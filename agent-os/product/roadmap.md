@@ -1015,6 +1015,12 @@ period)` so money already spent stops being held twice and only going over bites
   `agent-os/specs/2026-08-25-1310-budget-funding-indicators/`. Budget rows show a progress
   bar, Funded / `$X more needed` / Fully Spent / On Track copy, and a colored Available
   pill. Leftover can be positive and still yellow. The ask is Assign's `neededAssigned`.
+  ✅ **Budget inspector shipped 2026-08-25.**
+  `agent-os/specs/2026-08-25-1633-budget-inspector/`. Regular, Bills, and Savings share
+  Name / Assigned / Activity / Available. Bill cadence, next charge, status, URL, and
+  notes live in a right pane on desktop and a full-screen sheet below `md`. Envelopes
+  remain the obligation registry; unscheduled bills keep estimate language, not a fake
+  date. The funding-indicators spec had left this pane out of scope.
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
   budget states a shortfall per bill envelope rather than as one collapsed number, and
   Assign → Underfunded names which envelopes will not be funded. The scan layer makes those

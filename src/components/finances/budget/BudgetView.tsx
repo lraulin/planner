@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useState,
   useTransition,
@@ -18,7 +19,9 @@ import {
   updateBudgetCategoryAction,
 } from "@/app/finances/actions";
 import type { Command } from "@/lib/commands/registry";
+import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { useIsCompact } from "@/components/shell/useIsCompact";
 import { ContextMenu, type MenuItem } from "@/components/grid/ContextMenu";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useGridState } from "@/components/grid/useGridState";
@@ -74,6 +77,7 @@ import { cadenceOf } from "@/lib/finances/recurringBills";
 import type { BillForecast } from "@/lib/finances/dashboardQueries";
 import { AssignDialog, AssignPreviewDialog } from "./AssignDialog";
 import { billColumns, envelopeColumns, type BudgetColumnCtx } from "./budgetColumns";
+import { BudgetInspector } from "./BudgetInspector";
 import { BudgetSummary } from "./BudgetSummary";
 import { BudgetStructureDrawer } from "./BudgetStructureDrawer";
 import { CommitmentPayeeDialog } from "./CommitmentPayeeDialog";
@@ -83,16 +87,13 @@ import { MoveMoneyDialog } from "./MoveMoneyDialog";
 import { TemplateDrawer } from "./TemplateDrawer";
 import { ReviewDrawer } from "./ReviewDrawer";
 
-/** Collapsed by default (D8): carried over from Commitments as a lookup, not a fixture. */
-const DEFAULT_HIDDEN_COLUMNS = new Set(["annual", "monthly"]);
-
 /**
  * The budget, one month at a time: **Income**, **Spending** (Regular above Bills), **Savings**.
  *
- * **Sections, not one grid.** Only a bill has a cadence, a next charge, a status or a URL, so
- * putting bills and ordinary envelopes on one table meant six columns reading `—` on most
- * rows. They stay one budget where it counts: `budgetTotals` runs over bills + regular as
- * "All spending", and Savings is totalled separately so a house fund is not an overspend.
+ * **Sections, not one grid.** Bills and ordinary envelopes stay separate tables so the All
+ * spending footer can still add them. Bill-only fields live in the inspector, so every
+ * table is Name / Assigned / Activity / Available
+ * (`agent-os/specs/2026-08-25-1633-budget-inspector/`).
  *
  * The sections are **derived from the envelope's `kind`**, not from groups. A user group
  * whose rows all land in one section renders no header (`sectionGridRows`), so the seeded
@@ -122,8 +123,11 @@ export function BudgetView({
 }) {
   const router = useRouter();
   const params = useSearchParams();
+  const compact = useIsCompact();
+  const inspectorTitleId = useId();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [inspecting, setInspecting] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(
     null,
   );
@@ -140,12 +144,11 @@ export function BudgetView({
   const [managingStructure, setManagingStructure] = useState(false);
   const [reviewing, setReviewing] = useState(false);
 
-  // One saved layout per table: the two offer different columns, so sharing a key would let
-  // hiding "Cadence" on the bills grid silently reorder the envelopes grid.
+  // One saved layout per table. Keys stay distinct so a width tweak on Bills does not
+  // rewrite Regular spending. Unknown persisted ids (the old cadence columns) are dropped
+  // by `useGridState`.
   const billGrid = useGridState("budget-bills", billColumns, {
-    order: billColumns
-      .map((column) => column.id)
-      .filter((id) => !DEFAULT_HIDDEN_COLUMNS.has(id)),
+    order: billColumns.map((column) => column.id),
     switches: { "show-hidden": false },
   });
   const envelopeGrid = useGridState("budget-envelopes", envelopeColumns, {
@@ -196,17 +199,52 @@ export function BudgetView({
   const envelopeSelect = useMultiSelect(envelopeRowIds, null, { allowEmpty: true });
   const savingsSelect = useMultiSelect(savingsRowIds, null, { allowEmpty: true });
 
+  const selectedRow = useMemo(() => {
+    const id =
+      focusedTable === "bills"
+        ? billSelect.selectedId
+        : focusedTable === "envelopes"
+          ? envelopeSelect.selectedId
+          : savingsSelect.selectedId;
+    if (!id) return null;
+    return rows.find((row) => row.id === id) ?? null;
+  }, [
+    focusedTable,
+    billSelect.selectedId,
+    envelopeSelect.selectedId,
+    savingsSelect.selectedId,
+    rows,
+  ]);
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
+      if (event.key === "Enter" && compact && selectedRow) {
+        if ((event.target as HTMLElement).closest("input, select, textarea, button")) {
+          return;
+        }
+        event.preventDefault();
+        setInspecting(true);
+        return;
+      }
       if (event.key !== "Escape") return;
-      if (assigning || preview || menu) return;
+      if (assigning || preview || menu || inspecting) return;
       billSelect.selectOne(null);
       envelopeSelect.selectOne(null);
       savingsSelect.selectOne(null);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [assigning, preview, menu, billSelect, envelopeSelect, savingsSelect]);
+  }, [
+    assigning,
+    preview,
+    menu,
+    inspecting,
+    compact,
+    selectedRow,
+    billSelect,
+    envelopeSelect,
+    savingsSelect,
+  ]);
 
   function run(work: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -602,9 +640,40 @@ export function BudgetView({
     );
   }
 
+  const inspector = (
+    <BudgetInspector
+      key={selectedRow?.id ?? "empty"}
+      row={selectedRow}
+      carryInCents={
+        selectedRow
+          ? templateCarryIn(previous ? categoryMonth(previous, selectedRow.id) : null)
+          : 0
+      }
+      indicator={selectedRow ? (indicators.get(selectedRow.id) ?? null) : null}
+      pending={pending}
+      onPatchBill={(row, patch) => ctx.onPatchBill(row, patch)}
+      onNotes={(row, notes) => run(() => updateBudgetCategoryAction(row.id, { notes }))}
+      onAssignUnderfunded={(row) => {
+        const result = planAssign({
+          option: "underfunded",
+          month: data.month,
+          todayKey: data.todayKey,
+          readyToAssignCents: month.readyToAssignCents,
+          envelopes: assignInputs.envelopes,
+          bills: assignInputs.bills,
+          history: assignInputs.history,
+          categoryIds: [row.id],
+        });
+        startAssign(result, [row.id]);
+      }}
+      onEditTarget={(row) => setEditing(row.id)}
+      onEditPayees={(row) => setEditingPayeesFor(row)}
+    />
+  );
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
+      <div className="flex shrink-0 flex-col gap-3 px-3 pt-3">
         <MonthBar
           month={month}
           onPrev={() => goToMonth(prevMonthKey(data.month))}
@@ -652,218 +721,252 @@ export function BudgetView({
               : ""}
           </p>
         ) : null}
-
-        <IncomeSection
-          rows={sections.income}
-          receivedCents={receivedThisMonthCents}
-          expectedCents={forecast.comparison.income.monthlyCents}
-        />
-
-        {data.movementNotes ? (
-          <details className="rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
-            <summary className="cursor-pointer text-ink">Movement log</summary>
-            <ol className="mt-2 space-y-1 text-ink-muted">
-              {data.movementNotes
-                .split("\n")
-                .filter(Boolean)
-                .reverse()
-                .map((line, index) => (
-                  <li key={`${index}:${line}`}>{line}</li>
-                ))}
-            </ol>
-          </details>
-        ) : null}
-
-        {error ? (
-          <p className="rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem] text-[var(--chart-spend)]">
-            {error}
-          </p>
-        ) : null}
-
-        {notice ? (
-          <p
-            role="status"
-            className="flex items-start gap-3 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem] text-ink"
-          >
-            <span className="min-w-0 flex-1">{notice}</span>
-            <button
-              type="button"
-              onClick={() => setNotice(null)}
-              aria-label="Dismiss"
-              className="flex-none rounded px-1 text-ink-muted hover:bg-surface-raised hover:text-ink"
-            >
-              ×
-            </button>
-          </p>
-        ) : null}
-
-        {backlog > 0 ? <Backlog data={data} /> : null}
-
-        {/* `shrink-0`, not `min-h-0`: these are stacked inside the page scroller, and a flex
-            item allowed to shrink below its content collapses both grids to one row. */}
-        <section className="flex min-w-0 shrink-0 flex-col gap-3" aria-label="Spending">
-          <h2 className="text-[1rem] font-semibold text-ink">Spending</h2>
-
-          <SectionHeader
-            title="Regular spending"
-            caption="Everything that is not a bill. Assign what you have; Available is what is left."
-            totals={envelopeTotals}
-          />
-          <BudgetTable
-            focused={focusedTable === "envelopes"}
-            onFocus={() => setFocusedTable("envelopes")}
-          >
-            <DataGrid<BudgetColumnCtx, BudgetRow>
-              rows={envelopeGridRows}
-              columns={envelopeGrid.columns}
-              allColumns={envelopeColumns}
-              columnCtx={ctx}
-              selectedId={envelopeSelect.selectedId}
-              selectedIds={envelopeSelect.selectedIds}
-              selectAllState={envelopeSelect.headerState}
-              onToggleSelectAll={envelopeSelect.toggleSelectAll}
-              onSelect={(id, mods) => {
-                setFocusedTable("envelopes");
-                envelopeSelect.select(id, mods);
-              }}
-              commandScope={exportPlan.envelopes.commandScope}
-              exportFocused={exportPlan.envelopes.exportFocused}
-              /*
-               * The same menu the Available cell opens, reachable by right-click and — the
-               * reason it is here — by long-press on a phone, where the compact row draws the
-               * amount as a chip, not a button. Without it cover/move would exist only on
-               * desktop.
-               */
-              rowMenu={(rowId) => {
-                const row = rows.find((candidate) => candidate.id === rowId);
-                return row ? balanceMenu(row) : [];
-              }}
-              ariaLabel={`Envelopes for ${monthLabel(data.month)}`}
-              empty="No envelopes yet."
-              widths={envelopeGrid.widths}
-              onResizeColumn={envelopeGrid.setWidth}
-              onResetColumnWidth={envelopeGrid.clearWidth}
-              columnControls={envelopeGrid.columnControls}
-              collapsedGroups={envelopeGrid.collapsedGroups}
-              onToggleGroup={envelopeGrid.toggleGroup}
-              density={envelopeGrid.density}
-              autoHeight
-              rowLabel={(row) => `Envelope: ${row.node.name}`}
-              groupSummary={(_nodes, header) =>
-                groupTotals(sections.envelopes, header.id)
-              }
-            />
-          </BudgetTable>
-
-          <SectionHeader
-            title="Bills"
-            caption="Each funds itself from its own cadence — Assign → Underfunded fills what this month owes."
-            totals={billTotals}
-          />
-          <BudgetTable
-            focused={focusedTable === "bills"}
-            onFocus={() => setFocusedTable("bills")}
-          >
-            <DataGrid<BudgetColumnCtx, BudgetBillRow>
-              rows={billGridRows}
-              columns={billGrid.columns}
-              allColumns={billColumns}
-              columnCtx={ctx}
-              selectedId={billSelect.selectedId}
-              selectedIds={billSelect.selectedIds}
-              selectAllState={billSelect.headerState}
-              onToggleSelectAll={billSelect.toggleSelectAll}
-              onSelect={(id, mods) => {
-                setFocusedTable("bills");
-                billSelect.select(id, mods);
-              }}
-              commandScope={exportPlan.bills.commandScope}
-              exportFocused={exportPlan.bills.exportFocused}
-              rowMenu={(rowId) => {
-                const row = rows.find((candidate) => candidate.id === rowId);
-                return row ? balanceMenu(row) : [];
-              }}
-              ariaLabel={`Bills for ${monthLabel(data.month)}`}
-              empty="No bills yet — Review proposes them from what actually charges you."
-              widths={billGrid.widths}
-              onResizeColumn={billGrid.setWidth}
-              onResetColumnWidth={billGrid.clearWidth}
-              columnControls={billGrid.columnControls}
-              collapsedGroups={billGrid.collapsedGroups}
-              onToggleGroup={billGrid.toggleGroup}
-              density={billGrid.density}
-              autoHeight
-              rowLabel={(row) => `Bill: ${row.node.name}`}
-              groupSummary={(_nodes, header) => groupTotals(sections.bills, header.id)}
-            />
-          </BudgetTable>
-
-          <footer className="tabular flex flex-wrap gap-x-5 gap-y-1 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
-            <span className="text-ink-muted">
-              All spending <span className="text-ink-faint">(bills + regular)</span>
-            </span>
-            <span className="text-ink-muted">
-              Assigned{" "}
-              <span className="text-ink">{formatUsd(totals.assignedCents)}</span>
-            </span>
-            <span className="text-ink-muted">
-              Spent <span className="text-ink">{formatUsd(totals.activityCents)}</span>
-            </span>
-            <span className="text-ink-muted">
-              Left <span className="text-ink">{formatUsd(totals.balanceCents)}</span>
-            </span>
-          </footer>
-        </section>
-
-        <section className="flex min-w-0 shrink-0 flex-col gap-3" aria-label="Savings">
-          <SectionHeader
-            title="Savings"
-            caption="Assigned money that is not a monthly expense. Held out of All spending so a house fund is not an overspend."
-            totals={savingsTotals}
-          />
-          <BudgetTable
-            focused={focusedTable === "savings"}
-            onFocus={() => setFocusedTable("savings")}
-          >
-            <DataGrid<BudgetColumnCtx, BudgetRow>
-              rows={savingsGridRows}
-              columns={savingsGrid.columns}
-              allColumns={envelopeColumns}
-              columnCtx={ctx}
-              selectedId={savingsSelect.selectedId}
-              selectedIds={savingsSelect.selectedIds}
-              selectAllState={savingsSelect.headerState}
-              onToggleSelectAll={savingsSelect.toggleSelectAll}
-              onSelect={(id, mods) => {
-                setFocusedTable("savings");
-                savingsSelect.select(id, mods);
-              }}
-              commandScope={exportPlan.savings.commandScope}
-              exportFocused={exportPlan.savings.exportFocused}
-              rowMenu={(rowId) => {
-                const row = rows.find((candidate) => candidate.id === rowId);
-                return row ? balanceMenu(row) : [];
-              }}
-              ariaLabel={`Savings for ${monthLabel(data.month)}`}
-              empty="No savings envelopes yet — add one from Manage groups and envelopes."
-              widths={savingsGrid.widths}
-              onResizeColumn={savingsGrid.setWidth}
-              onResetColumnWidth={savingsGrid.clearWidth}
-              columnControls={savingsGrid.columnControls}
-              collapsedGroups={savingsGrid.collapsedGroups}
-              onToggleGroup={savingsGrid.toggleGroup}
-              density={savingsGrid.density}
-              autoHeight
-              rowLabel={(row) => `Savings: ${row.node.name}`}
-              groupSummary={(_nodes, header) =>
-                groupTotals(sections.savings, header.id)
-              }
-            />
-          </BudgetTable>
-        </section>
-
-        <ForecastDetails months={forecast.months} comparison={forecast.comparison} />
       </div>
+
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
+          <IncomeSection
+            rows={sections.income}
+            receivedCents={receivedThisMonthCents}
+            expectedCents={forecast.comparison.income.monthlyCents}
+          />
+
+          {data.movementNotes ? (
+            <details className="rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
+              <summary className="cursor-pointer text-ink">Movement log</summary>
+              <ol className="mt-2 space-y-1 text-ink-muted">
+                {data.movementNotes
+                  .split("\n")
+                  .filter(Boolean)
+                  .reverse()
+                  .map((line, index) => (
+                    <li key={`${index}:${line}`}>{line}</li>
+                  ))}
+              </ol>
+            </details>
+          ) : null}
+
+          {error ? (
+            <p className="rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem] text-[var(--chart-spend)]">
+              {error}
+            </p>
+          ) : null}
+
+          {notice ? (
+            <p
+              role="status"
+              className="flex items-start gap-3 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem] text-ink"
+            >
+              <span className="min-w-0 flex-1">{notice}</span>
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                aria-label="Dismiss"
+                className="flex-none rounded px-1 text-ink-muted hover:bg-surface-raised hover:text-ink"
+              >
+                ×
+              </button>
+            </p>
+          ) : null}
+
+          {backlog > 0 ? <Backlog data={data} /> : null}
+
+          {/* `shrink-0`, not `min-h-0`: these are stacked inside the page scroller, and a flex
+            item allowed to shrink below its content collapses both grids to one row. */}
+          <section
+            className="flex min-w-0 shrink-0 flex-col gap-3"
+            aria-label="Spending"
+          >
+            <h2 className="text-[1rem] font-semibold text-ink">Spending</h2>
+
+            <SectionHeader
+              title="Regular spending"
+              caption="Everything that is not a bill. Assign what you have; Available is what is left."
+              totals={envelopeTotals}
+            />
+            <BudgetTable
+              focused={focusedTable === "envelopes"}
+              onFocus={() => setFocusedTable("envelopes")}
+            >
+              <DataGrid<BudgetColumnCtx, BudgetRow>
+                rows={envelopeGridRows}
+                columns={envelopeGrid.columns}
+                allColumns={envelopeColumns}
+                columnCtx={ctx}
+                selectedId={envelopeSelect.selectedId}
+                selectedIds={envelopeSelect.selectedIds}
+                selectAllState={envelopeSelect.headerState}
+                onToggleSelectAll={envelopeSelect.toggleSelectAll}
+                onSelect={(id, mods) => {
+                  setFocusedTable("envelopes");
+                  envelopeSelect.select(id, mods);
+                }}
+                onOpenDetail={() => setInspecting(true)}
+                commandScope={exportPlan.envelopes.commandScope}
+                exportFocused={exportPlan.envelopes.exportFocused}
+                /*
+                 * The same menu the Available cell opens, reachable by right-click and — the
+                 * reason it is here — by long-press on a phone, where the compact row draws the
+                 * amount as a chip, not a button. Without it cover/move would exist only on
+                 * desktop.
+                 */
+                rowMenu={(rowId) => {
+                  const row = rows.find((candidate) => candidate.id === rowId);
+                  return row ? balanceMenu(row) : [];
+                }}
+                ariaLabel={`Envelopes for ${monthLabel(data.month)}`}
+                empty="No envelopes yet."
+                widths={envelopeGrid.widths}
+                onResizeColumn={envelopeGrid.setWidth}
+                onResetColumnWidth={envelopeGrid.clearWidth}
+                columnControls={envelopeGrid.columnControls}
+                collapsedGroups={envelopeGrid.collapsedGroups}
+                onToggleGroup={envelopeGrid.toggleGroup}
+                density={envelopeGrid.density}
+                autoHeight
+                rowLabel={(row) => `Envelope: ${row.node.name}`}
+                groupSummary={(_nodes, header) =>
+                  groupTotals(sections.envelopes, header.id)
+                }
+              />
+            </BudgetTable>
+
+            <SectionHeader
+              title="Bills"
+              caption="Each funds itself from its own cadence — Assign → Underfunded fills what this month owes."
+              totals={billTotals}
+            />
+            <BudgetTable
+              focused={focusedTable === "bills"}
+              onFocus={() => setFocusedTable("bills")}
+            >
+              <DataGrid<BudgetColumnCtx, BudgetBillRow>
+                rows={billGridRows}
+                columns={billGrid.columns}
+                allColumns={billColumns}
+                columnCtx={ctx}
+                selectedId={billSelect.selectedId}
+                selectedIds={billSelect.selectedIds}
+                selectAllState={billSelect.headerState}
+                onToggleSelectAll={billSelect.toggleSelectAll}
+                onSelect={(id, mods) => {
+                  setFocusedTable("bills");
+                  billSelect.select(id, mods);
+                }}
+                onOpenDetail={() => setInspecting(true)}
+                commandScope={exportPlan.bills.commandScope}
+                exportFocused={exportPlan.bills.exportFocused}
+                rowMenu={(rowId) => {
+                  const row = rows.find((candidate) => candidate.id === rowId);
+                  return row ? balanceMenu(row) : [];
+                }}
+                ariaLabel={`Bills for ${monthLabel(data.month)}`}
+                empty="No bills yet — Review proposes them from what actually charges you."
+                widths={billGrid.widths}
+                onResizeColumn={billGrid.setWidth}
+                onResetColumnWidth={billGrid.clearWidth}
+                columnControls={billGrid.columnControls}
+                collapsedGroups={billGrid.collapsedGroups}
+                onToggleGroup={billGrid.toggleGroup}
+                density={billGrid.density}
+                autoHeight
+                rowLabel={(row) => `Bill: ${row.node.name}`}
+                groupSummary={(_nodes, header) =>
+                  groupTotals(sections.bills, header.id)
+                }
+              />
+            </BudgetTable>
+
+            <footer className="tabular flex flex-wrap gap-x-5 gap-y-1 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
+              <span className="text-ink-muted">
+                All spending <span className="text-ink-faint">(bills + regular)</span>
+              </span>
+              <span className="text-ink-muted">
+                Assigned{" "}
+                <span className="text-ink">{formatUsd(totals.assignedCents)}</span>
+              </span>
+              <span className="text-ink-muted">
+                Spent{" "}
+                <span className="text-ink">{formatUsd(totals.activityCents)}</span>
+              </span>
+              <span className="text-ink-muted">
+                Left <span className="text-ink">{formatUsd(totals.balanceCents)}</span>
+              </span>
+            </footer>
+          </section>
+
+          <section
+            className="flex min-w-0 shrink-0 flex-col gap-3"
+            aria-label="Savings"
+          >
+            <SectionHeader
+              title="Savings"
+              caption="Assigned money that is not a monthly expense. Held out of All spending so a house fund is not an overspend."
+              totals={savingsTotals}
+            />
+            <BudgetTable
+              focused={focusedTable === "savings"}
+              onFocus={() => setFocusedTable("savings")}
+            >
+              <DataGrid<BudgetColumnCtx, BudgetRow>
+                rows={savingsGridRows}
+                columns={savingsGrid.columns}
+                allColumns={envelopeColumns}
+                columnCtx={ctx}
+                selectedId={savingsSelect.selectedId}
+                selectedIds={savingsSelect.selectedIds}
+                selectAllState={savingsSelect.headerState}
+                onToggleSelectAll={savingsSelect.toggleSelectAll}
+                onSelect={(id, mods) => {
+                  setFocusedTable("savings");
+                  savingsSelect.select(id, mods);
+                }}
+                onOpenDetail={() => setInspecting(true)}
+                commandScope={exportPlan.savings.commandScope}
+                exportFocused={exportPlan.savings.exportFocused}
+                rowMenu={(rowId) => {
+                  const row = rows.find((candidate) => candidate.id === rowId);
+                  return row ? balanceMenu(row) : [];
+                }}
+                ariaLabel={`Savings for ${monthLabel(data.month)}`}
+                empty="No savings envelopes yet — add one from Manage groups and envelopes."
+                widths={savingsGrid.widths}
+                onResizeColumn={savingsGrid.setWidth}
+                onResetColumnWidth={savingsGrid.clearWidth}
+                columnControls={savingsGrid.columnControls}
+                collapsedGroups={savingsGrid.collapsedGroups}
+                onToggleGroup={savingsGrid.toggleGroup}
+                density={savingsGrid.density}
+                autoHeight
+                rowLabel={(row) => `Savings: ${row.node.name}`}
+                groupSummary={(_nodes, header) =>
+                  groupTotals(sections.savings, header.id)
+                }
+              />
+            </BudgetTable>
+          </section>
+
+          <ForecastDetails months={forecast.months} comparison={forecast.comparison} />
+        </div>
+
+        <aside
+          className="hidden min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-rule bg-surface md:flex"
+          aria-label="Category details"
+        >
+          {inspector}
+        </aside>
+      </div>
+
+      {compact && inspecting && selectedRow ? (
+        <Drawer open onClose={() => setInspecting(false)} labelledBy={inspectorTitleId}>
+          <DrawerHeader
+            titleId={inspectorTitleId}
+            title={selectedRow?.name ?? "Details"}
+            onClose={() => setInspecting(false)}
+          />
+          {inspector}
+        </Drawer>
+      ) : null}
 
       {menu ? (
         <ContextMenu

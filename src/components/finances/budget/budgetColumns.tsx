@@ -1,31 +1,21 @@
 "use client";
 
 import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
-import { DateKeyCell } from "@/components/grid/cells";
-import { CadenceSelect } from "@/components/finances/CadenceSelect";
-import type { EnvelopeStatus } from "@/db/schema";
 import type { BillEnvelopeEdit } from "@/lib/finances/mutations";
 import { formatUsd } from "@/lib/finances/money";
-import {
-  annualCents,
-  cadenceDaysApprox,
-  cadenceLabel,
-  cadenceOf,
-  type Cadence,
-} from "@/lib/finances/recurringBills";
+import type { Cadence } from "@/lib/finances/recurringBills";
 import type { EnvelopeIndicator } from "@/lib/finances/budget/indicator";
 import { type BudgetBillRow, type BudgetRow } from "@/lib/finances/budget/rows";
 import { AvailablePill, FundingBar } from "./FundingChrome";
-import { UrlCell } from "./UrlCell";
 
 /**
- * Two column sets over one row shape: bills and ordinary envelopes are separate tables
- * (`agent-os/specs/2026-08-23-2313-one-budget/`, revised after use).
+ * One column set on every money table.
  *
- * Assigned / Activity / Available are built by {@link moneyColumns} so the two tables cannot
- * drift on the figures that have to add up across them. Everything else differs: only a bill
- * has a cadence, a next charge, a status or a URL, and putting those on one grid meant six
- * columns reading `—` on every ordinary envelope.
+ * Bills and ordinary envelopes stay separate tables
+ * (`agent-os/specs/2026-08-23-2313-one-budget/`). Bill-only fields (cadence, next charge,
+ * amount, status, URL, yearly) live in the inspector, not extra columns
+ * (`agent-os/specs/2026-08-25-1633-budget-inspector/` D2). Assigned / Activity / Available
+ * are built by {@link moneyColumns} so the totals cannot drift.
  */
 
 export type BillPatch = Omit<BillEnvelopeEdit, "name" | "cadence"> & {
@@ -185,184 +175,14 @@ function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnC
   };
 }
 
-/** The cadence a bill row is on. `cadenceMonths` is only ever null off a `kind: 'bill'` row. */
-function cadenceOfBill(bill: BudgetBillRow["bill"]): Cadence {
-  return cadenceOf({
-    cadenceMonths: bill.cadenceMonths ?? 1,
-    cadenceDays: bill.cadenceDays,
-  });
-}
-
-/** What a bill costs per year, or 0 when no amount has been declared. */
-function annualCentsOf(row: BudgetBillRow): number {
-  if (row.bill.expectedCents === null) return 0;
-  return annualCents(row.bill.expectedCents, cadenceOfBill(row.bill));
-}
-
-function dollarsInput(
-  cents: number,
-  onCommit: (cents: number) => void,
-  label: string,
-  pending: boolean,
-) {
-  return (
-    <input
-      key={cents}
-      type="text"
-      inputMode="decimal"
-      defaultValue={(cents / 100).toFixed(2)}
-      disabled={pending}
-      aria-label={label}
-      onBlur={(event) => {
-        const next = Math.round(
-          Number(event.target.value.replace(/[$,\s]/g, "")) * 100,
-        );
-        if (Number.isFinite(next) && next !== cents) onCommit(next);
-      }}
-      className="tabular w-20 rounded border border-rule bg-surface px-1 text-right text-base text-ink md:text-[0.8125rem]"
-    />
-  );
-}
-
-/** Ordinary envelopes: Actual's three columns and nothing else. */
+/** Ordinary envelopes: the four money columns. */
 export const envelopeColumns: ColumnDef<BudgetColumnCtx, BudgetRow>[] = [
   nameColumn("Envelope"),
   ...moneyColumns<BudgetRow>(),
 ];
 
-/** Bills: the Commitments table's columns, with Assigned/Activity/Available in place of the meter. */
+/** Bills: the same four columns. Facet fields live in the inspector. */
 export const billColumns: ColumnDef<BudgetColumnCtx, BudgetBillRow>[] = [
   nameColumn("Bill"),
-  {
-    id: "nextDue",
-    label: "Next charge",
-    width: "8rem",
-    filterKind: "date",
-    filterValue: (row) => row.node.nextDueKey ?? "",
-    sortValue: (row) => row.node.nextDueKey ?? "",
-    compact: "meta",
-    render: (row, ctx) =>
-      !row.node.bill.scheduled ? (
-        <span className="text-ink-faint">Unscheduled</span>
-      ) : (
-        <DateKeyCell
-          value={row.node.nextDueKey ?? ""}
-          ariaLabel={`Next charge for ${row.node.name}`}
-          disabled={ctx.pending}
-          align="left"
-          onChange={(anchorDate) => ctx.onPatchBill(row.node, { anchorDate })}
-        />
-      ),
-  },
-  {
-    id: "cadence",
-    label: "Cadence",
-    width: "8rem",
-    filterKind: "enum",
-    filterValue: (row) =>
-      row.node.bill.scheduled
-        ? cadenceLabel(cadenceOfBill(row.node.bill))
-        : "Irregular",
-    // Days and months rank together by the length of a cycle, so a 28-day autoship sorts just
-    // under a monthly bill rather than beside a yearly one.
-    sortValue: (row) => cadenceDaysApprox(cadenceOfBill(row.node.bill)),
-    render: (row, ctx) =>
-      !row.node.bill.scheduled ? (
-        <span className="text-ink-faint">Irregular</span>
-      ) : (
-        <CadenceSelect
-          value={cadenceOfBill(row.node.bill)}
-          disabled={ctx.pending}
-          ariaLabel={`Cadence for ${row.node.name}`}
-          onChange={(cadence) => ctx.onPatchBill(row.node, { cadence })}
-          className="min-h-tap w-full rounded border border-rule bg-surface px-1 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
-        />
-      ),
-  },
-  {
-    id: "billAmount",
-    label: "Amount",
-    width: "7rem",
-    align: "right",
-    filterKind: "number",
-    filterValue: (row) => formatUsd(row.node.bill.expectedCents ?? 0),
-    sortValue: (row) => row.node.bill.expectedCents ?? -1,
-    compact: "meta",
-    render: (row, ctx) =>
-      dollarsInput(
-        row.node.bill.expectedCents ?? 0,
-        (expectedCents) => ctx.onPatchBill(row.node, { expectedCents }),
-        `Amount for ${row.node.name}`,
-        ctx.pending,
-      ),
-  },
   ...moneyColumns<BudgetBillRow>(),
-  {
-    id: "billStatus",
-    label: "Status",
-    width: "7rem",
-    filterKind: "enum",
-    filterValue: (row) => row.node.bill.status,
-    sortValue: (row) => row.node.bill.status,
-    render: (row, ctx) => (
-      <select
-        value={row.node.bill.status}
-        disabled={ctx.pending}
-        aria-label={`Status for ${row.node.name}`}
-        onChange={(event) =>
-          ctx.onPatchBill(row.node, {
-            status: event.target.value as EnvelopeStatus,
-          })
-        }
-        className="min-h-tap rounded border border-rule bg-surface px-1 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
-      >
-        <option value="active">Active</option>
-        <option value="paused">Paused</option>
-        <option value="cancelled">Cancelled</option>
-      </select>
-    ),
-  },
-  {
-    id: "billUrl",
-    label: "URL",
-    width: "minmax(7rem,0.8fr)",
-    filterKind: "text",
-    filterValue: (row) => row.node.bill.url,
-    render: (row, ctx) => (
-      <UrlCell
-        value={row.node.bill.url}
-        label={row.node.name}
-        disabled={ctx.pending}
-        onCommit={(url) => ctx.onPatchBill(row.node, { url })}
-      />
-    ),
-  },
-  {
-    id: "annual",
-    label: "A year",
-    width: "6rem",
-    align: "right",
-    filterKind: "number",
-    filterValue: (row) => formatUsd(annualCentsOf(row.node)),
-    sortValue: (row) => annualCentsOf(row.node),
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-[var(--chart-spend)]">
-        {formatUsd(annualCentsOf(row.node))}
-      </span>
-    ),
-  },
-  {
-    id: "monthly",
-    label: "Monthly",
-    width: "5.5rem",
-    align: "right",
-    filterKind: "number",
-    filterValue: (row) => formatUsd(Math.round(annualCentsOf(row.node) / 12)),
-    sortValue: (row) => Math.round(annualCentsOf(row.node) / 12),
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink">
-        {formatUsd(Math.round(annualCentsOf(row.node) / 12))}
-      </span>
-    ),
-  },
 ];

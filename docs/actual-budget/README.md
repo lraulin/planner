@@ -87,3 +87,9 @@ narrowed by later deltas:
   a colored pill with an icon. Envelope math is still Actual's; the ask is Assign's
   `neededAssigned`. Actual colors leftover by sign and puts goal status in a tooltip.
   See `agent-os/specs/2026-08-25-1310-budget-funding-indicators/`.
+- **The Budget page has a YNAB-shaped inspector.** Category details (bill cadence, next
+  charge, status, URL, notes, target status) live in a right pane on desktop and a
+  full-screen sheet below `md`. Envelope math and bill-cadence demand stay Actual-derived.
+  The Available breakdown is leftover identity (carry-in + assigned + activity), not
+  YNAB's cash-vs-credit split. See
+  `agent-os/specs/2026-08-25-1633-budget-inspector/`.
