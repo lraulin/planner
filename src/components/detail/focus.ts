@@ -18,6 +18,24 @@ function focusable(container: HTMLElement): HTMLElement[] {
 }
 
 /**
+ * Whether an open popup inside the dialog should get Escape before the dialog does.
+ *
+ * The drawer and the modal both claim Escape on `document` in the **capture** phase, so a
+ * handler on the focused control can never win — the Category picker's Escape closed the
+ * drawer out from under its own open list. The rule that fixes it is the one a native
+ * `<select>` follows: while a combobox is expanded, Escape collapses the list, and only a
+ * second Escape leaves the surface behind it.
+ */
+export function comboboxOwnsEscape(): boolean {
+  const active = document.activeElement;
+  if (!active) return false;
+  return (
+    active.getAttribute("role") === "combobox" &&
+    active.getAttribute("aria-expanded") === "true"
+  );
+}
+
+/**
  * Modal focus behaviour, shared by the drawer and the confirmation dialog: focus moves
  * inside when it opens, Tab cycles within it while it is open, and focus returns to
  * whatever opened it on close.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
-import { useModalFocus } from "./focus";
+import { comboboxOwnsEscape, useModalFocus } from "./focus";
 
 /**
  * The centered-dialog shell: backdrop, panel, focus handling, Escape.
@@ -55,6 +55,8 @@ export function ModalShell({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        // An expanded combobox closes its own list first — see `comboboxOwnsEscape`.
+        if (comboboxOwnsEscape()) return;
         event.preventDefault();
         event.stopPropagation();
         onClose();

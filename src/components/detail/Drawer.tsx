@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { formatBindings, matchBindings } from "@/lib/commands/bindings";
 import { COMMIT_FORM, SAVE } from "@/lib/commands/chords";
-import { useModalFocus } from "./focus";
+import { comboboxOwnsEscape, useModalFocus } from "./focus";
 
 const SAVE_CHORD = formatBindings(SAVE) ?? "⌘S";
 const COMMIT_CHORD = formatBindings(COMMIT_FORM) ?? "⌘⏎";
@@ -44,6 +44,8 @@ export function Drawer({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        // An expanded combobox closes its own list first — see `comboboxOwnsEscape`.
+        if (comboboxOwnsEscape()) return;
         event.preventDefault();
         // Stop the outline's own Escape handling from also firing behind the drawer.
         event.stopPropagation();
