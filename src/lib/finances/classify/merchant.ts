@@ -89,13 +89,16 @@ const TRAILING_ORDER_REF = /\*[A-Z0-9]*\d[A-Z0-9]*$/;
  * the store number behind it from being stripped. */
 const TRAILING_ASTERISK = /\*+$/;
 
-function stripOnce(value: string, prefixes: readonly string[]): string {
+function stripOnce(
+  value: string,
+  prefixes: readonly string[],
+): { value: string; stripped: boolean } {
   for (const prefix of prefixes) {
     if (value.toUpperCase().startsWith(prefix.toUpperCase())) {
-      return value.slice(prefix.length);
+      return { value: value.slice(prefix.length), stripped: true };
     }
   }
-  return value;
+  return { value, stripped: false };
 }
 
 /**
@@ -111,9 +114,9 @@ export function normalizeMerchant(description: string): string {
   // the wrapper behind as if it were the merchant.
   let out = description.replace(/^\s+/, "").replace(/^&\s*/, "");
 
-  out = stripOnce(out, FEED_PREFIXES);
-  out = stripOnce(out, PROCESSOR_PREFIXES);
-  out = out.toUpperCase().trimEnd();
+  out = stripOnce(out, FEED_PREFIXES).value;
+  const processor = stripOnce(out, PROCESSOR_PREFIXES);
+  out = processor.value.toUpperCase().trimEnd();
 
   for (const suffix of PAYROLL_SUFFIXES) {
     if (out.endsWith(suffix)) {
@@ -136,5 +139,16 @@ export function normalizeMerchant(description: string): string {
     out = out.trimEnd();
   }
 
-  return out.replace(/\s+/g, " ").trim();
+  out = out.replace(/\s+/g, " ").trim();
+
+  // A processor stamp with nothing but an order reference behind it names no merchant.
+  // `PP*P36C17FF0B` strips to `P36C17FF0B`, then the trailing-number loop eats it down to
+  // the single letter `P`, which then becomes a payee that four unrelated PayPal charges
+  // share. Two characters cannot identify a merchant, and `resolve.ts` already treats a
+  // result this short as opaque — so say so here instead of minting an alias from the
+  // wreckage. Only after a processor prefix: `BP#9310152EP 5 290598250` is a petrol
+  // station the bank wrote badly, not a reference number.
+  if (processor.stripped && out.length < 3) return "";
+
+  return out;
 }

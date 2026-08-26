@@ -163,6 +163,30 @@ describeDb("seedPayees", () => {
     expect(await listPayees(userId)).toHaveLength(1);
   });
 
+  it("takes back a payee minted from normalizer wreckage", async () => {
+    // `PP*P36C17FF0B` used to normalize to the single letter `P`, and four unrelated PayPal
+    // charges became one payee called `P`. The normalizer no longer produces it, so the pass
+    // that recomputes identity has to take the old assignment off the rows too — otherwise
+    // the fiction survives in `payee_id` for as long as the row does.
+    const [residue, real] = await addTransactions(userId, accountId, [
+      { description: "PP*P36C17FF0B", amount: "-9.00" },
+      { description: "WM SUPERCENTER #1", amount: "-40.00" },
+    ]);
+    const orphan = await createPayee(userId, { name: "P", aliases: ["P"] });
+    await db
+      .update(financeTransactions)
+      .set({ payeeId: orphan })
+      .where(eq(financeTransactions.id, residue));
+
+    const summary = await seedPayees(userId);
+
+    expect(summary.detached).toBe(1);
+    expect(await payeeIdOf(residue)).toBeNull();
+    expect(await payeeIdOf(real)).not.toBeNull();
+    // Idempotent: the second run has nothing left to take back.
+    expect((await seedPayees(userId)).detached).toBe(0);
+  });
+
   it("gives a bare PayPal row the payee its statement counterparty names", async () => {
     const [first, second] = await addTransactions(userId, accountId, [
       { description: "PAYPAL *", amount: "-9.00", date: "2026-08-05" },

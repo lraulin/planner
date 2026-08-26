@@ -30,6 +30,16 @@ export type SeedPayeesSummary = {
   /** Rows whose `payee_id` changed. Zero on a second run is the idempotence claim. */
   assigned: number;
   /**
+   * Rows whose payee was cleared because their description names no merchant any more.
+   *
+   * The repair half of a normalizer fix. `PP*P36C17FF0B` used to normalize to the single
+   * letter `P`, and four unrelated PayPal charges became one payee called `P`; it now
+   * normalizes to nothing. Leaving those rows pointing at the old payee would keep the
+   * fiction alive for as long as the row survives, so the pass that recomputes identity
+   * takes it back off (`.../2026-08-25-2144-payee-evidence-and-merge/` D6).
+   */
+  detached: number;
+  /**
    * Rows still without a payee — their description names no merchant at all.
    *
    * Reported rather than swallowed: it is the number a person can sanity-check against the
@@ -149,7 +159,7 @@ const ASSIGN_CHUNK = 500;
 async function assignPayees(
   userId: string,
   byRowId: Map<string, { description: string; counterparty: string | null }>,
-): Promise<{ assigned: number; unresolved: number }> {
+): Promise<{ assigned: number; detached: number; unresolved: number }> {
   const index = payeeIndex(
     await db
       .select({
@@ -166,6 +176,7 @@ async function assignPayees(
     .where(eq(financeTransactions.userId, userId));
 
   const wanted = new Map<string, string[]>();
+  const detach: string[] = [];
   let unresolved = 0;
 
   for (const row of current) {
@@ -176,6 +187,10 @@ async function assignPayees(
 
     if (payee === null) {
       unresolved += 1;
+      // No merchant at all, yet the row still carries a payee: identity the normalizer has
+      // since disowned. An unknown alias is different — the planner will mint a payee for it
+      // on the next pass — so only the empty result detaches.
+      if (alias === "" && row.payeeId !== null) detach.push(row.id);
       continue;
     }
     if (row.payeeId === payee) continue;
@@ -183,6 +198,21 @@ async function assignPayees(
     const list = wanted.get(payee);
     if (list) list.push(row.id);
     else wanted.set(payee, [row.id]);
+  }
+
+  let detached = 0;
+  for (let start = 0; start < detach.length; start += ASSIGN_CHUNK) {
+    const chunk = detach.slice(start, start + ASSIGN_CHUNK);
+    await db
+      .update(financeTransactions)
+      .set({ payeeId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          inArray(financeTransactions.id, chunk),
+        ),
+      );
+    detached += chunk.length;
   }
 
   let assigned = 0;
@@ -202,7 +232,7 @@ async function assignPayees(
     }
   }
 
-  return { assigned, unresolved };
+  return { assigned, detached, unresolved };
 }
 
 export type EnsurePayeesSummary = Pick<
@@ -293,12 +323,13 @@ export async function seedPayees(userId: string): Promise<SeedPayeesSummary> {
   const nameHint = loadNameHint();
   const ensured = await applyPayeePlan(userId, sources, existing, nameHint);
 
-  const { assigned, unresolved } = await assignPayees(userId, byRowId);
+  const { assigned, detached, unresolved } = await assignPayees(userId, byRowId);
 
   return {
     createdPayees: ensured.createdPayees,
     addedAliases: ensured.addedAliases,
     assigned,
+    detached,
     unresolved,
     conflicts: ensured.conflicts,
   };

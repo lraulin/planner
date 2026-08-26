@@ -140,6 +140,9 @@ export function PayeesView({
         `${summary.addedAliases} spellings claimed`,
         `${summary.assigned} charges assigned`,
       ];
+      if (summary.detached > 0) {
+        parts.push(`${summary.detached} charges detached from a name that was not one`);
+      }
       if (summary.unresolved > 0) {
         parts.push(`${summary.unresolved} charges name no merchant`);
       }

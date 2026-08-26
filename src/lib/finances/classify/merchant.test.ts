@@ -112,3 +112,31 @@ describe("normalizeMerchant", () => {
     expect(normalizeMerchant("Withdrawal from ")).toBe("");
   });
 });
+
+describe("processor residue", () => {
+  // `PP*P36C17FF0B` used to strip down to the single letter `P`, which then became a payee
+  // four unrelated PayPal charges shared. A processor stamp over an order reference names
+  // no merchant at all, and saying so is what stops the residue becoming an alias.
+  it("yields nothing for a PayPal stamp over an order reference", () => {
+    for (const description of [
+      "PP*P36C17FF0B",
+      "PP*P35D2FE7E5",
+      "PP*P34E4FB030",
+      "PP*P3407FC0FA",
+    ]) {
+      expect(normalizeMerchant(description)).toBe("");
+    }
+  });
+
+  it("keeps a merchant the processor stamp actually named", () => {
+    expect(normalizeMerchant("PP*GOOGLE YOUTUBE SUBSCRI")).toBe(
+      "GOOGLE YOUTUBE SUBSCRI",
+    );
+    expect(normalizeMerchant("PP*APPLE.COM/BILL")).toBe("APPLE/BILL");
+  });
+
+  it("leaves a short name the bank wrote itself alone", () => {
+    // No processor stamp, so this is a badly written petrol station, not a reference.
+    expect(normalizeMerchant("BP#9310152EP 5 290598250")).toBe("BP");
+  });
+});
