@@ -1,6 +1,6 @@
 # Supplies — recurring-consumable cost worksheet
 
-**Status: active**
+**Status: frozen / complete** (2026-08-26)
 Spec folder: `agent-os/specs/2026-08-26-0910-supplies-worksheet/`
 
 ## Spec relationships
@@ -393,6 +393,22 @@ from the filesystem, so nothing to update there.
 **Standing rule while this spec is active:** material changes to requirements, design or
 scope — including feedback on what gets built — go into `plan.md` / `shape.md` plus a row
 in _Changes from original plan_. Pure implementation detail does not.
+
+## Follow-ups
+
+Not done, and deliberately not opened here. Each wants its own delta-spec.
+
+- **Match supply items to `finance_transactions`.** Named out of scope above and still the
+  same thread the roadmap parks under _itemized receipts_. The ASIN is now stored on the
+  option, which is the join key that work would use.
+- **Price history.** An option carries one current price and a `pricedOn` date. Watching a
+  vendor's price move over a year is a different feature with a different table.
+- **A supply-item drawer.** Group and envelope became grid columns because there is no
+  drawer (Changes row 2). If unit label, notes and per-option notes want a home, that is
+  when `components/drawer-pattern.md` applies.
+- **Verify the worksheet at 390×844 on the deployed phone.** The desktop grid was driven
+  end to end in a browser; the compact layout is the shared `DataGrid`'s and the columns
+  declare `compactText`, but it has not been read on a real phone.
 
 ## Deliberately out of scope
 

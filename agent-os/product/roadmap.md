@@ -1105,6 +1105,21 @@ period)` so money already spent stops being held twice and only going over bites
      still later: order-confirmation email; Walmart is harder from the bank feed but
      purchases go through the app.
 
+     ✅ **Supplies worksheet shipped 2026-08-26** —
+     `specs/2026-08-26-0910-supplies-worksheet/`. Net-new intent rather than a listed
+     item, and the nearest thing yet to (1) and (2): it holds the **consumption rate a
+     receipt never carries**, so a $38.97 Walmart charge becomes 42 cans of cat food
+     lasting ten and a half days and $1,355 a year. An item owns how fast it is used;
+     its offers own price, and exactly one drives the totals — which is what lets a
+     rival vendor sit permanently on the sheet as a comparison without inflating
+     anything. Group headers read "Pets — est. $121.70/mo · funded from Groceries",
+     which is the signal that Pets wants its own envelope. `Suggest from Amazon` reads
+     the order history already ingested above, so the sheet is not typed from scratch.
+     **Nothing here writes the budget**: attributing one Walmart charge across
+     envelopes needs split transactions, and that friction is what would stop the sheet
+     being kept up. Matching supply items to `finance_transactions` remains the next
+     spec, as above.
+
 - **Eventually:** **Plaid** (or equivalent) remains a metered fallback if SimpleFIN
   staleness is unacceptable. Live bank sync shipped 2026-08-16 —
   `specs/2026-08-15-1315-live-bank-sync` — SimpleFIN setup-token paste, linked to

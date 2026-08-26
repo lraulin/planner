@@ -1,6 +1,6 @@
 # Standards — Supplies worksheet
 
-**Status: active**
+**Status: frozen / complete** (2026-08-26)
 
 Canonical standards are referenced rather than copied, so this spec does not fork their
 instructions. Read these before implementation:
