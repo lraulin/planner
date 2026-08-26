@@ -116,22 +116,15 @@ Format the output differently based on the detected scenario:
 
 #### Scenario: Conversation
 
-Read the standards and announce them:
+Read the standards files, then announce **only the paths read and the key points that bear on
+the work at hand**. Do not print the standards back — reading a file already puts it in
+context on every harness, so echoing it is a second full copy at output prices.
 
 ```
-I've read the following standards as they are relevant to what we're working on:
+I've read these standards as relevant to what we're working on:
 
---- Standard: api/response-format ---
-
-[full content of the standard file]
-
---- End Standard ---
-
---- Standard: api/error-handling ---
-
-[full content of the standard file]
-
---- End Standard ---
+- `agent-os/standards/api/response-format.md`
+- `agent-os/standards/api/error-handling.md`
 
 **Key points:**
 - All API responses use { success, data, error } envelope
@@ -195,18 +188,9 @@ These standards cover:
 
 #### Scenario: Shaping/Planning
 
-First, use AskUserQuestion to determine how to include the standards:
-
-```
-How should these standards be included in your plan?
-
-1. **References** — Add @ file paths that point to the standards (keeps plan lightweight, standards stay in sync)
-2. **Copy content** — Paste the full standards content into the plan (self-contained, but won't update if standards change)
-
-Which approach? (1 or 2)
-```
-
-**If References (option 1):**
+**References only — a spec never copies standards** (see AGENTS.md). There is no choice to
+offer here, so do not ask one. Standards live at a stable path and in git history; a copy in
+a spec is write-only text that nobody reads back.
 
 ```
 Be sure to include references to the following standards files in the appropriate location in the plan we're building:
@@ -221,28 +205,8 @@ These standards cover:
 - File naming, variable naming conventions
 ```
 
-**If Copy content (option 2):**
-
-```
-Include the following standards content in your plan:
-
---- Standard: api/response-format ---
-
-[full content of the standard file]
-
---- End Standard ---
-
---- Standard: api/error-handling ---
-
-[full content of the standard file]
-
---- End Standard ---
-
-These standards cover:
-- API response envelope structure, status codes
-- Error codes, exception handling, error responses
-- File naming, variable naming conventions
-```
+If the spec needs a frozen record of what applied, **pin rather than copy**: record the
+standards commit SHA, and `git show <sha>:agent-os/standards/<path>` recovers it exactly.
 
 ---
 

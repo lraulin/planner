@@ -133,7 +133,12 @@ decision being replaced. Omit this block for a root spec.
 
 Check if `agent-os/product/` exists and contains files.
 
-If it exists, read key files (like `mission.md`, `roadmap.md`, `tech-stack.md`) and use AskUserQuestion:
+If it exists, read `mission.md` and `tech-stack.md` in full — they are small. **Do not read
+`roadmap.md` whole**; it is ~86 KB across three phase sections (`## Phase 1`, `## Phase 2`,
+`## Phase 3`). Grep it for the feature's terms and read only the phase section the matches
+fall in.
+
+Then use AskUserQuestion:
 
 ```
 I found product context in agent-os/product/. Should this feature align with any specific product goals or constraints?
@@ -162,7 +167,9 @@ Based on what we're building, these standards may apply:
 Should I include these in the spec? (yes / adjust: remove 3, add frontend/forms)
 ```
 
-Read the confirmed standards files to include their content in the plan context.
+Read the confirmed standards files, then state — in the plan and in `standards.md` — only the
+key points that bear on **this** feature, plus any deliberate deviation. Do not restate the
+standards themselves: a spec references standards, it never copies them (see AGENTS.md).
 
 ### Step 6: Generate Spec Folder Name
 
@@ -200,7 +207,7 @@ Create `agent-os/specs/{folder-name}/` with:
 
 - **plan.md** — This full plan (**Status: active**), including empty **Changes from original plan**
 - **shape.md** — Shaping notes (scope, decisions, context from our conversation)
-- **standards.md** — Relevant standards that apply to this work
+- **standards.md** — Which standards apply, why, and any deviations (references, not copies)
 - **references.md** — Governing specs and reference implementations studied
 - **visuals/** — Any mockups or screenshots provided
 
@@ -241,18 +248,18 @@ Remind the implementer (in plan.md body or closing note) of the standing rule:
 > and append to **Changes from original plan**. Skip pure implementation details. Freeze
 > when verified.
 
-### Step 9: Ready for Execution
+### Step 9: Save the Spec, Then Stop
 
-When the full plan is ready:
+When the full plan is ready, present it for approval. Once the user approves, execute
+**Task 1 only** — write the spec folder — and then **stop here**. End the turn with the
+handoff below. Do not begin Task 2, and do not offer to.
+
+Implementation runs in a fresh session so the shaping context — every spec read, the product
+docs, the whole Q&A — does not ride along into it.
 
 ```
-Plan complete. When you approve and execute:
-
-1. Task 1 will save all spec documentation first (Status: active)
-2. Implementation tasks proceed; keep the active spec current for material refinements
-3. Final task freezes the spec and updates the roadmap if needed
-
-Ready to start? (approve / adjust)
+Spec saved: agent-os/specs/{folder}/ (Status: active)
+Next: start a new session and say "implement agent-os/specs/{folder}", beginning at Task 2.
 ```
 
 ## Output Structure
@@ -348,24 +355,22 @@ The shape.md file should capture:
 
 ## standards.md Content
 
-Include the full content of each relevant standard:
+**References, not copies.** List the paths and why each applies; never inline the standards
+text. Pin the standards commit instead — `git show <sha>:agent-os/standards/<path>` recovers
+exactly what applied at shape time.
 
 ```markdown
 # Standards for {Feature Name}
 
-The following standards apply to this work.
+Applied as of standards commit `{sha}`. References, not copies — see AGENTS.md.
 
----
+- `agent-os/standards/components/data-grid.md` — {why it applies here}
+- `agent-os/standards/development/testing.md` — {why it applies here}
 
-## api/response-format
+## Deviations
 
-[Full content of the standard file]
-
----
-
-## api/error-handling
-
-[Full content of the standard file]
+{Each deliberate divergence, stated in full — this is the part that is not recoverable
+from the standards file, so it is the part worth writing down. Or "None."}
 ```
 
 ## references.md Content

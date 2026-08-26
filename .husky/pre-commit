@@ -3,9 +3,13 @@ npx lint-staged
 # Whole-project rather than staged-files-only: type-aware rules and tsc both reason
 # across module boundaries, so an edit to one file can break lint in a file that isn't
 # staged. ~6s combined, which is cheap next to finding it on deploy.
-npm run lint
-npm run typecheck
+#
+# Every gate runs through scripts/gate.sh: silent when it passes, failing tail on stderr
+# when it doesn't. A passing gate that narrates itself costs tokens in every agent session
+# that commits, and nobody reads a green vitest run.
+bash scripts/gate.sh "lint" npm run lint
+bash scripts/gate.sh "typecheck" npm run typecheck
 
 # Unit tests only — hermetic and ~2s, so committing never depends on Docker being up.
 # The integration tests run on pre-push instead.
-npm run test:unit
+bash scripts/gate.sh "unit tests" npm run test:unit

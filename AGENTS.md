@@ -126,6 +126,14 @@ delta overrides only the decisions it explicitly supersedes. If specs, code, and
 disagree, surface the mismatch — never infer a new requirement from a commit or silently
 rewrite a frozen spec.
 
+**A spec references standards; it never copies them.** `standards.md` lists the standard
+paths, one line each on why it applies, and any deliberate deviation — not their text.
+Standards live at a stable path and in git history, so a copy is write-only: `/shape-spec`
+already forbids preloading `standards.md`, and inlining `components/data-grid.md` alone
+costs ~11k tokens to read and ~11k to write again. The frozen-record concern is real and is
+answered by **pinning, not copying**: at freeze, record the standards commit SHA.
+`git show <sha>:agent-os/standards/<path>` recovers exactly what applied.
+
 #### Agent OS workflows (Claude Code, Grok, Copilot, and Codex)
 
 **Every workflow lives, in full, in `.agents/skills/<name>/SKILL.md`.** That is the one
@@ -172,6 +180,12 @@ current with _material_ changes to requirements, design decisions, or scope — 
 developer feedback on what was actually built — and append a row to **Changes from original
 plan**. Skip pure implementation details. Once frozen it is a historical as-built record;
 further change opens a **new delta-spec**, not an edit to the frozen folder.
+
+**Shaping ends when the spec folder is saved.** Whoever shapes the work writes the spec and
+stops there — it does not roll straight into implementation, and does not offer to. Implementation
+starts in a fresh session against the saved folder, so the shaping context (every spec read, the
+product docs, the whole Q&A) does not ride along into it. This holds whether or not `/shape-spec`
+was invoked by name.
 
 Full lifecycle, freeze procedure, and templates: `agent-os/specs/README.md`. Exemplar frozen
 spec: `agent-os/specs/2026-07-28-1234-weekly-schedule/`.

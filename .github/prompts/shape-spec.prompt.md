@@ -13,3 +13,4 @@ Goal:
 - Gather scope, visuals, references, product context, and standards.
 - Produce a spec plan where Task 1 saves documentation and the final task freezes the spec.
 - Keep spec lifecycle rules aligned with AGENTS.md.
+- Stop once the spec folder is saved — hand off; implementation runs in a fresh session.
