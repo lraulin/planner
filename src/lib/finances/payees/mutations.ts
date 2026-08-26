@@ -13,7 +13,7 @@
  * written here would only hold for callers that remembered to come through here.
  */
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeBudgetCategories,
@@ -22,8 +22,10 @@ import {
   financeTransactions,
 } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
+import { amountMatches } from "../amountMatch";
 import { normalizeMerchant } from "../classify/merchant";
 import { suggestCommitmentName } from "../commitments";
+import { formatUsd, numericStringToCents } from "../money";
 import { isAutoCategoryMode, type AutoCategoryMode } from "./autoCategory";
 import { aliasFor } from "./resolve";
 import { mergeClaimDecision } from "./merge";
@@ -276,6 +278,125 @@ export async function isolatePayeeForBill(
         ),
       );
   }
+  return dedicated;
+}
+
+function absCents(amount: string): number {
+  return Math.abs(numericStringToCents(amount) ?? 0);
+}
+
+async function mintAmountSlicedPayee(
+  userId: string,
+  billName: string,
+  cents: number,
+  sourcePayeeId: string,
+): Promise<string> {
+  const base = cleanName(billName);
+  const source = await requirePayee(userId, sourcePayeeId);
+  const names =
+    base.toLowerCase() === source.name.toLowerCase()
+      ? [`${base} ${formatUsd(cents)}`]
+      : [base, `${base} ${formatUsd(cents)}`];
+  for (const name of names) {
+    try {
+      return await createPayee(userId, { name, aliases: [] });
+    } catch (error) {
+      const taken = error instanceof Error && error.message.includes("already exists");
+      if (!taken) throw error;
+    }
+  }
+  throw new Error(`A payee called "${base}" already exists.`);
+}
+
+/**
+ * When one alias is many products, the bill owns this amount, not the merchant string.
+ *
+ * `PP*APPLE.COM/BILL` is App Store, Music, iCloud. ExtraCare isolation splits aliases;
+ * it cannot split one alias. Moving only similar-amount rows onto a payee with no alias
+ * files this subscription's history without claiming future $0.99 apps. New mixed
+ * charges stay on the original payee, which still owns the alias.
+ */
+export async function isolateSimilarAmountForBill(
+  userId: string,
+  transactionId: string,
+  payeeId: string,
+  billName: string,
+): Promise<string> {
+  const [selected] = await db
+    .select({
+      id: financeTransactions.id,
+      amount: financeTransactions.amount,
+      description: financeTransactions.description,
+    })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.id, transactionId),
+        eq(financeTransactions.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!selected) throw new Error("That transaction does not exist.");
+  const targetCents = absCents(selected.amount);
+  const alias = aliasFor(selected.description);
+
+  const onPayee = await db
+    .select({
+      id: financeTransactions.id,
+      amount: financeTransactions.amount,
+      description: financeTransactions.description,
+    })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financeTransactions.payeeId, payeeId),
+      ),
+    );
+
+  const unassigned =
+    alias === ""
+      ? []
+      : (
+          await db
+            .select({
+              id: financeTransactions.id,
+              amount: financeTransactions.amount,
+              description: financeTransactions.description,
+            })
+            .from(financeTransactions)
+            .where(
+              and(
+                eq(financeTransactions.userId, userId),
+                isNull(financeTransactions.payeeId),
+              ),
+            )
+        ).filter((entry) => aliasFor(entry.description) === alias);
+
+  const candidates = [...onPayee, ...unassigned];
+  const mixed = candidates.some(
+    (entry) => !amountMatches(absCents(entry.amount), targetCents),
+  );
+  if (!mixed) return payeeId;
+
+  const matching = candidates.filter((entry) =>
+    amountMatches(absCents(entry.amount), targetCents),
+  );
+  if (matching.length === 0) return payeeId;
+
+  const dedicated = await mintAmountSlicedPayee(userId, billName, targetCents, payeeId);
+  await db
+    .update(financeTransactions)
+    .set({ payeeId: dedicated, updatedAt: new Date() })
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        inArray(
+          financeTransactions.id,
+          matching.map((entry) => entry.id),
+        ),
+      ),
+    );
   return dedicated;
 }
 

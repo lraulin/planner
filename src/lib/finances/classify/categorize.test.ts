@@ -7,6 +7,13 @@ describe("categorize", () => {
     expect(categorize("WAL-MART #1981").merchant).toBe("Walmart");
   });
 
+  it("names Apple.com/bill Apple and leaves Apple Greene Wine alone", () => {
+    expect(categorize("PP*APPLE.COM/BILL").merchant).toBe("Apple");
+    expect(categorize("APPLE GREENE WINE AND SPIDUNKIRKMD").merchant).toBe(
+      "APPLE GREENE WINE AND SPIDUNKIRKMD",
+    );
+  });
+
   it("collapses all three rent payer strings onto one merchant", () => {
     const spellings = [
       "Withdrawal from TURBOTENANT.COM RENT:RAULI",

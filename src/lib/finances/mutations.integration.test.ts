@@ -698,9 +698,9 @@ describeDb("next due keys for the bills grid", () => {
       },
     ];
 
-    expect(
-      (await loadNextDueKeys(userId, categories, "2026-08-21")).get(bill.id),
-    ).toBe("2026-09-01");
+    expect((await loadNextDueKeys(userId, categories, "2026-08-21")).get(bill.id)).toBe(
+      "2026-09-01",
+    );
     expect(await loadBillSnapshots(userId, categories, "2026-08-21")).toEqual([]);
   });
 });
@@ -1081,6 +1081,59 @@ describeDb("trackTransactionAsBill", () => {
       categoryId: null,
       payeeId: cvs,
     });
+  });
+
+  it("files only this amount of a mixed Apple Store payee, without taking the alias", async () => {
+    const apple = await createPayee(userId, {
+      name: "Apple",
+      aliases: ["APPLE/BILL", "APPLE GREENE WINE AND SPIDUNKIRKMD"],
+    });
+    const music = await addCharge("PP*APPLE.COM/BILL", "-9.99", "2026-07-01", apple);
+    const app = await addCharge("PP*APPLE.COM/BILL", "-14.99", "2026-07-15", apple);
+    const wine = await addCharge(
+      "APPLE GREENE WINE AND SPIDUNKIRKMD",
+      "-32.69",
+      "2026-07-20",
+      apple,
+    );
+
+    const { payeeId } = await trackTransactionAsBill(userId, music, {
+      name: "Apple Music",
+      cadence: { unit: "month", n: 1 },
+      expectedCents: 999,
+    });
+    expect(payeeId).not.toBe(apple);
+
+    const bills = await loadRecurringBills(userId);
+    const envelope = bills.find((bill) => bill.name === "Apple Music");
+    expect(envelope?.payeeIds).toEqual([payeeId]);
+
+    const billed = await getPayee(userId, payeeId);
+    expect(billed?.aliases).toEqual([]);
+
+    const filed = await db
+      .select({
+        id: financeTransactions.id,
+        categoryId: financeTransactions.budgetCategoryId,
+        payeeId: financeTransactions.payeeId,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId));
+    expect(filed.find((row) => row.id === music)).toMatchObject({
+      categoryId: envelope?.id,
+      payeeId,
+    });
+    expect(filed.find((row) => row.id === app)).toMatchObject({
+      categoryId: null,
+    });
+    expect(filed.find((row) => row.id === app)?.payeeId).not.toBe(payeeId);
+    expect(filed.find((row) => row.id === wine)).toMatchObject({
+      categoryId: null,
+      payeeId: apple,
+    });
+
+    const index = payeeIndex(await listAliasRows(userId));
+    expect(payeeForDescription("PP*APPLE.COM/BILL", index)).not.toBe(payeeId);
   });
 
   it("keeps a named payee when alternate statement spellings give it multiple aliases", async () => {

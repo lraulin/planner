@@ -5,6 +5,7 @@ import {
   inferredDefault,
   isConvertiblePayeeCategoryRule,
   nextLearnedDefault,
+  shouldLearnFromCategoryEdit,
   type PayeeAutoCategory,
 } from "./autoCategory";
 
@@ -53,6 +54,48 @@ describe("categoryForNewTransaction", () => {
         autoCategoryMode: "off",
       }),
     ).toBeNull();
+  });
+});
+
+describe("shouldLearnFromCategoryEdit", () => {
+  it("learns a first default only once nothing uncategorised remains", () => {
+    expect(shouldLearnFromCategoryEdit(LEARNING, [choice("a", "food")])).toBe(true);
+    expect(
+      shouldLearnFromCategoryEdit(LEARNING, [choice("a", "food"), choice("b", null)]),
+    ).toBe(false);
+  });
+
+  it("still considers a later 2-of-3 once a default exists", () => {
+    expect(
+      shouldLearnFromCategoryEdit({ ...LEARNING, defaultBudgetCategoryId: "food" }, [
+        choice("a", "pets"),
+        choice("b", null),
+        choice("c", "food"),
+      ]),
+    ).toBe(true);
+  });
+
+  it("does not learn while claimed or in off mode", () => {
+    expect(
+      shouldLearnFromCategoryEdit(
+        {
+          claimedBudgetCategoryId: "bill",
+          defaultBudgetCategoryId: null,
+          autoCategoryMode: "learn",
+        },
+        [choice("a", "food")],
+      ),
+    ).toBe(false);
+    expect(
+      shouldLearnFromCategoryEdit(
+        {
+          claimedBudgetCategoryId: null,
+          defaultBudgetCategoryId: null,
+          autoCategoryMode: "off",
+        },
+        [choice("a", "food")],
+      ),
+    ).toBe(false);
   });
 });
 

@@ -10,6 +10,7 @@
  */
 
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
+import { amountMatches } from "./amountMatch";
 import { effectiveFlow, effectiveMerchant, spendCentsOf } from "./analytics";
 import { normalizeMerchant } from "./classify/merchant";
 import {
@@ -40,9 +41,14 @@ export type TrackAsBillDraft = {
   name: string;
   cadence: Cadence;
   expectedCents: number;
+  /** This row's spend — the amount the bill will match, not the payee's median. */
+  matchAmountCents: number;
   lastChargeOn: string;
   nextDueKey: string;
+  /** Charges at about `matchAmountCents`, which is what confirming will file. */
   chargeCount: number;
+  /** Spend charges on this merchant/payee, including other amounts. */
+  merchantChargeCount: number;
 };
 
 /** Compact claimed list for the Register: stable payee → the bill envelope that holds it. */
@@ -84,7 +90,10 @@ export function trackAsBillRefusal(
 }
 
 /**
- * Prefill for the confirmation dialog, from every spend charge this merchant has on file.
+ * Prefill for the confirmation dialog, from spend charges of this merchant at this amount.
+ *
+ * `PP*APPLE.COM/BILL` is every Apple Store product. Counting the whole payee would treat
+ * a $9.99 subscription as 299 mixed charges. Confirming files the similar-amount subset.
  *
  * Cadence is a guess: `detectCadence` first (the only thing that can tell a 28-day autoship
  * from rent), then the median gap snapped to a standard month cadence, then monthly. One
@@ -104,12 +113,14 @@ export function trackAsBillDraft(
   if (selected.payeeId === null && merchant === "") {
     throw new Error("This row has no merchant to match");
   }
-  const charges = rows
-    .filter((row) => {
-      if (effectiveFlow(row) !== "spend") return false;
-      if (selected.payeeId !== null) return row.payeeId === selected.payeeId;
-      return effectiveMerchant(row) === merchant;
-    })
+  const matchAmountCents = Math.max(0, spendCentsOf(selected));
+  const sameMerchant = rows.filter((row) => {
+    if (effectiveFlow(row) !== "spend") return false;
+    if (selected.payeeId !== null) return row.payeeId === selected.payeeId;
+    return effectiveMerchant(row) === merchant;
+  });
+  const charges = sameMerchant
+    .filter((row) => amountMatches(spendCentsOf(row), matchAmountCents))
     .sort((left, right) => left.transactionDate.localeCompare(right.transactionDate));
   const dates = charges.map((row) => row.transactionDate);
   const typicalGap = medianGapDays(dates);
@@ -129,9 +140,11 @@ export function trackAsBillDraft(
     name: suggestCommitmentName(merchant),
     cadence,
     expectedCents,
+    matchAmountCents,
     lastChargeOn,
     nextDueKey: nextDueFrom(lastChargeOn, cadence, todayKey),
     chargeCount: charges.length,
+    merchantChargeCount: sameMerchant.length,
   };
 }
 

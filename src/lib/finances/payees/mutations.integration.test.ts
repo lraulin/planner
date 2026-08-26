@@ -585,6 +585,24 @@ describeDb("payee auto-category", () => {
     expect(payee?.defaultBudgetCategoryId).toBe(food);
   });
 
+  it("does not learn a default while other uncategorised charges remain", async () => {
+    const entertainment = await makeSpendingEnvelope("Entertainment");
+    const payeeId = await createPayee(userId, { name: "Apple" });
+    const music = await addTransaction(userId, accountId, {
+      description: "PP*APPLE.COM/BILL",
+      amount: "-9.99",
+      payeeId,
+    });
+    await addTransaction(userId, accountId, {
+      description: "PP*APPLE.COM/BILL",
+      amount: "-14.99",
+      payeeId,
+    });
+    await setTransactionBudgetCategory(userId, music, entertainment);
+    const payee = await getPayee(userId, payeeId);
+    expect(payee?.defaultBudgetCategoryId).toBeNull();
+  });
+
   it("fills a new uncategorised charge from the learned default", async () => {
     const food = await makeSpendingEnvelope("Groceries");
     const payeeId = await createPayee(userId, { name: "Aldi" });

@@ -42,7 +42,9 @@ const CANONICAL_NAMES: readonly NameHint[] = [
   { match: /^CURSOR/, name: "Cursor" },
   { match: /^GITHUB/, name: "GitHub" },
   { match: /^PADDLE/, name: "Paddle.com Market Limited" },
-  { match: /^APPLE/, name: "Apple" },
+  // Exact Apple Inc. descriptors only. `/^APPLE/` also named
+  // `APPLE GREENE WINE AND SPIDUNKIRKMD` — a liquor store — as Apple.
+  { match: /^(APPLE\/BILL|APPLE\/US|APPLE SERVICES|APPLE)$/, name: "Apple" },
   { match: /^STEAM/, name: "Steam" },
   { match: /^PLAYSTATION/, name: "PlayStation" },
   { match: /^ITCH IO/, name: "itch.io" },

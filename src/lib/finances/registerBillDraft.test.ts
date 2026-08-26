@@ -163,8 +163,10 @@ describe("trackAsBillDraft", () => {
       name: "Geico",
       cadence: { unit: "month", n: 1 },
       expectedCents: 59_498,
+      matchAmountCents: 59_498,
       lastChargeOn: "2025-10-24",
       chargeCount: 1,
+      merchantChargeCount: 1,
     });
     // Last charged Oct 24; monthly walks to the first date still ahead of today.
     expect(draft.nextDueKey).toBe("2026-08-24");
@@ -269,6 +271,33 @@ describe("trackAsBillDraft", () => {
     const draft = trackAsBillDraft(rows, "b", "2026-08-21");
     expect(draft.chargeCount).toBe(2);
     expect(draft.expectedCents).toBe(1599);
+    expect(draft.cadence).toEqual({ unit: "month", n: 1 });
+  });
+
+  it("counts only similar amounts when the merchant is many products", () => {
+    // PP*APPLE.COM/BILL is App Store, Music, iCloud, one-offs — one descriptor.
+    const rows = [
+      row("song", "2026-06-01", {
+        description: "PP*APPLE.COM/BILL",
+        payeeName: "Apple",
+        amountCents: -999,
+      }),
+      row("app", "2026-06-15", {
+        description: "PP*APPLE.COM/BILL",
+        payeeName: "Apple",
+        amountCents: -1499,
+      }),
+      row("music", "2026-07-01", {
+        description: "PP*APPLE.COM/BILL",
+        payeeName: "Apple",
+        amountCents: -999,
+      }),
+    ];
+    const draft = trackAsBillDraft(rows, "music", "2026-08-21");
+    expect(draft.matchAmountCents).toBe(999);
+    expect(draft.expectedCents).toBe(999);
+    expect(draft.chargeCount).toBe(2);
+    expect(draft.merchantChargeCount).toBe(3);
     expect(draft.cadence).toEqual({ unit: "month", n: 1 });
   });
 

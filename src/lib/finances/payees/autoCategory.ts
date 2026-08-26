@@ -68,10 +68,30 @@ export function majorityOfLatestThree(
 }
 
 /**
+ * Whether this Category write should update the learned default.
+ *
+ * A first default waits until the payee has no remaining uncategorised eligible charges.
+ * Filing $9.99 Apple Music by amount must not teach the Apple payee to categorise $14.99
+ * App Store purchases. Once a default exists, 2-of-latest-3 still runs so a real change of
+ * mind can replace it.
+ *
+ * Claimed / fixed / off payees never learn; `nextLearnedDefault` is a no-op for them too.
+ */
+export function shouldLearnFromCategoryEdit(
+  payee: PayeeAutoCategory,
+  latestEligible: readonly CategoryChoice[],
+): boolean {
+  if (payee.claimedBudgetCategoryId) return false;
+  if (payee.autoCategoryMode !== "learn") return false;
+  if (payee.defaultBudgetCategoryId) return true;
+  return latestEligible.every((row) => row.categoryId !== null);
+}
+
+/**
  * The next learned default after an edit, or the current default when nothing should change.
  *
  * - First manual assignment (no current default, exactly one distinct Category among the
- *   latest three) learns immediately.
+ *   latest three) learns immediately — once `shouldLearnFromCategoryEdit` has let it.
  * - A different Category on at least two of the latest three replaces the default.
  * - Edits outside that window are ignored.
  * - Claimed / fixed / off payees do not learn; the stored default is preserved.

@@ -8,6 +8,7 @@ import {
   loadTrackAsBillDraftAction,
   trackTransactionAsBillAction,
 } from "@/app/finances/actions";
+import { formatUsd } from "@/lib/finances/money";
 import { nextDueFrom, type Cadence } from "@/lib/finances/recurringBills";
 import type { ClaimedPayee, TrackAsBillDraft } from "@/lib/finances/registerBillDraft";
 import { CadenceSelect } from "./CadenceSelect";
@@ -133,8 +134,11 @@ function TrackAsBillForm({
           Track as bill
         </h2>
         <p className="text-[0.75rem] text-ink-muted">
-          Matches &ldquo;{seed.merchant}&rdquo; · {seed.chargeCount}{" "}
-          {seed.chargeCount === 1 ? "charge" : "charges"} on file
+          Matches &ldquo;{seed.merchant}&rdquo; at {formatUsd(seed.matchAmountCents)}
+          {" · "}
+          {seed.chargeCount === seed.merchantChargeCount
+            ? `${seed.chargeCount} ${seed.chargeCount === 1 ? "charge" : "charges"} on file`
+            : `${seed.chargeCount} of ${seed.merchantChargeCount} charges on file`}
         </p>
 
         <label className="flex flex-col gap-1 text-[0.75rem] text-ink-muted">

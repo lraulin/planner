@@ -27,6 +27,7 @@ import type { PaypalResolution } from "./paypalMatch";
 import { ensurePayees } from "./payees/backfill";
 import {
   isolatePayeeForBill,
+  isolateSimilarAmountForBill,
   replaceCommitmentPayeesInTransaction,
 } from "./payees/mutations";
 import { applyClaimedPayees } from "./payees/claims";
@@ -652,8 +653,8 @@ export type BillEnvelopeEdit = {
  * **This is the canonical bill-envelope write.** Agent tools, the payee-claim picker, and
  * cadence edits on an existing bill call it directly. Transaction-backed Track as bill /
  * New bill… / Review / Insights go through `trackTransactionAsBill`, which isolates the
- * merchant then lands here. Claiming payees files those charges (including history) and
- * upserts the exact-payee rule here, not in each caller.
+ * merchant (and, when amounts are mixed, this amount) then lands here. Claiming payees
+ * files those charges (including history) here, not in each caller.
  *
  * The cadence is checked here as well as by the column's CHECK — a constraint violation
  * surfaces as a database error the user cannot act on, and the offered list is a closed set.
@@ -686,10 +687,11 @@ function requireValidBillEnvelope(edit: BillEnvelopeEdit): string {
 /**
  * Declare a bill from a Register (or Insights / Review) transaction.
  *
- * Isolation, envelope upsert, historical filing, and the exact-payee rule are one domain
- * write so the browser cannot compose `isolatePayeeForBill` + `upsertBillEnvelope` and
- * leave a split payee behind a refused cadence. Validation runs before isolation so a
- * blank name or illegal cadence is a no-op.
+ * Isolation, envelope upsert, and historical filing are one domain write so the
+ * browser cannot compose `isolatePayeeForBill` + `upsertBillEnvelope` and leave a split
+ * payee behind a refused cadence. Validation runs before isolation so a blank name or
+ * illegal cadence is a no-op. Mixed-amount merchants (Apple Store) isolate this amount
+ * onto a payee that does not take the shared alias.
  */
 export async function trackTransactionAsBill(
   userId: string,
@@ -697,7 +699,13 @@ export async function trackTransactionAsBill(
   edit: Omit<BillEnvelopeEdit, "payeeIds">,
 ): Promise<{ payeeId: string }> {
   requireValidBillEnvelope(edit);
-  const payeeId = await isolatePayeeForBill(userId, transactionId);
+  const isolated = await isolatePayeeForBill(userId, transactionId);
+  const payeeId = await isolateSimilarAmountForBill(
+    userId,
+    transactionId,
+    isolated,
+    edit.name,
+  );
   await attachUnassignedMerchantHistory(userId, transactionId, payeeId);
   await upsertBillEnvelope(userId, { ...edit, payeeIds: [payeeId] });
   return { payeeId };
@@ -725,6 +733,19 @@ async function attachUnassignedMerchantHistory(
   if (!row) return;
   const alias = aliasFor(row.description);
   if (alias === "") return;
+
+  const [ownsAlias] = await db
+    .select({ alias: financePayeeAliases.alias })
+    .from(financePayeeAliases)
+    .where(
+      and(
+        eq(financePayeeAliases.userId, userId),
+        eq(financePayeeAliases.payeeId, payeeId),
+        eq(financePayeeAliases.alias, alias),
+      ),
+    )
+    .limit(1);
+  if (!ownsAlias) return;
 
   const unassigned = await db
     .select({

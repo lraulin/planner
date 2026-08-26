@@ -11,6 +11,7 @@ import { numericStringToCents } from "../money";
 import {
   inferredDefault,
   nextLearnedDefault,
+  shouldLearnFromCategoryEdit,
   type AutoCategoryMode,
   type CategoryChoice,
 } from "./autoCategory";
@@ -94,6 +95,7 @@ export async function learnFromCategoryEdit(
   const payee = await loadPayeeAutoCategory(userId, payeeId);
   if (!payee) return;
   const latest = await latestEligibleChoices(userId, payeeId);
+  if (!shouldLearnFromCategoryEdit(payee, latest)) return;
   const next = nextLearnedDefault(payee, editedId, latest);
   if (next === payee.defaultBudgetCategoryId) return;
   await db
