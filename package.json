@@ -15,6 +15,7 @@
     "agent:docs:check": "tsx scripts/generate-agent-docs.ts --check",
     "amazon:slim": "tsx scripts/amazon-orders-slim.ts",
     "flow:audit": "tsx --env-file=.env.local scripts/flow-audit.ts",
+    "payee:audit": "tsx --env-file=.env.local scripts/payee-merge-audit.ts",
     "smoke": "node scripts/smoke.mjs",
     "smoke:agent": "node --env-file=.env.local scripts/smoke-agent.mjs",
     "test": "vitest run",

@@ -1,6 +1,7 @@
 # Payee evidence, merge from the envelope, and normalizer repair — Shaping Notes
 
-**Status: active**
+**Status: active** — built and verified at desktop width; the 390×844 pass is what remains before
+freezing. See `plan.md` **Changes from original plan** for the five places the build differed.
 
 ## Scope
 

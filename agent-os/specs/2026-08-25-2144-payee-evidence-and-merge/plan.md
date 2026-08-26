@@ -107,30 +107,35 @@ rows across 64 merchant strings — belongs to `scripts/amazon-orders-slim.ts` a
 
 ## Acceptance criteria
 
-- [ ] The Category inspector lists every payee filing into the selected envelope, with filed count,
+- [x] The Category inspector lists every payee filing into the selected envelope, with filed count,
       unfiled count, and applied-vs-held state; a held default gives the guard's reason.
-- [ ] A payee whose default routes elsewhere, or that is damaged (`P`), is flagged in that list.
-- [ ] Remove clears a default / releases a claim from the inspector. Merge opens the existing flow
+- [x] A payee whose default routes elsewhere, or that is damaged (`P`), is flagged in that list.
+- [x] Remove clears a default / releases a claim from the inspector. Merge opens the existing flow
       with those payees preselected and honours the frozen merge semantics.
-- [ ] Setting or confirming a default offers to file that payee's waiting rows, stating the count
+- [x] Setting or confirming a default offers to file that payee's waiting rows, stating the count
       before writing; declining files nothing.
-- [ ] Bulk categorize from a Register filter still learns once per distinct payee, and the inspector
+- [x] Bulk categorize from a Register filter still learns once per distinct payee, and the inspector
       afterwards shows whether it learned or held.
-- [ ] `PP*P36C17FF0B` no longer yields the alias `P`; a unit test pins the whole residue family.
-- [ ] City/state merges are proposals only. No migration rewrites an alias without confirmation.
+- [x] `PP*P36C17FF0B` no longer yields the alias `P`; a unit test pins the whole residue family.
+- [x] City/state merges are proposals only. No migration rewrites an alias without confirmation.
       Regression tests pin `AMAZON PRIME`, `GRAY MIRROR`, and `EVERGREEN DISPOSAL` as non-merges.
-- [ ] `scripts/payee-merge-audit.ts` runs read-only, has no `--apply`, and its output is reviewed
+- [x] `scripts/payee-merge-audit.ts` runs read-only, has no `--apply`, and its output is reviewed
       against the real ledger before the migration runs.
-- [ ] A second user cannot read, change, or delete the first user's payees, defaults, claims, or
+- [x] A second user cannot read, change, or delete the first user's payees, defaults, claims, or
       transactions through any new mutation (`*.integration.test.ts`, per `AGENTS.md`).
-- [ ] lint, typecheck, `test:unit`, non-skipped database tests with Postgres up, production build,
-      and `npm run smoke` on a running dev server. Driven in a browser at desktop and 390×844.
+- [~] lint, typecheck, `test:unit`, non-skipped database tests with Postgres up, production build,
+  and `npm run smoke` on a running dev server. Driven in a browser at desktop;
+  **390×844 still outstanding** (see Changes from original plan, row 5).
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                            | Why                                                                                                                                                                                                                                                                                                                                                       |
+| --- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **D6's repair is a recompute in the seed pass, not a schema migration.**          | The alias is the join key, so the plan called the fix "a migration". Nothing in the schema changes: `seedPayees` already recomputes `payee_id` from the normalizer and is idempotent. It now also **detaches** a row whose description normalizes to nothing but still carries a payee — the `P` case — and reports the count. Re-running writes nothing. |
+| 2   | **D5's offer is triggered from the Files-here row, not from a default-set form.** | The count only exists where the evidence is, and the inspector is the surface that has it. `File N waiting…` sits on the payee's own line, states the count in the confirmation, and does nothing on Cancel.                                                                                                                                              |
+| 3   | **City/state proposals surface in the audit only; no proposal UI was built.**     | D6 says propose, never sweep, and D7 puts the report behind a read-only script. Confirming one is the merge dialog that already exists, reached from the Files-here list. A second proposal screen would add a surface without adding a decision.                                                                                                         |
+| 4   | **`PayeeMergeDialog` now takes `{ id, name }` rather than a whole `PayeeRow`.**   | Two callers select different row shapes for the same payees. Everything else the dialog shows already came from the server preview.                                                                                                                                                                                                                       |
+| 5   | **Not yet verified at 390×844.** Everything else in the gate ran and passed.      | Chrome would not resize the window below the desktop viewport in this session. The section uses the inspector's existing responsive conventions (44px targets, wrapping action rows, truncating names) and the compact inspector is already a full-screen drawer — but it has not been driven on a narrow viewport, so the spec stays active until it is. |
 
 ## Tasks
 
@@ -139,29 +144,33 @@ rows across 64 merchant strings — belongs to `scripts/amazon-orders-slim.ts` a
 evidence for _not_ building the amount/date design, and it outlives the conversation that produced
 it. No `visuals/`: the only sketch is D3's, inline above.
 
-**Task 2 — Evidence queries.** In `src/lib/finances/payees/queries.ts`: payees filing into an
+**Task 2 — Evidence queries.** ✅ **Done.** In `src/lib/finances/payees/queries.ts`: payees filing into an
 envelope, with filed/unfiled counts and applied-vs-held state. The held reason reuses
 `shouldLearnFromCategoryEdit` (`autoCategory.ts`) rather than restating its logic. Pure shaping in
 a tested `lib` module per `AGENTS.md`.
 
-**Task 3 — "Files here" section** in `src/components/finances/budget/BudgetInspector.tsx`, following
+**Task 3 — "Files here" section** ✅ **Done.** in `src/components/finances/budget/BudgetInspector.tsx`, following
 its existing section pattern and `labelClass`/`fieldClass` conventions. Wire through `BudgetView.tsx`
 alongside `onEditPayees`.
 
-**Task 4 — Remove and Merge from the inspector**, reusing the payee merge flow (`payees/merge.ts`)
+**Task 4 — Remove and Merge from the inspector** ✅ **Done.**, reusing the payee merge flow (`payees/merge.ts`)
 and existing mutations. New/changed mutations take `userId` and get integration tests with a second
 user attempting read, change, and delete.
 
-**Task 5 — File-what-is-waiting** on default set/confirm, counted and confirmed before the write,
+**Task 5 — File-what-is-waiting** ✅ **Done.** on default set/confirm, counted and confirmed before the write,
 reusing `setTransactionBudgetCategories`.
 
-**Task 6 — Normalizer repair.** Fix the PayPal residue in `classify/merchant.ts` with tests for the
+**Task 6 — Normalizer repair.** ✅ **Done.** Fix the PayPal residue in `classify/merchant.ts` with tests for the
 residue family. Build city/state candidates as proposals; pin the three hazard non-merges.
 
-**Task 7 — `scripts/payee-merge-audit.ts`**, read-only, no `--apply`. Run it against the ledger and
+**Task 7 — `scripts/payee-merge-audit.ts`** ✅ **Done.**, read-only, no `--apply`. Run it against the ledger and
 read the output before any alias migration.
 
-**Task 8 — Verify and freeze.** Full gate (see acceptance criteria), browser at both widths, then
+**Task 8 — Verify and freeze.** 🔄 Gate green — lint, typecheck, 3,342 unit tests, 879 database
+tests with Postgres up (no skip warning), production build, and `npm run smoke` across all 60
+routes — and the flow was driven end to end in a browser at desktop width: the Files-here list,
+a held first default with its reason, the counted filing confirmation, Remove, and the merge
+dialog opening preselected. **Outstanding: the 390×844 pass.** Freeze once that is done. Full gate (see acceptance criteria), browser at both widths, then
 mark `plan.md` / `shape.md` **frozen / complete**, complete **Changes from original plan**, and
 record follow-ups as new work — chiefly **Amazon order-data categorization**, the largest remaining
 slice of the backlog.
