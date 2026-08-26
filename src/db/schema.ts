@@ -3225,6 +3225,10 @@ export const amazonOrderItems = pgTable(
     ),
     index("amazon_order_items_order_idx").on(table.userId, table.orderId),
     index("amazon_order_items_user_order_idx").on(table.userId, table.amazonOrderId),
+    // Supplies groups this table by ASIN to find what you rebuy
+    // (`src/lib/finances/supplies/queries.ts`). Without this the aggregate is a full scan
+    // of every line item you have ever bought.
+    index("amazon_order_items_user_asin_idx").on(table.userId, table.asin),
   ],
 );
 
@@ -3312,6 +3316,150 @@ export const amazonReplacements = pgTable(
       table.externalId,
     ),
     index("amazon_replacements_user_order_idx").on(table.userId, table.amazonOrderId),
+  ],
+);
+
+/**
+ * ────────────────────────────────── Supplies ──────────────────────────────────
+ *
+ * What recurring consumables actually cost, and whether you are buying them from the right
+ * place. See `agent-os/specs/2026-08-26-0910-supplies-worksheet/`.
+ *
+ * The source was a flat spreadsheet — one row per thing, carrying both how fast you go
+ * through it and what one order costs. That shape cannot hold a price comparison: a row for
+ * "the same cat food at Chewy" is indistinguishable from a real expense and double-counts in
+ * the total. So the model splits in two. **The item owns consumption** (four cans a day),
+ * **the option owns price** (Fancy Feast · Walmart · 42ct · $38.97), and exactly one option
+ * per item is `in_use` and drives the totals. Switching pack size then never means re-typing
+ * how fast you go through the stuff.
+ *
+ * Nothing here writes the budget. Attributing one Walmart charge across several envelopes
+ * needs split transactions, and that friction is what would stop the sheet being kept up.
+ */
+
+/** How an item's consumption rate is stated. Exactly one of the two columns is populated. */
+export const SUPPLY_RATE_BASES = ["units_per_day", "days_per_unit"] as const;
+export type SupplyRateBasis = (typeof SUPPLY_RATE_BASES)[number];
+
+/**
+ * One thing you consume on a cycle, and how fast.
+ *
+ * `rate_basis` exists because half these items have no countable daily rate. You can say
+ * "four cans a day" about cat food; you cannot honestly say "0.022 tubes per day" about
+ * toothpaste, but you can say "a tube lasts about 45 days". Both are the same fact stated
+ * from opposite ends, and the display derives whichever one you did not type.
+ *
+ * `days_per_unit` is **days one unit lasts**, not days one purchase lasts. That keeps the
+ * rate a property of the item and independent of pack size — a 3-pack of tubes at 45
+ * days/tube simply lasts 135 days — which is the same orthogonality the item/option split
+ * buys everywhere else.
+ */
+export const financeSupplyItems = pgTable(
+  "finance_supply_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /**
+     * How you slice the worksheet — "Pets", "Household". Free text, and deliberately **not**
+     * the envelope link below.
+     *
+     * You must be able to name a group before the envelope exists: the whole point of the
+     * page is to discover that pet supplies cost $1,355/yr out of Groceries and therefore
+     * want an envelope of their own. One field cannot say both what you call a group and
+     * where it is funded from today.
+     */
+    groupLabel: text("group_label").notNull().default(""),
+    /** Which envelope pays for this today. Read-only comparison target; never written to. */
+    envelopeId: uuid("envelope_id").references(() => financeBudgetCategories.id, {
+      onDelete: "set null",
+    }),
+    /** What one unit is called — "can", "tube", "roll". Display only. */
+    unitLabel: text("unit_label").notNull().default(""),
+    rateBasis: text("rate_basis")
+      .$type<SupplyRateBasis>()
+      .notNull()
+      .default("units_per_day"),
+    /** Thousandths of a unit per day. `4/day` is `4000`. Null unless that is the basis. */
+    unitsPerDayMilli: integer("units_per_day_milli"),
+    /** Tenths of a day one unit lasts. `45 days` is `450`. Null unless that is the basis. */
+    daysPerUnitTenths: integer("days_per_unit_tenths"),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("finance_supply_items_user_group_idx").on(table.userId, table.groupLabel),
+    index("finance_supply_items_user_envelope_idx").on(table.userId, table.envelopeId),
+    check("finance_supply_items_name_present", sql`length(trim(${table.name})) > 0`),
+    // Text plus a check rather than a pgEnum, for the reason `finance_account_kind` gives:
+    // `ALTER TYPE … ADD VALUE` fails on Neon's transaction-mode pooler.
+    check(
+      "finance_supply_items_rate_basis",
+      sql`${table.rateBasis} in ('units_per_day', 'days_per_unit')`,
+    ),
+    // The load-bearing one: the basis and the populated column must agree, and the other
+    // column must be null. Left to application code this rots into "whichever mutation
+    // remembered to clear the other field", and a row carrying both is a row whose cost
+    // depends on which branch happens to read it first.
+    check(
+      "finance_supply_items_rate_set",
+      sql`(${table.rateBasis} = 'units_per_day'
+             and ${table.unitsPerDayMilli} is not null and ${table.unitsPerDayMilli} > 0
+             and ${table.daysPerUnitTenths} is null)
+          or (${table.rateBasis} = 'days_per_unit'
+             and ${table.daysPerUnitTenths} is not null and ${table.daysPerUnitTenths} > 0
+             and ${table.unitsPerDayMilli} is null)`,
+    ),
+  ],
+);
+
+/**
+ * One offer for an item: a brand, a vendor, a pack size and a price.
+ *
+ * Every item has at least one; the rest are comparison rows that show cost-per-unit against
+ * the one in use and never touch a total. Cost per unit is **not** a column — `$38.97 ÷ 42`
+ * is $0.9279, and per `src/lib/finances/money.ts` storing that rounded to $0.93 is how a
+ * column stops summing. It is computed for display.
+ */
+export const financeSupplyOptions = pgTable(
+  "finance_supply_options",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => financeSupplyItems.id, { onDelete: "cascade" }),
+    brand: text("brand").notNull().default(""),
+    vendor: text("vendor").notNull().default(""),
+    /** Units in one purchase — 42 cans, 12 cans, 1 tube. */
+    qtyPerItem: integer("qty_per_item").notNull().default(1),
+    costPerOrderCents: integer("cost_per_order_cents").notNull().default(0),
+    /** The one that drives this item's totals. At most one per item, by index below. */
+    inUse: boolean("in_use").notNull().default(false),
+    /** When this price was last checked. A calendar day — `development/dates.md`. */
+    pricedOn: date("priced_on", { mode: "string" }),
+    /** Set when the option came from an Amazon suggestion, so re-suggesting recognises it. */
+    asin: text("asin").notNull().default(""),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("finance_supply_options_item_idx").on(table.userId, table.itemId),
+    index("finance_supply_options_user_asin_idx").on(table.userId, table.asin),
+    // "Exactly one option drives the total" is the rule the whole feature rests on, so it is
+    // a constraint and not a convention. Partial, because the comparison rows — all of them
+    // `false` — must not fight over one key. Same shape as `nodes_one_inbox_per_user_uq`.
+    uniqueIndex("finance_supply_options_item_in_use_uq")
+      .on(table.userId, table.itemId)
+      .where(sql`${table.inUse}`),
+    check("finance_supply_options_qty_positive", sql`${table.qtyPerItem} > 0`),
+    check("finance_supply_options_cost_nonneg", sql`${table.costPerOrderCents} >= 0`),
   ],
 );
 
@@ -3533,6 +3681,10 @@ export type AmazonReturn = typeof amazonReturns.$inferSelect;
 export type NewAmazonReturn = typeof amazonReturns.$inferInsert;
 export type AmazonReplacement = typeof amazonReplacements.$inferSelect;
 export type NewAmazonReplacement = typeof amazonReplacements.$inferInsert;
+export type FinanceSupplyItem = typeof financeSupplyItems.$inferSelect;
+export type NewFinanceSupplyItem = typeof financeSupplyItems.$inferInsert;
+export type FinanceSupplyOption = typeof financeSupplyOptions.$inferSelect;
+export type NewFinanceSupplyOption = typeof financeSupplyOptions.$inferInsert;
 export type LifeEvent = typeof lifeEvents.$inferSelect;
 export type NewLifeEvent = typeof lifeEvents.$inferInsert;
 export type Job = typeof jobs.$inferSelect;

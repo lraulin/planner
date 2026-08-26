@@ -540,6 +540,13 @@
       "when": 1787630317272,
       "tag": "0076_wealthy_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1787752156500,
+      "tag": "0077_right_albert_cleary",
+      "breakpoints": true
     }
   ]
 }
