@@ -5,15 +5,23 @@
  * user's row reaches another user's page (`agent-os/standards/development/security.md`).
  */
 
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  financeAccounts,
   financeBudgetCategories,
   financePayeeAliases,
   financePayees,
   financeTransactions,
 } from "@/db/schema";
+import { effectiveFlow } from "../analytics";
+import { categoryAssignableIds } from "../categoryEligibility";
 import { numericStringToCents } from "../money";
+import {
+  payeeEvidenceRows,
+  type EvidenceCharge,
+  type PayeeEvidenceRow,
+} from "./evidence";
 import type { AliasRow } from "./resolve";
 import { mergeClaimDecision } from "./merge";
 import type { AutoCategoryMode } from "./autoCategory";
@@ -225,4 +233,138 @@ export async function previewPayeeMerge(
     resultingClaim: claim.claim,
     refusal: claim.refusal,
   };
+}
+
+/**
+ * Every payee that files into one envelope, with the evidence behind it.
+ *
+ * Answers the Files-here section (`agent-os/specs/2026-08-25-2144-payee-evidence-and-merge/`
+ * D3): who routes here, how much of it is already filed, how much is still waiting, and
+ * whether the payee's default is in force or held. Shaping is `./evidence.ts`; this function
+ * only gathers, and it scopes every join on `userId`.
+ *
+ * A payee counts as filing here when charges of its own already sit in the envelope **or** when
+ * its claim or default points at the envelope — a payee configured but not yet filed is
+ * exactly the one a person needs to see.
+ */
+export async function payeeEvidenceForCategory(
+  userId: string,
+  categoryId: string,
+): Promise<PayeeEvidenceRow[]> {
+  const [configured, filed] = await Promise.all([
+    db
+      .select({ id: financePayees.id })
+      .from(financePayees)
+      .where(
+        and(
+          eq(financePayees.userId, userId),
+          or(
+            eq(financePayees.claimedBudgetCategoryId, categoryId),
+            eq(financePayees.defaultBudgetCategoryId, categoryId),
+          ),
+        ),
+      ),
+    db
+      .selectDistinct({ id: financeTransactions.payeeId })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.budgetCategoryId, categoryId),
+          sql`${financeTransactions.payeeId} is not null`,
+        ),
+      ),
+  ]);
+
+  const payeeIds = [
+    ...new Set([
+      ...configured.map((row) => row.id),
+      ...filed.flatMap((row) => (row.id ? [row.id] : [])),
+    ]),
+  ];
+  if (payeeIds.length === 0) return [];
+
+  const [payees, charges, envelopes] = await Promise.all([
+    db
+      .select({
+        id: financePayees.id,
+        name: financePayees.name,
+        claimedBudgetCategoryId: financePayees.claimedBudgetCategoryId,
+        defaultBudgetCategoryId: financePayees.defaultBudgetCategoryId,
+        autoCategoryMode: financePayees.autoCategoryMode,
+      })
+      .from(financePayees)
+      .where(
+        and(eq(financePayees.userId, userId), inArray(financePayees.id, payeeIds)),
+      ),
+    db
+      .select({
+        id: financeTransactions.id,
+        payeeId: financeTransactions.payeeId,
+        categoryId: financeTransactions.budgetCategoryId,
+        accountId: financeTransactions.accountId,
+        accountOffBudget: financeAccounts.offBudget,
+        transactionDate: financeTransactions.transactionDate,
+        transferGroupId: financeTransactions.transferGroupId,
+        derivedFlow: financeTransactions.derivedFlow,
+        flowOverride: financeTransactions.flowOverride,
+        amount: financeTransactions.amount,
+      })
+      .from(financeTransactions)
+      .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeAccounts.userId, userId),
+          inArray(financeTransactions.payeeId, payeeIds),
+        ),
+      ),
+    db
+      .select({ id: financeBudgetCategories.id, name: financeBudgetCategories.name })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId)),
+  ]);
+
+  const assignable = categoryAssignableIds(
+    charges.map((row) => ({
+      id: row.id,
+      accountId: row.accountId,
+      transactionDate: row.transactionDate,
+      transferGroupId: row.transferGroupId,
+      effectiveFlow: effectiveFlow({
+        derivedFlow: row.derivedFlow,
+        flowOverride: row.flowOverride,
+        amountCents: numericStringToCents(row.amount) ?? 0,
+      }),
+    })),
+    new Set(charges.flatMap((row) => (row.accountOffBudget ? [row.accountId] : []))),
+  );
+
+  const chargesByPayee = new Map<string, EvidenceCharge[]>();
+  for (const row of charges) {
+    if (!row.payeeId) continue;
+    const charge: EvidenceCharge = {
+      id: row.id,
+      categoryId: row.categoryId,
+      eligible: assignable.has(row.id),
+    };
+    const list = chargesByPayee.get(row.payeeId);
+    if (list) list.push(charge);
+    else chargesByPayee.set(row.payeeId, [charge]);
+  }
+
+  const envelopeNames = new Map(envelopes.map((row) => [row.id, row.name]));
+
+  return payeeEvidenceRows(
+    categoryId,
+    payees.map((payee) => ({
+      id: payee.id,
+      name: payee.name,
+      claimedBudgetCategoryId: payee.claimedBudgetCategoryId,
+      defaultBudgetCategoryId: payee.defaultBudgetCategoryId,
+      autoCategoryMode: payee.autoCategoryMode as AutoCategoryMode,
+      charges: chargesByPayee.get(payee.id) ?? [],
+    })),
+    (id) => envelopeNames.get(id) ?? null,
+  );
 }

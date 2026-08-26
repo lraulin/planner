@@ -4,20 +4,27 @@ import { useEffect, useId, useMemo, useState, useTransition } from "react";
 import { mergePayeesAction, previewPayeeMergeAction } from "@/app/finances/actions";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { formatUsd } from "@/lib/finances/money";
-import type { PayeeMergePreview, PayeeRow } from "@/lib/finances/payees/queries";
+import type { PayeeMergePreview } from "@/lib/finances/payees/queries";
 
 function claimLabel(preview: PayeeMergePreview): string {
   if (!preview.resultingClaim) return "No envelope claim";
   return `Envelope: ${preview.resultingClaim.name}`;
 }
 
-/** Choose the surviving payee and inspect every reference the merge will move. */
+/**
+ * Choose the surviving payee and inspect every reference the merge will move.
+ *
+ * Takes only the identities: the Payees grid selects whole rows, while the Budget inspector's
+ * Files-here list selects evidence rows for the same payees
+ * (`agent-os/specs/2026-08-25-2144-payee-evidence-and-merge/` D4). Everything else the dialog
+ * shows comes from the server preview, which is the only trustworthy source for it anyway.
+ */
 export function PayeeMergeDialog({
   payees,
   onClose,
   onMerged,
 }: {
-  payees: readonly PayeeRow[];
+  payees: readonly { id: string; name: string }[];
   onClose: () => void;
   onMerged: (message: string) => void;
 }) {

@@ -3,6 +3,7 @@
 import { seedPayees, type SeedPayeesSummary } from "@/lib/finances/payees/backfill";
 import {
   addAlias,
+  clearPayeeRouting,
   deletePayee,
   mergePayees,
   replaceCommitmentPayees,
@@ -15,10 +16,12 @@ import {
 } from "@/lib/finances/payees/mutations";
 import {
   listPayees,
+  payeeEvidenceForCategory,
   previewPayeeMerge,
   type PayeeMergePreview,
   type PayeeRow,
 } from "@/lib/finances/payees/queries";
+import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
 import {
   clearScrapedPending,
   replaceScrapedPending,
@@ -47,6 +50,7 @@ import {
   autoMapConfiguredBudgetCategories,
   createBudgetCategory,
   createCategoryGroup,
+  fileWaitingChargesForPayee,
   deleteBudgetCategory,
   deleteCategoryGroup,
   moveBudgetStructureItem,
@@ -528,6 +532,28 @@ export async function setPayeeAutoCategoryAction(
   },
 ): Promise<ActionResult> {
   return run((userId) => setPayeeAutoCategory(userId, payeeId, input));
+}
+
+/** The Files-here list for one envelope (`.../2026-08-25-2144-payee-evidence-and-merge/` D3). */
+export async function payeeEvidenceAction(
+  categoryId: string,
+): Promise<QueryResult<PayeeEvidenceRow[]>> {
+  return runQuery((userId) => payeeEvidenceForCategory(userId, categoryId));
+}
+
+/** Remove: release the payee's claim, or clear its default (D4). */
+export async function clearPayeeRoutingAction(payeeId: string): Promise<ActionResult> {
+  return run((userId) => clearPayeeRouting(userId, payeeId));
+}
+
+/** File a payee's waiting charges into an envelope, after the count was confirmed (D5). */
+export async function fileWaitingChargesAction(
+  payeeId: string,
+  categoryId: string,
+): Promise<DataActionResult<{ filed: number }>> {
+  return runWithData((userId) =>
+    fileWaitingChargesForPayee(userId, payeeId, categoryId),
+  );
 }
 
 export async function deletePayeeAction(payeeId: string): Promise<ActionResult> {

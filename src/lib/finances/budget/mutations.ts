@@ -1045,6 +1045,50 @@ export async function setTransactionBudgetCategories(
   return { updated: assignable, skipped };
 }
 
+/**
+ * File every waiting charge of one payee into an envelope.
+ *
+ * The offer D5 makes when a default is set or confirmed: a payee whose destination is known
+ * usually has a backlog behind it — 372 `AMAZON MKTPL` charges, 286 Apple ones — and filing
+ * them by hand is the work the app exists to remove. It is never silent: the caller states
+ * the count first and this runs only on a yes.
+ *
+ * Only rows with no Category at all are touched, so a Category someone chose by hand is
+ * never overwritten; ineligible rows are skipped by the bulk write as everywhere else.
+ */
+export async function fileWaitingChargesForPayee(
+  userId: string,
+  payeeId: string,
+  categoryId: string,
+): Promise<{ filed: number }> {
+  await requireCategory(userId, categoryId);
+  const [payee] = await db
+    .select({ id: financePayees.id })
+    .from(financePayees)
+    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)))
+    .limit(1);
+  if (!payee) throw new Error("That payee does not exist.");
+
+  const waiting = await db
+    .select({ id: financeTransactions.id })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financeTransactions.payeeId, payeeId),
+        isNull(financeTransactions.budgetCategoryId),
+      ),
+    );
+  if (waiting.length === 0) return { filed: 0 };
+
+  const result = await setTransactionBudgetCategories(
+    userId,
+    waiting.map((row) => row.id),
+    categoryId,
+  );
+  return { filed: result.updated.length };
+}
+
 /** Put one transaction in a Category, or make it Uncategorized. */
 export async function setTransactionBudgetCategory(
   userId: string,

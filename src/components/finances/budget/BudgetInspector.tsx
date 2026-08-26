@@ -17,7 +17,9 @@ import {
   type BudgetRow,
 } from "@/lib/finances/budget/rows";
 import { summarize } from "@/lib/finances/budget/templates/types";
+import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
 import { formatUsd } from "@/lib/finances/money";
+import { FilesHereSection } from "./FilesHereSection";
 import { UrlCell, withScheme } from "./UrlCell";
 import type { BillPatch } from "./budgetColumns";
 
@@ -47,21 +49,34 @@ export function BudgetInspector({
   carryInCents,
   indicator,
   pending,
+  evidence,
+  selectedPayeeIds,
   onPatchBill,
   onNotes,
   onAssignUnderfunded,
   onEditTarget,
   onEditPayees,
+  onTogglePayee,
+  onMergePayees,
+  onRemovePayeeRouting,
+  onFileWaiting,
 }: {
   row: BudgetRow | null;
   carryInCents: number;
   indicator: EnvelopeIndicator | null;
   pending: boolean;
+  /** Payees filing into this envelope; `null` while the list is still loading. */
+  evidence: readonly PayeeEvidenceRow[] | null;
+  selectedPayeeIds: readonly string[];
   onPatchBill: (row: BudgetBillRow, patch: BillPatch) => void;
   onNotes: (row: BudgetRow, notes: string) => void;
   onAssignUnderfunded: (row: BudgetRow) => void;
   onEditTarget: (row: BudgetRow) => void;
   onEditPayees: (row: BudgetRow) => void;
+  onTogglePayee: (payeeId: string) => void;
+  onMergePayees: () => void;
+  onRemovePayeeRouting: (evidenceRow: PayeeEvidenceRow) => void;
+  onFileWaiting: (evidenceRow: PayeeEvidenceRow) => void;
 }) {
   const titleId = useId();
   const [notesDraft, setNotesDraft] = useState(row?.notes ?? "");
@@ -255,6 +270,19 @@ export function BudgetInspector({
           </div>
         </section>
       ) : null}
+
+      {row.isIncome ? null : (
+        <FilesHereSection
+          envelopeName={row.name}
+          rows={evidence}
+          selected={selectedPayeeIds}
+          pending={pending}
+          onToggle={onTogglePayee}
+          onMerge={onMergePayees}
+          onRemove={onRemovePayeeRouting}
+          onFileWaiting={onFileWaiting}
+        />
+      )}
 
       {scan.moreNeededCents > 0 && !row.isIncome ? (
         <button

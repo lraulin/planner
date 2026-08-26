@@ -498,6 +498,31 @@ export async function setPayeeAutoCategory(
   if (!owned) throw new Error("That payee does not exist.");
 }
 
+/**
+ * Stop a payee routing anywhere on its own: release its claim, or clear its default.
+ *
+ * The Remove of the envelope's Files-here list (`D4`). A claim is the stronger fact and is
+ * what the reader sees, so it is what a single Remove releases; a payee that is both claimed
+ * and carries a default needs a second Remove, which is honest about there being two facts.
+ *
+ * Filed charges are left where they are. Removing the rule that would file the *next* charge
+ * is not a reason to unfile the history a person put there by hand.
+ */
+export async function clearPayeeRouting(
+  userId: string,
+  payeeId: string,
+): Promise<void> {
+  const payee = await requirePayee(userId, payeeId);
+  await db
+    .update(financePayees)
+    .set(
+      payee.budgetCategoryId
+        ? { claimedBudgetCategoryId: null, updatedAt: new Date() }
+        : { defaultBudgetCategoryId: null, updatedAt: new Date() },
+    )
+    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+}
+
 export async function setPayeeNotes(
   userId: string,
   payeeId: string,
