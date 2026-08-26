@@ -23,6 +23,30 @@ import {
 } from "@/lib/finances/payees/queries";
 import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
 import {
+  createSupplyItem,
+  createSupplyItemFromSuggestion,
+  createSupplyOption,
+  deleteSupplyItem,
+  deleteSupplyOption,
+  setSupplyOptionInUse,
+  updateSupplyItem,
+  updateSupplyOption,
+  type SupplyItemEdit,
+  type SupplyItemInput,
+  type SupplyOptionEdit,
+  type SupplyOptionInput,
+} from "@/lib/finances/supplies/mutations";
+import {
+  listAmazonRepeatPurchases,
+  listSupplyItems,
+  type SupplyItemRow,
+} from "@/lib/finances/supplies/queries";
+import {
+  supplySuggestions,
+  type SupplySuggestion,
+} from "@/lib/finances/supplies/suggestions";
+import { parsePackCount } from "@/lib/finances/supplies/packSize";
+import {
   clearScrapedPending,
   replaceScrapedPending,
   type ReplaceScrapedPendingResult,
@@ -572,4 +596,143 @@ export async function mergePayeesAction(
   sourceIds: readonly string[],
 ): Promise<DataActionResult<{ movedTransactions: number; movedAliases: number }>> {
   return runWithData((userId) => mergePayees(userId, targetId, sourceIds));
+}
+
+/* ────────────────────────────── Supplies worksheet ───────────────────────────── */
+
+/**
+ * The worksheet is a grid the client holds and patches, so the inline edits pass
+ * `revalidate: []` — a layout revalidate reloads every row and discards the grid state the
+ * user is mid-edit in, for the same reason `updateTransactionAction` does it.
+ */
+export async function listSupplyItemsAction(): Promise<QueryResult<SupplyItemRow[]>> {
+  return runQuery(listSupplyItems);
+}
+
+export async function createSupplyItemAction(
+  input: SupplyItemInput,
+): Promise<ActionResult> {
+  return run((userId) => createSupplyItem(userId, input), { revalidate: [] });
+}
+
+export async function updateSupplyItemAction(
+  itemId: string,
+  edit: SupplyItemEdit,
+): Promise<ActionResult> {
+  return run((userId) => updateSupplyItem(userId, itemId, edit), { revalidate: [] });
+}
+
+export async function deleteSupplyItemAction(itemId: string): Promise<ActionResult> {
+  return run((userId) => deleteSupplyItem(userId, itemId), { revalidate: [] });
+}
+
+export async function createSupplyOptionAction(
+  input: SupplyOptionInput,
+): Promise<ActionResult> {
+  return run((userId) => createSupplyOption(userId, input), { revalidate: [] });
+}
+
+export async function updateSupplyOptionAction(
+  optionId: string,
+  edit: SupplyOptionEdit,
+): Promise<ActionResult> {
+  return run((userId) => updateSupplyOption(userId, optionId, edit), {
+    revalidate: [],
+  });
+}
+
+export async function deleteSupplyOptionAction(
+  optionId: string,
+): Promise<ActionResult> {
+  return run((userId) => deleteSupplyOption(userId, optionId), { revalidate: [] });
+}
+
+export async function setSupplyOptionInUseAction(
+  optionId: string,
+): Promise<ActionResult> {
+  return run((userId) => setSupplyOptionInUse(userId, optionId), { revalidate: [] });
+}
+
+/** Repeat purchases shaped into prefills, minus whatever is already on the worksheet. */
+export async function listAmazonSupplySuggestionsAction(): Promise<
+  QueryResult<SupplySuggestion[]>
+> {
+  return runQuery(async (userId) => {
+    const [purchases, items] = await Promise.all([
+      listAmazonRepeatPurchases(userId),
+      listSupplyItems(userId),
+    ]);
+    const knownAsins = new Set(
+      items.flatMap((item) =>
+        item.options.flatMap((option) => (option.asin ? [option.asin] : [])),
+      ),
+    );
+    return supplySuggestions(purchases, { knownAsins });
+  });
+}
+
+export async function createSupplyItemFromSuggestionAction(
+  input: Parameters<typeof createSupplyItemFromSuggestion>[1],
+): Promise<ActionResult> {
+  // `run` reports the new item's id, which is what the dialog selects on return.
+  return run((userId) => createSupplyItemFromSuggestion(userId, input), {
+    revalidate: [],
+  });
+}
+
+/**
+ * Add one Amazon line item to the worksheet, from the Orders grid.
+ *
+ * Runs the same aggregate as the suggestion dialog, scoped to this ASIN, so the rate comes
+ * from the whole purchase history rather than from the single row that was right-clicked.
+ * One order gives no observable span, and rather than refuse — "I bought this once and want
+ * to track it" is a reasonable thing to want — it falls back to a visible 30-days-per-unit
+ * placeholder the user corrects in the grid.
+ */
+export async function addSupplyFromAmazonItemAction(
+  asin: string,
+): Promise<ActionResult> {
+  return run(
+    async (userId) => {
+      const [purchase] = await listAmazonRepeatPurchases(userId, {
+        minOrders: 1,
+        asin,
+      });
+      if (!purchase) throw new Error("That order item is not on file.");
+
+      const existing = await listSupplyItems(userId);
+      if (
+        existing.some((item) => item.options.some((option) => option.asin === asin))
+      ) {
+        throw new Error("That item is already on the Supplies worksheet.");
+      }
+
+      const [suggestion] = supplySuggestions([purchase]);
+      const packCount =
+        suggestion?.qtyPerItem ?? parsePackCount(purchase.productName) ?? 1;
+      return createSupplyItemFromSuggestion(userId, {
+        name: purchase.productName,
+        rate:
+          suggestion === undefined
+            ? { rateBasis: "days_per_unit", daysPerUnitTenths: 300 }
+            : suggestion.rateBasis === "units_per_day"
+              ? {
+                  rateBasis: "units_per_day",
+                  unitsPerDayMilli: suggestion.unitsPerDayMilli ?? 1,
+                }
+              : {
+                  rateBasis: "days_per_unit",
+                  daysPerUnitTenths: suggestion.daysPerUnitTenths ?? 1,
+                },
+        option: {
+          vendor: "Amazon",
+          qtyPerItem: packCount,
+          costPerOrderCents: purchase.latestUnitPriceCents ?? 0,
+          pricedOn: purchase.lastOrderDate,
+          asin,
+        },
+      });
+    },
+    { revalidate: [] },
+  );
 }

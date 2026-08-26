@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { GridRow } from "@/lib/tree/slice";
 import { AMAZON_GROUP_BY_VALUES, groupAmazonItems } from "@/lib/amazon/grouping";
 import type { AmazonItemListRow } from "@/lib/amazon/types";
@@ -14,6 +15,8 @@ import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
+import type { MenuItem } from "@/components/grid/ContextMenu";
+import { addSupplyFromAmazonItemAction } from "@/app/finances/actions";
 import { amazonColumns, type AmazonColumnCtx } from "./amazonColumns";
 
 const AMAZON_VIEWS = [{ id: "all", label: "All Orders" }] as const;
@@ -46,6 +49,9 @@ export function AmazonOrdersView({
   const [seen, setSeen] = useState(initialItems);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   if (initialItems !== seen) {
     setSeen(initialItems);
@@ -95,6 +101,34 @@ export function AmazonOrdersView({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [move]);
 
+  /**
+   * The discovery path for the Supplies worksheet: you notice you keep rebuying something
+   * while looking at what you bought. Adding lands on the worksheet, because the rate it
+   * infers is a guess that wants correcting where the totals are visible.
+   */
+  const rowMenu = useCallback(
+    (rowId: string | null): MenuItem[] => {
+      const row = rows.find((candidate) => candidate.id === rowId);
+      const asin = row?.asin ?? "";
+      return [
+        {
+          label: "Add to Supplies…",
+          disabled: pending || asin === "",
+          title: asin === "" ? "This line item has no ASIN to track." : undefined,
+          onSelect: () => {
+            setError(null);
+            startTransition(async () => {
+              const result = await addSupplyFromAmazonItemAction(asin);
+              if (result.ok) router.push("/finances/supplies");
+              else setError(result.error);
+            });
+          },
+        },
+      ];
+    },
+    [rows, pending, router],
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <GridToolbar
@@ -103,6 +137,7 @@ export function AmazonOrdersView({
         allColumns={amazonColumns}
         distinctValues={distinctValues}
         counts={counts}
+        error={error}
         views={views}
         groupDimensions={AMAZON_GROUP_BY_VALUES}
         groupIds={groupIds}
@@ -119,6 +154,7 @@ export function AmazonOrdersView({
         onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         ariaLabel="Amazon orders"
+        rowMenu={rowMenu}
         rowLabel={(row) => row.node.productName || "Amazon item"}
         enableFilters
         enableSort

@@ -248,6 +248,14 @@ const PAGES = {
         "envelope zero-based ready to assign assign categories ynab actual carryover rollover schedules recurring bills upcoming subscriptions commitments spend pizza set aside cadence review",
     },
     {
+      id: "supplies",
+      label: "Supplies",
+      segment: "supplies",
+      status: "built",
+      keywords:
+        "worksheet calculator unit cost price per compare vendor brand pack size consumables estimate rebuy recurring purchases cat food",
+    },
+    {
       id: "insights",
       label: "Insights",
       segment: "insights",

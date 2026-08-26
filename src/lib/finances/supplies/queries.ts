@@ -167,7 +167,7 @@ export type AmazonRepeatPurchase = {
  */
 export async function listAmazonRepeatPurchases(
   userId: string,
-  options: { minOrders?: number } = {},
+  options: { minOrders?: number; asin?: string } = {},
 ): Promise<AmazonRepeatPurchase[]> {
   const minOrders = options.minOrders ?? 3;
 
@@ -197,6 +197,7 @@ export async function listAmazonRepeatPurchases(
         eq(amazonOrderItems.userId, userId),
         eq(amazonOrderItems.channel, "retail"),
         ne(amazonOrderItems.asin, ""),
+        ...(options.asin ? [eq(amazonOrderItems.asin, options.asin)] : []),
         sql`${amazonOrders.orderDate} is not null`,
         sql`lower(${amazonOrders.orderStatus}) not like '%cancel%'`,
       ),
