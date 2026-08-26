@@ -31,7 +31,7 @@ export default async function FinancesRegisterPage() {
     transactions,
     accounts,
     bills,
-    envelopes,
+    envelopeCatalog,
     storedBudget,
     payees,
     tags,
@@ -74,7 +74,7 @@ export default async function FinancesRegisterPage() {
           initialPrepared={initialPrepared}
           initialAccounts={accounts}
           initialClaimed={claimedPayeesOf(bills)}
-          envelopes={envelopes}
+          catalog={envelopeCatalog}
           initialUpcoming={upcoming}
           payees={payees.map(({ id, name }) => ({ id, name }))}
           tags={tags.map(({ tag, color }) => ({ tag, color }))}

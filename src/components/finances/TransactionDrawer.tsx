@@ -10,7 +10,7 @@ import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { Section, SelectField, TextArea } from "@/components/detail/fields";
 import { effectiveFlow } from "@/lib/finances/analytics";
 import { categoryAssignmentRefusal } from "@/lib/finances/categoryEligibility";
-import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
+import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind, FinanceFlowKind } from "@/db/schema";
 import { CategorySelect } from "./CategorySelect";
 import { FLOW_KINDS, flowLabel } from "@/lib/finances/flowLabels";
@@ -32,7 +32,7 @@ import { addTagToNotes, normalizeTagInput, tagsInNotes } from "@/lib/finances/ta
 export function TransactionDrawer({
   transactionId,
   row,
-  envelopes,
+  catalog,
   offBudgetAccountIds,
   managedTags,
   onClose,
@@ -41,7 +41,7 @@ export function TransactionDrawer({
 }: {
   transactionId: string | null;
   row: RegisterTransactionRow | null;
-  envelopes: readonly EnvelopePickerOption[];
+  catalog: EnvelopeCatalog;
   offBudgetAccountIds: ReadonlySet<string>;
   managedTags: readonly string[];
   onClose: () => void;
@@ -63,7 +63,7 @@ export function TransactionDrawer({
         <TransactionForm
           key={row.id}
           row={row}
-          envelopes={envelopes}
+          catalog={catalog}
           offBudgetAccountIds={offBudgetAccountIds}
           managedTags={managedTags}
           onClose={onClose}
@@ -92,7 +92,7 @@ function ReadOnly({ label, children }: { label: string; children: React.ReactNod
 
 function TransactionForm({
   row,
-  envelopes,
+  catalog,
   offBudgetAccountIds,
   managedTags,
   onClose,
@@ -100,7 +100,7 @@ function TransactionForm({
   onCreateEnvelope,
 }: {
   row: RegisterTransactionRow;
-  envelopes: readonly EnvelopePickerOption[];
+  catalog: EnvelopeCatalog;
   offBudgetAccountIds: ReadonlySet<string>;
   managedTags: readonly string[];
   onClose: () => void;
@@ -170,7 +170,8 @@ function TransactionForm({
       onChanged(row.id, {
         budgetCategoryId: categoryId,
         budgetCategoryName: categoryId
-          ? (envelopes.find((envelope) => envelope.id === categoryId)?.name ?? null)
+          ? (catalog.envelopes.find((envelope) => envelope.id === categoryId)?.name ??
+            null)
           : null,
       });
     });
@@ -234,7 +235,7 @@ function TransactionForm({
                 </button>
               </div>
             </div>
-            {envelopes.length > 0 &&
+            {catalog.envelopes.length > 0 &&
               (envelopeRefusal ? (
                 <ReadOnly label="Category">
                   <span className="text-ink-muted">Not budgeted</span>
@@ -248,7 +249,7 @@ function TransactionForm({
                     Category
                   </span>
                   <CategorySelect
-                    envelopes={envelopes}
+                    catalog={catalog}
                     value={envelopeId}
                     onChange={setEnvelope}
                     onCreate={(kind) => onCreateEnvelope(row.id, kind)}

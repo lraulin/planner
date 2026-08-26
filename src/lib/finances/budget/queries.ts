@@ -96,22 +96,36 @@ export type BudgetEnvelopeOption = {
   /** Envelope's own name — what the register Category column stores. */
   name: string;
   kind: EnvelopeKind;
+  groupId: string | null;
+  sortKey: string;
+  hidden: boolean;
 };
 
-/** Small schedule-editor read; labels include the complete group path for nested budgets. */
+export type BudgetEnvelopeCatalog = {
+  groups: BudgetGroupRow[];
+  envelopes: BudgetEnvelopeOption[];
+};
+
+/** Small catalog read for Register Category and Payees auto-category. */
 export async function listBudgetEnvelopeOptions(
   userId: string,
-): Promise<BudgetEnvelopeOption[]> {
+): Promise<BudgetEnvelopeCatalog> {
   const [groups, categories] = await Promise.all([
     groupsOf(userId),
     categoriesOf(userId),
   ]);
-  return categories.map((category) => ({
-    id: category.id,
-    label: budgetEnvelopeLabel(groups, category),
-    name: category.name,
-    kind: category.kind,
-  }));
+  return {
+    groups,
+    envelopes: categories.map((category) => ({
+      id: category.id,
+      label: budgetEnvelopeLabel(groups, category),
+      name: category.name,
+      kind: category.kind,
+      groupId: category.groupId,
+      sortKey: category.sortKey,
+      hidden: category.hidden,
+    })),
+  };
 }
 
 export type BudgetData = {
@@ -647,11 +661,7 @@ export async function loadBillSnapshots(
     const bill = storedBillOf(category);
     if (bill === null || category.bill?.status !== "active") continue;
 
-    const anchor = billAnchor(
-      bill,
-      lastCharge.get(category.id) ?? null,
-      todayKey,
-    );
+    const anchor = billAnchor(bill, lastCharge.get(category.id) ?? null, todayKey);
     if (anchor.nextDueKey === null || bill.expectedCents === null) continue;
 
     snapshots.push({

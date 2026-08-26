@@ -12,7 +12,7 @@ import {
   type RegisterFieldId,
 } from "@/lib/finances/registerFields";
 import { categoryAssignmentRefusal } from "@/lib/finances/categoryEligibility";
-import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
+import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind } from "@/db/schema";
 import { CategorySelect } from "./CategorySelect";
 
@@ -22,7 +22,7 @@ import { CategorySelect } from "./CategorySelect";
  */
 export type FinanceColumnCtx = {
   /** Every envelope, in budget order. Empty until a budget is set up. */
-  envelopes: readonly EnvelopePickerOption[];
+  catalog: EnvelopeCatalog;
   offBudgetAccountIds: ReadonlySet<string>;
   onSetEnvelope: (transactionId: string, categoryId: string | null) => void;
   onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
@@ -177,7 +177,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
       }
       return (
         <CategorySelect
-          envelopes={ctx.envelopes}
+          catalog={ctx.catalog}
           value={row.node.budgetCategoryId}
           ariaLabel={`Category for ${row.node.description}`}
           onChange={(categoryId) => ctx.onSetEnvelope(row.node.id, categoryId)}

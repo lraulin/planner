@@ -1,5 +1,7 @@
 # References for Category picker typeahead
 
+**Status: frozen / complete** (2026-08-26)
+
 ## Governing specs
 
 ### `agent-os/specs/2026-08-24-1522-category-by-kind-and-history/`

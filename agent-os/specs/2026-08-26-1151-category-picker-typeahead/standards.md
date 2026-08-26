@@ -1,5 +1,7 @@
 # Standards for Category picker typeahead
 
+**Status: frozen / complete** (2026-08-26)
+
 Applied as of standards commit `b8ecaf5a8f68b7e19b0b943e3ec4c693f042832c`. References, not
 copies — see AGENTS.md.
 

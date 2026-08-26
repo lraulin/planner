@@ -1,6 +1,6 @@
 # Category picker typeahead — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete**
 
 ## Scope
 

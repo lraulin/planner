@@ -64,7 +64,10 @@ import { TransactionDrawer } from "./TransactionDrawer";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { TrackAsBillDialog } from "./TrackAsBillDialog";
 import { NewEnvelopeDialog } from "./NewEnvelopeDialog";
-import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
+import type {
+  EnvelopeCatalog,
+  EnvelopePickerOption,
+} from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind } from "@/db/schema";
 import {
   FINANCE_COLUMN_IDS,
@@ -178,7 +181,7 @@ export function FinancesView({
   initialPrepared,
   initialAccounts,
   initialClaimed,
-  envelopes,
+  catalog,
   initialUpcoming = [],
   payees: _payees,
   tags,
@@ -188,8 +191,8 @@ export function FinancesView({
   initialPrepared: RegisterPrepared;
   initialAccounts: FinanceAccountRow[];
   initialClaimed: readonly ClaimedPayee[];
-  /** Budget envelopes, in budget order. Empty until a budget exists. */
-  envelopes: readonly EnvelopePickerOption[];
+  /** Budget groups and envelopes, in budget order. Empty until a budget exists. */
+  catalog: EnvelopeCatalog;
   /** Unposted schedule occurrences. Not transactions; never mixed into `rows`. */
   initialUpcoming?: UpcomingBillRow[];
   payees: readonly { id: string; name: string }[];
@@ -351,15 +354,23 @@ export function FinancesView({
     refresh();
   }, [closeFileImport, refresh]);
 
-  const envelopeCatalog = useMemo(() => {
-    const known = new Set(envelopes.map((envelope) => envelope.id));
-    return [
-      ...envelopes,
-      ...createdEnvelopes.filter((envelope) => !known.has(envelope.id)),
-    ];
-  }, [envelopes, createdEnvelopes]);
+  // Envelopes minted from New {type}… are folded in locally so the picker can show one
+  // before the server component reloads. They land at type root — see the spec.
+  const envelopeCatalog = useMemo((): EnvelopeCatalog => {
+    const known = new Set(catalog.envelopes.map((envelope) => envelope.id));
+    return {
+      groups: catalog.groups,
+      envelopes: [
+        ...catalog.envelopes,
+        ...createdEnvelopes.filter((envelope) => !known.has(envelope.id)),
+      ],
+    };
+  }, [catalog, createdEnvelopes]);
   const envelopeNameById = useMemo(
-    () => new Map(envelopeCatalog.map((envelope) => [envelope.id, envelope.name])),
+    () =>
+      new Map(
+        envelopeCatalog.envelopes.map((envelope) => [envelope.id, envelope.name]),
+      ),
     [envelopeCatalog],
   );
 
@@ -432,7 +443,7 @@ export function FinancesView({
 
   const columnCtx = useMemo(
     () => ({
-      envelopes: envelopeCatalog,
+      catalog: envelopeCatalog,
       offBudgetAccountIds,
       tagColors,
       onSetEnvelope,
@@ -699,7 +710,15 @@ export function FinancesView({
             const transactionId = newEnvelope.transactionId;
             setCreatedEnvelopes((current) => [
               ...current,
-              { id, label: name, name, kind: newEnvelope.kind },
+              {
+                id,
+                label: name,
+                name,
+                kind: newEnvelope.kind,
+                groupId: null,
+                sortKey: name,
+                hidden: false,
+              },
             ]);
             setNewEnvelope(null);
             onSetEnvelope(transactionId, id);
@@ -709,7 +728,7 @@ export function FinancesView({
       <TransactionDrawer
         transactionId={openId}
         row={openId ? rowById(openId) : null}
-        envelopes={envelopeCatalog}
+        catalog={envelopeCatalog}
         offBudgetAccountIds={offBudgetAccountIds}
         managedTags={tags.map((tag) => tag.tag)}
         onClose={closeDrawer}
@@ -735,7 +754,7 @@ export function FinancesView({
             </p>
             <div className="mt-4">
               <CategorySelect
-                envelopes={envelopeCatalog}
+                catalog={envelopeCatalog}
                 value={null}
                 ariaLabel="Category"
                 onChange={(categoryId) => {
@@ -748,7 +767,7 @@ export function FinancesView({
                   setCategoryPickerOpen(false);
                   if (id) onCreateEnvelope(id, kind);
                 }}
-                className="min-h-tap w-full rounded border border-rule bg-surface px-2 text-[0.8125rem] text-ink"
+                className="min-h-tap w-full rounded border border-rule bg-surface px-2 text-base text-ink md:text-[0.8125rem]"
               />
             </div>
             <div className="mt-4 flex justify-end">

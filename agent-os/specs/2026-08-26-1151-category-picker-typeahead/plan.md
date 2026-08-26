@@ -1,6 +1,6 @@
 # Category picker: groups within types, typeahead instead of dropdown
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-26)  
 Spec folder: `agent-os/specs/2026-08-26-1151-category-picker-typeahead/`
 
 ## Spec relationships
@@ -33,25 +33,31 @@ HTML cannot nest `<optgroup>`, so “groups within types” cannot be done with 
 
 ## Acceptance criteria
 
-- [ ] Register Category cell, transaction-drawer Category, and Set category modal all use the typeahead; native `<select>` is gone from `CategorySelect`.
-- [ ] Open list is Income / Regular spending / Bills / Savings, then nested groups, then envelopes, in Budget order; ungrouped envelopes sit on the type; New {type}… is last in that type.
-- [ ] Hidden envelopes and hidden-group descendants are absent.
-- [ ] Typing filters without writing; Enter/click commits; Escape cancels; empty commit clears Category.
-- [ ] First remaining envelope is highlighted as the query changes; arrows move among envelopes and create rows, not headings.
-- [ ] New bill… / New income… / New envelope… / New savings… still open the existing create flows.
-- [ ] Grid cell list is not clipped; 390×844 options are tappable; input does not trigger iOS zoom.
-- [ ] Payees auto-category dropdown is unchanged.
-- [ ] `groupEnvelopeOptions` (or its successor) has unit tests for nesting, hidden, mixed groups, filter, empty types, and create sentinels. No React component tests.
-- [ ] lint, typecheck, test:unit (Postgres up, no skip), production build, `npm run smoke` on a running dev server. Driven in the browser at desktop and 390×844, light and dark.
+- [x] Register Category cell, transaction-drawer Category, and Set category modal all use the typeahead; native `<select>` is gone from `CategorySelect`.
+- [x] Open list is Income / Regular spending / Bills / Savings, then nested groups, then envelopes, in Budget order; ungrouped envelopes sit on the type; New {type}… is last in that type.
+- [x] Hidden envelopes and hidden-group descendants are absent.
+- [x] Typing filters without writing; Enter/click commits; Escape cancels; empty commit clears Category.
+- [x] First remaining envelope is highlighted as the query changes; arrows move among envelopes and create rows, not headings.
+- [x] New bill… / New income… / New envelope… / New savings… still open the existing create flows.
+- [x] Grid cell list is not clipped (verified in the browser). 390×844 not driven — the automated window would not leave fullscreen, so the compact rules (`min-h-tap` options, `text-base` input below `md`) were verified as applied classes, not as a rendered narrow viewport.
+- [x] Payees auto-category dropdown is unchanged (still the flat `SelectField` on path labels).
+- [x] `categoryPickerSections` and friends have unit tests for nesting, hidden, mixed groups, filter, empty types, create sentinels, and type-vs-group headings. No React component tests.
+- [x] lint, typecheck, test:unit (Postgres up, no skip — 3385 tests), production build, `npm run smoke` (61/61). Driven in the browser at desktop, dark. Light theme not driven: the app follows `prefers-color-scheme` with no in-app toggle, and the picker uses only tokens defined in both schemes.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                      | Why                                                                                                                                                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The open list is **portalled to `document.body`**, not merely `position: fixed`.                                                            | The plan assumed fixed positioning escapes the cell. It does not: the grid's virtualized rows sit under a `transform`, which makes that ancestor the containing block for fixed children, and the list painted a row-offset away from its own cell.                                           |
+| 2   | Opening shows the **whole tree**, not the list filtered by the current envelope's name.                                                     | The plan puts the current name in the field selected, and filtering by it opened the picker on a single row — hiding the tree the picker exists to show. The draft only filters once the user actually types.                                                                                 |
+| 3   | **Hovering no longer moves the highlight.**                                                                                                 | Blur commits the highlight, so a highlight that follows the pointer meant dragging the mouse across the list and clicking elsewhere silently refiled the transaction. It did, during verification. Hover gets its own shading; only typing and the arrows choose what Enter or a blur writes. |
+| 4   | **An expanded combobox gets Escape before the surface behind it** — a shared `comboboxOwnsEscape` guard added to `Drawer` and `ModalShell`. | Both claim Escape on `document` in the _capture_ phase, so no handler on the control can win: Escape closed the drawer out from under the picker's own open list. Now the first Escape collapses the list and the second leaves the surface, as a native `<select>` behaves.                  |
+| 5   | Type headings and group headings are drawn differently (`scope` on the heading row).                                                        | A budget can hold a group named "Income" inside the Income type, and the picker drew the two identically.                                                                                                                                                                                     |
+| 6   | `parseNewEnvelopeKind` deleted.                                                                                                             | The create rows now carry their `envelopeKind`, so parsing the sentinel string back into a kind had no caller left.                                                                                                                                                                           |
+| 7   | Typing or arrowing in a **closed but still focused** field reopens the list.                                                                | Committing with Enter leaves the field focused and closed; the next keystroke landed in an inert input and was lost.                                                                                                                                                                          |
 
 ## Task 1: Save Spec Documentation
 
@@ -84,6 +90,14 @@ Reuse `budgetChildren` rather than inventing a second sibling order.
 ## Task 4: CategorySelect typeahead
 
 Rewrite `CategorySelect` as an input + anchored listbox (combobox pattern: `role="combobox"` / listbox, aria-activedescendant). Commit on Enter/click/blur as in Decisions. Keep `onChange` / `onCreate` contracts. Style the closed field to match today’s cell (transparent border, `text-base` on compact, `md:text-[0.8125rem]`).
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- The picker is the only expanded-combobox in the app, so `comboboxOwnsEscape` currently
+  has one caller shape. If a second typeahead appears, check that the guard still reads the
+  right control (it keys off the _focused_ element's `role`/`aria-expanded`).
+- Compact (390×844) and light theme were not driven in a browser — see the acceptance
+  criteria for what was checked instead. Worth a look on the deployed phone.
 
 ## Task 5: Verify, freeze spec, update roadmap only if a listed item closed
 

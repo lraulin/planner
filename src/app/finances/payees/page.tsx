@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 /** The canonical merchant names and the bank spellings each one answers to. */
 export default async function FinancesPayeesPage() {
   const userId = await getCurrentUserId();
-  const [payees, envelopes] = await Promise.all([
+  const [payees, catalog] = await Promise.all([
     listPayees(userId),
     listBudgetEnvelopeOptions(userId),
   ]);
@@ -18,7 +18,8 @@ export default async function FinancesPayeesPage() {
   return (
     <AppShell active="finances">
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <PayeesView initialPayees={payees} envelopes={envelopes} />
+        {/* Payees keeps the flat list: its SelectField shows the full group path label. */}
+        <PayeesView initialPayees={payees} envelopes={catalog.envelopes} />
       </Suspense>
     </AppShell>
   );
