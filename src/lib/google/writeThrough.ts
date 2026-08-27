@@ -103,6 +103,35 @@ export async function pushCreate(
  * locally — the two would diverge. The error is rewritten to a clear user-facing sentence
  * so the drawer does not surface a calendar-id blob or a bare "Internal error".
  */
+/**
+ * Which Google event a local edit targets, and the body to PATCH onto it.
+ *
+ * Split out of `pushUpdate` because this is the whole of the interesting reasoning and
+ * none of the network: an instance id would edit one occurrence when the user meant the
+ * series, and the recurrence field is conditional. Kept pure so its test needs neither a
+ * Google token nor a mocked client — the standard's "prefer real values over mocks", and
+ * the reason the unit suite has no `vi.mock` left to leak across a shared worker.
+ */
+export function buildUpdatePatch(
+  row: { externalId: string; externalSeriesId: string | null },
+  merged: PushableAppointment,
+): { targetEventId: string; patch: Partial<GoogleEventWrite> } {
+  const body = appointmentToGoogleEvent(merged);
+  // Recurrence is omitted for one-offs so a PATCH cannot invent a series. When the
+  // merged row *has* a rule we send it: converting a repeating timed event to all-day
+  // otherwise leaves Google's timed UNTIL beside date-only start/end, which it rejects
+  // as "Invalid start time."
+  const { recurrence, ...instanceFields } = body;
+  const patch: Partial<GoogleEventWrite> = instanceFields;
+  if (merged.recurrenceFrequency !== "none") {
+    patch.recurrence = recurrence;
+  }
+
+  // An instance id ("evt-1_20260810T090000Z") edits a single occurrence; the series id
+  // edits the rule. The drawer edits the series.
+  return { targetEventId: row.externalSeriesId || row.externalId, patch };
+}
+
 export async function pushUpdate(
   userId: string,
   row: Pick<
@@ -115,18 +144,10 @@ export async function pushUpdate(
     return null;
   }
 
-  const body = appointmentToGoogleEvent(merged);
-  // Recurrence is omitted for one-offs so a PATCH cannot invent a series. When the
-  // merged row *has* a rule we send it: converting a repeating timed event to all-day
-  // otherwise leaves Google's timed UNTIL beside date-only start/end, which it rejects
-  // as "Invalid start time."
-  const { recurrence, ...instanceFields } = body;
-  const patch: Partial<GoogleEventWrite> = instanceFields;
-  if (merged.recurrenceFrequency !== "none") {
-    patch.recurrence = recurrence;
-  }
-
-  const targetEventId = row.externalSeriesId || row.externalId;
+  const { targetEventId, patch } = buildUpdatePatch(
+    { externalId: row.externalId, externalSeriesId: row.externalSeriesId },
+    merged,
+  );
 
   let event;
   try {
