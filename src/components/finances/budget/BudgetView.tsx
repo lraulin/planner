@@ -871,7 +871,32 @@ export function BudgetView({
             className="flex min-w-0 shrink-0 flex-col gap-3 md:rounded md:border md:border-rule md:p-3"
             aria-label="Spending"
           >
-            <h2 className="text-[1rem] font-semibold text-ink">Spending</h2>
+            <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule pb-2 md:-mx-3 md:px-3">
+              <div className="min-w-0">
+                <h2 className="text-[1rem] font-semibold text-ink">Spending</h2>
+                <p className="text-[0.75rem] text-ink-muted">
+                  Bills + regular. Savings is held out so a house fund is not an
+                  overspend.
+                </p>
+              </div>
+              {/* Leading labels and `text-ink` figures, where the sections below use a
+                quieter trailing-label run: this is the line that has to be believed, so it
+                stays heavier than the subtotals it sums. */}
+              <span className="tabular flex flex-wrap gap-x-5 text-[0.8125rem]">
+                <span className="text-ink-muted">
+                  Assigned{" "}
+                  <span className="text-ink">{formatUsd(totals.assignedCents)}</span>
+                </span>
+                <span className="text-ink-muted">
+                  Spent{" "}
+                  <span className="text-ink">{formatUsd(totals.activityCents)}</span>
+                </span>
+                <span className="text-ink-muted">
+                  Left{" "}
+                  <span className="text-ink">{formatUsd(totals.balanceCents)}</span>
+                </span>
+              </span>
+            </header>
 
             <BudgetSection
               title="Regular spending"
@@ -964,28 +989,11 @@ export function BudgetView({
                 groupTotals={(_nodes, header) => groupTotals(sections.bills, header.id)}
               />
             </BudgetSection>
-
-            <footer className="tabular flex flex-wrap gap-x-5 gap-y-1 border-t border-rule pt-2 text-[0.8125rem] md:-mx-3 md:px-3">
-              <span className="text-ink-muted">
-                All spending <span className="text-ink-faint">(bills + regular)</span>
-              </span>
-              <span className="text-ink-muted">
-                Assigned{" "}
-                <span className="text-ink">{formatUsd(totals.assignedCents)}</span>
-              </span>
-              <span className="text-ink-muted">
-                Spent{" "}
-                <span className="text-ink">{formatUsd(totals.activityCents)}</span>
-              </span>
-              <span className="text-ink-muted">
-                Left <span className="text-ink">{formatUsd(totals.balanceCents)}</span>
-              </span>
-            </footer>
           </section>
 
           <BudgetSection
             title="Savings"
-            caption="Assigned money that is not a monthly expense. Held out of All spending so a house fund is not an overspend."
+            caption="Assigned money that is not a monthly expense. Held out of the Spending total so a house fund is not an overspend."
             totals={savingsTotals}
             level="h2"
             focused={focusedTable === "savings"}
