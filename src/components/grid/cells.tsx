@@ -4,6 +4,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
+import { parseAmountEntryCents } from "@/lib/finances/money";
 import { isSettled } from "@/lib/tree/completionCascade";
 import { isDeadlineOverdue } from "@/lib/tree/status";
 import type { OutlineNode } from "@/lib/tree/types";
@@ -356,6 +357,100 @@ export function EffortCell({
         "tabular w-full border-none bg-transparent text-right text-[0.75rem] outline-none placeholder:text-ink-faint/50",
         invalid ? "text-priority-a" : "text-ink-muted",
       ].join(" ")}
+    />
+  );
+}
+
+/**
+ * A money field that takes arithmetic — `50+25`, `(40+60)/2` — and commits integer cents.
+ *
+ * Shared because the sites it replaces were the same uncontrolled blur-commit input written
+ * out three times, and because the one part that is easy to get wrong has to be identical in
+ * all of them: **an empty or unparseable field reverts and writes nothing**. The ad-hoc
+ * parse these carried before leaned on `Number("")` being `0`, so clearing a Budget cell and
+ * tabbing out silently zeroed the envelope. Typing `0` is still how you zero one.
+ *
+ * Same contract as {@link EffortCell} above, on {@link parseAmountEntryCents} instead of
+ * `parseEffort`. The caller owns the box (`className`); this owns the alignment, the
+ * invalid tone, and the keys.
+ */
+export function AmountCell({
+  cents,
+  onCommit,
+  label,
+  disabled = false,
+  className = "",
+}: {
+  cents: number;
+  onCommit: (cents: number) => void;
+  label: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const shown = (cents / 100).toFixed(2);
+  const [value, setValue] = useState(shown);
+  const [invalid, setInvalid] = useState(false);
+  // A commit elsewhere (Assign, Move money, an undo) changes `cents` under a field nobody is
+  // editing. The sites this replaces remounted on `key={cents}` to pick that up; tracking the
+  // last value rendered does the same without throwing away focus mid-type.
+  const [lastShown, setLastShown] = useState(shown);
+  if (lastShown !== shown) {
+    setLastShown(shown);
+    setValue(shown);
+    setInvalid(false);
+  }
+  // Escape blurs, and blur commits. The flag is what stops the cancelled text being parsed
+  // on the way out and flashing the field invalid.
+  const cancelled = useRef(false);
+
+  function commit() {
+    const next = parseAmountEntryCents(value);
+
+    if (next === null) {
+      setInvalid(true);
+      setValue(shown);
+      return;
+    }
+
+    setInvalid(false);
+    setValue((next / 100).toFixed(2));
+    if (next !== cents) onCommit(next);
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={value}
+      disabled={disabled}
+      aria-label={label}
+      aria-invalid={invalid}
+      onClick={(event) => event.stopPropagation()}
+      onFocus={(event) => {
+        cancelled.current = false;
+        event.target.select();
+      }}
+      onChange={(event) => {
+        setInvalid(false);
+        setValue(event.target.value);
+      }}
+      onBlur={() => {
+        if (cancelled.current) return;
+        commit();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.currentTarget.blur();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          cancelled.current = true;
+          setValue(shown);
+          setInvalid(false);
+          event.currentTarget.blur();
+        }
+      }}
+      className={`tabular text-right ${invalid ? "text-priority-a" : ""} ${className}`}
     />
   );
 }
