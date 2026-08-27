@@ -1,6 +1,6 @@
 # Pull-request CI
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-27)  
 Spec folder: `agent-os/specs/2026-08-27-0736-pull-request-ci/`
 
 ## Spec relationships
@@ -79,8 +79,8 @@ Postgres runs as a service container, so no secrets are involved and fork PRs wo
 - [x] A job whose Postgres service is unreachable **fails**; it cannot report green with the
       integration tests skipped — `docker compose down && CI=true npm run test:integration`
       fails all 54 files, each naming the unreachable database
-- [ ] Each of the five open Dependabot PRs shows a pass or fail from the new check — **pending**,
-      see Task 6. Needs `@dependabot rebase` on #2, #3, #4, #5, #7 to synchronize them
+- [x] Each of the five open Dependabot PRs shows a pass or fail from the new check — all five
+      rebased and reported; see Task 6 for what each said
 - [x] Pushing to `master` is unchanged: no CI run, hooks untouched, Vercel untouched —
       `gh run list` shows no `CI` run from any of the four pushes, only the manual dispatches
 - [x] Job wall time under 4 minutes — 2m50s green (1m36s and 1m46s on the two failing runs)
@@ -158,9 +158,23 @@ A `pull_request` workflow runs from the base branch, so the five open Dependabot
 pick it up until each is synchronized. Comment `@dependabot rebase` on each to trigger a push,
 then read the results.
 
-Merge what is green. For anything red, record here what failed — the fullcalendar 7 pair
-already fails Vercel's build, so a red CI result there is expected and confirms the check works
-rather than indicating a problem to fix.
+**Results.** All five rebased and all five reported. Two green, three red, and every red is a
+real finding rather than a workflow problem:
+
+| PR  | Bump                        | `ci` | What it said                                                                                                                                                                                                                                          |
+| --- | --------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #2  | development-minor-patch (4) | pass | —                                                                                                                                                                                                                                                     |
+| #4  | `@types/node` 20 → 26       | pass | —                                                                                                                                                                                                                                                     |
+| #3  | `@fullcalendar/core` 6 → 7  | fail | `npm ci` will not even resolve: `@fullcalendar/daygrid@6.1.21` needs core 6, the root asks for 7. The group has to move together                                                                                                                      |
+| #5  | `@fullcalendar/react` 6 → 7 | fail | Typecheck. `TimeChartEditorView.tsx` — `FullCalendar` is a value not a type, `PluginDef` no longer assignable to `PluginInput`, and every callback arg type renamed (`DateSelectArg` → `DateSelectInfo`, and five more). A real migration, not a bump |
+| #7  | production-minor-patch (5)  | fail | Typecheck, one error: `src/lib/google/client.ts:71` no longer matches an overload                                                                                                                                                                     |
+
+The fullcalendar pair was already failing Vercel's build, so CI agreeing there is the check
+confirming itself. #7 is the interesting one — a _minor/patch_ group that Vercel's build passed
+and typecheck did not, which is exactly the class of breakage no PR check could see before.
+
+Merging is left to Lee, per the "CI reports; Lee merges" decision above. #2 and #4 are green and
+ready.
 
 ## Task 7: Verify, freeze spec, update roadmap
 
