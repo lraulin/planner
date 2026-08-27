@@ -9,6 +9,9 @@
  */
 
 import { headers } from "next/headers";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { accounts } from "@/db/schema";
 import { auth } from "@/lib/auth/server";
 import type { GoogleEvent, GoogleEventWrite } from "./mapping";
 
@@ -56,6 +59,28 @@ export class GoogleApiError extends Error {
  * deliberately does not hand-roll either. A user who never linked Google has no account
  * row for the provider, which surfaces here as a throw rather than an empty string.
  */
+/**
+ * This user's Better Auth account row for Google, or null if they never linked one.
+ *
+ * Better Auth 1.7 replaced `getAccessToken`'s `providerId` with the account *row* id: one
+ * user can hold several accounts for one provider, and the old shape had no way to say
+ * which. `listUserAccounts` is the published way to find it and is unusable here — it
+ * resolves its user from a session, and half of these callers (sync jobs, scripts) have a
+ * userId and no request. We own the table, so this is one indexed read.
+ *
+ * Exported because `getGoogleAccessToken` rewrites every failure to `GoogleNotLinkedError`,
+ * which makes "found the wrong row" and "found no row" indistinguishable from outside. The
+ * scoping is the part worth a tripwire, so it is asserted on this directly.
+ */
+export async function googleAccountId(userId: string): Promise<string | null> {
+  const [account] = await db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(and(eq(accounts.userId, userId), eq(accounts.providerId, "google")))
+    .limit(1);
+  return account?.id ?? null;
+}
+
 export async function getGoogleAccessToken(userId: string): Promise<string> {
   try {
     // `headers()` throws outside a request scope (a script, a test). The user is already
@@ -67,8 +92,11 @@ export async function getGoogleAccessToken(userId: string): Promise<string> {
       requestHeaders = undefined;
     }
 
+    const accountId = await googleAccountId(userId);
+    if (!accountId) throw new GoogleNotLinkedError();
+
     const result = await auth.api.getAccessToken({
-      body: { providerId: "google", userId },
+      body: { accountId, userId },
       ...(requestHeaders ? { headers: requestHeaders } : {}),
     });
     if (!result?.accessToken) throw new GoogleNotLinkedError();
