@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { previewAmazonSnapshot, uniqueBillName } from "./preview";
+import { parseAmazonOrderSummary } from "./orderSummary";
 import { SNAPSHOT_SOURCE, SNAPSHOT_VERSION, type AmazonSnapshot } from "./snapshot";
 
 function snapshot(overrides?: Partial<AmazonSnapshot>): AmazonSnapshot {
@@ -48,6 +49,10 @@ function snapshot(overrides?: Partial<AmazonSnapshot>): AmazonSnapshot {
         orderDate: "2026-07-31",
         orderStatus: "Shipped",
         subscribeAndSave: true,
+        summary: parseAmazonOrderSummary([
+          { label: "Item(s) Subtotal:", amount: "$21.14" },
+          { label: "Grand Total:", amount: "$21.14" },
+        ]),
       },
     ],
     items: [

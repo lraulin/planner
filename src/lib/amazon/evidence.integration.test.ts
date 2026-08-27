@@ -21,6 +21,7 @@ import {
   listAmazonSubscriptions,
 } from "./queries";
 import { persistAmazonSnapshot } from "./reconcile";
+import { parseAmazonOrderSummary } from "./orderSummary";
 import { SNAPSHOT_SOURCE, SNAPSHOT_VERSION, type AmazonSnapshot } from "./snapshot";
 import { SLIM_SOURCE, SLIM_VERSION } from "./types";
 
@@ -84,6 +85,12 @@ function snapshot(overrides?: Partial<AmazonSnapshot>): AmazonSnapshot {
         orderDate: "2026-07-31",
         orderStatus: "Shipped",
         subscribeAndSave: true,
+        summary: parseAmazonOrderSummary([
+          { label: "Item(s) Subtotal:", amount: "$18.99" },
+          { label: "Subscription saving:", amount: "-$2.00" },
+          { label: "Estimated tax to be collected:", amount: "$1.15" },
+          { label: "Grand Total:", amount: "$18.14" },
+        ]),
       },
     ],
     items: [

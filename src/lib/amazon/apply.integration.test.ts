@@ -7,6 +7,7 @@ import { listSplitChildren, listTransactions } from "@/lib/finances/queries";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { applyAmazonSnapshotText } from "./apply";
 import { listAmazonSubscriptions } from "./queries";
+import { parseAmazonOrderSummary } from "./orderSummary";
 import { serializeAmazonSnapshot, SNAPSHOT_SOURCE, SNAPSHOT_VERSION } from "./snapshot";
 import { AMAZON_SNS_GROUP } from "./preview";
 
@@ -80,6 +81,10 @@ function snapshotText() {
         orderDate: "2026-07-31",
         orderStatus: "Shipped",
         subscribeAndSave: true,
+        summary: parseAmazonOrderSummary([
+          { label: "Item(s) Subtotal:", amount: "$21.14" },
+          { label: "Grand Total:", amount: "$21.14" },
+        ]),
       },
     ],
     items: [

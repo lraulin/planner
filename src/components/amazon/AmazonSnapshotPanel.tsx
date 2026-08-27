@@ -6,7 +6,7 @@ import {
   applyAmazonSnapshotAction,
   previewAmazonSnapshotAction,
 } from "@/app/finances/actions";
-import { looksLikePlannerAmazon } from "@/lib/amazon/snapshot";
+import { amazonSnapshotHeaderProblem } from "@/lib/amazon/snapshot";
 
 export function AmazonSnapshotPanel() {
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -22,11 +22,12 @@ export function AmazonSnapshotPanel() {
   function run(mode: "preview" | "apply") {
     const text = readText();
     if (text.trim() === "") {
-      setError("Paste a # planner-amazon v1 snapshot first.");
+      setError("Paste a # planner-amazon v2 snapshot first.");
       return;
     }
-    if (!looksLikePlannerAmazon(text)) {
-      setError("That is not a Planner Amazon snapshot.");
+    const headerProblem = amazonSnapshotHeaderProblem(text);
+    if (headerProblem) {
+      setError(headerProblem);
       return;
     }
     setError(null);
@@ -115,7 +116,7 @@ export function AmazonSnapshotPanel() {
         spellCheck={false}
         rows={8}
         aria-label="Amazon subscription snapshot"
-        placeholder="# planner-amazon v1"
+        placeholder="# planner-amazon v2"
         className="w-full rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.75rem] text-ink"
       />
     </div>
