@@ -132,6 +132,8 @@ export const AMAZON_FEEDS = {
   refund: "amazon:refund",
   return: "amazon:return",
   replacement: "amazon:replacement",
+  subscription: "amazon:subscription",
+  charge: "amazon:charge",
 } as const;
 
 export type AmazonImportResult = {
@@ -173,4 +175,6 @@ export type AmazonItemListRow = {
   website: string;
   currency: string;
   refundCount: number;
+  billName: string | null;
+  matchLabel: string | null;
 };

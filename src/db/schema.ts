@@ -3354,6 +3354,198 @@ export const amazonReplacements = pgTable(
 );
 
 /**
+ * Browser-captured Subscribe & Save evidence. Canonical order/item identity still lives in
+ * `amazon_orders` / `amazon_order_items` (`orderId:ASIN:ordinal`). These tables hold the
+ * payment relationship the privacy dump does not: a subscription id, a charge that may
+ * cover several orders, the bank-row match, and the receipt allocation that survives a
+ * later manual split edit.
+ *
+ * See `agent-os/specs/2026-08-27-1202-amazon-subscribe-and-save/`.
+ */
+export const amazonSubscriptions = pgTable(
+  "amazon_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    amazonSubscriptionId: text("amazon_subscription_id").notNull(),
+    asin: text("asin").notNull().default(""),
+    productName: text("product_name").notNull().default(""),
+    quantity: integer("quantity").notNull().default(1),
+    cadenceMonths: smallint("cadence_months"),
+    cadenceDays: smallint("cadence_days"),
+    cadenceLabel: text("cadence_label").notNull().default(""),
+    nextDeliveryDate: date("next_delivery_date", { mode: "string" }),
+    status: text("status").notNull().default("unknown"),
+    billId: uuid("bill_id").references(() => financeBudgetCategories.id, {
+      onDelete: "set null",
+    }),
+    needsReview: boolean("needs_review").notNull().default(false),
+    reviewReason: text("review_reason").notNull().default(""),
+    capturedOn: date("captured_on", { mode: "string" }),
+    externalSource: text("external_source").notNull(),
+    externalId: text("external_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("amazon_subscriptions_user_sub_uq").on(
+      table.userId,
+      table.amazonSubscriptionId,
+    ),
+    uniqueIndex("amazon_subscriptions_external_ref_uq").on(
+      table.userId,
+      table.externalSource,
+      table.externalId,
+    ),
+    index("amazon_subscriptions_user_bill_idx").on(table.userId, table.billId),
+    check(
+      "amazon_subscriptions_status",
+      sql`${table.status} in ('active', 'attention', 'cancelled', 'unknown')`,
+    ),
+  ],
+);
+
+export const amazonCharges = pgTable(
+  "amazon_charges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    amazonPaymentId: text("amazon_payment_id").notNull(),
+    paymentDate: date("payment_date", { mode: "string" }),
+    amount: numeric("amount", { precision: 14, scale: 2 }),
+    status: text("status").notNull().default("unknown"),
+    cardLast4: text("card_last4"),
+    instrumentKind: text("instrument_kind").notNull().default("other"),
+    needsReview: boolean("needs_review").notNull().default(false),
+    reviewReason: text("review_reason").notNull().default(""),
+    capturedOn: date("captured_on", { mode: "string" }),
+    externalSource: text("external_source").notNull(),
+    externalId: text("external_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("amazon_charges_user_payment_uq").on(
+      table.userId,
+      table.amazonPaymentId,
+    ),
+    uniqueIndex("amazon_charges_external_ref_uq").on(
+      table.userId,
+      table.externalSource,
+      table.externalId,
+    ),
+    index("amazon_charges_user_date_idx").on(table.userId, table.paymentDate),
+    check(
+      "amazon_charges_status",
+      sql`${table.status} in ('completed', 'pending', 'refunded', 'unknown')`,
+    ),
+    check(
+      "amazon_charges_instrument",
+      sql`${table.instrumentKind} in ('card', 'rewards', 'gift', 'other')`,
+    ),
+  ],
+);
+
+export const amazonChargeOrders = pgTable(
+  "amazon_charge_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    chargeId: uuid("charge_id")
+      .notNull()
+      .references(() => amazonCharges.id, { onDelete: "cascade" }),
+    amazonOrderId: text("amazon_order_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("amazon_charge_orders_user_charge_order_uq").on(
+      table.userId,
+      table.chargeId,
+      table.amazonOrderId,
+    ),
+    index("amazon_charge_orders_user_order_idx").on(table.userId, table.amazonOrderId),
+  ],
+);
+
+export const amazonChargeMatches = pgTable(
+  "amazon_charge_matches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    chargeId: uuid("charge_id")
+      .notNull()
+      .references(() => amazonCharges.id, { onDelete: "cascade" }),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => financeTransactions.id, { onDelete: "cascade" }),
+    method: text("method").notNull(),
+    dateMismatch: boolean("date_mismatch").notNull().default(false),
+    cardMismatch: boolean("card_mismatch").notNull().default(false),
+    splitProtected: boolean("split_protected").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("amazon_charge_matches_user_charge_uq").on(
+      table.userId,
+      table.chargeId,
+    ),
+    uniqueIndex("amazon_charge_matches_user_txn_uq").on(
+      table.userId,
+      table.transactionId,
+    ),
+    check(
+      "amazon_charge_matches_method",
+      sql`${table.method} in ('automatic', 'manual')`,
+    ),
+  ],
+);
+
+export const amazonReceiptAllocations = pgTable(
+  "amazon_receipt_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    chargeId: uuid("charge_id")
+      .notNull()
+      .references(() => amazonCharges.id, { onDelete: "cascade" }),
+    lineId: text("line_id").notNull(),
+    amazonOrderId: text("amazon_order_id").notNull().default(""),
+    asin: text("asin").notNull().default(""),
+    amazonSubscriptionId: text("amazon_subscription_id"),
+    billId: uuid("bill_id").references(() => financeBudgetCategories.id, {
+      onDelete: "set null",
+    }),
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+    kind: text("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("amazon_receipt_allocations_user_charge_line_uq").on(
+      table.userId,
+      table.chargeId,
+      table.lineId,
+    ),
+    index("amazon_receipt_allocations_user_bill_idx").on(table.userId, table.billId),
+    check(
+      "amazon_receipt_allocations_kind",
+      sql`${table.kind} in ('subscription', 'remainder', 'unassigned')`,
+    ),
+  ],
+);
+
+/**
  * ────────────────────────────────── Supplies ──────────────────────────────────
  *
  * What recurring consumables actually cost, and whether you are buying them from the right
@@ -3718,6 +3910,16 @@ export type AmazonReturn = typeof amazonReturns.$inferSelect;
 export type NewAmazonReturn = typeof amazonReturns.$inferInsert;
 export type AmazonReplacement = typeof amazonReplacements.$inferSelect;
 export type NewAmazonReplacement = typeof amazonReplacements.$inferInsert;
+export type AmazonSubscription = typeof amazonSubscriptions.$inferSelect;
+export type NewAmazonSubscription = typeof amazonSubscriptions.$inferInsert;
+export type AmazonCharge = typeof amazonCharges.$inferSelect;
+export type NewAmazonCharge = typeof amazonCharges.$inferInsert;
+export type AmazonChargeOrder = typeof amazonChargeOrders.$inferSelect;
+export type NewAmazonChargeOrder = typeof amazonChargeOrders.$inferInsert;
+export type AmazonChargeMatch = typeof amazonChargeMatches.$inferSelect;
+export type NewAmazonChargeMatch = typeof amazonChargeMatches.$inferInsert;
+export type AmazonReceiptAllocation = typeof amazonReceiptAllocations.$inferSelect;
+export type NewAmazonReceiptAllocation = typeof amazonReceiptAllocations.$inferInsert;
 export type FinanceSupplyItem = typeof financeSupplyItems.$inferSelect;
 export type NewFinanceSupplyItem = typeof financeSupplyItems.$inferInsert;
 export type FinanceSupplyOption = typeof financeSupplyOptions.$inferSelect;
