@@ -1,0 +1,5 @@
+ALTER TABLE "finance_transactions" ADD COLUMN "is_parent" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "finance_transactions" ADD COLUMN "parent_id" uuid;--> statement-breakpoint
+ALTER TABLE "finance_transactions" ADD CONSTRAINT "finance_transactions_parent_id_finance_transactions_id_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."finance_transactions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "finance_transactions_parent_idx" ON "finance_transactions" USING btree ("user_id","parent_id") WHERE "finance_transactions"."parent_id" is not null;--> statement-breakpoint
+ALTER TABLE "finance_transactions" ADD CONSTRAINT "finance_transactions_no_nested_splits" CHECK (not ("finance_transactions"."is_parent" and "finance_transactions"."parent_id" is not null));

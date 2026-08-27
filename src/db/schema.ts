@@ -2256,6 +2256,31 @@ export const financeTransactions = pgTable(
       (): AnyPgColumn => financeBudgetCategories.id,
       { onDelete: "set null" },
     ),
+    /**
+     * This row is a split parent: it keeps the bank's amount and holds no envelope, and its
+     * children divide that amount between envelopes
+     * (`agent-os/specs/2026-08-26-2022-split-transactions/` D1).
+     *
+     * `budgetCategoryId` is null on a parent by construction (D3). If it were not, the leaf
+     * sum and the envelope sum would double-count the parent — and it is exactly that null
+     * that has to be filtered out of the backlog count above, since a parent's missing
+     * envelope is by design and not a discrepancy.
+     *
+     * Actual carries an `is_child` column beside `parent_id` for its CRDT sync layer. There
+     * is none here: `parentId is not null` *is* is_child, and a second stored copy is the
+     * derived duplicate this schema refuses elsewhere.
+     */
+    isParent: boolean("is_parent").notNull().default(false),
+    /**
+     * The split parent this row divides. Null on every ordinary row.
+     *
+     * `on delete cascade`: a child is not a bank row (D4) and has no meaning without its
+     * parent, so deleting the parent must take the children with it rather than leave
+     * orphans that every leaf-row sum would then count as free-standing money.
+     */
+    parentId: uuid("parent_id").references((): AnyPgColumn => financeTransactions.id, {
+      onDelete: "cascade",
+    }),
     externalSource: text("external_source"),
     externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2287,6 +2312,15 @@ export const financeTransactions = pgTable(
       table.userId,
       table.derivedFlow,
       table.transactionDate,
+    ),
+    // Fetching one parent's children, which is the only way a child is ever read (D8).
+    index("finance_transactions_parent_idx")
+      .on(table.userId, table.parentId)
+      .where(sql`${table.parentId} is not null`),
+    // No nested splits: a child can never itself be a parent (D10).
+    check(
+      "finance_transactions_no_nested_splits",
+      sql`not (${table.isParent} and ${table.parentId} is not null)`,
     ),
   ],
 );
