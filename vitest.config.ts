@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 
@@ -8,9 +8,6 @@ config({ path: ".env.local" });
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
-    // Integration tests share one database, so run files serially to keep them isolated.
-    fileParallelism: false,
     env: {
       DATABASE_URL: process.env.DATABASE_URL ?? "",
       /**
@@ -24,6 +21,36 @@ export default defineConfig({
        */
       TZ: "America/New_York",
     },
+    /**
+     * Two suites with two different isolation requirements, so they are two named projects
+     * rather than one glob. Both run their files in parallel: every integration file creates
+     * its own users with `crypto.randomUUID()` emails and drops them in `afterAll`, so files
+     * never contend for shared rows.
+     *
+     * Isolation and worker count are deliberately *not* set here. Vitest 3.2.7 builds a single
+     * Tinypool from the root config, so `isolate` and `poolOptions.forks.*` are per-process,
+     * not per-project — set on a project they are accepted and silently ignored (verified:
+     * `maxForks: 1` on this project still ran 8-way). They live on the `test:unit` and
+     * `test:integration` invocations in package.json instead, which is why `npm test` chains
+     * those two scripts rather than running one vitest.
+     */
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          include: ["src/**/*.test.ts"],
+          exclude: [...configDefaults.exclude, "**/*.integration.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "integration",
+          include: ["src/**/*.integration.test.ts"],
+        },
+      },
+    ],
   },
   resolve: {
     alias: {
