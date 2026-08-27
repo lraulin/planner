@@ -43,7 +43,15 @@ export function categoryAssignableIds(
 export function categoryAssignmentRefusal(input: {
   accountOffBudget: boolean;
   categoryAssignable: boolean;
+  /** Absent means "not split", so every existing caller keeps its answer. */
+  isSplitParent?: boolean;
 }): string | null {
+  if (input.isSplitParent) {
+    // A split parent holds no envelope by design
+    // (`agent-os/specs/2026-08-26-2022-split-transactions/` D3): if it kept one, the leaf sum
+    // and the envelope sum would double-count it. The children are where the Category goes.
+    return "A split transaction takes its Categories from its children.";
+  }
   if (input.accountOffBudget) {
     return "This account is outside the envelope budget.";
   }
@@ -67,6 +75,7 @@ export function partitionCategoryTargets(
     id: string;
     accountOffBudget: boolean;
     categoryAssignable: boolean;
+    isSplitParent?: boolean;
   }[],
 ): { assignable: string[]; skipped: CategoryAssignmentSkip[] } {
   const byId = new Map(loaded.map((row) => [row.id, row]));

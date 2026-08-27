@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import type { FinanceExecutor } from "./dbExecutor";
 import { numericStringToCents } from "./money";
+import { bankRows, moneyRows } from "./splitRows";
 import { tagsInNotes } from "./tags";
 import type {
   FinanceAccountRow,
@@ -74,8 +75,10 @@ export async function listAccounts(
       externalKey: financeAccounts.externalKey,
       closedAt: financeAccounts.closedAt,
       offBudget: financeAccounts.offBudget,
-      balance: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
-      transactionCount: sql<number>`count(${financeTransactions.id})::int`,
+      // The two answers of D2 in one scan, which is where noticing they differ started:
+      // the balance is money and wants leaves, the count is bank rows and wants parents.
+      balance: sql<string>`coalesce(sum(${financeTransactions.amount}) filter (where ${moneyRows}), 0)`,
+      transactionCount: sql<number>`count(${financeTransactions.id}) filter (where ${bankRows})::int`,
     })
     .from(financeAccounts)
     .leftJoin(
@@ -125,6 +128,9 @@ export async function listAccounts(
       .where(
         and(
           eq(financeTransactions.userId, userId),
+          // Money: leaves. Splitting a row after the statement closed must not move the
+          // post-statement total, or the account's balance would jump for no reason.
+          moneyRows,
           or(
             ...latestList.map(([accountId, latest]) =>
               and(
@@ -255,7 +261,9 @@ export async function listTransactions(
         eq(financePayees.userId, userId),
       ),
     )
-    .where(and(...scopeConditions(userId, filter)))
+    // Bank rows: this is a register, and a split's children are not transactions the bank
+    // made. They are reached through their parent (D8), never listed alongside it.
+    .where(and(bankRows, ...scopeConditions(userId, filter)))
     .orderBy(
       desc(financeTransactions.transactionDate),
       // Same-day rows need a tiebreak or their order shifts between loads, which reads as
@@ -427,7 +435,7 @@ export async function transactionTotalCents(
   const [row] = await db
     .select({ total: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)` })
     .from(financeTransactions)
-    .where(and(...scopeConditions(userId, filter)));
+    .where(and(moneyRows, ...scopeConditions(userId, filter)));
 
   return numericStringToCents(row?.total ?? "0") ?? 0;
 }

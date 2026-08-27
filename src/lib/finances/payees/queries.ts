@@ -25,6 +25,7 @@ import {
 import type { AliasRow } from "./resolve";
 import { mergeClaimDecision } from "./merge";
 import type { AutoCategoryMode } from "./autoCategory";
+import { bankRows, moneyRows } from "../splitRows";
 
 /** Which envelope claims a payee, if any. At most one column, so at most one claim. */
 export type PayeeClaim = { id: string; name: string };
@@ -100,8 +101,12 @@ export async function listPayees(userId: string): Promise<PayeeRow[]> {
     db
       .select({
         payeeId: financeTransactions.payeeId,
-        count: sql<number>`count(*)::int`,
-        amount: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
+        // Both answers of D2 in one scan: how many times this merchant was paid is a count
+        // of bank rows, and how much they were paid is a sum of leaves. A child inherits its
+        // parent's payee, so leaf-summing still attributes the whole $34.97 to Apple — which
+        // is right, Apple was paid $34.97.
+        count: sql<number>`count(*) filter (where ${bankRows})::int`,
+        amount: sql<string>`coalesce(sum(${financeTransactions.amount}) filter (where ${moneyRows}), 0)`,
       })
       .from(financeTransactions)
       .where(
@@ -316,6 +321,9 @@ export async function payeeEvidenceForCategory(
         and(
           eq(financeTransactions.userId, userId),
           eq(financeAccounts.userId, userId),
+          // Leaves: this drives the waiting-charge offer, and a split parent is not waiting
+          // for an envelope — it has given that job to its children.
+          moneyRows,
           inArray(financeTransactions.payeeId, payeeIds),
         ),
       ),

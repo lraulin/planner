@@ -36,6 +36,7 @@ import { budgetEnvelopeLabel } from "./hierarchy";
 import type { BillSnapshot } from "./templates/schedule";
 import { ASSIGN_AVERAGE_MONTHS } from "./assign/types";
 import type { ActivityPoint } from "./assign/fromBudget";
+import { moneyRows } from "../splitRows";
 
 /**
  * Reads for the envelope budget. Every one takes `userId` and scopes on it.
@@ -276,6 +277,10 @@ async function activitySince(
         eq(financeTransactions.userId, userId),
         eq(financeAccounts.userId, userId),
         eq(financeAccounts.offBudget, false),
+        // Money: leaves. A parent is excluded by the envelope test above anyway — it holds
+        // none by design — but saying so explicitly is what stops a later edit to that test
+        // silently double-counting every split.
+        moneyRows,
         isNotNull(financeTransactions.budgetCategoryId),
         gte(financeTransactions.transactionDate, since),
         sql`not exists (
@@ -317,6 +322,11 @@ async function backlogSince(
         eq(financeTransactions.userId, userId),
         eq(financeAccounts.userId, userId),
         eq(financeAccounts.offBudget, false),
+        // The sharp one. A split parent has a null envelope *by design*, and the count of
+        // null envelopes is the size of the discrepancy the Budget page reports — so without
+        // this filter the budget would claim to be out of balance by exactly the value of
+        // every split. The children carry the real answer and are counted instead.
+        moneyRows,
         sql`${financeTransactions.budgetCategoryId} is null`,
         gte(financeTransactions.transactionDate, since),
         sql`(
@@ -365,6 +375,9 @@ async function uncategorizedActivityThrough(
         eq(financeTransactions.userId, userId),
         eq(financeAccounts.userId, userId),
         eq(financeAccounts.offBudget, false),
+        // Leaves, for the same reason as `backlogSince`: a split parent's null envelope is
+        // not unassigned money, it is money assigned one level down.
+        moneyRows,
         sql`${financeTransactions.budgetCategoryId} is null`,
         gte(financeTransactions.transactionDate, since),
         sql`${financeTransactions.transactionDate} <= ${monthEndKey(through)}`,
@@ -580,6 +593,8 @@ export async function openingPositionFor(
       and(
         eq(financeTransactions.userId, userId),
         eq(financeAccounts.userId, userId),
+        // Money: leaves, so that splitting a row after `asOfKey` cannot move the balance.
+        moneyRows,
         sql`${financeTransactions.transactionDate} > ${asOfKey}`,
       ),
     );

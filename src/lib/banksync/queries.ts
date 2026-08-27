@@ -18,6 +18,7 @@ import {
 } from "@/db/schema";
 import { numericStringToCents } from "@/lib/finances/money";
 import type { ExistingRow } from "./syncPlan";
+import { bankRows } from "@/lib/finances/splitRows";
 
 /** A connection as the settings page shows it. Deliberately without the access URL. */
 export type BankConnectionRow = {
@@ -184,6 +185,9 @@ export async function existingRowsInWindow(
     .where(
       and(
         eq(financeTransactions.userId, userId),
+        // Bank rows: the feed is matching against what the bank sent us before, and a child
+        // has no external identity of its own to match on.
+        bankRows,
         inArray(financeTransactions.accountId, [...accountIds]),
         gte(financeTransactions.transactionDate, startDate),
         lte(financeTransactions.transactionDate, endDate),

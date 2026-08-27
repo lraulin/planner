@@ -54,6 +54,7 @@ import {
   type EnvelopeRef,
 } from "./operations";
 import { PRESET_GROUPS, type BudgetPreset } from "./presets";
+import { moneyRows } from "../splitRows";
 import {
   AVERAGE_LOOKBACK_MONTHS,
   loadBillSnapshots,
@@ -936,6 +937,7 @@ const CATEGORY_ROW_COLUMNS = {
   flowOverride: financeTransactions.flowOverride,
   amount: financeTransactions.amount,
   payeeId: financeTransactions.payeeId,
+  isParent: financeTransactions.isParent,
 } as const;
 
 /** Put many transactions in a Category, skipping ineligible rows. */
@@ -1007,7 +1009,12 @@ export async function setTransactionBudgetCategories(
   const { assignable, skipped } =
     categoryId === null
       ? {
-          assignable: unique.filter((id) => loadedIds.has(id)),
+          // Even clearing skips a split parent: its null envelope is the split, not an
+          // absence, and letting the bulk write touch it would be a silent no-op reported
+          // as a success.
+          assignable: unique.filter(
+            (id) => loadedIds.has(id) && !rows.find((row) => row.id === id)?.isParent,
+          ),
           skipped: [],
         }
       : partitionCategoryTargets(
@@ -1016,6 +1023,7 @@ export async function setTransactionBudgetCategories(
             id: row.id,
             accountOffBudget: row.accountOffBudget,
             categoryAssignable: assignableSet.has(row.id),
+            isSplitParent: row.isParent,
           })),
         );
 
@@ -1076,6 +1084,8 @@ export async function fileWaitingChargesForPayee(
       and(
         eq(financeTransactions.userId, userId),
         eq(financeTransactions.payeeId, payeeId),
+        // Leaves: a split parent's null envelope is not a charge waiting to be filed.
+        moneyRows,
         isNull(financeTransactions.budgetCategoryId),
       ),
     );

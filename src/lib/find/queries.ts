@@ -46,6 +46,7 @@ import type { ContactItemKind, NodeItemKind } from "@/db/schema";
 import { loadOutline } from "@/lib/tree/queries";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { FindFieldClass, FindSourceId } from "./types";
+import { bankRows } from "@/lib/finances/splitRows";
 
 export type NodeItemRow = {
   id: string;
@@ -708,6 +709,9 @@ async function loadFinancesSource(userId: string): Promise<CorpusPart> {
           and(
             eq(financeTransactions.userId, userId),
             eq(financeAccounts.userId, userId),
+            // Children do not participate in search (D8); a hit on one would open a row the
+            // register cannot scroll to.
+            bankRows,
           ),
         ),
       db

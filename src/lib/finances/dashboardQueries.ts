@@ -38,6 +38,7 @@ import type { FinanceAccountRow } from "./types";
 import { loadSelectedWorkingPending } from "./workingPendingQuery";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { tagsInNotes } from "./tags";
+import { bankRows, moneyRows } from "./splitRows";
 
 /**
  * Reads for the insights dashboard. Every one takes `userId` and scopes on it.
@@ -113,7 +114,9 @@ export async function loadInsightsRows(
         eq(financeBudgetCategories.userId, userId),
       ),
     )
-    .where(and(...scopeConditions(userId, filter)))
+    // Money: leaves. Every analytics rollup downstream sums these by flow, and a parent
+    // beside its children would double each split in the burn rate.
+    .where(and(moneyRows, ...scopeConditions(userId, filter)))
     .orderBy(asc(financeTransactions.transactionDate), asc(financeTransactions.id));
 
   return rows.map((row) => ({
@@ -146,6 +149,9 @@ export async function unclassifiedCount(userId: string): Promise<number> {
     .where(
       and(
         eq(financeTransactions.userId, userId),
+        // Bank rows: reclassify runs over what the bank sent, and a child's flow is its
+        // parent's. An unclassified child would be a row nobody can act on.
+        bankRows,
         sql`${financeTransactions.derivedFlow} is null`,
       ),
     );

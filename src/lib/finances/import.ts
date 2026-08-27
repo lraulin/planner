@@ -51,6 +51,7 @@ import {
 } from "./ingestion";
 import { defaultOffBudget } from "./accountKind";
 import { includeNewOnBudgetAccount } from "./budget/membership";
+import { bankRows } from "./splitRows";
 
 /**
  * Writing parsed CSV or statement rows into the register.
@@ -270,6 +271,10 @@ async function existingOnAccount(
     .where(
       and(
         eq(financeTransactions.userId, userId),
+        // Bank rows: an import compares a file's lines against the bank rows already held.
+        // A child is not one, and matching a file line to one would attach the file's
+        // identity to half a charge.
+        bankRows,
         eq(financeTransactions.accountId, accountId),
         gte(financeTransactions.transactionDate, from),
         lte(financeTransactions.transactionDate, to),
