@@ -21,7 +21,8 @@ export function AmazonReviewDrawer({
 }) {
   const titleId = useId();
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<AmazonReviewRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<AmazonChargeCandidate[]>([]);
@@ -84,10 +85,12 @@ export function AmazonReviewDrawer({
       return;
     }
     setError(null);
+    setSaving(true);
     startTransition(async () => {
       const result = await approveAmazonChargeMatchAction(selected.id, picked);
       if (!result.ok) {
         setError(result.error);
+        setSaving(false);
         return;
       }
       setDirty(false);
@@ -98,6 +101,7 @@ export function AmazonReviewDrawer({
         selectItem(listed.data[0] ?? null);
       }
       router.refresh();
+      setSaving(false);
       if (close) onClose();
     });
   }
@@ -179,7 +183,7 @@ export function AmazonReviewDrawer({
         onSave={() => save(false)}
         onSaveAndClose={() => save(true)}
         onClose={onClose}
-        saving={pending}
+        saving={saving}
         dirty={dirty}
         justSaved={justSaved}
         error={error}
