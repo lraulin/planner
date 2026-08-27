@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SupplyItemRow, SupplyOptionRow } from "./queries";
-import { supplyGrandTotals, supplyGroups, supplyItemRows } from "./rows";
+import { supplyGroups, supplyItemRows, supplyRowTotals } from "./rows";
 
 function option(over: Partial<SupplyOptionRow> = {}): SupplyOptionRow {
   return {
@@ -89,9 +89,7 @@ describe("supplyGroups", () => {
     expect(groups.map((group) => group.label)).toEqual(["Groceries", "Pets"]);
     expect(groups[1].totals.biweeklyCents).toBe(5196);
     expect(groups[0].totals.biweeklyCents).toBe(5521);
-    expect(supplyGrandTotals(groups).biweeklyCents).toBe(5196 + 5521);
   });
-
   it("sorts the ungrouped bucket last", () => {
     const groups = supplyGroups([
       item({ id: "a", groupLabel: "" }),
@@ -115,5 +113,47 @@ describe("supplyGroups", () => {
     const [mixed] = supplyGroups([funded, item({ id: "third" })]);
     expect(mixed.envelopeName).toBeNull();
     expect(mixed.envelopeBudgetedCents).toBeNull();
+  });
+});
+
+describe("supplyRowTotals", () => {
+  it("sums the item rows and ignores the offers under them", () => {
+    // Both offers price the same item; counting the alternative would bill the user
+    // once per vendor they compared.
+    const rows = supplyItemRows(
+      item({ options: [option({ inUse: true }), option({ id: "other" })] }),
+    );
+    expect(rows.filter((row) => row.kind === "option")).toHaveLength(2);
+    expect(supplyRowTotals(rows).biweeklyCents).toBe(5196);
+  });
+
+  it("adds up to the grand total across groups, and follows a narrowed row set", () => {
+    const catFood = item({ options: [option({ inUse: true })] });
+    const drink = item({
+      id: "drink",
+      name: "Energy Drink",
+      groupLabel: "Groceries",
+      unitsPerDayMilli: 2000,
+      options: [
+        option({
+          itemId: "drink",
+          qtyPerItem: 12,
+          costPerOrderCents: 2366,
+          inUse: true,
+        }),
+      ],
+    });
+    const all = [...supplyItemRows(catFood), ...supplyItemRows(drink)];
+    expect(supplyRowTotals(all).biweeklyCents).toBe(5196 + 5521);
+    // Filter the cat food away and the total has to drop with it.
+    expect(supplyRowTotals(supplyItemRows(drink)).biweeklyCents).toBe(5521);
+  });
+
+  it("is zero for an item priced at nothing", () => {
+    expect(supplyRowTotals(supplyItemRows(item({ options: [option()] })))).toEqual({
+      biweeklyCents: 0,
+      monthlyCents: 0,
+      yearlyCents: 0,
+    });
   });
 });

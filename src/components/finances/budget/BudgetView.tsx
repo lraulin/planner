@@ -685,19 +685,25 @@ export function BudgetView({
   const editingRow = rows.find((row) => row.id === editing) ?? null;
   const backlog = data.uncategorizedCount;
 
-  /** A group header's own subtotal, over the rows that group contributes to this section. */
-  function groupTotals(sectionRows: readonly BudgetRow[], groupId: string) {
+  /**
+   * A group header's own subtotal, over the rows that group contributes to this section,
+   * keyed to the columns it totals. No word labels: Assigned / Activity / Available are
+   * directly above each figure, and a pack-versus-pack comparison is a glance down one
+   * column rather than a hunt through a run of prose.
+   */
+  function groupTotals(
+    sectionRows: readonly BudgetRow[],
+    groupId: string,
+  ): Record<string, ReactNode> | null {
     const ids = descendantEnvelopeIds(data.groups, data.categories, groupId);
     const mine = sectionRows.filter((row) => ids.has(row.id));
     if (mine.length === 0) return null;
     const group = budgetTotals(mine);
-    return (
-      <span className="tabular flex gap-4 text-[0.75rem] text-ink-muted">
-        <span>{formatUsd(group.assignedCents)} assigned</span>
-        <span>{formatUsd(group.activityCents)} spent</span>
-        <span>{formatUsd(group.balanceCents)} left</span>
-      </span>
-    );
+    return {
+      assigned: formatUsd(group.assignedCents),
+      activity: formatUsd(group.activityCents),
+      balance: formatUsd(group.balanceCents),
+    };
   }
 
   const inspector = (
@@ -913,7 +919,7 @@ export function BudgetView({
                 density={envelopeGrid.density}
                 autoHeight
                 rowLabel={(row) => `Envelope: ${row.node.name}`}
-                groupSummary={(_nodes, header) =>
+                groupTotals={(_nodes, header) =>
                   groupTotals(sections.envelopes, header.id)
                 }
               />
@@ -959,9 +965,7 @@ export function BudgetView({
                 density={billGrid.density}
                 autoHeight
                 rowLabel={(row) => `Bill: ${row.node.name}`}
-                groupSummary={(_nodes, header) =>
-                  groupTotals(sections.bills, header.id)
-                }
+                groupTotals={(_nodes, header) => groupTotals(sections.bills, header.id)}
               />
             </BudgetTable>
 
@@ -1027,7 +1031,7 @@ export function BudgetView({
                 density={savingsGrid.density}
                 autoHeight
                 rowLabel={(row) => `Savings: ${row.node.name}`}
-                groupSummary={(_nodes, header) =>
+                groupTotals={(_nodes, header) =>
                   groupTotals(sections.savings, header.id)
                 }
               />

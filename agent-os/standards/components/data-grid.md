@@ -91,6 +91,54 @@ rank among the destination parent's children (`useTreeRowDrag`, `lib/tree/outlin
   first; categorical dimensions run alphabetically; empty buckets come last. Grouping
   therefore never rewrites or visually competes with stored note ancestry.
 
+## Aggregation
+
+Two grids total their rows — Budget's three tables and the Supplies worksheet. The tree tabs
+do not, and the Register cannot. What separates them is worth stating before the layout rules.
+
+- **Whoever owns the pipeline owns the totals.** A grid that holds every row locally may sum
+  what it holds. A grid whose rows arrive as a window over a server-prepared index may not: the
+  cache is a prefetch ring around the viewport, not a sample of the group, so a client sum is
+  not stale, it is undefined. The **Register** is the exemplar — `preparedDisplay` bypasses the
+  client filter/collapse/sort pipeline entirely, a month can span two blocks, and unloaded rows
+  are placeholders. Its group rows stay **label + count**, and if money is ever wanted there it
+  becomes a field on `RegisterIndexEntry` accumulated in the walk `prepareRegister` already
+  performs — never a client reducer.
+- **Totals render in the columns they total**, via `groupTotals` / `footerTotals`, keyed by
+  column id and aligned with `ColumnDef.align` exactly as the leaf cells are. Word labels
+  (`$1,240.00 assigned`) go: the column heading is already directly above the figure, and a
+  total that scrolls off with its own column is what a spreadsheet does.
+  **Do not retry `ml-auto` on a full-span header.** It was tried, and while the header spanned
+  every track the only edge it could reach was the far right of the whole grid — which parked
+  the figures under the name column, off-screen in a scrolled grid. The fix was per-column
+  cells, not a different flex rule. Layout maths lives in `lib/grid/groupTotals.ts`: the label
+  keeps the gutter through the column before the first total, a total keyed to a hidden or
+  unknown column is dropped rather than shifted into its neighbour's track, and the label never
+  gives up the first column.
+- **The group header carries the rollup, collapsed and expanded, and nothing moves on toggle.**
+  No subtotal row after the children. The header is the only row that survives collapse, so a
+  bottom-placed total leaves a collapsed group as either a figure with no name or a second
+  header invented to hold one; and a figure that changes vertical slot with expand state stops
+  its column being a scan path, which is how these pages are actually read. YNAB and Actual
+  both do this. "Totals before the rows they sum" is not the objection it looks like: a group
+  row is a folder plus a scoreboard, and folders are labelled on top.
+- **Aggregates follow the filtered set, exactly as the count must.** A subtotal beside a
+  restated count that still sums the unfiltered rows is a claim the user can see is false.
+  `groupTotals` receives the group's members on the filtered list — collapse-hidden rows
+  included, so collapsing does not un-ask the total; `footerTotals` receives every filtered
+  node row.
+- **A grand total is a footer row inside the grid when it is a straight sum of the columns on
+  screen** — Supplies, whose Biweekly / Monthly / Yearly footer is the same three columns. It
+  is a **page-level bar** when it is an argument rather than a column sum: Budget's "All
+  spending (bills + regular)" deliberately excludes Savings, so writing it in the grid's own
+  column language would invite a reader to add the Savings table to it.
+- **Do not print the same three numbers a fourth time.** Budget already runs row → group header
+  → `SectionHeader` per kind → one combined spending footer, plus `BudgetSummary`. None of its
+  three grids gets a `footerTotals`. Each surface has to answer a different question or it is
+  noise the reader has to disambiguate.
+- **No per-column aggregation function.** `ColumnDef` has no `aggFn` and is not getting one.
+  On a money column, offering `avg` beside `sum` is how people come to believe a wrong number.
+
 ## Inherited values are computed once, in `derive`
 
 A value a row gets from its ancestry — L.A.P., shelving, category — is computed **once** in
@@ -580,13 +628,13 @@ in `ux-principles.md`.
 
 ## What we deliberately do not do
 
-| Not doing                     | Why                                                                                                                                                                                                                                    |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Virtualization**            | Personal data volumes. The row layer is CSS grid plus HTML5 drag and would fight a virtualizer for no gain we can currently measure.                                                                                                   |
-| **Pagination**                | Same. Pagination also breaks "scroll to the row I was just looking at", which is how these grids are actually used.                                                                                                                    |
-| **Server-side sort / filter** | Everything is already in memory from one recursive CTE. Round-tripping a keystroke would be slower, not faster.                                                                                                                        |
-| **Aggregation footers**       | The numbers that matter — effort, effort left, % complete — already roll up the _tree_ in `derive.ts`. A second, group-shaped sum of the same field in the same column would be a different number with no way to tell which is which. |
-| **Pivoting**                  | No question anyone has asked of this data needs it.                                                                                                                                                                                    |
+| Not doing                        | Why                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Virtualization**               | Personal data volumes. The row layer is CSS grid plus HTML5 drag and would fight a virtualizer for no gain we can currently measure.                                                                                                                                                                                                                                                         |
+| **Pagination**                   | Same. Pagination also breaks "scroll to the row I was just looking at", which is how these grids are actually used.                                                                                                                                                                                                                                                                          |
+| **Server-side sort / filter**    | Everything is already in memory from one recursive CTE. Round-tripping a keystroke would be slower, not faster.                                                                                                                                                                                                                                                                              |
+| **Aggregation on the tree tabs** | Outline, Tasks, Projects, Goals and Result Areas get no group or footer totals. The numbers that matter there — effort, effort left, % complete — already roll up the _tree_ in `derive.ts`; a second, group-shaped sum of the same field in the same column would be a different number with no way to tell which is which. The money grids do aggregate — see [Aggregation](#aggregation). |
+| **Pivoting**                     | No question anyone has asked of this data needs it.                                                                                                                                                                                                                                                                                                                                          |
 
 ## Why hand-rolled, and when to revisit
 
@@ -611,22 +659,23 @@ Per `development/testing.md`: the logic lives in `src/lib/grid/**` and `src/lib/
 with a test beside it, and there are **no React component tests**. The pure modules worth
 knowing about:
 
-| Module                          | What it owns                                                 |
-| ------------------------------- | ------------------------------------------------------------ |
-| `lib/grid/sortRows.ts`          | Hierarchy-preserving multi-key sort                          |
-| `lib/grid/columnMenu.ts`        | Which column-menu items are available, and header drag slots |
-| `lib/grid/ancestors.ts`         | Ancestor closure that keeps a filtered tree connected        |
-| `lib/tree/flattenLevels.ts`     | Dissolving a level and promoting its children                |
-| `lib/tree/completionCascade.ts` | Which other nodes a state change moves, and which way        |
-| `lib/grid/customFilter.ts`      | Operator vocabulary and per-column expressions               |
-| `lib/grid/crossFilter.ts`       | Cross-column And/Or advanced filter                          |
-| `lib/grid/search.ts`            | Quick search matching                                        |
-| `lib/grid/chips.ts`             | What the chip bar says                                       |
-| `lib/grid/distinct.ts`          | Distinct values, shared by funnel and builder                |
-| `lib/settings/grid.ts`          | The persisted shape, its defaults and its migrations         |
-| `lib/grid/grouping.ts`          | Shared group dimensions and progressive-level state          |
-| `lib/tree/slice.ts`             | Outline row slices and tree-tab group headers/counts         |
-| `lib/notes/grouping.ts`         | Notes column buckets, ordering, and nested group headers     |
+| Module                          | What it owns                                                            |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| `lib/grid/sortRows.ts`          | Hierarchy-preserving multi-key sort                                     |
+| `lib/grid/columnMenu.ts`        | Which column-menu items are available, and header drag slots            |
+| `lib/grid/ancestors.ts`         | Ancestor closure that keeps a filtered tree connected                   |
+| `lib/tree/flattenLevels.ts`     | Dissolving a level and promoting its children                           |
+| `lib/tree/completionCascade.ts` | Which other nodes a state change moves, and which way                   |
+| `lib/grid/customFilter.ts`      | Operator vocabulary and per-column expressions                          |
+| `lib/grid/crossFilter.ts`       | Cross-column And/Or advanced filter                                     |
+| `lib/grid/search.ts`            | Quick search matching                                                   |
+| `lib/grid/chips.ts`             | What the chip bar says                                                  |
+| `lib/grid/distinct.ts`          | Distinct values, shared by funnel and builder                           |
+| `lib/settings/grid.ts`          | The persisted shape, its defaults and its migrations                    |
+| `lib/grid/grouping.ts`          | Shared group dimensions and progressive-level state                     |
+| `lib/grid/groupTotals.ts`       | Which track a group header's label spans, and which columns get a total |
+| `lib/tree/slice.ts`             | Outline row slices and tree-tab group headers/counts                    |
+| `lib/notes/grouping.ts`         | Notes column buckets, ordering, and nested group headers                |
 
 A test earns its place if it would fail on a plausible mistake. The mistakes this area
 actually makes are: a filter that silently matches nothing, a sort that lifts a child above

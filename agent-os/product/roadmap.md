@@ -866,7 +866,9 @@ period)` so money already spent stops being held twice and only going over bites
   ✅ Commitments expected vs income shipped 2026-08-21 —
   `agent-os/specs/2026-08-21-1403-commitments-expected-vs-income/`. Bills and recurring
   spend now expose comparable monthly, pay-period and annual costs, with active-only totals
-  in grid footers and group headers. One table subtracts both commitment tiers from the same
+  in grid footers and group headers — since 2026-08-26 those group totals sit in the columns
+  they total rather than beside the group name
+  (`agent-os/specs/2026-08-26-2159-grid-aggregation-placement/`). One table subtracts both commitment tiers from the same
   detected-income series used by the Dashboard. Review sorts newest charge first; both grids
   gained export, grouping and saved views, while rare manual creation moved on demand.
   ✅ Register **Track as bill…** shipped 2026-08-21 —

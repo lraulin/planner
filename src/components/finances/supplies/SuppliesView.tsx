@@ -23,7 +23,7 @@ import { collectDistinctValues } from "@/lib/grid/distinct";
 import { formatUsd } from "@/lib/finances/money";
 import type { SupplyItemRow } from "@/lib/finances/supplies/queries";
 import {
-  supplyGrandTotals,
+  supplyRowTotals,
   supplyGroups,
   supplyItemRows,
   type SupplyGridRow,
@@ -93,7 +93,13 @@ export function SuppliesView({
   const gridState = views.grid;
 
   const groups = useMemo(() => supplyGroups(items), [items]);
-  const grandTotals = useMemo(() => supplyGrandTotals(groups), [groups]);
+
+  /** The group behind a header id — the rows are built by hand below, so is the lookup. */
+  const groupFor = useCallback(
+    (headerId: string) =>
+      groups.find((candidate) => `group:${candidate.label}` === headerId) ?? null,
+    [groups],
+  );
 
   /**
    * Group headers are built here rather than by the grid's own grouping: the header has to
@@ -324,31 +330,35 @@ export function SuppliesView({
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
         density={gridState.density}
-        groupSummary={(_nodes, header) => {
-          const group = groups.find(
-            (candidate) => `group:${candidate.label}` === header.id,
-          );
-          if (!group) return null;
-          return (
-            <span className="tabular flex flex-wrap items-center gap-x-3 text-[0.75rem]">
-              <span className="text-ink-muted">
-                est.{" "}
-                <span className="text-ink">{formatUsd(group.totals.monthlyCents)}</span>
-                /mo
-              </span>
-              <span className="text-ink-muted">
-                {formatUsd(group.totals.yearlyCents)}/yr
-              </span>
-              {group.envelopeName ? (
-                <span className="text-ink-faint">
-                  funded from {group.envelopeName}
-                  {group.envelopeBudgetedCents === null
-                    ? ""
-                    : ` · budgeted ${formatUsd(group.envelopeBudgetedCents)}/mo`}
-                </span>
-              ) : null}
-            </span>
-          );
+        // The periods go in their own columns, so `est.` / `/mo` / `/yr` go: Biweekly,
+        // Monthly and Yearly are written directly above each figure.
+        groupTotals={(nodes) => {
+          // Summed from the rows the grid is showing, so a filtered group's subtotal adds
+          // up to the rows under it the way its count already restates.
+          const totals = supplyRowTotals(nodes);
+          return {
+            biweekly: formatUsd(totals.biweeklyCents),
+            monthly: formatUsd(totals.monthlyCents),
+            yearly: formatUsd(totals.yearlyCents),
+          };
+        }}
+        // Which envelope pays for the group is a fact about the group, not a column.
+        groupNote={(_nodes, header) => {
+          const group = groupFor(header.id);
+          if (!group?.envelopeName) return null;
+          return `funded from ${group.envelopeName}${
+            group.envelopeBudgetedCents === null
+              ? ""
+              : ` · budgeted ${formatUsd(group.envelopeBudgetedCents)}/mo`
+          }`;
+        }}
+        footerTotals={(nodes) => {
+          const totals = supplyRowTotals(nodes);
+          return {
+            biweekly: formatUsd(totals.biweeklyCents),
+            monthly: formatUsd(totals.monthlyCents),
+            yearly: formatUsd(totals.yearlyCents),
+          };
         }}
         empty={
           <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-[0.9375rem] text-ink-muted">
@@ -359,21 +369,6 @@ export function SuppliesView({
           </div>
         }
       />
-
-      <footer className="tabular flex flex-wrap gap-x-5 gap-y-1 border-t border-rule bg-surface px-3 py-2 text-[0.8125rem]">
-        <span className="text-ink-muted">All supplies</span>
-        <span className="text-ink-muted">
-          Biweekly{" "}
-          <span className="text-ink">{formatUsd(grandTotals.biweeklyCents)}</span>
-        </span>
-        <span className="text-ink-muted">
-          Monthly{" "}
-          <span className="text-ink">{formatUsd(grandTotals.monthlyCents)}</span>
-        </span>
-        <span className="text-ink-muted">
-          Yearly <span className="text-ink">{formatUsd(grandTotals.yearlyCents)}</span>
-        </span>
-      </footer>
 
       {suggesting ? (
         <SuggestFromAmazonDialog

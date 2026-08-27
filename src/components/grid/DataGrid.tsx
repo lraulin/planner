@@ -23,6 +23,7 @@ import {
   buildGridTemplate,
   type ColumnControls,
   type ColumnDef,
+  type ColumnMeta,
   type NodeGridRow,
 } from "./columns";
 import { ColumnHeaderRow } from "./ColumnHeader";
@@ -38,6 +39,7 @@ import { collectColumnValues, distinctValuesOf } from "@/lib/grid/distinct";
 import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
 import type { GridFilterValue } from "@/lib/grid/filterValue";
 import { groupMembers } from "@/lib/grid/groupMembers";
+import { totalsLayout } from "@/lib/grid/groupTotals";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import { applyGroupCollapse, dropEmptyGroups } from "@/lib/grid/collapse";
 import { resolveCompactFields } from "@/lib/grid/compactFields";
@@ -216,7 +218,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   collapsedGroups,
   onToggleGroup,
   onGroupIdsChange,
-  groupSummary,
+  groupTotals,
+  groupNote,
+  footerTotals,
   onNavigableIdsChange,
   density = "comfortable",
   autoHeight = false,
@@ -364,17 +368,39 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    */
   onGroupIdsChange?: (groupIds: string[]) => void;
   /**
-   * Extra content on a group header, typically column totals for the rows under it.
+   * Column-slotted totals for the rows under a group header, keyed by column id.
+   *
+   * Each entry renders in the column it totals, right where the values it sums are, so it
+   * scrolls off with that column and needs no word label — the column heading is the label.
+   * Keys that name a hidden or unknown column are dropped rather than shifted (see
+   * `@/lib/grid/groupTotals`).
    *
    * Receives the node payloads that belong to the header on the *filtered* list, including
-   * rows hidden by collapse, so a collapsed section still shows the same figures expanding
-   * it would. Omit it and headers stay label-plus-count, which is every grid except the
-   * ones that already have a totals footer of their own.
+   * rows hidden by collapse, so a collapsed section shows the same figures expanding it
+   * would and nothing moves on toggle. Omit it and headers stay label-plus-count, which is
+   * every grid except Budget and Supplies.
    */
-  groupSummary?: (
+  groupTotals?: (
+    nodes: TRow[],
+    group: Extract<GridRow<TRow>, { kind: "group" }>,
+  ) => Record<string, ReactNode> | null;
+  /**
+   * Free text after the count, for a fact about the group that is not one of the columns —
+   * Supplies' "funded from Household". Anything that *is* a column belongs in `groupTotals`.
+   */
+  groupNote?: (
     nodes: TRow[],
     group: Extract<GridRow<TRow>, { kind: "group" }>,
   ) => ReactNode;
+  /**
+   * A grand total pinned to the bottom of the scroll area, keyed by column id like
+   * `groupTotals`. Receives the node payloads that survived filtering, so the column
+   * visibly adds up to what it prints.
+   *
+   * A page-level bar is the alternative and is the right call where the figures are not a
+   * straight sum of the columns on screen; see `components/data-grid.md`.
+   */
+  footerTotals?: (nodes: TRow[]) => Record<string, ReactNode> | null;
   /**
    * The node ids actually on screen, in screen order — after column filters, search, grouping
    * and sort.
@@ -602,7 +628,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     );
   }, [preparedDisplay, rows, passIds]);
 
-  const summarizeGroups = groupSummary != null;
+  const summarizeGroups = groupTotals != null || groupNote != null;
   const membersByGroup = useMemo(() => {
     if (!summarizeGroups) return null;
     return groupMembers(filteredRows);
@@ -1004,6 +1030,80 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   // column when the user has shown `icon`, beside the name otherwise. See `NameIconContext`.
   const nameShowsIcon = !columns.some((column) => column.id === "icon");
 
+  /**
+   * The grand total, pinned to the bottom of the scroll area and sharing the column
+   * template so each figure scrolls sideways with the column it sums.
+   *
+   * Built from `filteredRows`, the same list the row count is taken from, so the label and
+   * the figures cannot disagree with the chip bar above them.
+   */
+  const footerValues = footerTotals
+    ? footerTotals(
+        filteredRows.flatMap((row) => (row.kind === "node" ? [row.node] : [])),
+      )
+    : null;
+  const footerLayout = totalsLayout(columns, footerValues);
+  const footerRow =
+    footerValues == null ? null : (
+      <div
+        role="row"
+        className={[
+          // Same padding as `DataRow` and the group header, or the grand total sits a few
+          // pixels off the column it totals.
+          "tabular sticky bottom-0 z-20 items-center border-t border-rule bg-surface-raised text-[0.8125rem] font-semibold text-ink",
+          compact ? "px-3" : "pr-3",
+          // A phone has no columns to align to, so the grand total is a labelled run — the
+          // same trade the compact group header makes. See `components/responsive.md`.
+          compact ? "flex min-h-9 flex-wrap gap-x-3 gap-y-0.5 py-1.5" : "grid",
+        ].join(" ")}
+        style={
+          compact
+            ? undefined
+            : {
+                gridTemplateColumns: gridTemplate,
+                columnGap: "0.75rem",
+                height: "var(--row-height)",
+              }
+        }
+      >
+        <div
+          role="rowheader"
+          className={`flex min-w-0 items-center gap-1.5 ${compact ? "" : "pl-3"}`}
+          style={
+            compact ? undefined : { gridColumn: `1 / span ${footerLayout.labelSpan}` }
+          }
+        >
+          <span className="truncate">Total</span>
+          <span className="text-[0.75rem] font-normal text-ink-faint">
+            ({shownCount} {shownCount === 1 ? "row" : "rows"})
+          </span>
+        </div>
+        {compact
+          ? columns.map((column) =>
+              footerValues[column.id] === undefined ? null : (
+                <span
+                  key={column.id}
+                  className="text-[0.75rem] font-normal text-ink-muted"
+                >
+                  {column.label}{" "}
+                  <span className="font-semibold text-ink">
+                    {footerValues[column.id]}
+                  </span>
+                </span>
+              ),
+            )
+          : columns.slice(footerLayout.labelSpan - 1).map((column, index) => (
+              <div
+                key={column.id}
+                role="gridcell"
+                className={`flex min-w-0 items-center self-stretch overflow-hidden ${alignClass(column.align)}`}
+              >
+                {footerLayout.cells[index] === null ? null : footerValues[column.id]}
+              </div>
+            ))}
+      </div>
+    );
+
   return (
     <NameIconContext.Provider value={nameShowsIcon}>
       <div
@@ -1113,7 +1213,6 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                       <GroupHeader
                         row={row}
                         gridTemplate={gridTemplate}
-                        columnCount={columns.length + 1}
                         collapsed={collapsedGroups?.has(row.id) ?? false}
                         onToggle={() => onToggleGroup?.(row.id)}
                         drag={dragBindingFor(
@@ -1124,9 +1223,15 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                             : undefined,
                         )}
                         compact={compact}
-                        summary={
-                          groupSummary && membersByGroup
-                            ? groupSummary(membersByGroup.get(row.id) ?? [], row)
+                        columns={columns}
+                        totals={
+                          groupTotals && membersByGroup
+                            ? groupTotals(membersByGroup.get(row.id) ?? [], row)
+                            : null
+                        }
+                        note={
+                          groupNote && membersByGroup
+                            ? groupNote(membersByGroup.get(row.id) ?? [], row)
                             : undefined
                         }
                       />
@@ -1212,6 +1317,8 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                   </div>
                 );
               })()}
+
+          {footerRow}
         </div>
 
         {menu && rowMenu && (
@@ -1616,24 +1723,30 @@ function nameColumnLeft(
 const GroupHeader = memo(function GroupHeader({
   row,
   gridTemplate,
-  columnCount,
+  columns,
   collapsed,
   onToggle,
   drag,
   compact,
-  summary,
+  totals,
+  note,
 }: {
   row: Extract<GridRow, { kind: "group" }>;
   gridTemplate: string;
-  columnCount: number;
+  /** The visible column set — the tracks a total can land in, and their alignment. */
+  columns: ColumnMeta[];
   collapsed: boolean;
   onToggle: () => void;
   /** Drop target only — group headers are never themselves dragged. */
   drag?: RowDragBinding;
   compact: boolean;
-  /** Totals (or similar) for the rows under this header. */
-  summary?: ReactNode;
+  /** Totals for the rows under this header, keyed by column id. */
+  totals?: Record<string, ReactNode> | null;
+  /** A fact about the group with no column of its own. */
+  note?: ReactNode;
 }) {
+  const layout = totalsLayout(columns, totals);
+  const totalColumns = columns.slice(layout.labelSpan - 1);
   return (
     <div
       role="row"
@@ -1660,7 +1773,11 @@ const GroupHeader = memo(function GroupHeader({
         // Sticky in both layouts: scrolling through forty rows of a group without being
         // able to see which group you are in is the failure mode grouping exists to avoid.
         // `bg-surface-raised` (not `/80`) so rows do not show through while it is pinned.
-        "sticky top-0 z-10 grid cursor-pointer items-center border-b border-rule bg-surface-raised px-3 text-[0.8125rem] font-semibold text-ink hover:brightness-95",
+        // `pr-3` only, matching `DataRow`: a group header that pads its left edge shrinks
+        // the flexible name track by that much and every total lands a few pixels off the
+        // values it sums. The chevron takes the handle gutter, where the row handles are.
+        "sticky top-0 z-10 grid cursor-pointer items-center border-b border-rule bg-surface-raised text-[0.8125rem] font-semibold text-ink hover:brightness-95",
+        compact ? "px-3" : "pr-3",
         // A compact header is a section label rather than a row in a template, and is tall
         // enough to tap.
         compact ? "min-h-9 py-1.5" : "",
@@ -1683,8 +1800,11 @@ const GroupHeader = memo(function GroupHeader({
       }}
     >
       <div
-        className={`flex min-w-0 items-center gap-1.5 ${compact ? "flex-wrap" : ""}`}
-        style={compact ? undefined : { gridColumn: `1 / span ${columnCount}` }}
+        role="rowheader"
+        // The inset lives on the cell, not the row: padding the row would shrink the
+        // flexible name track and pull every total off its column.
+        className={`flex min-w-0 items-center gap-1.5 ${compact ? "flex-wrap" : "pl-3"}`}
+        style={compact ? undefined : { gridColumn: `1 / span ${layout.labelSpan}` }}
       >
         <span
           className="text-[0.625rem] text-ink-faint"
@@ -1696,20 +1816,45 @@ const GroupHeader = memo(function GroupHeader({
         <span className="tabular text-[0.75rem] font-normal text-ink-faint">
           ({row.count})
         </span>
-        {summary != null && (
-          <span
-            className={[
-              // Sit next to the count, not at the far right of the track. The header
-              // spans every column, so `ml-auto` parked the figures under Category —
-              // off-screen in a scrolled grid — while the footer they copy stays in view.
-              "flex items-baseline gap-x-4 gap-y-0.5 pl-3 text-[0.75rem] font-normal text-ink-muted",
-              compact ? "flex-wrap" : "shrink-0",
-            ].join(" ")}
-          >
-            {summary}
+        {note != null && (
+          <span className="min-w-0 truncate pl-2 text-[0.75rem] font-normal text-ink-faint">
+            {note}
+          </span>
+        )}
+        {/*
+          A phone row has no columns to align to, so the totals stay an inline run here —
+          but built from the same record and labelled with each column’s own heading, since
+          nothing above them says what they are. See `components/responsive.md`.
+        */}
+        {compact && totals != null && (
+          <span className="tabular flex flex-wrap items-baseline gap-x-3 pl-2 text-[0.75rem] font-normal text-ink-muted">
+            {columns.map((column) =>
+              totals[column.id] === undefined ? null : (
+                <span key={column.id}>
+                  {column.label} <span className="text-ink">{totals[column.id]}</span>
+                </span>
+              ),
+            )}
           </span>
         )}
       </div>
+      {/*
+        One cell per column from here right, so a total sits under the values it sums and
+        goes off-screen exactly when its own column does. The earlier design put the run of
+        figures beside the label because the header spanned every track, which left `ml-auto`
+        no edge to reach but the far right of the whole grid; per-column cells are what that
+        comment should have reached for, so do not retry the flex approach.
+      */}
+      {!compact &&
+        totalColumns.map((column, index) => (
+          <div
+            key={column.id}
+            role="gridcell"
+            className={`tabular flex min-w-0 items-center self-stretch overflow-hidden text-[0.75rem] font-normal text-ink-muted ${alignClass(column.align)}`}
+          >
+            {layout.cells[index] === null ? null : totals?.[column.id]}
+          </div>
+        ))}
     </div>
   );
 });

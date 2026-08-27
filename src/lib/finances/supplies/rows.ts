@@ -151,14 +151,18 @@ export function supplyGroups(items: readonly SupplyItemRow[]): SupplyGroup[] {
     });
 }
 
-/** Grand total, summed from the same displayed row values as the group subtotals. */
-export function supplyGrandTotals(groups: readonly SupplyGroup[]): SupplyPeriodTotals {
-  return groups.reduce(
-    (running, group) => ({
-      biweeklyCents: running.biweeklyCents + group.totals.biweeklyCents,
-      monthlyCents: running.monthlyCents + group.totals.monthlyCents,
-      yearlyCents: running.yearlyCents + group.totals.yearlyCents,
-    }),
+/**
+ * Period totals over an arbitrary set of grid rows — the group's own rows, or every row a
+ * filter left standing.
+ *
+ * Offer rows are skipped, not because they have no figures but because theirs are what the
+ * item *would* cost on that offer. Only the in-use offer is money the worksheet is
+ * spending, and that is what the item head already carries; adding the alternatives would
+ * bill the user once per vendor they considered.
+ */
+export function supplyRowTotals(rows: readonly SupplyGridRow[]): SupplyPeriodTotals {
+  return rows.reduce(
+    (running, row) => (row.kind === "item" ? addTotals(running, row.totals) : running),
     ZERO,
   );
 }

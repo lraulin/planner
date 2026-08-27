@@ -1,6 +1,6 @@
 # Grid aggregation placement
 
-**Status: active**
+**Status: frozen / complete** — 2026-08-26
 Spec folder: `agent-os/specs/2026-08-26-2159-grid-aggregation-placement/`
 
 ## Spec relationships
@@ -97,33 +97,36 @@ entry gets narrowed to what it actually means rather than deleted.
 
 ## Acceptance criteria
 
-- [ ] On Budget, each group header's assigned / spent / left figures sit in the Assigned,
-      Spent and Available columns, right-aligned with the leaf values beneath them, with no
-      word labels.
-- [ ] The figures are present and identical whether the group is collapsed or expanded, and
+- [~] On Budget, each group header's assigned / spent / left figures sit in the Assigned,
+  Spent and Available columns, right-aligned with the leaf values beneath them, with no
+  word labels. _Verified structurally only — see change 3._
+- [x] The figures are present and identical whether the group is collapsed or expanded, and
       nothing moves on toggle.
-- [ ] On Supplies, group headers carry Biweekly / Monthly / Yearly in those columns, and the
+- [x] On Supplies, group headers carry Biweekly / Monthly / Yearly in those columns, and the
       `funded from <envelope>` prose still reads on the header beside the label.
-- [ ] Supplies' grand total is a pinned row inside the grid, sharing the column template, and
+- [x] Supplies' grand total is a pinned row inside the grid, sharing the column template, and
       the bespoke `<footer>` is gone.
-- [ ] Scrolling a grid horizontally moves each total with its own column.
-- [ ] Budget's SectionHeader subtotals, "All spending" footer and BudgetSummary are unchanged;
+- [x] Scrolling a grid horizontally moves each total with its own column.
+- [x] Budget's SectionHeader subtotals, "All spending" footer and BudgetSummary are unchanged;
       none of the three Budget grids grows a footer row.
-- [ ] Register group rows are unchanged: label + count, no money, no footer.
-- [ ] Every grid that passes no totals renders exactly the header it renders today.
-- [ ] Group totals restate after a filter, as the count already does.
-- [ ] `agent-os/standards/components/data-grid.md` has an `## Aggregation` section, and its
+- [x] Register group rows are unchanged: label + count, no money, no footer.
+- [x] Every grid that passes no totals renders exactly the header it renders today.
+- [x] Group totals restate after a filter, as the count already does.
+- [x] `agent-os/standards/components/data-grid.md` has an `## Aggregation` section, and its
       "Aggregation footers" non-goal no longer contradicts shipped code.
-- [ ] Below `md`, group figures still read with their labels — no naked numbers where there
-      are no columns to align to.
+- [~] Below `md`, group figures still read with their labels — no naked numbers where there
+  are no columns to align to. _Reviewed by reading only — see change 4._
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                            | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Supplies group and footer totals are summed from the rows on screen (new `supplyRowTotals`), not from the precomputed `supplyGroup.totals` / `supplyGrandTotals`. | Supplies is the one grid here with filters and search, and the acceptance criterion "group totals restate after a filter, as the count already does" was not actually met by the shipped code. `groupTotals` / `footerTotals` already hand over the filtered node payloads, so the fix was a ten-line reducer. Offer rows are skipped — theirs is what the item _would_ cost on that vendor. `supplyGrandTotals` had no caller left and was deleted. |
+| 2   | The group header and the footer row drop their left padding (`px-3` → `pr-3`) and inset the label cell instead.                                                   | Padding the row shrinks the flexible name track, which put every total ~4px off the values it sums — invisible in review, obvious once the figures sit in the columns. `DataRow` already pads only on the right, so this is matching it, not inventing a rule.                                                                                                                                                                                       |
+| 3   | Budget's group headers could not be exercised on screen — the dev data has no envelope groups this month.                                                         | Verified structurally instead (same `DataGrid` path as Supplies, three right-aligned money columns). Flagged rather than mutating the user's finance data to make a test group.                                                                                                                                                                                                                                                                      |
+| 4   | The compact (`< md`) layouts were reviewed by reading, not on screen.                                                                                             | The browser tooling in use renders every tab at a fixed 1728px viewport regardless of window size, so the breakpoint could not be crossed.                                                                                                                                                                                                                                                                                                           |
 
 ---
 
