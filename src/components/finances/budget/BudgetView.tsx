@@ -868,17 +868,15 @@ export function BudgetView({
           {/* `shrink-0`, not `min-h-0`: these are stacked inside the page scroller, and a flex
             item allowed to shrink below its content collapses both grids to one row. */}
           <section
-            className="flex min-w-0 shrink-0 flex-col gap-3"
+            className="flex min-w-0 shrink-0 flex-col gap-3 md:rounded md:border md:border-rule md:p-3"
             aria-label="Spending"
           >
             <h2 className="text-[1rem] font-semibold text-ink">Spending</h2>
 
-            <SectionHeader
+            <BudgetSection
               title="Regular spending"
               caption="Everything that is not a bill. Assign what you have; Available is what is left."
               totals={envelopeTotals}
-            />
-            <BudgetTable
               focused={focusedTable === "envelopes"}
               onFocus={() => setFocusedTable("envelopes")}
             >
@@ -923,14 +921,12 @@ export function BudgetView({
                   groupTotals(sections.envelopes, header.id)
                 }
               />
-            </BudgetTable>
+            </BudgetSection>
 
-            <SectionHeader
+            <BudgetSection
               title="Bills"
               caption="Each funds itself from its own cadence — Assign → Underfunded fills what this month owes."
               totals={billTotals}
-            />
-            <BudgetTable
               focused={focusedTable === "bills"}
               onFocus={() => setFocusedTable("bills")}
             >
@@ -967,9 +963,9 @@ export function BudgetView({
                 rowLabel={(row) => `Bill: ${row.node.name}`}
                 groupTotals={(_nodes, header) => groupTotals(sections.bills, header.id)}
               />
-            </BudgetTable>
+            </BudgetSection>
 
-            <footer className="tabular flex flex-wrap gap-x-5 gap-y-1 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
+            <footer className="tabular flex flex-wrap gap-x-5 gap-y-1 border-t border-rule pt-2 text-[0.8125rem] md:-mx-3 md:px-3">
               <span className="text-ink-muted">
                 All spending <span className="text-ink-faint">(bills + regular)</span>
               </span>
@@ -987,56 +983,48 @@ export function BudgetView({
             </footer>
           </section>
 
-          <section
-            className="flex min-w-0 shrink-0 flex-col gap-3"
-            aria-label="Savings"
+          <BudgetSection
+            title="Savings"
+            caption="Assigned money that is not a monthly expense. Held out of All spending so a house fund is not an overspend."
+            totals={savingsTotals}
+            level="h2"
+            focused={focusedTable === "savings"}
+            onFocus={() => setFocusedTable("savings")}
           >
-            <SectionHeader
-              title="Savings"
-              caption="Assigned money that is not a monthly expense. Held out of All spending so a house fund is not an overspend."
-              totals={savingsTotals}
+            <DataGrid<BudgetColumnCtx, BudgetRow>
+              rows={savingsGridRows}
+              columns={savingsGrid.columns}
+              allColumns={envelopeColumns}
+              columnCtx={ctx}
+              selectedId={savingsSelect.selectedId}
+              selectedIds={savingsSelect.selectedIds}
+              selectAllState={savingsSelect.headerState}
+              onToggleSelectAll={savingsSelect.toggleSelectAll}
+              onSelect={(id, mods) => {
+                setFocusedTable("savings");
+                savingsSelect.select(id, mods);
+              }}
+              onOpenDetail={() => setInspecting(true)}
+              commandScope={exportPlan.savings.commandScope}
+              exportFocused={exportPlan.savings.exportFocused}
+              rowMenu={(rowId) => {
+                const row = rows.find((candidate) => candidate.id === rowId);
+                return row ? balanceMenu(row) : [];
+              }}
+              ariaLabel={`Savings for ${monthLabel(data.month)}`}
+              empty="No savings envelopes yet — add one from Manage groups and envelopes."
+              widths={savingsGrid.widths}
+              onResizeColumn={savingsGrid.setWidth}
+              onResetColumnWidth={savingsGrid.clearWidth}
+              columnControls={savingsGrid.columnControls}
+              collapsedGroups={savingsGrid.collapsedGroups}
+              onToggleGroup={savingsGrid.toggleGroup}
+              density={savingsGrid.density}
+              autoHeight
+              rowLabel={(row) => `Savings: ${row.node.name}`}
+              groupTotals={(_nodes, header) => groupTotals(sections.savings, header.id)}
             />
-            <BudgetTable
-              focused={focusedTable === "savings"}
-              onFocus={() => setFocusedTable("savings")}
-            >
-              <DataGrid<BudgetColumnCtx, BudgetRow>
-                rows={savingsGridRows}
-                columns={savingsGrid.columns}
-                allColumns={envelopeColumns}
-                columnCtx={ctx}
-                selectedId={savingsSelect.selectedId}
-                selectedIds={savingsSelect.selectedIds}
-                selectAllState={savingsSelect.headerState}
-                onToggleSelectAll={savingsSelect.toggleSelectAll}
-                onSelect={(id, mods) => {
-                  setFocusedTable("savings");
-                  savingsSelect.select(id, mods);
-                }}
-                onOpenDetail={() => setInspecting(true)}
-                commandScope={exportPlan.savings.commandScope}
-                exportFocused={exportPlan.savings.exportFocused}
-                rowMenu={(rowId) => {
-                  const row = rows.find((candidate) => candidate.id === rowId);
-                  return row ? balanceMenu(row) : [];
-                }}
-                ariaLabel={`Savings for ${monthLabel(data.month)}`}
-                empty="No savings envelopes yet — add one from Manage groups and envelopes."
-                widths={savingsGrid.widths}
-                onResizeColumn={savingsGrid.setWidth}
-                onResetColumnWidth={savingsGrid.clearWidth}
-                columnControls={savingsGrid.columnControls}
-                collapsedGroups={savingsGrid.collapsedGroups}
-                onToggleGroup={savingsGrid.toggleGroup}
-                density={savingsGrid.density}
-                autoHeight
-                rowLabel={(row) => `Savings: ${row.node.name}`}
-                groupTotals={(_nodes, header) =>
-                  groupTotals(sections.savings, header.id)
-                }
-              />
-            </BudgetTable>
-          </section>
+          </BudgetSection>
 
           <ForecastDetails months={forecast.months} comparison={forecast.comparison} />
         </div>
@@ -1330,56 +1318,80 @@ function Backlog({ data }: { data: BudgetData }) {
 }
 
 /**
- * Last-interacted table: the ring is what makes `focusedTable` (Assign + File ▸ Export)
- * visible. `onFocusCapture` so clicking the header or empty area counts, not only a row.
+ * A table, its heading and its own subtotal, as one card.
+ *
+ * The subtotal sits above the grid rather than in a footer under it so the tables read the
+ * same way when one of them is empty, and so the page keeps exactly one full-width footer —
+ * the combined one, which is the figure that has to be believed
+ * (`agent-os/specs/2026-08-26-2159-grid-aggregation-placement/` D4).
+ *
+ * The card is what makes that placement legible. These sections used to be a flat `gap-3`
+ * stack, so a header sat the same distance from its own grid as from the grid above it and
+ * pointed at neither; its full-width bottom rule then read as a divider between two tables
+ * rather than a cap on one. Containment fixes that without moving a single figure.
+ *
+ * The grid runs to the card's left and right edges on purpose: `GroupHeader` drops its left
+ * padding so group totals stay in their column tracks and rows carry their own `pr-3`, so
+ * padding the card body would inset the grid against tuning that already exists.
+ *
+ * Do not add `overflow-hidden` here. It would make the card a scroll container and break the
+ * column header's `sticky top-0`, which sticks to the page scroller.
+ *
+ * Last-interacted: the ring is what makes `focusedTable` (Assign + File ▸ Export) visible, and
+ * it now rings the whole card so the heading it belongs to is inside it. `onFocusCapture` so
+ * clicking the header or empty area counts, not only a row.
  */
-function BudgetTable({
+function BudgetSection({
+  title,
+  caption,
+  totals,
+  level = "h3",
   focused,
   onFocus,
   children,
 }: {
+  title: string;
+  caption: string;
+  totals: { assignedCents: number; activityCents: number; balanceCents: number };
+  /** `h2` for a top-level section — Savings is a peer of Spending, not of Bills. */
+  level?: "h2" | "h3";
   focused: boolean;
   onFocus: () => void;
   children: ReactNode;
 }) {
+  const Heading = level;
   return (
-    <div
+    <section
+      aria-label={title}
       onFocusCapture={onFocus}
-      className={focused ? "rounded ring-2 ring-select-edge ring-inset" : undefined}
+      /* `shrink-0`: a flex item allowed to shrink below its content collapses the grid to one row. */
+      className={`flex min-w-0 shrink-0 flex-col rounded border bg-surface ${
+        focused
+          ? "border-select-edge ring-1 ring-select-edge ring-inset"
+          : "border-rule"
+      }`}
     >
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule px-3 py-2">
+        <div className="min-w-0">
+          <Heading
+            className={
+              level === "h2"
+                ? "text-[1rem] font-semibold text-ink"
+                : "text-[0.9375rem] font-medium text-ink"
+            }
+          >
+            {title}
+          </Heading>
+          <p className="text-[0.75rem] text-ink-muted">{caption}</p>
+        </div>
+        <span className="tabular flex flex-wrap gap-x-4 text-[0.75rem] text-ink-muted">
+          <span>{formatUsd(totals.assignedCents)} assigned</span>
+          <span>{formatUsd(totals.activityCents)} spent</span>
+          <span>{formatUsd(totals.balanceCents)} left</span>
+        </span>
+      </header>
       {children}
-    </div>
-  );
-}
-
-/**
- * A table's heading and its own subtotal.
- *
- * The subtotal sits here rather than in a footer under each grid so the two tables read the
- * same way when one of them is empty, and so the page has exactly one full-width footer —
- * the combined one, which is the figure that has to be believed.
- */
-function SectionHeader({
-  title,
-  caption,
-  totals,
-}: {
-  title: string;
-  caption: string;
-  totals: { assignedCents: number; activityCents: number; balanceCents: number };
-}) {
-  return (
-    <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule pb-1">
-      <div className="min-w-0">
-        <h2 className="text-[0.9375rem] font-medium text-ink">{title}</h2>
-        <p className="text-[0.75rem] text-ink-muted">{caption}</p>
-      </div>
-      <span className="tabular flex flex-wrap gap-x-4 text-[0.75rem] text-ink-muted">
-        <span>{formatUsd(totals.assignedCents)} assigned</span>
-        <span>{formatUsd(totals.activityCents)} spent</span>
-        <span>{formatUsd(totals.balanceCents)} left</span>
-      </span>
-    </header>
+    </section>
   );
 }
 
