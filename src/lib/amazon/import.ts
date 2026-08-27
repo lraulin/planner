@@ -57,10 +57,11 @@ export async function importAmazonSlim(
 export async function persistSlim(
   userId: string,
   document: SlimAmazonOrders,
+  options: { enrich?: boolean } = {},
 ): Promise<AmazonImportResult> {
   return db.transaction(async (tx) => {
-    const orders = await upsertOrders(tx, userId, document);
-    const items = await upsertItems(tx, userId, document);
+    const orders = await upsertOrders(tx, userId, document, options.enrich === true);
+    const items = await upsertItems(tx, userId, document, options.enrich === true);
     const refunds = await upsertRefunds(tx, userId, document);
     const returns = await upsertReturns(tx, userId, document);
     const replacements = await upsertReplacements(tx, userId, document);
@@ -90,6 +91,7 @@ async function upsertOrders(
   tx: Executor,
   userId: string,
   document: SlimAmazonOrders,
+  enrich = false,
 ): Promise<Counts> {
   const existing = await tx
     .select()
@@ -118,14 +120,25 @@ async function upsertOrders(
       toInsert.push(values);
       continue;
     }
+    const next = enrich
+      ? {
+          ...values,
+          orderDate: order.orderDate ? values.orderDate : found.orderDate,
+          orderStatus: values.orderStatus || found.orderStatus,
+          paymentMethod: values.paymentMethod || found.paymentMethod,
+          paymentLast4: values.paymentLast4 ?? found.paymentLast4,
+          website: values.website || found.website,
+          currency: values.currency || found.currency,
+        }
+      : values;
     const changed =
-      found.channel !== values.channel ||
-      !sameDate(found.orderDate, order.orderDate) ||
-      !sameText(found.orderStatus, values.orderStatus) ||
-      !sameText(found.paymentMethod, values.paymentMethod) ||
-      !sameText(found.paymentLast4, values.paymentLast4) ||
-      !sameText(found.website, values.website) ||
-      !sameText(found.currency, values.currency);
+      found.channel !== next.channel ||
+      !sameDate(found.orderDate, next.orderDate ?? "") ||
+      !sameText(found.orderStatus, next.orderStatus) ||
+      !sameText(found.paymentMethod, next.paymentMethod) ||
+      !sameText(found.paymentLast4, next.paymentLast4) ||
+      !sameText(found.website, next.website) ||
+      !sameText(found.currency, next.currency);
     if (!changed) {
       counts.unchanged += 1;
       continue;
@@ -133,13 +146,13 @@ async function upsertOrders(
     await tx
       .update(amazonOrders)
       .set({
-        channel: values.channel,
-        orderDate: values.orderDate,
-        orderStatus: values.orderStatus,
-        paymentMethod: values.paymentMethod,
-        paymentLast4: values.paymentLast4,
-        website: values.website,
-        currency: values.currency,
+        channel: next.channel,
+        orderDate: next.orderDate,
+        orderStatus: next.orderStatus,
+        paymentMethod: next.paymentMethod,
+        paymentLast4: next.paymentLast4,
+        website: next.website,
+        currency: next.currency,
         updatedAt: new Date(),
       })
       .where(and(eq(amazonOrders.id, found.id), eq(amazonOrders.userId, userId)));
@@ -155,6 +168,7 @@ async function upsertItems(
   tx: Executor,
   userId: string,
   document: SlimAmazonOrders,
+  enrich = false,
 ): Promise<Counts> {
   const orders = await tx
     .select({ id: amazonOrders.id, amazonOrderId: amazonOrders.amazonOrderId })
@@ -201,21 +215,42 @@ async function upsertItems(
       toInsert.push(values);
       continue;
     }
+    const next = enrich
+      ? {
+          ...values,
+          asin: values.asin || found.asin,
+          productName: values.productName || found.productName,
+          unitPrice: item.unitPriceCents === null ? found.unitPrice : values.unitPrice,
+          unitPriceTax:
+            item.unitPriceTaxCents === null ? found.unitPriceTax : values.unitPriceTax,
+          itemPaid: item.itemPaidCents === null ? found.itemPaid : values.itemPaid,
+          itemTax: item.itemTaxCents === null ? found.itemTax : values.itemTax,
+          discounts: item.discountsCents === null ? found.discounts : values.discounts,
+          shippingCharge:
+            item.shippingChargeCents === null
+              ? found.shippingCharge
+              : values.shippingCharge,
+          shippingOption: values.shippingOption || found.shippingOption,
+          shipmentStatus: values.shipmentStatus || found.shipmentStatus,
+          subscribeAndSave: values.subscribeAndSave || found.subscribeAndSave,
+          shipDate: item.shipDate ? values.shipDate : found.shipDate,
+        }
+      : values;
     const changed =
-      found.channel !== values.channel ||
-      !sameText(found.asin, values.asin) ||
-      !sameText(found.productName, values.productName) ||
-      found.quantity !== values.quantity ||
-      !sameMoney(found.unitPrice, item.unitPriceCents) ||
-      !sameMoney(found.unitPriceTax, item.unitPriceTaxCents) ||
-      !sameMoney(found.itemPaid, item.itemPaidCents) ||
-      !sameMoney(found.itemTax, item.itemTaxCents) ||
-      !sameMoney(found.discounts, item.discountsCents) ||
-      !sameMoney(found.shippingCharge, item.shippingChargeCents) ||
-      !sameText(found.shippingOption, values.shippingOption) ||
-      !sameText(found.shipmentStatus, values.shipmentStatus) ||
-      found.subscribeAndSave !== values.subscribeAndSave ||
-      !sameDate(found.shipDate, item.shipDate);
+      found.channel !== next.channel ||
+      !sameText(found.asin, next.asin) ||
+      !sameText(found.productName, next.productName) ||
+      found.quantity !== next.quantity ||
+      !sameMoney(found.unitPrice, numericStringToCents(next.unitPrice)) ||
+      !sameMoney(found.unitPriceTax, numericStringToCents(next.unitPriceTax)) ||
+      !sameMoney(found.itemPaid, numericStringToCents(next.itemPaid)) ||
+      !sameMoney(found.itemTax, numericStringToCents(next.itemTax)) ||
+      !sameMoney(found.discounts, numericStringToCents(next.discounts)) ||
+      !sameMoney(found.shippingCharge, numericStringToCents(next.shippingCharge)) ||
+      !sameText(found.shippingOption, next.shippingOption) ||
+      !sameText(found.shipmentStatus, next.shipmentStatus) ||
+      found.subscribeAndSave !== next.subscribeAndSave ||
+      !sameDate(found.shipDate, next.shipDate ?? "");
     if (!changed) {
       counts.unchanged += 1;
       continue;
@@ -223,20 +258,20 @@ async function upsertItems(
     await tx
       .update(amazonOrderItems)
       .set({
-        channel: values.channel,
-        asin: values.asin,
-        productName: values.productName,
-        quantity: values.quantity,
-        unitPrice: values.unitPrice,
-        unitPriceTax: values.unitPriceTax,
-        itemPaid: values.itemPaid,
-        itemTax: values.itemTax,
-        discounts: values.discounts,
-        shippingCharge: values.shippingCharge,
-        shippingOption: values.shippingOption,
-        shipmentStatus: values.shipmentStatus,
-        subscribeAndSave: values.subscribeAndSave,
-        shipDate: values.shipDate,
+        channel: next.channel,
+        asin: next.asin,
+        productName: next.productName,
+        quantity: next.quantity,
+        unitPrice: next.unitPrice,
+        unitPriceTax: next.unitPriceTax,
+        itemPaid: next.itemPaid,
+        itemTax: next.itemTax,
+        discounts: next.discounts,
+        shippingCharge: next.shippingCharge,
+        shippingOption: next.shippingOption,
+        shipmentStatus: next.shipmentStatus,
+        subscribeAndSave: next.subscribeAndSave,
+        shipDate: next.shipDate,
         updatedAt: new Date(),
       })
       .where(

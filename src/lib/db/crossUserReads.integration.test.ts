@@ -38,7 +38,16 @@ import {
 import { createResource } from "@/lib/resources/mutations";
 import { getResourceDetail, listResources } from "@/lib/resources/queries";
 import { importAmazonSlim } from "@/lib/amazon/import";
-import { getAmazonItem, listAmazonItems } from "@/lib/amazon/queries";
+import { persistAmazonSnapshot } from "@/lib/amazon/reconcile";
+import {
+  getAmazonCharge,
+  getAmazonItem,
+  getAmazonSubscription,
+  listAmazonCharges,
+  listAmazonItems,
+  listAmazonSubscriptions,
+} from "@/lib/amazon/queries";
+import { SNAPSHOT_SOURCE, SNAPSHOT_VERSION } from "@/lib/amazon/snapshot";
 import { SLIM_SOURCE, SLIM_VERSION } from "@/lib/amazon/types";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import {
@@ -166,6 +175,8 @@ type Owned = {
   financeStatementId: string;
   paymentResolutionId: string;
   amazonItemId: string;
+  amazonSubscriptionId: string;
+  amazonChargeId: string;
   planId: string;
   exerciseId: string;
   sessionId: string;
@@ -352,6 +363,43 @@ async function seedOwner(): Promise<Owned> {
   });
   const [amazonItem] = await listAmazonItems(userId);
   if (!amazonItem) throw new Error("expected the amazon seed to create an item");
+  await persistAmazonSnapshot(userId, {
+    version: SNAPSHOT_VERSION,
+    source: SNAPSHOT_SOURCE,
+    generatedAt: "2026-08-27T16:00:00.000Z",
+    capturedOn: "2026-08-27",
+    completeness: { subscriptions: true, payments: true, orders: true },
+    subscriptions: [
+      {
+        subscriptionId: "sub-owner",
+        asin: "B00OWN",
+        productName: "Owner paper",
+        quantity: 1,
+        cadence: { unit: "month", n: 1 },
+        cadenceLabel: "Deliver every month",
+        nextDeliveryDate: "2026-09-01",
+        status: "active",
+      },
+    ],
+    payments: [
+      {
+        paymentId: "pay-owner",
+        date: "2026-08-01",
+        amountCents: -630,
+        status: "completed",
+        cardLast4: "9910",
+        instrumentKind: "card",
+        amazonOrderIds: ["114-owner"],
+      },
+    ],
+    orders: [],
+    items: [],
+  });
+  const [amazonSubscription] = await listAmazonSubscriptions(userId);
+  const [amazonCharge] = await listAmazonCharges(userId);
+  if (!amazonSubscription || !amazonCharge) {
+    throw new Error("expected the amazon snapshot seed to create evidence");
+  }
 
   const plan = await ensureWeeklyPlan(userId, { weekStart: WEEK_START });
   await upsertPlanEntry(userId, plan.id, goalId, { focus: true });
@@ -415,6 +463,8 @@ async function seedOwner(): Promise<Owned> {
     financeStatementId: financeStatement.id,
     paymentResolutionId: paymentResolution.id,
     amazonItemId: amazonItem.id,
+    amazonSubscriptionId: amazonSubscription.id,
+    amazonChargeId: amazonCharge.id,
     planId: plan.id,
     exerciseId,
     sessionId,
@@ -543,6 +593,15 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listAmazonItems(owner.userId)).map((row) => row.id)).toContain(
       owner.amazonItemId,
     );
+    expect(await listAmazonSubscriptions(intruder)).toEqual([]);
+    expect(await listAmazonCharges(intruder)).toEqual([]);
+    expect(
+      await getAmazonSubscription(intruder, owner.amazonSubscriptionId),
+    ).toBeNull();
+    expect(await getAmazonCharge(intruder, owner.amazonChargeId)).toBeNull();
+    expect(
+      (await listAmazonSubscriptions(owner.userId)).map((row) => row.id),
+    ).toContain(owner.amazonSubscriptionId);
   });
 
   it("finance accounts and transactions", async () => {

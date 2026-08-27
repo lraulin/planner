@@ -20,6 +20,7 @@ import { changedRows, planReclassify } from "./classify/reclassify";
 import { summarizeClassifiedIncome, type IncomeSummary } from "./classify/income";
 import { summarizeFlowChanges, type FlowDiff } from "./classify/flowDiff";
 import { lastChargeOnBill } from "./billLastCharge";
+import { markAmazonMatchSplitProtected } from "@/lib/amazon/matchProtect";
 import { nextChargeWriteError } from "./commitments";
 import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
 import { centsToNumericString, numericStringToCents } from "./money";
@@ -1233,6 +1234,7 @@ export async function updateSplitChildren(
   );
 
   await writeSplitChildren(userId, parent, children);
+  await markAmazonMatchSplitProtected(userId, transactionId);
 }
 
 /**
@@ -1269,4 +1271,5 @@ export async function unsplitTransaction(
         ),
       );
   });
+  await markAmazonMatchSplitProtected(userId, transactionId);
 }
