@@ -6,6 +6,18 @@ updates:
       interval: weekly
     target-branch: master
     groups:
+      # All five must move together or nothing resolves: PR #3 bumped @fullcalendar/core to
+      # 7 on its own and `npm ci` refused it outright, because daygrid 6.1.21 peers on core
+      # 6. Listed first so it claims these packages before the type-based groups below, and
+      # covering major so a 6 → 7 arrives as one reviewable PR instead of five that each
+      # fail alone.
+      fullcalendar:
+        patterns:
+          - "@fullcalendar/*"
+        update-types:
+          - major
+          - minor
+          - patch
       production-minor-patch:
         dependency-type: production
         update-types:
