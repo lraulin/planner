@@ -70,22 +70,31 @@ Postgres runs as a service container, so no secrets are involved and fork PRs wo
 
 ## Acceptance criteria
 
-- [ ] Opening or synchronizing a PR against `master` runs one `ci` check that fails on any lint
-      error, type error, or failing test
-- [ ] The job applies all 79 migrations to an empty Postgres and fails if any will not apply
-- [ ] A job whose Postgres service is unreachable **fails**; it cannot report green with the
-      integration tests skipped
-- [ ] Each of the five open Dependabot PRs shows a pass or fail from the new check
-- [ ] Pushing to `master` is unchanged: no CI run, hooks untouched, Vercel untouched
-- [ ] Job wall time under 4 minutes
+- [x] Opening or synchronizing a PR against `master` runs one `ci` check that fails on any lint
+      error, type error, or failing test — verified through `workflow_dispatch`, which runs the
+      identical job. Two of the three runs failed, on lint and then on tests, before the third
+      went green
+- [x] The job applies all 79 migrations to an empty Postgres and fails if any will not apply —
+      `npm run db:migrate` passes on every run against the fresh service container
+- [x] A job whose Postgres service is unreachable **fails**; it cannot report green with the
+      integration tests skipped — `docker compose down && CI=true npm run test:integration`
+      fails all 54 files, each naming the unreachable database
+- [ ] Each of the five open Dependabot PRs shows a pass or fail from the new check — **pending**,
+      see Task 6. Needs `@dependabot rebase` on #2, #3, #4, #5, #7 to synchronize them
+- [x] Pushing to `master` is unchanged: no CI run, hooks untouched, Vercel untouched —
+      `gh run list` shows no `CI` run from any of the four pushes, only the manual dispatches
+- [x] Job wall time under 4 minutes — 2m50s green (1m36s and 1m46s on the two failing runs)
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                     | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Two fixes to `master` landed that the spec did not anticipate, because CI found them on its first two runs | The gate cannot be called working while `master` is red, and both were real defects the hooks had never been able to see. (a) The three `src/app/.well-known/**` routes were outside the TypeScript program on a clean checkout — TS wildcards skip dot-directories, and locally they were dragged in only through the generated `.next/types`. They had been unlinted and untypechecked since they were added. (b) Two unit tests failed with "Google is not connected": the only `vi.mock` in the unit suite, leaking under `--no-isolate` when file-to-worker distribution puts a real import of the module first. Reproduces locally at `maxForks=2`; CI runners have fewer cores. Fixed by extracting `buildUpdatePatch` as pure logic and deleting the mock. |
+| 2   | Verified with `workflow_dispatch` on `master` rather than by opening a PR                                  | `workflow_dispatch` was already in the design as a manual trigger, and it exercises every step of the job identically. Three runs: red on lint, red on tests, then green.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 3   | Node major recorded: `.nvmrc` says 24, Vercel's project is set to 24.x, local is v24.19.0                  | Task 4 asked for the check. They agree; nothing to resolve.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 4   | `actions/checkout` and `actions/setup-node` pinned at `v7`, not the `v6` the shaping notes assumed         | v7 is the current major of both.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ---
 
