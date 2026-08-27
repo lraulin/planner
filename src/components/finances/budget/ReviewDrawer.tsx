@@ -9,7 +9,7 @@ import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { CadenceSelect } from "@/components/finances/CadenceSelect";
 import { DateText } from "@/components/date/DateText";
 import type { RecurringMerchant } from "@/lib/finances/analytics";
-import { formatUsd } from "@/lib/finances/money";
+import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
 import {
   cadenceFromGapDays,
   cadenceLabel,
@@ -180,7 +180,7 @@ function ReviewForm({
     nextDueFrom(entry.lastChargeOn, initialCadence, todayKey),
   );
   const [nextTouched, setNextTouched] = useState(false);
-  const cents = Math.round(Number(amount.replace(/[$,\s]/g, "")) * 100);
+  const cents = parseAmountEntryCents(amount);
 
   function changeCadence(value: Cadence) {
     setCadence(value);
@@ -202,7 +202,7 @@ function ReviewForm({
           const result = await trackTransactionAsBillAction(entry.lastTransactionId, {
             name: name.trim(),
             cadence,
-            expectedCents: cents > 0 ? cents : null,
+            expectedCents: cents !== null && cents > 0 ? cents : null,
             anchorDate: next || null,
             scheduled: true,
           });

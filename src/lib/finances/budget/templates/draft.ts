@@ -13,7 +13,7 @@
  * Spec: `agent-os/specs/2026-08-22-2242-budget-goal-templates/` D1.
  */
 
-import { parseAmountCents } from "@/lib/finances/money";
+import { parseAmountEntryCents } from "@/lib/finances/money";
 import type { MonthKey } from "../envelope";
 import {
   newTemplateId,
@@ -115,7 +115,7 @@ export type DraftResult =
   { ok: true; templates: Template[] } | { ok: false; error: string };
 
 function money(raw: string, what: string): number | string {
-  const cents = parseAmountCents(raw);
+  const cents = parseAmountEntryCents(raw);
   if (cents === null) return `${what} is not an amount.`;
   if (cents <= 0) return `${what} must be more than zero.`;
   return cents;

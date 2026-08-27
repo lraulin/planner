@@ -1,6 +1,6 @@
 # Arithmetic expressions in currency inputs — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete (2026-08-27)**
 
 ## Scope
 

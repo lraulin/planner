@@ -39,6 +39,7 @@ semantics transfer; the machinery does not.**
 | Rules and rule editor (first-match categorisation; payee claims still own commitment matching) | `packages/loot-core/src/server/rules/`                                                                          |
 | Budget UI and menu vocabulary                                                                  | `packages/desktop-client/src/components/budget/envelope/`                                                       |
 | Cell → UI naming crib                                                                          | `packages/desktop-client/src/spreadsheet/bindings.ts`                                                           |
+| **Amount entry** — evaluating a typed expression, and formatting a cell for and from edit      | `packages/loot-core/src/shared/arithmetic.ts`, `packages/desktop-client/src/hooks/useFormat.ts`                 |
 | Their own docs                                                                                 | `packages/docs/docs/`                                                                                           |
 
 ## Reading order (for agents)
@@ -93,3 +94,11 @@ narrowed by later deltas:
   The Available breakdown is leftover identity (carry-in + assigned + activity), not
   YNAB's cash-vs-credit split. See
   `agent-os/specs/2026-08-25-1633-budget-inspector/`.
+- **Unparseable amount entry reverts instead of committing zero.** Actual's `fromEdit`
+  returns a caller-supplied default for anything it cannot read, and the budget cell's
+  `onSave` turns that into `0` — so clearing a cell zeroes the envelope. This app writes
+  nothing and restores the prior value; typing `0` is how you zero one. It also runs the
+  **currency parser before the expression evaluator**, the reverse of `fromEdit`, so
+  `(1.23)` keeps its accounting meaning of −1.23 rather than being re-read as grouping and
+  flipping to +1.23. And it stops at the four functions: no `^`. See
+  `agent-os/specs/2026-08-27-0757-currency-expression-entry/` D3/D4/D6.

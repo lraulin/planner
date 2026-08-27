@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 
 import { ModalShell } from "@/components/detail/ModalShell";
-import { formatUsd } from "@/lib/finances/money";
+import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
 import type { BudgetRow } from "@/lib/finances/budget/rows";
 
 /**
@@ -28,9 +28,9 @@ export function MoveMoneyDialog({
   const [toId, setToId] = useState(targets[0]?.id ?? "");
   const [amount, setAmount] = useState((from.balanceCents / 100).toFixed(2));
 
-  const cents = Math.round(Number(amount.replace(/[$,\s]/g, "")) * 100);
+  const cents = parseAmountEntryCents(amount);
   const valid =
-    toId !== "" && Number.isFinite(cents) && cents > 0 && cents <= from.balanceCents;
+    toId !== "" && cents !== null && cents > 0 && cents <= from.balanceCents;
 
   return (
     <ModalShell open onClose={onCancel} labelledBy={headingId} width="max-w-sm">
@@ -38,7 +38,7 @@ export function MoveMoneyDialog({
         className="flex flex-col gap-3 p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (valid) onMove(toId, cents);
+          if (valid && cents !== null) onMove(toId, cents);
         }}
       >
         <h2 id={headingId} className="text-[1rem] font-medium text-ink">

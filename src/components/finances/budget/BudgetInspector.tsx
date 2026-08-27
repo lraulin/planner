@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 
 import { CadenceSelect } from "@/components/finances/CadenceSelect";
-import { DateKeyCell } from "@/components/grid/cells";
+import { AmountCell, DateKeyCell } from "@/components/grid/cells";
 import type { EnvelopeStatus } from "@/db/schema";
 import type { EnvelopeIndicator } from "@/lib/finances/budget/indicator";
 import {
@@ -195,22 +195,12 @@ export function BudgetInspector({
             )}
             <label className={labelClass}>
               Amount
-              <input
-                key={billView.expectedCents}
-                type="text"
-                inputMode="decimal"
-                defaultValue={(billView.expectedCents / 100).toFixed(2)}
+              <AmountCell
+                cents={billView.expectedCents}
+                onCommit={(cents) => onPatchBill(bill, { expectedCents: cents })}
+                label={`Amount for ${row.name}`}
                 disabled={pending}
-                aria-label={`Amount for ${row.name}`}
-                onBlur={(event) => {
-                  const next = Math.round(
-                    Number(event.target.value.replace(/[$,\s]/g, "")) * 100,
-                  );
-                  if (Number.isFinite(next) && next !== billView.expectedCents) {
-                    onPatchBill(bill, { expectedCents: next });
-                  }
-                }}
-                className={`${fieldClass} tabular text-right`}
+                className={fieldClass}
               />
             </label>
             <label className={labelClass}>

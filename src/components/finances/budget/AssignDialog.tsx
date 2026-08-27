@@ -2,7 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
-import { formatUsd } from "@/lib/finances/money";
+import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
 import {
   ASSIGN_OPTION_LABELS,
   type AssignLine,
@@ -112,8 +112,8 @@ export function AssignDialog({
             onSubmit={(event) => {
               event.preventDefault();
               if (!target) return;
-              const cents = Math.round(Number(amount.replace(/[$,\s]/g, "")) * 100);
-              if (!Number.isFinite(cents) || cents <= 0) return;
+              const cents = parseAmountEntryCents(amount);
+              if (cents === null || cents <= 0) return;
               onManual(target, cents);
             }}
           >

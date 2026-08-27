@@ -1,5 +1,6 @@
 "use client";
 
+import { AmountCell } from "@/components/grid/cells";
 import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
 import type { BillEnvelopeEdit } from "@/lib/finances/mutations";
 import { formatUsd } from "@/lib/finances/money";
@@ -49,32 +50,12 @@ function indicatorOf(ctx: BudgetColumnCtx, id: string): EnvelopeIndicator {
 
 function assignedCell<T extends BudgetRow>(row: NodeGridRow<T>, ctx: BudgetColumnCtx) {
   return (
-    <input
-      key={row.node.assignedCents}
-      type="text"
-      inputMode="decimal"
-      defaultValue={(row.node.assignedCents / 100).toFixed(2)}
+    <AmountCell
+      cents={row.node.assignedCents}
+      onCommit={(cents) => ctx.onAssign(row.node, cents)}
+      label={`Assigned to ${row.node.name}`}
       disabled={ctx.pending}
-      aria-label={`Assigned to ${row.node.name}`}
-      onFocus={(event) => event.target.select()}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") event.currentTarget.blur();
-        if (event.key === "Escape") {
-          event.currentTarget.value = (row.node.assignedCents / 100).toFixed(2);
-          event.currentTarget.blur();
-        }
-      }}
-      onBlur={(event) => {
-        const next = Math.round(
-          Number(event.target.value.replace(/[$,\s]/g, "")) * 100,
-        );
-        if (!Number.isFinite(next)) {
-          event.target.value = (row.node.assignedCents / 100).toFixed(2);
-          return;
-        }
-        if (next !== row.node.assignedCents) ctx.onAssign(row.node, next);
-      }}
-      className="tabular w-24 rounded border border-rule bg-surface px-1 text-right text-base text-ink md:text-[0.8125rem]"
+      className="w-24 rounded border border-rule bg-surface px-1 text-base text-ink md:text-[0.8125rem]"
     />
   );
 }

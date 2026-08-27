@@ -1,6 +1,6 @@
 # Arithmetic expressions in currency inputs
 
-**Status: active**
+**Status: frozen / complete (2026-08-27)**
 Spec folder: `agent-os/specs/2026-08-27-0757-currency-expression-entry/`
 
 ## Spec relationships
@@ -61,24 +61,30 @@ with them.
 
 ## Acceptance criteria
 
-- [ ] `50+25` in the Assigned cell commits `75.00`; Available and Ready-to-Assign both move by $75.
-- [ ] `(40+60)/2` commits `50.00`; `2+3*4` commits `14.00` (precedence, not left-to-right).
-- [ ] `$1,000 + 50` commits `1050.00` — currency chrome inside an expression is tolerated.
-- [ ] Clearing a cell and tabbing out **restores the previous value and writes nothing**.
-- [ ] `abc`, `2+`, and `1/0` all revert and mark the field invalid; none of them writes.
-- [ ] Escape mid-expression restores the stored value and blurs, as before.
+- [x] `50+25` in the Assigned cell commits `75.00`; Available and Ready-to-Assign both move by $75.
+- [x] `(40+60)/2` commits `50.00`; `2+3*4` commits `14.00` (precedence, not left-to-right).
+- [x] `$1,000 + 50` commits `1050.00` — currency chrome inside an expression is tolerated.
+- [x] Clearing a cell and tabbing out **restores the previous value and writes nothing**.
+- [x] `abc`, `2+`, and `1/0` all revert and mark the field invalid; none of them writes.
+- [x] Escape mid-expression restores the stored value and blurs, as before.
 - [ ] Assign and Move-money dialogs accept `100/2` and enable submit; `0` and blank do not.
-- [ ] Supplies Cost/order accepts `12.99*2`; supplies Qty accepts `3*2`.
-- [ ] `grep -rn 'Number(.*replace(/\[\$,\\s\]/g' src/` returns nothing.
-- [ ] `npm run lint && npm run typecheck && npm run test:unit` green.
+      **Verified only in code and unit tests.** The Assign form renders and reads its amount
+      through `parseAmountEntryCents`, but its submit was gated shut by a negative Ready to
+      Assign in the local data, and Move money needs a positive envelope balance to open — so
+      neither guard was exercised against a real click.
+- [x] Supplies Cost/order accepts `12.99*2`; supplies Qty accepts `3*2`.
+- [x] `grep -rn 'Number(.*replace(/\[\$,\\s\]/g' src/` returns nothing.
+- [x] `npm run lint && npm run typecheck && npm run test:unit` green.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                                                                    | Why                                                                                                                                                                                                                                                               |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | **Whitespace separates tokens; it is not stripped before scanning.** Task 2 asked for both "strip whitespace up front" (Actual's move) and `1 2` → `null`. Those contradict: stripping makes `1 2` twelve. The scanner skips whitespace _between_ tokens, and a number token ends at one. | `1 2` is a typo and a silent `12` is the worst reading of it. Keeping the stated `null` case was the right half of the contradiction to keep — the whitespace instruction was only ever a means to `10 + -4`, which tokenizing also gives.                        |
+| C2  | **`AmountCell` resyncs on a changed `cents` prop rather than remounting on `key`.** The sites it replaced used `key={cents}`. It now tracks the last value it rendered and resets state when that changes.                                                                                | Same effect for an idle field, but a `key` remount also fires while someone is mid-type if another edit lands, throwing away focus and the caret. A shared cell used by a live grid should not have that failure mode.                                            |
+| C3  | **Commit is blur-only; Enter blurs, and Escape sets a cancel flag first.** `EffortCell`, the model, commits on Enter _and_ on the blur that follows it, and its Escape restores state then blurs into a commit of the stale typed text.                                                   | On `EffortCell` that double-commits and flashes the field invalid on Escape. Copying the shape into a cell that writes money is how a duplicate assignment happens, so `AmountCell` takes the corrected version. `EffortCell` itself is untouched — separate fix. |
 
 ## Task 1: Save spec documentation
 
@@ -168,3 +174,15 @@ No schema change, no server-action change, no new dependency. `onAssign` keeps i
 **Standing rule while this spec is active:** material changes to requirements, design, or
 scope — including feedback on what was built — go into `plan.md`/`shape.md` plus a row in
 **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+
+## Follow-ups (new work, not part of this spec)
+
+- **`MoneyField`** (`src/components/detail/fields.tsx`) and its callers — project and task
+  costs, job pay, residence rent — still have no expression support. Deliberately out of
+  scope (D1): it keeps a decimal string end to end rather than converting to cents and it
+  rejects negatives, so it needs its own decision about what an expression means there.
+- **`EffortCell` double-commits on Enter and flashes invalid on Escape.** Found while
+  modelling `AmountCell` on it (C3): it calls `commit()` then `blur()`, and its `onBlur`
+  commits again; Escape sets state and blurs, and the blur parses the stale typed text.
+  `AmountCell` carries the corrected shape; `EffortCell` was left alone because it writes
+  minutes, not money, and fixing it is a `/fix-bug` of its own.

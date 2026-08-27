@@ -1,6 +1,7 @@
 "use client";
 
 import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
+import { evalArithmetic } from "@/lib/arithmetic";
 import { formatUsd } from "@/lib/finances/money";
 import {
   formatDeltaPercent,
@@ -107,8 +108,10 @@ function NumberCell({
         }
       }}
       onBlur={(event) => {
-        const next = Number(event.target.value.replace(/[$,\s]/g, ""));
-        if (!Number.isFinite(next)) {
+        // `null` covers blank as well as malformed: the old `Number("")` read an emptied
+        // field as a committed zero. Reverting is the only safe reading of a cleared cell.
+        const next = evalArithmetic(event.target.value);
+        if (next === null) {
           event.target.value = shown;
           return;
         }

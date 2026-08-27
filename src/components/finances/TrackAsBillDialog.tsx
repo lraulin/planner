@@ -8,7 +8,7 @@ import {
   loadTrackAsBillDraftAction,
   trackTransactionAsBillAction,
 } from "@/app/finances/actions";
-import { formatUsd } from "@/lib/finances/money";
+import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
 import { nextDueFrom, type Cadence } from "@/lib/finances/recurringBills";
 import type { ClaimedPayee, TrackAsBillDraft } from "@/lib/finances/registerBillDraft";
 import { CadenceSelect } from "./CadenceSelect";
@@ -90,7 +90,7 @@ function TrackAsBillForm({
   const [next, setNext] = useState(seed.nextDueKey);
   const [nextTouched, setNextTouched] = useState(false);
   const [scheduled, setScheduled] = useState(true);
-  const cents = Math.round(Number(amount.replace(/[$,\s]/g, "")) * 100);
+  const cents = parseAmountEntryCents(amount);
 
   function changeCadence(value: Cadence) {
     setCadence(value);
@@ -109,7 +109,7 @@ function TrackAsBillForm({
             const result = await trackTransactionAsBillAction(seed.transactionId, {
               name: name.trim(),
               cadence,
-              expectedCents: cents > 0 ? cents : null,
+              expectedCents: cents !== null && cents > 0 ? cents : null,
               anchorDate: scheduled ? next || null : null,
               scheduled,
             });
