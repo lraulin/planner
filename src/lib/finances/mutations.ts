@@ -22,7 +22,8 @@ import { summarizeFlowChanges, type FlowDiff } from "./classify/flowDiff";
 import { lastChargeOnBill } from "./billLastCharge";
 import { nextChargeWriteError } from "./commitments";
 import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
-import { numericStringToCents } from "./money";
+import { centsToNumericString, numericStringToCents } from "./money";
+import { splitRemainderCents } from "./splitRemainder";
 import type { PaypalResolution } from "./paypalMatch";
 import { ensurePayees } from "./payees/backfill";
 import {
@@ -949,4 +950,323 @@ export async function setSubscriptionStatus(
  */
 function todayInUtc(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * One child of a split, as the editor hands it over.
+ *
+ * `id` names an existing child to keep and update; absent, a new one is inserted. Only the
+ * three fields a child owns are here — everything else is the parent's and is inherited
+ * (`agent-os/specs/2026-08-26-2022-split-transactions/` D9). Payee especially: identity is
+ * derived from the bank's description with no per-row override, and the bank says Apple.
+ */
+export type SplitChildInput = {
+  id?: string;
+  /** Signed cents, same convention as the parent. */
+  amountCents: number;
+  /** Null is a real answer here — an unassigned child *is* budget backlog. */
+  budgetCategoryId: string | null;
+  notes?: string;
+};
+
+/** Columns a child inherits from its parent, read once and copied onto every insert. */
+const SPLIT_PARENT_COLUMNS = {
+  id: financeTransactions.id,
+  accountId: financeTransactions.accountId,
+  transactionDate: financeTransactions.transactionDate,
+  postedDate: financeTransactions.postedDate,
+  pending: financeTransactions.pending,
+  description: financeTransactions.description,
+  amount: financeTransactions.amount,
+  payeeId: financeTransactions.payeeId,
+  derivedFlow: financeTransactions.derivedFlow,
+  flowOverride: financeTransactions.flowOverride,
+  transferGroupId: financeTransactions.transferGroupId,
+  excludeFromBaseline: financeTransactions.excludeFromBaseline,
+  eventLabel: financeTransactions.eventLabel,
+  budgetCategoryId: financeTransactions.budgetCategoryId,
+  isParent: financeTransactions.isParent,
+  parentId: financeTransactions.parentId,
+} as const;
+
+type SplitParentRow = {
+  [
+    K in keyof typeof SPLIT_PARENT_COLUMNS
+  ]: (typeof financeTransactions.$inferSelect)[K];
+};
+
+async function requireSplitParent(
+  userId: string,
+  transactionId: string,
+): Promise<SplitParentRow> {
+  const [row] = await db
+    .select(SPLIT_PARENT_COLUMNS)
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.id, transactionId),
+        eq(financeTransactions.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new Error("Transaction not found.");
+  return row;
+}
+
+/**
+ * Every envelope named by the children must be the caller's.
+ *
+ * This is the novel cross-user hole the parent/child schema opens: the child rows are
+ * written by us, so a `userId` on the insert proves nothing about the ids the caller chose
+ * to put *in* them.
+ */
+async function requireCategoriesOwned(
+  userId: string,
+  categoryIds: readonly (string | null)[],
+): Promise<void> {
+  const unique = [...new Set(categoryIds.flatMap((id) => (id === null ? [] : [id])))];
+  if (unique.length === 0) return;
+  const rows = await db
+    .select({ id: financeBudgetCategories.id })
+    .from(financeBudgetCategories)
+    .where(
+      and(
+        eq(financeBudgetCategories.userId, userId),
+        inArray(financeBudgetCategories.id, unique),
+      ),
+    );
+  if (rows.length !== unique.length) throw new Error("Envelope not found.");
+}
+
+/**
+ * Refuse a split that does not add up.
+ *
+ * **Divergence from Actual**, which persists the imbalance as a `SplitTransactionError` and
+ * shows it on the row. Two reasons to be stricter here: `reconcile.ts` is a hard arithmetic
+ * check, so an unbalanced split surfaces as a statement discrepancy whose cause is invisible
+ * from where it is reported; and there is no sync layer forcing tolerance of a half-written
+ * record. An unbalanced split can only ever be a bug wearing data's clothes.
+ */
+function requireBalanced(
+  parentCents: number,
+  children: readonly SplitChildInput[],
+): void {
+  const remainder = splitRemainderCents(
+    parentCents,
+    children.map((child) => child.amountCents),
+  );
+  if (remainder === 0) return;
+  // Direction is relative to the parent's sign, not to zero: on a card charge every amount
+  // runs negative, so a remainder of -$1.98 is $1.98 *still to allocate*, not an overshoot.
+  const stillToAllocate = parentCents === 0 || remainder * parentCents > 0;
+  const gap = centsToNumericString(Math.abs(remainder));
+  const direction = stillToAllocate ? "short by" : "over by";
+  throw new Error(
+    `Split does not add up: the children are ${direction} $${gap}. Use Distribute to close the gap.`,
+  );
+}
+
+/** The rows a split may not be made from (D10). */
+function requireSplittable(parent: SplitParentRow): void {
+  if (parent.parentId !== null) {
+    throw new Error("A split child cannot itself be split.");
+  }
+  if (parent.transferGroupId !== null) {
+    // Both legs would have to be split to stay coherent, and `activitySince`'s transfer
+    // exclusion keys on the group rather than on the row.
+    throw new Error("A transfer cannot be split.");
+  }
+}
+
+/**
+ * Replace a parent's children wholesale, inside one transaction.
+ *
+ * Wholesale rather than per-row because the balance invariant is a property of the *set*:
+ * any per-child write would have to pass through a state where the split does not add up,
+ * and D6 says that state is never persisted.
+ */
+async function writeSplitChildren(
+  userId: string,
+  parent: SplitParentRow,
+  children: readonly SplitChildInput[],
+): Promise<void> {
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    const existing = await tx
+      .select({ id: financeTransactions.id })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.parentId, parent.id),
+        ),
+      );
+    const existingIds = new Set(existing.map((row) => row.id));
+
+    const kept = new Set(
+      children.flatMap((child) =>
+        child.id !== undefined && existingIds.has(child.id) ? [child.id] : [],
+      ),
+    );
+    const removed = [...existingIds].filter((id) => !kept.has(id));
+    if (removed.length > 0) {
+      await tx
+        .delete(financeTransactions)
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            inArray(financeTransactions.id, removed),
+          ),
+        );
+    }
+
+    for (const child of children) {
+      const values = {
+        amount: centsToNumericString(child.amountCents),
+        budgetCategoryId: child.budgetCategoryId,
+        notes: child.notes?.trim() ?? "",
+        updatedAt: now,
+      };
+      if (child.id !== undefined && kept.has(child.id)) {
+        await tx
+          .update(financeTransactions)
+          .set(values)
+          .where(
+            and(
+              eq(financeTransactions.userId, userId),
+              eq(financeTransactions.id, child.id),
+            ),
+          );
+        continue;
+      }
+      await tx.insert(financeTransactions).values({
+        userId,
+        parentId: parent.id,
+        accountId: parent.accountId,
+        transactionDate: parent.transactionDate,
+        postedDate: parent.postedDate,
+        pending: parent.pending,
+        description: parent.description,
+        payeeId: parent.payeeId,
+        derivedFlow: parent.derivedFlow,
+        flowOverride: parent.flowOverride,
+        excludeFromBaseline: parent.excludeFromBaseline,
+        eventLabel: parent.eventLabel,
+        // `externalSource` / `externalId` stay null: a child is not a bank row (D4), so it
+        // sits outside the partial unique index that dedups re-imports and can neither be
+        // created nor resurrected by one.
+        ...values,
+      });
+    }
+
+    // D3: the parent holds no envelope. If it kept one, the leaf sum and the envelope sum
+    // would double-count it.
+    await tx
+      .update(financeTransactions)
+      .set({ isParent: true, budgetCategoryId: null, updatedAt: now })
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.id, parent.id),
+        ),
+      );
+  });
+}
+
+/**
+ * Divide one bank transaction between envelopes.
+ *
+ * The parent keeps the bank's amount and gives up its envelope; the children sum to it
+ * exactly. Nothing calls this automatically — no rule action, no import
+ * (`agent-os/specs/2026-08-23-1536-finance-rules/` D4 stands). Splits are rare by design,
+ * and a split register is a harder register to read.
+ *
+ * An envelope already on the row moves onto the first child rather than being dropped on the
+ * floor, unless the caller named one there.
+ */
+export async function splitTransaction(
+  userId: string,
+  transactionId: string,
+  children: readonly SplitChildInput[],
+): Promise<void> {
+  const parent = await requireSplitParent(userId, transactionId);
+  requireSplittable(parent);
+  if (parent.isParent) throw new Error("That transaction is already split.");
+  if (children.length === 0) throw new Error("A split needs at least one child.");
+
+  const inherited = children.map((child, index) =>
+    index === 0 && child.budgetCategoryId === null && parent.budgetCategoryId !== null
+      ? { ...child, budgetCategoryId: parent.budgetCategoryId }
+      : { ...child, id: undefined },
+  );
+  requireBalanced(numericStringToCents(parent.amount) ?? 0, inherited);
+  await requireCategoriesOwned(
+    userId,
+    inherited.map((child) => child.budgetCategoryId),
+  );
+
+  await writeSplitChildren(userId, parent, inherited);
+}
+
+/**
+ * Rewrite an existing split's children.
+ *
+ * An empty set unsplits the row (D11): removing the last child has to restore an ordinary
+ * transaction, or a mis-split row would be permanently strange with no way back.
+ */
+export async function updateSplitChildren(
+  userId: string,
+  transactionId: string,
+  children: readonly SplitChildInput[],
+): Promise<void> {
+  const parent = await requireSplitParent(userId, transactionId);
+  if (!parent.isParent) throw new Error("That transaction is not split.");
+  if (children.length === 0) {
+    await unsplitTransaction(userId, transactionId);
+    return;
+  }
+
+  requireBalanced(numericStringToCents(parent.amount) ?? 0, children);
+  await requireCategoriesOwned(
+    userId,
+    children.map((child) => child.budgetCategoryId),
+  );
+
+  await writeSplitChildren(userId, parent, children);
+}
+
+/**
+ * Return a split parent to an ordinary row.
+ *
+ * The children go; the parent's envelope stays null, so the row lands back in the budget's
+ * backlog and the ordinary envelope picker is how it leaves again. Restoring one child's
+ * envelope onto the parent would be a guess about which of two was the real one.
+ */
+export async function unsplitTransaction(
+  userId: string,
+  transactionId: string,
+): Promise<void> {
+  const parent = await requireSplitParent(userId, transactionId);
+  if (!parent.isParent) return;
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.parentId, transactionId),
+        ),
+      );
+    await tx
+      .update(financeTransactions)
+      .set({ isParent: false, updatedAt: now })
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.id, transactionId),
+        ),
+      );
+  });
 }

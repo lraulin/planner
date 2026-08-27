@@ -8,7 +8,7 @@ import {
   financeTransactions,
   users,
 } from "@/db/schema";
-import { createCategoryGroup } from "./budget/mutations";
+import { createBudgetCategory, createCategoryGroup } from "./budget/mutations";
 import {
   loadBillSnapshots,
   loadNextDueKeys,
@@ -22,11 +22,15 @@ import {
   deleteTransaction,
   deleteTransactions,
   setSubscriptionStatus,
+  splitTransaction,
   trackTransactionAsBill,
+  unsplitTransaction,
+  updateSplitChildren,
   updateAccount,
   updateTransaction,
   upsertBillEnvelope,
 } from "./mutations";
+import { numericStringToCents } from "./money";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { getTransaction, listAccounts, listTransactions } from "./queries";
 import { createPayee } from "./payees/mutations";
@@ -1212,5 +1216,291 @@ describeDb("trackTransactionAsBill", () => {
     });
     await expect(deleteTransaction(intruderId, charge)).rejects.toThrow(/not found/i);
     expect(await getTransaction(userId, charge)).not.toBeNull();
+  });
+});
+
+describeDb("split transactions", () => {
+  let userId: string;
+  let accountId: string;
+  let appleId: string;
+  let software: string;
+  let fitness: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+    const [account] = await db
+      .insert(financeAccounts)
+      .values({
+        userId,
+        name: "Sapphire",
+        kind: "credit_card",
+        externalSource: "test",
+        externalKey: `card-${crypto.randomUUID()}`,
+      })
+      .returning({ id: financeAccounts.id });
+    accountId = account.id;
+    const [row] = await db
+      .insert(financeTransactions)
+      .values({
+        userId,
+        accountId,
+        transactionDate: "2026-05-03",
+        description: "PP*APPLE.COM/BILL",
+        amount: "-34.97",
+        externalSource: "csv:chase-credit",
+        externalId: `apple-${crypto.randomUUID()}`,
+      })
+      .returning({ id: financeTransactions.id });
+    appleId = row.id;
+    software = await createBudgetCategory(userId, { name: "Software" });
+    fitness = await createBudgetCategory(userId, { name: "Fitness" });
+  });
+
+  async function children(parentId: string) {
+    return db
+      .select({
+        id: financeTransactions.id,
+        amount: financeTransactions.amount,
+        categoryId: financeTransactions.budgetCategoryId,
+        notes: financeTransactions.notes,
+        description: financeTransactions.description,
+        transactionDate: financeTransactions.transactionDate,
+        accountId: financeTransactions.accountId,
+        externalId: financeTransactions.externalId,
+        isParent: financeTransactions.isParent,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.parentId, parentId));
+  }
+
+  const apple = [
+    { amountCents: -1378, budgetCategoryId: null as string | null, notes: "Copilot" },
+    {
+      amountCents: -2119,
+      budgetCategoryId: null as string | null,
+      notes: "Intervals Pro",
+    },
+  ];
+
+  it("divides the Apple charge between two envelopes", async () => {
+    await splitTransaction(userId, appleId, [
+      { ...apple[0], budgetCategoryId: software },
+      { ...apple[1], budgetCategoryId: fitness },
+    ]);
+
+    const rows = await children(appleId);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.amount).sort()).toEqual(["-13.78", "-21.19"]);
+    expect(new Set(rows.map((row) => row.categoryId))).toEqual(
+      new Set([software, fitness]),
+    );
+    // A child inherits the bank's half and is not itself a bank row (D4, D9).
+    for (const row of rows) {
+      expect(row.description).toBe("PP*APPLE.COM/BILL");
+      expect(row.transactionDate).toBe("2026-05-03");
+      expect(row.accountId).toBe(accountId);
+      expect(row.externalId).toBeNull();
+      expect(row.isParent).toBe(false);
+    }
+
+    const [parent] = await db
+      .select({
+        isParent: financeTransactions.isParent,
+        amount: financeTransactions.amount,
+        categoryId: financeTransactions.budgetCategoryId,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, appleId));
+    expect(parent).toMatchObject({
+      isParent: true,
+      amount: "-34.97",
+      categoryId: null,
+    });
+  });
+
+  it("refuses a split that does not add up, naming the shortfall", async () => {
+    await expect(
+      splitTransaction(userId, appleId, [
+        { amountCents: -1300, budgetCategoryId: software },
+        { amountCents: -1999, budgetCategoryId: fitness },
+      ]),
+    ).rejects.toThrow(/short by \$1\.98/);
+    expect(await children(appleId)).toEqual([]);
+
+    await expect(
+      splitTransaction(userId, appleId, [
+        { amountCents: -2000, budgetCategoryId: software },
+        { amountCents: -2000, budgetCategoryId: fitness },
+      ]),
+    ).rejects.toThrow(/over by \$5\.03/);
+  });
+
+  it("moves an envelope already on the row onto the first child", async () => {
+    await db
+      .update(financeTransactions)
+      .set({ budgetCategoryId: software })
+      .where(eq(financeTransactions.id, appleId));
+
+    await splitTransaction(userId, appleId, [
+      { ...apple[0] },
+      { ...apple[1], budgetCategoryId: fitness },
+    ]);
+
+    const rows = await children(appleId);
+    expect(rows.find((row) => row.amount === "-13.78")?.categoryId).toBe(software);
+  });
+
+  it("will not split a transfer leg or a child, and will not re-split a parent", async () => {
+    await splitTransaction(userId, appleId, [
+      { ...apple[0], budgetCategoryId: software },
+      { ...apple[1], budgetCategoryId: fitness },
+    ]);
+    await expect(
+      splitTransaction(userId, appleId, [
+        { amountCents: -3497, budgetCategoryId: software },
+      ]),
+    ).rejects.toThrow(/already split/);
+
+    const [child] = await children(appleId);
+    await expect(
+      splitTransaction(userId, child.id, [
+        {
+          amountCents: numericStringToCents(child.amount) ?? 0,
+          budgetCategoryId: software,
+        },
+      ]),
+    ).rejects.toThrow(/cannot itself be split/);
+
+    const [leg] = await db
+      .insert(financeTransactions)
+      .values({
+        userId,
+        accountId,
+        transactionDate: "2026-05-04",
+        description: "Payment Thank You",
+        amount: "-100.00",
+        transferGroupId: crypto.randomUUID(),
+      })
+      .returning({ id: financeTransactions.id });
+    await expect(
+      splitTransaction(userId, leg.id, [
+        { amountCents: -10000, budgetCategoryId: software },
+      ]),
+    ).rejects.toThrow(/transfer cannot be split/);
+  });
+
+  it("rewrites children in place, keeping the ids it was given", async () => {
+    await splitTransaction(userId, appleId, [
+      { ...apple[0], budgetCategoryId: software },
+      { ...apple[1], budgetCategoryId: fitness },
+    ]);
+    const before = await children(appleId);
+    const keep = before.find((row) => row.amount === "-13.78")!;
+
+    await updateSplitChildren(userId, appleId, [
+      { id: keep.id, amountCents: -1500, budgetCategoryId: software, notes: "Copilot" },
+      { amountCents: -1997, budgetCategoryId: fitness },
+    ]);
+
+    const after = await children(appleId);
+    expect(after).toHaveLength(2);
+    expect(after.find((row) => row.id === keep.id)?.amount).toBe("-15.00");
+    // The child that was not named was replaced, not orphaned.
+    expect(
+      after.some((row) => row.id === before.find((r) => r.id !== keep.id)!.id),
+    ).toBe(false);
+  });
+
+  it("unsplits when the last child is removed, and directly", async () => {
+    await splitTransaction(userId, appleId, [
+      { ...apple[0], budgetCategoryId: software },
+      { ...apple[1], budgetCategoryId: fitness },
+    ]);
+    await updateSplitChildren(userId, appleId, []);
+
+    expect(await children(appleId)).toEqual([]);
+    const [parent] = await db
+      .select({
+        isParent: financeTransactions.isParent,
+        categoryId: financeTransactions.budgetCategoryId,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, appleId));
+    expect(parent).toMatchObject({ isParent: false, categoryId: null });
+
+    await splitTransaction(userId, appleId, [
+      { amountCents: -3497, budgetCategoryId: software },
+    ]);
+    await unsplitTransaction(userId, appleId);
+    expect(await children(appleId)).toEqual([]);
+  });
+
+  it("takes the children with the parent when the parent is deleted", async () => {
+    await splitTransaction(userId, appleId, [
+      { ...apple[0], budgetCategoryId: software },
+      { ...apple[1], budgetCategoryId: fitness },
+    ]);
+    await deleteTransaction(userId, appleId);
+
+    expect(await children(appleId)).toEqual([]);
+    const remaining = await db
+      .select({ id: financeTransactions.id })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId));
+    expect(remaining).toEqual([]);
+  });
+
+  it("survives a re-import of the source file without duplicating anything", async () => {
+    await splitTransaction(userId, appleId, [
+      { ...apple[0], budgetCategoryId: software },
+      { ...apple[1], budgetCategoryId: fitness },
+    ]);
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+
+    expect(await children(appleId)).toHaveLength(2);
+    const apples = await db
+      .select({ id: financeTransactions.id })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.description, "PP*APPLE.COM/BILL"));
+    expect(apples.filter((row) => row.id === appleId)).toHaveLength(1);
+  });
+
+  it("keeps a second user out of every part of a split", async () => {
+    const intruderId = await makeUser();
+    const theirEnvelope = await createBudgetCategory(intruderId, { name: "Theirs" });
+
+    await expect(
+      splitTransaction(intruderId, appleId, [
+        { amountCents: -3497, budgetCategoryId: theirEnvelope },
+      ]),
+    ).rejects.toThrow(/not found/i);
+
+    await splitTransaction(userId, appleId, [
+      { ...apple[0], budgetCategoryId: software },
+      { ...apple[1], budgetCategoryId: fitness },
+    ]);
+    const rows = await children(appleId);
+
+    await expect(
+      updateSplitChildren(intruderId, appleId, [
+        { amountCents: -3497, budgetCategoryId: theirEnvelope },
+      ]),
+    ).rejects.toThrow(/not found/i);
+    await expect(unsplitTransaction(intruderId, appleId)).rejects.toThrow(/not found/i);
+    await expect(deleteTransaction(intruderId, appleId)).rejects.toThrow(/not found/i);
+    await deleteTransactions(intruderId, [appleId, ...rows.map((row) => row.id)]);
+    expect(await children(appleId)).toHaveLength(2);
+
+    // The novel hole this schema opens: the child rows are ours to write, so a userId on the
+    // insert proves nothing about the envelope ids the caller chose to put in them.
+    await expect(
+      updateSplitChildren(userId, appleId, [
+        { amountCents: -3497, budgetCategoryId: theirEnvelope },
+      ]),
+    ).rejects.toThrow(/envelope not found/i);
+    expect((await children(appleId)).map((row) => row.categoryId).sort()).toEqual(
+      [software, fitness].sort(),
+    );
   });
 });
