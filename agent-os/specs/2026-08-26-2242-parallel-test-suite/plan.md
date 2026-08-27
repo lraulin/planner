@@ -1,6 +1,6 @@
 # Parallelize the test suite and make the integration gate unskippable
 
-**Status: active**  
+**Status: frozen / complete**  
 Spec folder: `agent-os/specs/2026-08-26-2242-parallel-test-suite/`
 
 ## Context
@@ -63,21 +63,36 @@ transform/collect, serialized.
 
 ## Acceptance criteria
 
-- [ ] `npm run test:unit` completes in **under 5s** and runs zero database tests
-- [ ] `npm test` completes in **under 30s** with all 348 files and 4327 tests passing
-- [ ] `npm run test:unit` and `npm run test:integration` select suites by project name, not by
-      filename glob or path substring
-- [ ] Integration tests run 3 consecutive times with no flake or connection-limit error
-- [ ] Pre-push starts a stopped Postgres container automatically and completes
-- [ ] Pre-push **fails with a readable message** when Docker itself is not running
-- [ ] A deliberately failed test still produces legible `gate.sh` output under parallelism
-- [ ] `agent-os/standards/development/testing.md` matches the new commands and gate behavior
+All measured on the same 12-CPU machine as the numbers in **Context**.
+
+- [x] `npm run test:unit` completes in **under 5s** and runs zero database tests —
+      **1.84s**, 294 files / 3414 tests, project `unit` only
+- [x] `npm test` completes in **under 30s** with all 348 files and 4327 tests passing —
+      **14.6s** wall (1.96s unit + 11.55s integration), 348 files / 4327 tests
+- [x] `npm run test:unit` and `npm run test:integration` select suites by project name, not by
+      filename glob or path substring — `--project unit` / `--project integration`
+- [x] Integration tests run 3 consecutive times with no flake or connection-limit error —
+      3/3 at 913/913, ~10s each, peak **41 of 100** Postgres connections
+- [x] Pre-push starts a stopped Postgres container automatically and completes — from
+      `npm run db:down`, the gate returned healthy in **5.8s**, silent
+- [x] Pre-push **fails with a readable message** when Docker itself is not running — verified
+      with an unreachable `DOCKER_HOST`: Docker's own "check if the daemon is running"
+      message, then `postgres failed — full output: docker compose up -d --wait`, exit 1
+- [x] A deliberately failed test still produces legible `gate.sh` output under parallelism —
+      verified for one unit and one integration failure. Vitest prints its `Failed Tests`
+      block and summary last, so `tail -60` captures the assertion, the diff, the source
+      frame and the counts regardless of how the ✓ lines interleave. No reporter change needed.
+- [x] `agent-os/standards/development/testing.md` matches the new commands and gate behavior —
+      plus the same correction in `AGENTS.md`
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                        | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `isolate` and `maxForks` moved from the project configs onto the `test:unit` / `test:integration` invocations | Tasks 2 and 3 assumed these are project-scoped. In Vitest 3.2.7 they are not: the runner builds **one** Tinypool from the root config (`vitest.config.poolOptions?.forks`), so a project-level value is accepted by the types, silently ignored at runtime, and leaves no warning. Verified twice — a project-level `isolate: false` still cost the full 9.1s, and a project-level `maxForks: 1` still ran 8-way at 471% CPU. The projects still exist and still do the selecting; only the pool settings moved. |
+| 2   | `npm test` is now `npm run test:unit && npm run test:integration` rather than one `vitest run`                | Follows from change 1. Since isolation is per-process, one invocation cannot give unit `isolate: false` and integration `isolate: true` — the spec's central decision. Two invocations give each suite exactly the isolation it was specified to have, and are also **faster** than the single-run plan: 14.6s against the ~21.8s a single isolated run measured.                                                                                                                                                |
+| 3   | The two-suite rationale is documented in `vitest.config.ts` as a comment on `projects`                        | The trap in change 1 is invisible — no type error, no warning, just a silently slow suite. The next person to "tidy" the pool flags back into the projects would reintroduce it, so the config says why they are not there.                                                                                                                                                                                                                                                                                      |
+| 4   | `AGENTS.md` gained a bullet on non-isolated unit tests                                                        | Task 5 asked only whether its skip-warning guidance needed correcting. It did — but the module-level-state constraint is new and agent-facing, and AGENTS.md is what an agent reads before writing a test.                                                                                                                                                                                                                                                                                                       |
 
 ---
 
@@ -92,6 +107,9 @@ references — never copies — `development/testing.md` (the gate being changed
 standing in for two different isolation requirements is exactly that).
 
 ## Task 2: Split `vitest.config.ts` into unit and integration projects
+
+> **As built:** the projects carry only `name`, `include` and `exclude`. `isolate` and
+> `maxForks` are per-process in Vitest 3.2.7 and live on the npm scripts — see change 1.
 
 Replace the global `fileParallelism: false` with `test.projects` (Vitest 3.2.7 supports it).
 Keep `environment`, `env` (the `TZ` pin and its comment — that comment is load-bearing, see
@@ -119,6 +137,10 @@ This also fixes a latent fragility: `test:integration` is currently `vitest run 
 a path-substring filter that would silently match any future file with that string in its name.
 
 ## Task 3: Bound the integration suite's Postgres connections
+
+> **As built:** `--poolOptions.forks.maxForks=8` on the `test:integration` script rather than
+> in the project config, for the reason in change 1. Runtime 10.0–11.6s, within the ~12s bar;
+> measured connection peak **41 of 100**, down from 51 unbounded.
 
 Each worker imports `@/db`, which builds its own `postgres()` pool at the library default of
 `max: 10`. Vitest's default is CPU-count-minus-one forks, so the ceiling scales with the machine
@@ -190,13 +212,15 @@ Raised explicitly in the request, so recording what actually bears on it:
 - **No CI is also a token decision** — no logs to fetch, no run status to poll. Consistent with the
   frozen `2026-08-12-1316` decision.
 
-## Observation, not a blocker
+## Observation, resolved
 
 The unit test count read 3411 in the first two runs of this session and 3414 in every run since,
 stable across serial, parallel, and non-isolated modes. The isolate/no-isolate diff proved the test
 _sets_ are identical, so this is not a parallelism artifact. This codebase does have date-dependent
 tests — `2026-08-20-1115-timed-isometric-exercises` records one whose hard-coded shelf date arrived
-and blocked pre-push. Worth a glance during Task 6, not worth chasing now.
+and blocked pre-push. Every run during implementation read **3414**, across isolated, non-isolated
+and project-split configurations, so nothing here is date-sensitive on 2026-08-27. Not chased
+further; the date-dependent-test risk that spec records is unchanged by this work.
 
 ---
 

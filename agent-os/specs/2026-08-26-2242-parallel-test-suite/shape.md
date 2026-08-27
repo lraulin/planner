@@ -1,6 +1,6 @@
 # Parallelize the test suite and make the integration gate unskippable — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete**
 
 ## Scope
 
@@ -27,6 +27,12 @@ Two changes that arrived from the same investigation:
 - **Two Vitest projects, not one global flag.** The unit and integration suites have genuinely
   different isolation requirements. A single `fileParallelism: false` cannot express that, which
   is precisely how it came to be applied to 294 files that never needed it.
+- **Isolation and worker count are set per invocation, not per project.** Discovered while
+  implementing: Vitest 3.2.7 builds one Tinypool from the root config, so `isolate` and
+  `poolOptions.forks.*` are process-wide even when written inside a project — accepted by the
+  types, ignored at runtime, no warning. So the projects do the selecting and `npm test` chains
+  the two scripts. That is a limitation worked around, not a model we chose; if a later Vitest
+  makes these project-scoped, folding them back into `vitest.config.ts` is the right move.
 - **`isolate: false` for unit tests only.** Bought the largest single win (9.1s → 2.1s). The
   cost is that unit files sharing a worker share module-level state; accepted because the
   testing standard already puts pure logic in `src/lib/**`, and because a leak surfaces as a
@@ -34,8 +40,9 @@ Two changes that arrived from the same investigation:
 - **Pre-push runs `docker compose up -d --wait`.** Chosen over a bare "fail if unreachable"
   (more annoying, no more safety) and over CI (async, reports after the Vercel deploy has
   already started, and contradicts a frozen decision).
-- **Bound `maxForks` on the integration project.** Insurance, not speculation: the connection
-  ceiling scales with CPU count while `max_connections` does not.
+- **Bound `maxForks` to 8 for the integration run.** Insurance, not speculation: the connection
+  ceiling scales with CPU count while `max_connections` does not. Measured peak fell from 51 to
+  **41 of 100** with no runtime cost (10.0s bounded against 10.4s unbounded).
 
 ## Context
 
@@ -43,7 +50,9 @@ Two changes that arrived from the same investigation:
 - **Measurements:** taken on a 12-CPU machine with the container healthy. Unit 43.9s → 9.1s
   (parallel) → 2.1s (parallel, non-isolated). Integration 48.0s → 10.4s. Full `npm test`
   96.1s → 21.8s. Only 1.56s of the original unit run was test execution; the rest was
-  serialized per-file transform and collect.
+  serialized per-file transform and collect. **As built**, running the two suites as separate
+  invocations beat the single-run estimate: unit 1.84s, integration 11.55s, full `npm test`
+  14.6s wall.
 - **Safety evidence:** 4 consecutive parallel integration runs passed 913/913 with no flake,
   peaking at 51 of 100 Postgres connections. The isolated and non-isolated unit runs were
   diffed by test `fullName` via the JSON reporter: 3414 tests each, zero additions or removals.
