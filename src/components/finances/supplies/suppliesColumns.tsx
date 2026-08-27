@@ -8,6 +8,7 @@ import {
   formatDerivedRate,
   formatRate,
   formatUnitCost,
+  trimNumber,
 } from "@/lib/finances/supplies/format";
 import type {
   SupplyItemEdit,
@@ -131,6 +132,16 @@ function periodCell(cents: number | null, live: boolean) {
   );
 }
 
+/** Lasts / Packs/mo. Same live-vs-greyed split as the period columns. */
+function restockCell(value: number | null, live: boolean) {
+  if (value === null) return <span className="text-ink-faint">—</span>;
+  return (
+    <span className={`tabular ${live ? "text-ink" : "text-ink-faint"}`}>
+      {trimNumber(value)}
+    </span>
+  );
+}
+
 function RateCell({
   row,
   ctx,
@@ -196,6 +207,8 @@ export const SUPPLIES_COLUMN_IDS = [
   "cost",
   "unitCost",
   "rate",
+  "lasts",
+  "packsPerMonth",
   "unitsPerMonth",
   "biweekly",
   "monthly",
@@ -372,6 +385,28 @@ export function suppliesColumns(): ColumnDef<SuppliesColumnCtx, SupplyGridRow>[]
         row.node.kind === "item"
           ? formatRate(row.node.rate, row.node.item.unitLabel)
           : null,
+    },
+    {
+      id: "lasts",
+      label: "Lasts",
+      width: "4.5rem",
+      align: "right",
+      sortValue: (row) => row.node.totals?.daysPerPack ?? null,
+      render: (row) =>
+        restockCell(row.node.totals?.daysPerPack ?? null, row.node.kind === "item"),
+      compactText: (row) =>
+        row.node.kind === "item" && row.node.totals
+          ? `${trimNumber(row.node.totals.daysPerPack)} days`
+          : null,
+    },
+    {
+      id: "packsPerMonth",
+      label: "Packs/mo",
+      width: "5rem",
+      align: "right",
+      sortValue: (row) => row.node.totals?.packsPerMonth ?? null,
+      render: (row) =>
+        restockCell(row.node.totals?.packsPerMonth ?? null, row.node.kind === "item"),
     },
     {
       id: "unitsPerMonth",

@@ -23,16 +23,21 @@ import {
 } from "@/lib/finances/payees/queries";
 import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
 import {
+  addSupplyItemFromAmazon,
+  addSupplyOptionFromAmazon,
   createSupplyItem,
   createSupplyItemFromSuggestion,
   createSupplyOption,
   deleteSupplyItem,
   deleteSupplyOption,
+  mergeSupplyItems,
+  previewSupplyMerge,
   setSupplyOptionInUse,
   updateSupplyItem,
   updateSupplyOption,
   type SupplyItemEdit,
   type SupplyItemInput,
+  type SupplyMergePreview,
   type SupplyOptionEdit,
   type SupplyOptionInput,
 } from "@/lib/finances/supplies/mutations";
@@ -45,7 +50,6 @@ import {
   supplySuggestions,
   type SupplySuggestion,
 } from "@/lib/finances/supplies/suggestions";
-import { parsePackCount } from "@/lib/finances/supplies/packSize";
 import {
   clearScrapedPending,
   replaceScrapedPending,
@@ -720,8 +724,33 @@ export async function createSupplyItemFromSuggestionAction(
   });
 }
 
+export async function previewSupplyMergeAction(
+  targetId: string,
+  sourceIds: readonly string[],
+): Promise<QueryResult<SupplyMergePreview>> {
+  return runQuery((userId) => previewSupplyMerge(userId, targetId, sourceIds));
+}
+
+export async function mergeSupplyItemsAction(
+  targetId: string,
+  sourceIds: readonly string[],
+): Promise<DataActionResult<{ movedOptions: number }>> {
+  return runWithData((userId) => mergeSupplyItems(userId, targetId, sourceIds), {
+    revalidate: [],
+  });
+}
+
+export async function addSupplyOptionFromAmazonAction(
+  itemId: string,
+  asin: string,
+): Promise<ActionResult> {
+  return run((userId) => addSupplyOptionFromAmazon(userId, itemId, asin), {
+    revalidate: [],
+  });
+}
+
 /**
- * Add one Amazon line item to the worksheet, from the Orders grid.
+ * Add one Amazon line item to the worksheet as a **new item**, from the Orders grid.
  *
  * Runs the same aggregate as the suggestion dialog, scoped to this ASIN, so the rate comes
  * from the whole purchase history rather than from the single row that was right-clicked.
@@ -732,47 +761,5 @@ export async function createSupplyItemFromSuggestionAction(
 export async function addSupplyFromAmazonItemAction(
   asin: string,
 ): Promise<ActionResult> {
-  return run(
-    async (userId) => {
-      const [purchase] = await listAmazonRepeatPurchases(userId, {
-        minOrders: 1,
-        asin,
-      });
-      if (!purchase) throw new Error("That order item is not on file.");
-
-      const existing = await listSupplyItems(userId);
-      if (
-        existing.some((item) => item.options.some((option) => option.asin === asin))
-      ) {
-        throw new Error("That item is already on the Supplies worksheet.");
-      }
-
-      const [suggestion] = supplySuggestions([purchase]);
-      const packCount =
-        suggestion?.qtyPerItem ?? parsePackCount(purchase.productName) ?? 1;
-      return createSupplyItemFromSuggestion(userId, {
-        name: purchase.productName,
-        rate:
-          suggestion === undefined
-            ? { rateBasis: "days_per_unit", daysPerUnitTenths: 300 }
-            : suggestion.rateBasis === "units_per_day"
-              ? {
-                  rateBasis: "units_per_day",
-                  unitsPerDayMilli: suggestion.unitsPerDayMilli ?? 1,
-                }
-              : {
-                  rateBasis: "days_per_unit",
-                  daysPerUnitTenths: suggestion.daysPerUnitTenths ?? 1,
-                },
-        option: {
-          vendor: "Amazon",
-          qtyPerItem: packCount,
-          costPerOrderCents: purchase.latestUnitPriceCents ?? 0,
-          pricedOn: purchase.lastOrderDate,
-          asin,
-        },
-      });
-    },
-    { revalidate: [] },
-  );
+  return run((userId) => addSupplyItemFromAmazon(userId, asin), { revalidate: [] });
 }

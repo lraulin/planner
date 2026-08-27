@@ -1,6 +1,6 @@
 # Supplies — merge items and restock columns
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 Spec folder: `agent-os/specs/2026-08-27-0958-supplies-merge-and-restock/`
 
 ## Spec relationships
@@ -69,24 +69,25 @@ Wire `commandCapabilities` on Supplies (it currently has none — New item / Sug
 
 ## Acceptance criteria
 
-- [ ] Selecting two or more distinct items (or offers under them) and running **Merge selected items…** opens a preview that names the survivor, how many offers move, and which rates/groups/envelopes will be dropped. Confirming leaves one item; the others are gone; every source offer sits under the survivor; exactly one offer is in use; the unique index still holds.
-- [ ] Merging into an item with no in-use offer promotes a source's in-use offer rather than leaving the survivor unpriced.
-- [ ] A second user cannot merge, preview, or attach using the first user's ids.
-- [ ] Suggest from Amazon **Add** still creates a new item. **Add to…** puts the offer on a chosen item without rewriting that item's rate, group, or envelope.
-- [ ] Orders → Add to Supplies offers New item vs existing items when the worksheet is non-empty; one-click new item when it is empty; still refuses a duplicate ASIN.
-- [ ] Lasts and Packs/mo show on the item (in-use pack) and greyed on offers. Fancy Feast 42ct at 4/day = **10.5 days** and **~2.9 packs/mo**. A 3-pack of 45-day tubes lasts 135 days. Changing Qty moves Lasts/Packs/mo and does not move Rate.
-- [ ] Group and footer totals are still only Biweekly / Monthly / Yearly.
-- [ ] Merge lives in the Item menu and the row menu, disabled with a reason when the selection is not two distinct items.
-- [ ] `npm run test` (unit **and** integration — Postgres up), lint, typecheck, build, `npm run smoke`, and a browser pass on `/finances/supplies` plus Orders → Add to Supplies.
+- [x] Selecting two or more distinct items (or offers under them) and running **Merge selected items…** opens a preview that names the survivor, how many offers move, and which rates/groups/envelopes will be dropped. Confirming leaves one item; the others are gone; every source offer sits under the survivor; exactly one offer is in use; the unique index still holds.
+- [x] Merging into an item with no in-use offer promotes a source's in-use offer rather than leaving the survivor unpriced.
+- [x] A second user cannot merge, preview, or attach using the first user's ids.
+- [x] Suggest from Amazon **Add** still creates a new item. **Add to…** puts the offer on a chosen item without rewriting that item's rate, group, or envelope.
+- [x] Orders → Add to Supplies offers New item vs existing items when the worksheet is non-empty; one-click new item when it is empty; still refuses a duplicate ASIN.
+- [x] Lasts and Packs/mo show on the item (in-use pack) and greyed on offers. Fancy Feast 42ct at 4/day = **10.5 days** and **~2.9 packs/mo**. A 3-pack of 45-day tubes lasts 135 days. Changing Qty moves Lasts/Packs/mo and does not move Rate.
+- [x] Group and footer totals are still only Biweekly / Monthly / Yearly.
+- [x] Merge lives in the Item menu and the row menu, disabled with a reason when the selection is not two distinct items.
+- [x] `npm run test` (unit **and** integration — Postgres up), lint, typecheck, build, `npm run smoke`, and a browser pass on `/finances/supplies` plus Orders → Add to Supplies.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                          | Why                                                                                                  |
+| --- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 1   | Folded `daysPerPack` / `packsPerMonth` onto `SupplyTotals` rather than re-deriving in the grid. | The worksheet already prices every row through `supplyTotals`; a second arithmetic site would drift. |
+| 2   | Moved Orders "new item from ASIN" into `addSupplyItemFromAmazon` next to attach.                | The action had become the only copy of the ASIN-scoped prefill; attach needed the same probe.        |
 
 ## Task 1: Save spec documentation
 
@@ -102,6 +103,8 @@ Tests that fail on a plausible mistake:
 - Energy 12ct at 2/day: 6 days.
 - Toothpaste 45 days/tube, qty 1 vs qty 3: Lasts scales (45 vs 135), cost-per-day does not (already pinned); Packs/mo scales inversely.
 - Zero rate or zero qty → 0, not Infinity.
+
+- [x] Done.
 
 ## Task 3: `mergeSupplyItems` + isolation tests
 
@@ -122,11 +125,15 @@ Integration tests (`mutations.integration.test.ts`):
 - Cross-user: second user fails to preview, merge, or attach using the first user's ids.
 - Selecting the same item twice / empty sources is a no-op or a human sentence, not a write.
 
+- [x] Done.
+
 ## Task 4: Attach Amazon offer to an existing item
 
 `addSupplyOptionFromAmazon(userId, itemId, asin)` (name as fits): same ASIN-scoped aggregate as `addSupplyFromAmazonItem`, then `createSupplyOption` on `itemId`. Refuses duplicate ASIN. Does not call `updateSupplyItem`. First offer on an empty item is in-use.
 
 `createSupplyItemFromSuggestion` stays for the new-item path.
+
+- [x] Done.
 
 ## Task 5: Server actions
 
@@ -134,11 +141,15 @@ Thin wrappers on `src/app/finances/actions.ts`: `previewSupplyMergeAction`, `mer
 
 Orders' `addSupplyFromAmazonItemAction` stays for New item.
 
+- [x] Done.
+
 ## Task 6: Lasts and Packs/mo columns
 
 `suppliesColumns.tsx` + `SUPPLIES_COLUMN_IDS` + `viewDefaults()` (after `rate`, Units/mo still omitted). Format via `format.ts` (trimNumber). Item live / option greyed. No `groupTotals` / `footerTotals` keys.
 
 `rows.ts` if totals grow the two fields — keep the arithmetic in `cost.ts`.
+
+- [x] Done.
 
 ## Task 7: Merge dialog + command
 
@@ -151,6 +162,8 @@ Orders' `addSupplyFromAmazonItemAction` stays for New item.
 - Compact: pick-sheet if the command runs with fewer than two already selected (Payees `PayeeMergePickerDialog`).
 - Row menu includes Merge.
 
+- [x] Done.
+
 ## Task 8: Amazon Add to existing
 
 `SuggestFromAmazonDialog`: **Add** unchanged; **Add to…** opens an item picker (`listSupplyItemsAction` is already on the page — pass the current items in, or fetch). After success, same "Added" state as Add.
@@ -158,6 +171,8 @@ Orders' `addSupplyFromAmazonItemAction` stays for New item.
 Orders: ModalShell picker when `listSupplyItems` is non-empty; empty worksheet keeps today's one-click + navigate to `/finances/supplies`. Attach should also navigate — prefer navigate to Supplies so the new offer is visible, same as today.
 
 Below `md`, pickers are full-screen sheets (`components/responsive.md`).
+
+- [x] Done.
 
 ## Task 9: Verify, freeze spec, update roadmap
 
@@ -168,9 +183,16 @@ Below `md`, pickers are full-screen sheets (`components/responsive.md`).
 - **Status: frozen / complete** (date). Follow-ups as new work, not edits.
 - Roadmap: a short note under the existing Supplies bullet that merge + restock columns shipped, still not matching to `finance_transactions`.
 
+- [x] Done. Phone check of the merge / Add to… sheets is on the deployed iPhone after push.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Matching supply items to `finance_transactions` / writing the budget.
+- Inventory, on-hand counts, reorder points, next-order dates.
+
 ---
 
-While this spec is **active**, when we make a material change to requirements, design, or scope (including from feedback on what was implemented), update the relevant sections and append to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+This spec is frozen. Further change opens a new delta-spec.
 
 ## Out of scope
 

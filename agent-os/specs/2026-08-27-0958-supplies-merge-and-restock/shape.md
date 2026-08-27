@@ -1,6 +1,6 @@
 # Supplies — merge items and restock columns — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 
 ## Scope
 

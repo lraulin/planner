@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  DAYS_PER_MONTH,
   costPerDayCents,
   costPerUnitCents,
+  daysPerPack,
   daysPerUnit,
   offerComparison,
+  packsPerMonth,
   supplyTotals,
   unitsPerDay,
   type SupplyRate,
@@ -77,6 +80,51 @@ describe("period totals", () => {
     const single = costPerDayCents(rate, { qtyPerItem: 1, costPerOrderCents: 429 });
     const threePack = costPerDayCents(rate, { qtyPerItem: 3, costPerOrderCents: 1287 });
     expect(threePack).toBeCloseTo(single, 10);
+  });
+});
+
+describe("restock", () => {
+  it("lasts 10.5 days for the cat-food case and 6 for a 12-pack at 2/day", () => {
+    expect(daysPerPack(CAT_FOOD_RATE, CAT_FOOD_OFFER)).toBe(10.5);
+    expect(packsPerMonth(CAT_FOOD_RATE, CAT_FOOD_OFFER)).toBe(DAYS_PER_MONTH / 10.5);
+    expect(supplyTotals(CAT_FOOD_RATE, CAT_FOOD_OFFER).daysPerPack).toBe(10.5);
+    expect(supplyTotals(CAT_FOOD_RATE, CAT_FOOD_OFFER).packsPerMonth).toBe(
+      DAYS_PER_MONTH / 10.5,
+    );
+
+    expect(daysPerPack(ENERGY_RATE, ENERGY_OFFER)).toBe(6);
+  });
+
+  it("scales Lasts with pack size and leaves cost-per-day alone", () => {
+    // A 3-pack of 45-day tubes lasts 135 days; Packs/mo is a third of the single-tube figure.
+    const rate: SupplyRate = { basis: "days_per_unit", daysPerUnitTenths: 450 };
+    const single = { qtyPerItem: 1, costPerOrderCents: 429 };
+    const threePack = { qtyPerItem: 3, costPerOrderCents: 1287 };
+    expect(daysPerPack(rate, single)).toBe(45);
+    expect(daysPerPack(rate, threePack)).toBe(135);
+    expect(packsPerMonth(rate, threePack)).toBeCloseTo(
+      packsPerMonth(rate, single) / 3,
+      10,
+    );
+    expect(costPerDayCents(rate, threePack)).toBeCloseTo(
+      costPerDayCents(rate, single),
+      10,
+    );
+  });
+
+  it("does not produce Infinity when the rate or qty is zero", () => {
+    expect(
+      daysPerPack({ basis: "units_per_day", unitsPerDayMilli: 0 }, CAT_FOOD_OFFER),
+    ).toBe(0);
+    expect(
+      packsPerMonth({ basis: "units_per_day", unitsPerDayMilli: 0 }, CAT_FOOD_OFFER),
+    ).toBe(0);
+    expect(daysPerPack(CAT_FOOD_RATE, { qtyPerItem: 0, costPerOrderCents: 3897 })).toBe(
+      0,
+    );
+    expect(
+      packsPerMonth(CAT_FOOD_RATE, { qtyPerItem: 0, costPerOrderCents: 3897 }),
+    ).toBe(0);
   });
 });
 

@@ -16,7 +16,13 @@ import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
 import type { MenuItem } from "@/components/grid/ContextMenu";
-import { addSupplyFromAmazonItemAction } from "@/app/finances/actions";
+import {
+  addSupplyFromAmazonItemAction,
+  addSupplyOptionFromAmazonAction,
+  listSupplyItemsAction,
+} from "@/app/finances/actions";
+import { SupplyItemPickerDialog } from "@/components/finances/supplies/SupplyItemPickerDialog";
+import type { SupplyItemRow } from "@/lib/finances/supplies/queries";
 import { amazonColumns, type AmazonColumnCtx } from "./amazonColumns";
 
 const AMAZON_VIEWS = [{ id: "all", label: "All Orders" }] as const;
@@ -51,6 +57,10 @@ export function AmazonOrdersView({
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [supplyPicker, setSupplyPicker] = useState<{
+    asin: string;
+    items: SupplyItemRow[];
+  } | null>(null);
   const router = useRouter();
 
   if (initialItems !== seen) {
@@ -118,9 +128,18 @@ export function AmazonOrdersView({
           onSelect: () => {
             setError(null);
             startTransition(async () => {
-              const result = await addSupplyFromAmazonItemAction(asin);
-              if (result.ok) router.push("/finances/supplies");
-              else setError(result.error);
+              const listed = await listSupplyItemsAction();
+              if (!listed.ok) {
+                setError(listed.error);
+                return;
+              }
+              if (listed.data.length === 0) {
+                const result = await addSupplyFromAmazonItemAction(asin);
+                if (result.ok) router.push("/finances/supplies");
+                else setError(result.error);
+                return;
+              }
+              setSupplyPicker({ asin, items: listed.data });
             });
           },
         },
@@ -184,6 +203,28 @@ export function AmazonOrdersView({
           </p>
         }
       />
+
+      {supplyPicker ? (
+        <SupplyItemPickerDialog
+          items={supplyPicker.items}
+          title="Add to Supplies"
+          description="Create a new item, or attach this product as an offer on one you already track. Either way you will land on the worksheet."
+          allowNewItem
+          onClose={() => setSupplyPicker(null)}
+          onPick={(choice) => {
+            const asin = supplyPicker.asin;
+            setSupplyPicker(null);
+            startTransition(async () => {
+              const result =
+                choice.kind === "new"
+                  ? await addSupplyFromAmazonItemAction(asin)
+                  : await addSupplyOptionFromAmazonAction(choice.itemId, asin);
+              if (result.ok) router.push("/finances/supplies");
+              else setError(result.error);
+            });
+          }}
+        />
+      ) : null}
 
       <FileImportHost
         commandId="import.amazon"

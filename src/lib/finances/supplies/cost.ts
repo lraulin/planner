@@ -45,6 +45,10 @@ export type SupplyTotals = {
   costPerUnitCents: number;
   unitsPerMonth: number;
   daysPerUnit: number;
+  /** How long one purchase lasts at the item's rate. Zero when the rate or qty is zero. */
+  daysPerPack: number;
+  /** Packs consumed in a month. Not ceiled — 1.33 is the honest rate. */
+  packsPerMonth: number;
   biweeklyCents: number;
   monthlyCents: number;
   yearlyCents: number;
@@ -83,6 +87,30 @@ export function costPerDayCents(rate: SupplyRate, offer: SupplyOffer): number {
 }
 
 /**
+ * How many days one purchase lasts: pack size ÷ daily use.
+ *
+ * Equivalent to `qtyPerItem * daysPerUnit`. Zero rather than Infinity when the rate or qty
+ * is zero — a pack of nothing, or a thing you do not use, lasts no time anyone can plan on.
+ */
+export function daysPerPack(rate: SupplyRate, offer: SupplyOffer): number {
+  if (offer.qtyPerItem <= 0) return 0;
+  const perDay = unitsPerDay(rate);
+  if (perDay <= 0) return 0;
+  return offer.qtyPerItem / perDay;
+}
+
+/**
+ * How many of that pack you go through in a month.
+ *
+ * Derived from {@link daysPerPack}, not ceiled: "buy 2 this month" is a shopping decision,
+ * not a column. Zero when a pack lasts no time.
+ */
+export function packsPerMonth(rate: SupplyRate, offer: SupplyOffer): number {
+  const lasts = daysPerPack(rate, offer);
+  return lasts > 0 ? DAYS_PER_MONTH / lasts : 0;
+}
+
+/**
  * Every period for one item at one price.
  *
  * Each period rounds **independently from the daily rate**, so `monthlyCents × 12` differs
@@ -92,10 +120,13 @@ export function costPerDayCents(rate: SupplyRate, offer: SupplyOffer): number {
  */
 export function supplyTotals(rate: SupplyRate, offer: SupplyOffer): SupplyTotals {
   const perDay = costPerDayCents(rate, offer);
+  const lasts = daysPerPack(rate, offer);
   return {
     costPerUnitCents: costPerUnitCents(offer),
     unitsPerMonth: unitsPerDay(rate) * DAYS_PER_MONTH,
     daysPerUnit: daysPerUnit(rate),
+    daysPerPack: lasts,
+    packsPerMonth: lasts > 0 ? DAYS_PER_MONTH / lasts : 0,
     biweeklyCents: Math.round(perDay * DAYS_PER_BIWEEK),
     monthlyCents: Math.round(perDay * DAYS_PER_MONTH),
     yearlyCents: Math.round(perDay * DAYS_PER_YEAR),

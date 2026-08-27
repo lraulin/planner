@@ -47,7 +47,7 @@ export function formatDeltaPercent(percent: number): string {
 }
 
 /** Up to three decimals, with none of the trailing zeroes that make a column ragged. */
-function trimNumber(value: number): string {
+export function trimNumber(value: number): string {
   if (!Number.isFinite(value)) return "0";
   return String(Number(value.toFixed(3)));
 }

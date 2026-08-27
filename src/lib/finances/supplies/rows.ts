@@ -56,6 +56,30 @@ export type SupplyGroup = {
 
 const ZERO: SupplyPeriodTotals = { biweeklyCents: 0, monthlyCents: 0, yearlyCents: 0 };
 
+/**
+ * Item roots of a grid selection: an offer row counts as its parent, and two offers under
+ * the same item count once. Selection order is preserved so the first-clicked item is the
+ * merge dialog's default survivor.
+ */
+export function itemIdsOfSelection(
+  selectedIds: ReadonlySet<string>,
+  items: readonly SupplyItemRow[],
+): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const id of selectedIds) {
+    const itemId = items.some((item) => item.id === id)
+      ? id
+      : (items.find((item) => item.options.some((option) => option.id === id))?.id ??
+        null);
+    if (itemId && !seen.has(itemId)) {
+      seen.add(itemId);
+      ids.push(itemId);
+    }
+  }
+  return ids;
+}
+
 /** The two rate columns as the discriminated value the cost math takes. */
 export function rateOf(item: SupplyItemRow): SupplyRate {
   return item.rateBasis === "days_per_unit"

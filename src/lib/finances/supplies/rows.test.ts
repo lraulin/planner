@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { SupplyItemRow, SupplyOptionRow } from "./queries";
-import { supplyGroups, supplyItemRows, supplyRowTotals } from "./rows";
+import {
+  itemIdsOfSelection,
+  supplyGroups,
+  supplyItemRows,
+  supplyRowTotals,
+} from "./rows";
 
 function option(over: Partial<SupplyOptionRow> = {}): SupplyOptionRow {
   return {
@@ -35,6 +40,33 @@ function item(over: Partial<SupplyItemRow> = {}): SupplyItemRow {
     ...over,
   };
 }
+
+describe("itemIdsOfSelection", () => {
+  it("reduces offer rows to their parent items and ignores a second offer on the same item", () => {
+    const cat = item({
+      id: "cat",
+      options: [
+        option({ id: "walmart", itemId: "cat" }),
+        option({ id: "chewy", itemId: "cat" }),
+      ],
+    });
+    const drink = item({
+      id: "drink",
+      options: [option({ id: "amazon", itemId: "drink" })],
+    });
+    expect(itemIdsOfSelection(new Set(["walmart", "chewy"]), [cat, drink])).toEqual([
+      "cat",
+    ]);
+    expect(itemIdsOfSelection(new Set(["walmart", "amazon"]), [cat, drink])).toEqual([
+      "cat",
+      "drink",
+    ]);
+    expect(itemIdsOfSelection(new Set(["drink", "walmart"]), [cat, drink])).toEqual([
+      "drink",
+      "cat",
+    ]);
+  });
+});
 
 describe("supplyItemRows", () => {
   it("prices the item from the in-use offer only", () => {

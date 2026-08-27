@@ -1,5 +1,7 @@
 # Standards for Supplies — merge items and restock columns
 
+**Status: frozen / complete** (2026-08-27)
+
 Applied as of standards commit `cf6d34ce661d23605395540b39195296f7f9f868`. References, not copies — see AGENTS.md. `git show cf6d34ce:agent-os/standards/<path>` recovers exactly what applied.
 
 - `agent-os/standards/components/data-grid.md` — Lasts and Packs/mo join the shared Supplies column set; hierarchy (item then offers) must survive sort/filter/group; new columns surface on saved layouts via `known`.

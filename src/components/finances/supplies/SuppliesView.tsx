@@ -19,10 +19,13 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
+import { useIsCompact } from "@/components/shell/useIsCompact";
 import { collectDistinctValues } from "@/lib/grid/distinct";
+import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { formatUsd } from "@/lib/finances/money";
 import type { SupplyItemRow } from "@/lib/finances/supplies/queries";
 import {
+  itemIdsOfSelection,
   supplyRowTotals,
   supplyGroups,
   supplyItemRows,
@@ -30,6 +33,8 @@ import {
 } from "@/lib/finances/supplies/rows";
 import type { GridRow } from "@/lib/tree/slice";
 import { SuggestFromAmazonDialog } from "./SuggestFromAmazonDialog";
+import { SupplyMergeDialog } from "./SupplyMergeDialog";
+import { SupplyMergePickerDialog } from "./SupplyMergePickerDialog";
 import {
   SUPPLIES_COLUMN_IDS,
   suppliesColumns,
@@ -71,6 +76,11 @@ export function SuppliesView({
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
+  const [pendingMerge, setPendingMerge] = useState<
+    readonly { id: string; name: string }[] | null
+  >(null);
+  const [choosingMerge, setChoosingMerge] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<{
     id: string;
     label: string;
@@ -151,8 +161,13 @@ export function SuppliesView({
     [gridRows],
   );
   const { order, onIdsChange } = useNavigableIds(rowIds);
-  const { selectedId, selectedIds, select, headerState, toggleSelectAll } =
+  const { selectedId, selectedIds, select, headerState, toggleSelectAll, selectOne } =
     useMultiSelect(order, null);
+  const compact = useIsCompact();
+  const selectedItemIds = useMemo(
+    () => itemIdsOfSelection(selectedIds, items),
+    [selectedIds, items],
+  );
 
   const refresh = useCallback(() => {
     startTransition(async () => {
@@ -192,6 +207,14 @@ export function SuppliesView({
     [envelopes, pending, commit],
   );
 
+  const requestMerge = useCallback(() => {
+    const selected = selectedItemIds
+      .map((id) => items.find((item) => item.id === id))
+      .filter((item): item is SupplyItemRow => item !== undefined);
+    if (selected.length >= 2) setPendingMerge(selected);
+    else if (compact && items.length >= 2) setChoosingMerge(true);
+  }, [selectedItemIds, items, compact]);
+
   const addItem = useCallback(() => {
     commit(() =>
       createSupplyItemAction({
@@ -221,8 +244,19 @@ export function SuppliesView({
       const option = items
         .flatMap((candidate) => candidate.options)
         .find((candidate) => candidate.id === rowId);
+      const mergeDisabled =
+        selectedItemIds.length < 2 && !(compact && items.length >= 2);
       return [
         { label: "New item", icon: "new", onSelect: addItem },
+        {
+          label:
+            selectedItemIds.length >= 2
+              ? "Merge selected items…"
+              : "Select items to merge…",
+          disabled: mergeDisabled,
+          title: mergeDisabled ? "Select two different items to merge." : undefined,
+          onSelect: requestMerge,
+        },
         {
           label: "Add offer",
           // Disabled with a reason rather than hidden — `components/navigation.md`.
@@ -259,8 +293,38 @@ export function SuppliesView({
         },
       ];
     },
-    [items, itemIdOf, addItem, commit],
+    [items, itemIdOf, addItem, commit, requestMerge, selectedItemIds, compact],
   );
+
+  const commandCapabilities: GridCommandCapabilities = useMemo(() => {
+    const canPick = compact && items.length >= 2;
+    const enough = selectedItemIds.length >= 2;
+    const mergeDisabled = !enough && !canPick;
+    const selectedItem = items.find((item) => item.id === selectedItemIds[0]);
+    return {
+      selection: {
+        id: selectedId,
+        count: selectedItemIds.length,
+        label: selectedItem?.name,
+        ids: selectedItemIds,
+      },
+      actions: {},
+      pageCommands: [
+        {
+          id: "supplies.merge",
+          label: enough ? "Merge selected items…" : "Select items to merge…",
+          group: "record",
+          menu: "item",
+          section: "Item",
+          icon: "convert",
+          rowMenu: true,
+          disabled: mergeDisabled,
+          title: mergeDisabled ? "Select two different items to merge." : undefined,
+          run: requestMerge,
+        },
+      ],
+    };
+  }, [compact, items, selectedId, selectedItemIds, requestMerge]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -272,6 +336,7 @@ export function SuppliesView({
         counts={counts}
         error={error}
         views={views}
+        commandCapabilities={commandCapabilities}
         right={
           <>
             <button
@@ -293,6 +358,19 @@ export function SuppliesView({
           </>
         }
       />
+
+      {notice !== null && (
+        <div className="flex items-start gap-3 border-b border-rule px-4 py-2 text-[0.8125rem] text-ink-muted">
+          <span className="min-w-0 flex-1">{notice}</span>
+          <button
+            type="button"
+            className="shrink-0 text-ink-muted hover:text-ink"
+            onClick={() => setNotice(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <DataGrid<SuppliesColumnCtx, SupplyGridRow>
         rows={gridRows}
@@ -372,8 +450,34 @@ export function SuppliesView({
 
       {suggesting ? (
         <SuggestFromAmazonDialog
+          items={items}
           onClose={() => setSuggesting(false)}
           onAdded={refresh}
+        />
+      ) : null}
+
+      {choosingMerge ? (
+        <SupplyMergePickerDialog
+          items={items}
+          initiallySelected={new Set(selectedItemIds)}
+          onClose={() => setChoosingMerge(false)}
+          onContinue={(chosen) => {
+            setChoosingMerge(false);
+            setPendingMerge(chosen);
+          }}
+        />
+      ) : null}
+
+      {pendingMerge ? (
+        <SupplyMergeDialog
+          items={pendingMerge}
+          onClose={() => setPendingMerge(null)}
+          onMerged={(message) => {
+            setPendingMerge(null);
+            setNotice(message);
+            selectOne(null);
+            refresh();
+          }}
         />
       ) : null}
 

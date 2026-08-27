@@ -1,5 +1,7 @@
 # References for Supplies — merge items and restock columns
 
+**Status: frozen / complete** (2026-08-27)
+
 ## Governing specs
 
 ### `agent-os/specs/2026-08-26-0910-supplies-worksheet/`

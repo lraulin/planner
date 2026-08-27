@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeBudgetCategories,
@@ -6,6 +6,15 @@ import {
   financeSupplyOptions,
   type SupplyRateBasis,
 } from "@/db/schema";
+import { parsePackCount } from "./packSize";
+import { listAmazonRepeatPurchases, listSupplyItems } from "./queries";
+import {
+  supplyMergeDecision,
+  supplyMergeIdentity,
+  type SupplyMergeDecision,
+  type SupplyMergeIdentity,
+} from "./merge";
+import { supplySuggestions } from "./suggestions";
 
 /**
  * Writes for the Supplies worksheet.
@@ -342,4 +351,259 @@ export async function createSupplyItemFromSuggestion(
   const itemId = await createSupplyItem(userId, item);
   await createSupplyOption(userId, { ...option, itemId, inUse: true });
   return itemId;
+}
+
+export type SupplyMergePreview = {
+  target: SupplyMergeIdentity;
+  sources: SupplyMergeIdentity[];
+  movedOptions: number;
+  willPromoteInUse: boolean;
+} & Pick<
+  SupplyMergeDecision,
+  "discardedRates" | "discardedGroups" | "discardedEnvelopes"
+>;
+
+function sourceIdsForMerge(targetId: string, sourceIds: readonly string[]): string[] {
+  return [...new Set(sourceIds)].filter((id) => id !== targetId);
+}
+
+/**
+ * Everything a person should see before selected items are consolidated.
+ *
+ * Target wins on name, rate, group, and envelope. Differing source values are named so the
+ * user can pick the survivor whose rate they trust, not so the merge can refuse — Supplies
+ * has no claim conflict analogous to payees.
+ */
+export async function previewSupplyMerge(
+  userId: string,
+  targetId: string,
+  sourceIds: readonly string[],
+): Promise<SupplyMergePreview> {
+  const sources = sourceIdsForMerge(targetId, sourceIds);
+  if (sources.length === 0) {
+    throw new Error("Select two different items to merge.");
+  }
+
+  const items = await listSupplyItems(userId);
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const target = byId.get(targetId);
+  const sourceRows = sources.map((id) => byId.get(id));
+  if (!target || sourceRows.some((row) => row === undefined)) {
+    throw new Error("That supply item does not exist.");
+  }
+  const ownedSources = sourceRows.filter((row) => row !== undefined);
+  const targetIdentity = supplyMergeIdentity(target);
+  const sourceIdentities = ownedSources.map(supplyMergeIdentity);
+  const inUseOptionIds = sources.flatMap((id) => {
+    const row = byId.get(id);
+    const inUse = row?.options.find((option) => option.inUse);
+    return inUse ? [inUse.id] : [];
+  });
+  const decision = supplyMergeDecision(
+    targetIdentity,
+    sourceIdentities,
+    inUseOptionIds,
+  );
+  return {
+    target: targetIdentity,
+    sources: sourceIdentities,
+    movedOptions: sourceIdentities.reduce((total, row) => total + row.optionCount, 0),
+    willPromoteInUse: decision.promoteOptionId !== null,
+    discardedRates: decision.discardedRates,
+    discardedGroups: decision.discardedGroups,
+    discardedEnvelopes: decision.discardedEnvelopes,
+  };
+}
+
+/**
+ * Fold `sourceIds` into `targetId`.
+ *
+ * One transaction: reparent options with `in_use` cleared (the partial unique index cannot
+ * hold two in-use offers on one item), promote a source's in-use offer only if the target
+ * has none, then delete the source items. Options move first — `onDelete: cascade` would
+ * otherwise wipe them.
+ */
+export async function mergeSupplyItems(
+  userId: string,
+  targetId: string,
+  sourceIds: readonly string[],
+): Promise<{ movedOptions: number }> {
+  const sources = sourceIdsForMerge(targetId, sourceIds);
+  if (sources.length === 0) return { movedOptions: 0 };
+
+  await requireSupplyItem(userId, targetId);
+  await Promise.all(sources.map((id) => requireSupplyItem(userId, id)));
+
+  return db.transaction(async (tx) => {
+    const [targetInUse] = await tx
+      .select({ id: financeSupplyOptions.id })
+      .from(financeSupplyOptions)
+      .where(
+        and(
+          eq(financeSupplyOptions.userId, userId),
+          eq(financeSupplyOptions.itemId, targetId),
+          eq(financeSupplyOptions.inUse, true),
+        ),
+      )
+      .limit(1);
+
+    const sourceOptions = await tx
+      .select({
+        id: financeSupplyOptions.id,
+        itemId: financeSupplyOptions.itemId,
+        inUse: financeSupplyOptions.inUse,
+      })
+      .from(financeSupplyOptions)
+      .where(
+        and(
+          eq(financeSupplyOptions.userId, userId),
+          inArray(financeSupplyOptions.itemId, sources),
+        ),
+      );
+
+    let promoteOptionId: string | null = null;
+    if (!targetInUse) {
+      for (const sourceId of sources) {
+        const inUse = sourceOptions.find(
+          (option) => option.itemId === sourceId && option.inUse,
+        );
+        if (inUse) {
+          promoteOptionId = inUse.id;
+          break;
+        }
+      }
+    }
+
+    if (sourceOptions.length > 0) {
+      await tx
+        .update(financeSupplyOptions)
+        .set({ itemId: targetId, inUse: false, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeSupplyOptions.userId, userId),
+            inArray(
+              financeSupplyOptions.id,
+              sourceOptions.map((option) => option.id),
+            ),
+          ),
+        );
+    }
+
+    if (promoteOptionId) {
+      await tx
+        .update(financeSupplyOptions)
+        .set({ inUse: true, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeSupplyOptions.userId, userId),
+            eq(financeSupplyOptions.id, promoteOptionId),
+          ),
+        );
+    }
+
+    await tx
+      .delete(financeSupplyItems)
+      .where(
+        and(
+          eq(financeSupplyItems.userId, userId),
+          inArray(financeSupplyItems.id, sources),
+        ),
+      );
+
+    return { movedOptions: sourceOptions.length };
+  });
+}
+
+async function requireUnusedAsin(userId: string, asin: string): Promise<void> {
+  const [existing] = await db
+    .select({ id: financeSupplyOptions.id })
+    .from(financeSupplyOptions)
+    .where(
+      and(eq(financeSupplyOptions.userId, userId), eq(financeSupplyOptions.asin, asin)),
+    )
+    .limit(1);
+  if (existing) throw new Error("That item is already on the Supplies worksheet.");
+}
+
+async function amazonSupplyPrefill(userId: string, asin: string) {
+  const [purchase] = await listAmazonRepeatPurchases(userId, { minOrders: 1, asin });
+  if (!purchase) throw new Error("That order item is not on file.");
+  await requireUnusedAsin(userId, asin);
+  const [suggestion] = supplySuggestions([purchase]);
+  const packCount = suggestion?.qtyPerItem ?? parsePackCount(purchase.productName) ?? 1;
+  const rate: SupplyRateInput =
+    suggestion === undefined
+      ? { rateBasis: "days_per_unit", daysPerUnitTenths: 300 }
+      : suggestion.rateBasis === "units_per_day"
+        ? {
+            rateBasis: "units_per_day",
+            unitsPerDayMilli: suggestion.unitsPerDayMilli ?? 1,
+          }
+        : {
+            rateBasis: "days_per_unit",
+            daysPerUnitTenths: suggestion.daysPerUnitTenths ?? 1,
+          };
+  return {
+    purchase,
+    rate,
+    option: {
+      vendor: "Amazon",
+      qtyPerItem: packCount,
+      costPerOrderCents: purchase.latestUnitPriceCents ?? 0,
+      pricedOn: purchase.lastOrderDate,
+      asin,
+    } satisfies Omit<SupplyOptionInput, "itemId">,
+  };
+}
+
+/**
+ * Add one Amazon line item as a new worksheet item — the Orders "New item" path.
+ *
+ * Same ASIN-scoped aggregate as Suggest from Amazon, so the rate comes from the whole
+ * purchase history rather than the single row that was right-clicked. One order falls back
+ * to a 30-days-per-unit placeholder.
+ */
+export async function addSupplyItemFromAmazon(
+  userId: string,
+  asin: string,
+): Promise<string> {
+  const prefill = await amazonSupplyPrefill(userId, asin);
+  return createSupplyItemFromSuggestion(userId, {
+    name: prefill.purchase.productName,
+    rate: prefill.rate,
+    option: prefill.option,
+  });
+}
+
+/**
+ * Attach an Amazon product as an offer on an existing item.
+ *
+ * Does not rewrite the item's rate, group, or envelope — Amazon's inferred rate is a guess
+ * for new items, and this item already has one. The first offer on an item with none in use
+ * becomes in use; otherwise it lands as a comparison.
+ */
+export async function addSupplyOptionFromAmazon(
+  userId: string,
+  itemId: string,
+  asin: string,
+): Promise<string> {
+  await requireSupplyItem(userId, itemId);
+  const prefill = await amazonSupplyPrefill(userId, asin);
+  const [inUse] = await db
+    .select({ id: financeSupplyOptions.id })
+    .from(financeSupplyOptions)
+    .where(
+      and(
+        eq(financeSupplyOptions.userId, userId),
+        eq(financeSupplyOptions.itemId, itemId),
+        eq(financeSupplyOptions.inUse, true),
+      ),
+    )
+    .limit(1);
+  return createSupplyOption(userId, {
+    ...prefill.option,
+    itemId,
+    brand: prefill.purchase.productName,
+    inUse: inUse === undefined,
+  });
 }

@@ -1117,6 +1117,13 @@ period)` so money already spent stops being held twice and only going over bites
      anything. Group headers read "Pets — est. $121.70/mo · funded from Groceries",
      which is the signal that Pets wants its own envelope. `Suggest from Amazon` reads
      the order history already ingested above, so the sheet is not typed from scratch.
+     ✅ **Merge + restock columns shipped 2026-08-27** —
+     `specs/2026-08-27-0958-supplies-merge-and-restock/`. Two Amazon pack sizes of the
+     same drink can fold into one item (Payees-style survivor + preview; source `in_use`
+     clears so the unique index holds). Suggest from Amazon and Orders can **Add to…** an
+     existing item without rewriting its rate. **Lasts** and **Packs/mo** are derived from
+     rate × qty (42 cans at 4/day = 10.5 days / ~2.9 packs a month) and are not summed.
+     Matching supply items to `finance_transactions` remains the next spec, as above.
      ✅ **Split transactions shipped 2026-08-26** —
      `specs/2026-08-26-2022-split-transactions/`. This was the blocker named here
      twice: one bank row can now be divided into children that each carry their own

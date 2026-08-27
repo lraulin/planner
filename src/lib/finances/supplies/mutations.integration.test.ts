@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  amazonOrderItems,
+  amazonOrders,
   financeBudgetAllocations,
   financeBudgetCategories,
   financeSupplyItems,
@@ -12,11 +14,15 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { monthKeyOf } from "@/lib/finances/budget/envelope";
 import { localDateKey } from "@/lib/schedule/geometry";
 import {
+  addSupplyItemFromAmazon,
+  addSupplyOptionFromAmazon,
   createSupplyItem,
   createSupplyItemFromSuggestion,
   createSupplyOption,
   deleteSupplyItem,
   deleteSupplyOption,
+  mergeSupplyItems,
+  previewSupplyMerge,
   setSupplyOptionInUse,
   updateSupplyItem,
   updateSupplyOption,
@@ -42,6 +48,38 @@ const CAT_FOOD = {
   name: "Canned Cat Food",
   rate: { rateBasis: "units_per_day", unitsPerDayMilli: 4000 },
 } as const;
+
+async function buy(
+  userId: string,
+  input: { asin: string; productName: string; orderDate: string; unitPrice?: string },
+): Promise<void> {
+  const amazonOrderId = `order-${crypto.randomUUID()}`;
+  const [order] = await db
+    .insert(amazonOrders)
+    .values({
+      userId,
+      amazonOrderId,
+      channel: "retail",
+      orderDate: input.orderDate,
+      orderStatus: "Shipped",
+      externalSource: "test",
+      externalId: amazonOrderId,
+    })
+    .returning({ id: amazonOrders.id });
+  await db.insert(amazonOrderItems).values({
+    userId,
+    orderId: order.id,
+    amazonOrderId,
+    channel: "retail",
+    asin: input.asin,
+    productName: input.productName,
+    quantity: 1,
+    unitPrice: input.unitPrice ?? "23.66",
+    subscribeAndSave: false,
+    externalSource: "test",
+    externalId: `${amazonOrderId}-item`,
+  });
+}
 
 describeDb("supply worksheet", () => {
   let owner = "";
@@ -219,6 +257,159 @@ describeDb("supply worksheet", () => {
     expect(item.options[0].asin).toBe("B07C4ENERGY");
   });
 
+  describe("merge", () => {
+    it("reparents options onto the survivor, keeps one in-use, and deletes sources", async () => {
+      const twelve = await createSupplyItemFromSuggestion(owner, {
+        name: "C4 12ct",
+        rate: { rateBasis: "units_per_day", unitsPerDayMilli: 2000 },
+        option: {
+          vendor: "Amazon",
+          qtyPerItem: 12,
+          costPerOrderCents: 2366,
+          asin: "B07TWELVE",
+        },
+      });
+      const twentyFour = await createSupplyItemFromSuggestion(owner, {
+        name: "C4 24ct",
+        rate: { rateBasis: "units_per_day", unitsPerDayMilli: 1500 },
+        groupLabel: "Drinks",
+        option: {
+          vendor: "Amazon",
+          qtyPerItem: 24,
+          costPerOrderCents: 4199,
+          asin: "B07TWENTY4",
+        },
+      });
+
+      const preview = await previewSupplyMerge(owner, twelve, [twentyFour]);
+      expect(preview.movedOptions).toBe(1);
+      expect(preview.discardedRates).toHaveLength(1);
+      expect(preview.discardedGroups).toEqual(["Drinks"]);
+      expect(preview.willPromoteInUse).toBe(false);
+
+      const result = await mergeSupplyItems(owner, twelve, [twentyFour]);
+      expect(result.movedOptions).toBe(1);
+
+      const items = await listSupplyItems(owner);
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe(twelve);
+      expect(items[0].name).toBe("C4 12ct");
+      expect(items[0].unitsPerDayMilli).toBe(2000);
+      expect(items[0].groupLabel).toBe("");
+      expect(items[0].options).toHaveLength(2);
+      expect(items[0].options.map((option) => option.asin).sort()).toEqual([
+        "B07TWELVE",
+        "B07TWENTY4",
+      ]);
+      expect(items[0].options.filter((option) => option.inUse)).toHaveLength(1);
+      expect(
+        items[0].options.find((option) => option.asin === "B07TWELVE")?.inUse,
+      ).toBe(true);
+    });
+
+    it("promotes a source in-use offer when the target has none", async () => {
+      const empty = await createSupplyItem(owner, { ...CAT_FOOD, name: "Unpriced" });
+      const priced = await createSupplyItemFromSuggestion(owner, {
+        name: "Priced",
+        rate: { rateBasis: "units_per_day", unitsPerDayMilli: 2000 },
+        option: { vendor: "Amazon", asin: "B07PRICED", inUse: true },
+      });
+
+      const preview = await previewSupplyMerge(owner, empty, [priced]);
+      expect(preview.willPromoteInUse).toBe(true);
+
+      await mergeSupplyItems(owner, empty, [priced]);
+      const [item] = await listSupplyItems(owner);
+      expect(item.id).toBe(empty);
+      expect(item.options).toHaveLength(1);
+      expect(item.options[0].inUse).toBe(true);
+      expect(item.options[0].asin).toBe("B07PRICED");
+    });
+
+    it("does not write when the same item is the only source", async () => {
+      const itemId = await createSupplyItem(owner, CAT_FOOD);
+      await expect(previewSupplyMerge(owner, itemId, [itemId])).rejects.toThrow(
+        "Select two different items to merge.",
+      );
+      expect(await mergeSupplyItems(owner, itemId, [itemId])).toEqual({
+        movedOptions: 0,
+      });
+      expect(await mergeSupplyItems(owner, itemId, [])).toEqual({ movedOptions: 0 });
+      expect(await listSupplyItems(owner)).toHaveLength(1);
+    });
+  });
+
+  describe("amazon attach", () => {
+    it("puts the offer on the chosen item without rewriting its rate", async () => {
+      await buy(owner, {
+        asin: "B07ATTACH",
+        productName: "C4 Energy Drink, 24-Count",
+        orderDate: "2026-01-01",
+      });
+      await buy(owner, {
+        asin: "B07ATTACH",
+        productName: "C4 Energy Drink, 24-Count",
+        orderDate: "2026-03-01",
+      });
+      const itemId = await createSupplyItem(owner, {
+        name: "Energy Drink",
+        rate: { rateBasis: "units_per_day", unitsPerDayMilli: 2000 },
+        groupLabel: "Groceries",
+      });
+
+      await addSupplyOptionFromAmazon(owner, itemId, "B07ATTACH");
+      const [item] = await listSupplyItems(owner);
+      expect(item.name).toBe("Energy Drink");
+      expect(item.unitsPerDayMilli).toBe(2000);
+      expect(item.groupLabel).toBe("Groceries");
+      expect(item.options).toHaveLength(1);
+      expect(item.options[0].asin).toBe("B07ATTACH");
+      expect(item.options[0].vendor).toBe("Amazon");
+      expect(item.options[0].inUse).toBe(true);
+      expect(item.options[0].brand).toBe("C4 Energy Drink, 24-Count");
+    });
+
+    it("refuses a duplicate ASIN even on another item", async () => {
+      await buy(owner, {
+        asin: "B07DUP",
+        productName: "C4 Energy Drink, 12-Count",
+        orderDate: "2026-01-01",
+      });
+      await addSupplyItemFromAmazon(owner, "B07DUP");
+      const other = await createSupplyItem(owner, CAT_FOOD);
+      await expect(addSupplyOptionFromAmazon(owner, other, "B07DUP")).rejects.toThrow(
+        "already on the Supplies worksheet",
+      );
+    });
+
+    it("lands a later offer as a comparison when the item already has one in use", async () => {
+      await buy(owner, {
+        asin: "B07SECOND",
+        productName: "C4 Energy Drink, 24-Count",
+        orderDate: "2026-01-01",
+      });
+      await buy(owner, {
+        asin: "B07SECOND",
+        productName: "C4 Energy Drink, 24-Count",
+        orderDate: "2026-03-01",
+      });
+      const itemId = await createSupplyItemFromSuggestion(owner, {
+        name: "Energy Drink",
+        rate: { rateBasis: "units_per_day", unitsPerDayMilli: 2000 },
+        option: { vendor: "Amazon", asin: "B07FIRST", inUse: true },
+      });
+      await addSupplyOptionFromAmazon(owner, itemId, "B07SECOND");
+      const [item] = await listSupplyItems(owner);
+      expect(item.options).toHaveLength(2);
+      expect(item.options.find((option) => option.asin === "B07FIRST")?.inUse).toBe(
+        true,
+      );
+      expect(item.options.find((option) => option.asin === "B07SECOND")?.inUse).toBe(
+        false,
+      );
+    });
+  });
+
   describe("user isolation", () => {
     let itemId = "";
     let optionId = "";
@@ -278,6 +469,29 @@ describeDb("supply worksheet", () => {
     it("does not let a second user attach an option to another user's item", async () => {
       await expect(
         createSupplyOption(intruder, { itemId, vendor: "Stolen" }),
+      ).rejects.toThrow("That supply item does not exist.");
+      expect((await listSupplyItems(owner))[0].options).toHaveLength(1);
+    });
+
+    it("does not let a second user preview or merge another user's items", async () => {
+      const other = await createSupplyItem(owner, { ...CAT_FOOD, name: "Second" });
+      await expect(previewSupplyMerge(intruder, itemId, [other])).rejects.toThrow(
+        "That supply item does not exist.",
+      );
+      await expect(mergeSupplyItems(intruder, itemId, [other])).rejects.toThrow(
+        "That supply item does not exist.",
+      );
+      expect(await listSupplyItems(owner)).toHaveLength(2);
+    });
+
+    it("does not let a second user attach an Amazon offer to another user's item", async () => {
+      await buy(intruder, {
+        asin: "B07INTRUDE",
+        productName: "Stolen drink, 12-Count",
+        orderDate: "2026-01-01",
+      });
+      await expect(
+        addSupplyOptionFromAmazon(intruder, itemId, "B07INTRUDE"),
       ).rejects.toThrow("That supply item does not exist.");
       expect((await listSupplyItems(owner))[0].options).toHaveLength(1);
     });

@@ -4,6 +4,7 @@ import {
   formatDerivedRate,
   formatRate,
   formatUnitCost,
+  trimNumber,
 } from "./format";
 import type { SupplyRate } from "./cost";
 
@@ -36,6 +37,14 @@ describe("formatRate", () => {
   it("shows the derived other end", () => {
     expect(formatDerivedRate(CANS, "can")).toBe("≈ 0.25 days per can");
     expect(formatDerivedRate(TUBE, "tube")).toBe("≈ 0.022 tube/day");
+  });
+});
+
+describe("trimNumber", () => {
+  it("drops trailing zeros so Lasts and Packs/mo stay compact", () => {
+    expect(trimNumber(10.5)).toBe("10.5");
+    expect(trimNumber(6)).toBe("6");
+    expect(trimNumber(2.9)).toBe("2.9");
   });
 });
 
