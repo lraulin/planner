@@ -6,6 +6,7 @@ import {
   formatUsdWhole,
   numericStringToCents,
   parseAmountCents,
+  parseAmountEntryCents,
   sumCents,
 } from "./money";
 
@@ -41,6 +42,41 @@ describe("parseAmountCents", () => {
   it("keeps sub-cent input from silently truncating downward", () => {
     expect(parseAmountCents("0.595")).toBe(60);
     expect(parseAmountCents("0.594")).toBe(59);
+  });
+});
+
+describe("parseAmountEntryCents", () => {
+  it("reads a plain typed amount", () => {
+    expect(parseAmountEntryCents("50")).toBe(5000);
+    expect(parseAmountEntryCents("$1,234.56")).toBe(123456);
+    expect(parseAmountEntryCents("-5")).toBe(-500);
+  });
+
+  it("evaluates arithmetic", () => {
+    expect(parseAmountEntryCents("50+25")).toBe(7500);
+    expect(parseAmountEntryCents("(40+60)/2")).toBe(5000);
+    expect(parseAmountEntryCents("12.99*2")).toBe(2598);
+    expect(parseAmountEntryCents("2+3*4")).toBe(1400);
+    expect(parseAmountEntryCents("$1,000 + 50")).toBe(105000);
+  });
+
+  // D6: currency first, so the accounting negative survives instead of the parens being
+  // re-read as grouping and the sign quietly flipping.
+  it("keeps (1.23) meaning -1.23", () => {
+    expect(parseAmountEntryCents("(1.23)")).toBe(-123);
+  });
+
+  it("rounds a repeating result to the cent", () => {
+    expect(parseAmountEntryCents("10/3")).toBe(333);
+    expect(parseAmountEntryCents("100/8")).toBe(1250);
+  });
+
+  it("returns null rather than committing a number nobody typed", () => {
+    expect(parseAmountEntryCents("")).toBeNull();
+    expect(parseAmountEntryCents("   ")).toBeNull();
+    expect(parseAmountEntryCents("abc")).toBeNull();
+    expect(parseAmountEntryCents("2+")).toBeNull();
+    expect(parseAmountEntryCents("1/0")).toBeNull();
   });
 });
 

@@ -8,6 +8,8 @@
  * when writing or displaying. Totals over many rows are better still computed in SQL.
  */
 
+import { evalArithmetic } from "@/lib/arithmetic";
+
 /** Cents in one dollar. Named so the arithmetic below reads as unit conversion. */
 const CENTS_PER_DOLLAR = 100;
 
@@ -42,6 +44,31 @@ export function parseAmountCents(raw: string): number | null {
   if (!Number.isFinite(magnitude)) return null;
 
   return negative ? -magnitude : magnitude;
+}
+
+/**
+ * Read what a person **typed** into a money field, in cents.
+ *
+ * Unlike {@link parseAmountCents} — which reads a bank CSV and must reject anything it does
+ * not recognise rather than coerce it — this accepts arithmetic: `50+25`, `(40+60)/2`,
+ * `12.99*2`, the gesture YNAB and Actual both offer for funding an envelope off a handful of
+ * receipts. Returns `null` for blank or unparseable input, which every caller treats as
+ * "revert the field and write nothing".
+ *
+ * The currency parser runs **first**, which is the reverse of Actual's order. That is what
+ * keeps `(1.23)` meaning accounting-negative −1.23 instead of being re-read as grouping and
+ * silently flipping to +1.23. The two parsers overlap on nothing else: `parseAmountCents`
+ * accepts only a bare signed decimal, and agrees with the evaluator on every one of those.
+ */
+export function parseAmountEntryCents(raw: string): number | null {
+  const currency = parseAmountCents(raw);
+  if (currency !== null) return currency;
+
+  const dollars = evalArithmetic(raw);
+  if (dollars === null) return null;
+
+  const cents = Math.round(dollars * CENTS_PER_DOLLAR);
+  return Number.isFinite(cents) ? cents : null;
 }
 
 /** Cents to the decimal string a `numeric(14,2)` column takes. */
