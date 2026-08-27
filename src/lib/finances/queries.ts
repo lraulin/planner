@@ -59,6 +59,42 @@ function scopeConditions(userId: string, filter: TransactionFilter) {
   return conditions;
 }
 
+const TRANSACTION_LIST_COLUMNS = {
+  id: financeTransactions.id,
+  accountId: financeTransactions.accountId,
+  accountName: financeAccounts.name,
+  accountKind: financeAccounts.kind,
+  transactionDate: financeTransactions.transactionDate,
+  postedDate: financeTransactions.postedDate,
+  pending: financeTransactions.pending,
+  description: financeTransactions.description,
+  amount: financeTransactions.amount,
+  sourceCategory: financeTransactions.sourceCategory,
+  category: financeTransactions.category,
+  derivedFlow: financeTransactions.derivedFlow,
+  transferGroupId: financeTransactions.transferGroupId,
+  flowOverride: financeTransactions.flowOverride,
+  excludeFromBaseline: financeTransactions.excludeFromBaseline,
+  eventLabel: financeTransactions.eventLabel,
+  notes: financeTransactions.notes,
+  balanceAfter: financeTransactions.balanceAfter,
+  budgetCategoryId: financeTransactions.budgetCategoryId,
+  budgetCategoryName: financeBudgetCategories.name,
+  payeeId: financeTransactions.payeeId,
+  payeeName: financePayees.name,
+  parentId: financeTransactions.parentId,
+  // Correlated rather than a join: the register reads parents only, splits are rare, and a
+  // join would have to be grouped away again on every one of these columns.
+  splitChildCount: sql<number>`(
+    select count(*) from ${financeTransactions} as child
+     where child.parent_id = ${financeTransactions.id}
+  )::int`,
+  splitChildTotal: sql<string>`(
+    select coalesce(sum(child.amount), 0) from ${financeTransactions} as child
+     where child.parent_id = ${financeTransactions.id}
+  )`,
+} as const;
+
 /** Accounts with their balance and row count, newest-named first for a stable picker. */
 export async function listAccounts(
   userId: string,
@@ -221,30 +257,7 @@ export async function listTransactions(
   filter: TransactionFilter = {},
 ): Promise<TransactionListRow[]> {
   const rows = await db
-    .select({
-      id: financeTransactions.id,
-      accountId: financeTransactions.accountId,
-      accountName: financeAccounts.name,
-      accountKind: financeAccounts.kind,
-      transactionDate: financeTransactions.transactionDate,
-      postedDate: financeTransactions.postedDate,
-      pending: financeTransactions.pending,
-      description: financeTransactions.description,
-      amount: financeTransactions.amount,
-      sourceCategory: financeTransactions.sourceCategory,
-      category: financeTransactions.category,
-      derivedFlow: financeTransactions.derivedFlow,
-      transferGroupId: financeTransactions.transferGroupId,
-      flowOverride: financeTransactions.flowOverride,
-      excludeFromBaseline: financeTransactions.excludeFromBaseline,
-      eventLabel: financeTransactions.eventLabel,
-      notes: financeTransactions.notes,
-      balanceAfter: financeTransactions.balanceAfter,
-      budgetCategoryId: financeTransactions.budgetCategoryId,
-      budgetCategoryName: financeBudgetCategories.name,
-      payeeId: financeTransactions.payeeId,
-      payeeName: financePayees.name,
-    })
+    .select(TRANSACTION_LIST_COLUMNS)
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
     // Left, not inner: most rows have no envelope, and an inner join would silently empty
@@ -275,31 +288,6 @@ export async function listTransactions(
   return rows.map(toTransactionListRow);
 }
 
-const TRANSACTION_LIST_COLUMNS = {
-  id: financeTransactions.id,
-  accountId: financeTransactions.accountId,
-  accountName: financeAccounts.name,
-  accountKind: financeAccounts.kind,
-  transactionDate: financeTransactions.transactionDate,
-  postedDate: financeTransactions.postedDate,
-  pending: financeTransactions.pending,
-  description: financeTransactions.description,
-  amount: financeTransactions.amount,
-  sourceCategory: financeTransactions.sourceCategory,
-  category: financeTransactions.category,
-  derivedFlow: financeTransactions.derivedFlow,
-  transferGroupId: financeTransactions.transferGroupId,
-  flowOverride: financeTransactions.flowOverride,
-  excludeFromBaseline: financeTransactions.excludeFromBaseline,
-  eventLabel: financeTransactions.eventLabel,
-  notes: financeTransactions.notes,
-  balanceAfter: financeTransactions.balanceAfter,
-  budgetCategoryId: financeTransactions.budgetCategoryId,
-  budgetCategoryName: financeBudgetCategories.name,
-  payeeId: financeTransactions.payeeId,
-  payeeName: financePayees.name,
-} as const;
-
 function toTransactionListRow(row: {
   id: string;
   accountId: string;
@@ -323,6 +311,9 @@ function toTransactionListRow(row: {
   budgetCategoryName: string | null;
   payeeId: string | null;
   payeeName: string | null;
+  parentId: string | null;
+  splitChildCount: number;
+  splitChildTotal: string;
 }): TransactionListRow {
   return {
     id: row.id,
@@ -348,6 +339,13 @@ function toTransactionListRow(row: {
     budgetCategoryName: row.budgetCategoryName,
     payeeId: row.payeeId,
     payeeName: row.payeeName,
+    parentId: row.parentId,
+    splitChildCount: row.splitChildCount,
+    splitImbalanceCents:
+      row.splitChildCount === 0
+        ? 0
+        : (numericStringToCents(row.amount) ?? 0) -
+          (numericStringToCents(row.splitChildTotal) ?? 0),
   };
 }
 
@@ -446,30 +444,7 @@ export async function getTransaction(
   transactionId: string,
 ): Promise<TransactionListRow | null> {
   const [row] = await db
-    .select({
-      id: financeTransactions.id,
-      accountId: financeTransactions.accountId,
-      accountName: financeAccounts.name,
-      accountKind: financeAccounts.kind,
-      transactionDate: financeTransactions.transactionDate,
-      postedDate: financeTransactions.postedDate,
-      pending: financeTransactions.pending,
-      description: financeTransactions.description,
-      amount: financeTransactions.amount,
-      sourceCategory: financeTransactions.sourceCategory,
-      category: financeTransactions.category,
-      derivedFlow: financeTransactions.derivedFlow,
-      transferGroupId: financeTransactions.transferGroupId,
-      flowOverride: financeTransactions.flowOverride,
-      excludeFromBaseline: financeTransactions.excludeFromBaseline,
-      eventLabel: financeTransactions.eventLabel,
-      notes: financeTransactions.notes,
-      balanceAfter: financeTransactions.balanceAfter,
-      budgetCategoryId: financeTransactions.budgetCategoryId,
-      budgetCategoryName: financeBudgetCategories.name,
-      payeeId: financeTransactions.payeeId,
-      payeeName: financePayees.name,
-    })
+    .select(TRANSACTION_LIST_COLUMNS)
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
     .leftJoin(
@@ -492,32 +467,44 @@ export async function getTransaction(
     )
     .limit(1);
 
-  if (!row) return null;
-  return {
-    id: row.id,
-    accountId: row.accountId,
-    accountName: row.accountName,
-    accountKind: row.accountKind,
-    transactionDate: row.transactionDate,
-    postedDate: row.postedDate,
-    pending: row.pending,
-    description: row.description,
-    amountCents: numericStringToCents(row.amount) ?? 0,
-    sourceCategory: row.sourceCategory,
-    category: row.category,
-    derivedFlow: row.derivedFlow,
-    transferGroupId: row.transferGroupId,
-    flowOverride: row.flowOverride,
-    excludeFromBaseline: row.excludeFromBaseline,
-    eventLabel: row.eventLabel,
-    notes: row.notes,
-    tags: tagsInNotes(row.notes),
-    balanceAfterCents: numericStringToCents(row.balanceAfter),
-    budgetCategoryId: row.budgetCategoryId,
-    budgetCategoryName: row.budgetCategoryName,
-    payeeId: row.payeeId,
-    payeeName: row.payeeName,
-  };
+  return row ? toTransactionListRow(row) : null;
+}
+
+/**
+ * One split parent's children, in the order they were written.
+ *
+ * The only way a child is ever read (D8). They are deliberately outside the register's
+ * index — no sort, no filter, no search — so this is a direct fetch by parent, and the
+ * partial index on `(user_id, parent_id)` is what makes it one lookup.
+ */
+export async function listSplitChildren(
+  userId: string,
+  parentId: string,
+): Promise<TransactionListRow[]> {
+  const rows = await db
+    .select(TRANSACTION_LIST_COLUMNS)
+    .from(financeTransactions)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .leftJoin(
+      financeBudgetCategories,
+      eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
+    )
+    .leftJoin(
+      financePayees,
+      and(
+        eq(financePayees.id, financeTransactions.payeeId),
+        eq(financePayees.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financeTransactions.parentId, parentId),
+      ),
+    )
+    .orderBy(asc(financeTransactions.createdAt), asc(financeTransactions.id));
+
+  return rows.map(toTransactionListRow);
 }
 
 /** Statement snapshots, newest period first. Always scoped by userId. */

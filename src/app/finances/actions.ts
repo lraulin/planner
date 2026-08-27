@@ -60,11 +60,15 @@ import {
   updateAccount,
   deleteAccount,
   updateTransaction,
+  splitTransaction,
+  unsplitTransaction,
+  updateSplitChildren,
   trackTransactionAsBill,
   upsertBillEnvelope,
   type AccountEdit,
   type BillEnvelopeEdit,
   type ReclassifySummary,
+  type SplitChildInput,
   type TransactionEdit,
 } from "@/lib/finances/mutations";
 import {
@@ -107,6 +111,7 @@ import {
 import {
   getTransaction,
   listAccounts,
+  listSplitChildren,
   listTransactions,
   loadRegisterBlock,
   loadRegisterExportRows,
@@ -238,6 +243,41 @@ export async function getTransactionAction(
     return { ok: false, error: "Select a transaction" };
   }
   return runQuery((userId) => getTransaction(userId, transactionId));
+}
+
+export async function listSplitChildrenAction(
+  parentId: string,
+): Promise<QueryResult<TransactionListRow[]>> {
+  if (typeof parentId !== "string" || parentId === "") {
+    return { ok: false, error: "Select a transaction" };
+  }
+  return runQuery((userId) => listSplitChildren(userId, parentId));
+}
+
+export async function splitTransactionAction(
+  transactionId: string,
+  children: readonly SplitChildInput[],
+): Promise<ActionResult> {
+  // Same reasoning as `updateTransactionAction`: the Register refetches the one row's
+  // children itself, and a layout revalidate would reload the whole ledger under the drawer.
+  return run((userId) => splitTransaction(userId, transactionId, children), {
+    revalidate: [],
+  });
+}
+
+export async function updateSplitChildrenAction(
+  transactionId: string,
+  children: readonly SplitChildInput[],
+): Promise<ActionResult> {
+  return run((userId) => updateSplitChildren(userId, transactionId, children), {
+    revalidate: [],
+  });
+}
+
+export async function unsplitTransactionAction(
+  transactionId: string,
+): Promise<ActionResult> {
+  return run((userId) => unsplitTransaction(userId, transactionId), { revalidate: [] });
 }
 
 export async function listAccountsAction(): Promise<QueryResult<FinanceAccountRow[]>> {

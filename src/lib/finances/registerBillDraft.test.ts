@@ -39,6 +39,9 @@ function row(
     budgetCategoryName: null,
     payeeId: "payeeId" in extras ? (extras.payeeId ?? null) : PAYEE_A,
     payeeName: "payeeName" in extras ? (extras.payeeName ?? null) : "Geico",
+    parentId: null,
+    splitChildCount: 0,
+    splitImbalanceCents: 0,
   };
 }
 
@@ -178,6 +181,9 @@ describe("trackAsBillDraft", () => {
         description: "CVSExtraCare 8007467287RI",
         amountCents: -500,
         payeeId: null,
+        parentId: null,
+        splitChildCount: 0,
+        splitImbalanceCents: 0,
         payeeName: null,
       }),
       row("b", "2025-04-04", {

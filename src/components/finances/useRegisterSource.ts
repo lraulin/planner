@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  listSplitChildrenAction,
   loadRegisterBlockAction,
   loadRegisterExportAction,
   loadRegisterIndexAction,
@@ -43,6 +44,9 @@ function placeholder(id: string): TransactionListRow {
     budgetCategoryName: null,
     payeeId: null,
     payeeName: null,
+    parentId: null,
+    splitChildCount: 0,
+    splitImbalanceCents: 0,
   };
 }
 
@@ -71,6 +75,19 @@ export function useRegisterSource({
   const [index, setIndex] = useState(initial.index);
   const [cache, setCache] = useState(() => cacheFrom(initial));
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Split children, held apart from `cache` and keyed by parent.
+   *
+   * They are not in the index and never will be (D8): they do not sort, filter, search or
+   * group, and the id-addressed block loader cannot fetch them. Keeping them in their own
+   * map is what stops any of the pipeline above from having to know they exist.
+   */
+  const [childrenByParent, setChildrenByParent] = useState<
+    Map<string, TransactionListRow[]>
+  >(() => new Map());
+  const [expandedSplitIds, setExpandedSplitIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const queryRef = useRef(query);
   const requestId = useRef(0);
   const inFlight = useRef<Set<string>>(new Set());
@@ -82,6 +99,33 @@ export function useRegisterSource({
   useEffect(() => {
     queryRef.current = query;
   });
+
+  const loadSplitChildren = useCallback(async (parentId: string) => {
+    const result = await listSplitChildrenAction(parentId);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setChildrenByParent((current) => {
+      const next = new Map(current);
+      next.set(parentId, result.data);
+      return next;
+    });
+  }, []);
+
+  /** Show or hide one parent's children. Fetches them the first time, then keeps them. */
+  const toggleSplit = useCallback(
+    (parentId: string) => {
+      setExpandedSplitIds((current) => {
+        const next = new Set(current);
+        if (next.has(parentId)) next.delete(parentId);
+        else next.add(parentId);
+        return next;
+      });
+      void loadSplitChildren(parentId);
+    },
+    [loadSplitChildren],
+  );
 
   const key = registerQueryKey(query);
   const notBudgetedIds = useMemo(
@@ -161,37 +205,66 @@ export function useRegisterSource({
 
   const gridRows: GridRow<RegisterTransactionRow>[] = useMemo(
     () =>
-      index.entries.map((entry) =>
-        entry.kind === "group"
-          ? {
+      index.entries.flatMap((entry): GridRow<RegisterTransactionRow>[] => {
+        if (entry.kind === "group") {
+          return [
+            {
               kind: "group" as const,
               id: entry.id,
               label: entry.label,
               count: entry.count,
               depth: entry.depth,
               collapsed: false,
-            }
-          : {
-              kind: "node" as const,
-              id: entry.id,
-              node: asRegisterRow(
-                cache.get(entry.id) ?? placeholder(entry.id),
-                notBudgetedIds,
-              ),
-              depth: 0,
             },
-      ),
-    [index.entries, cache, notBudgetedIds],
+          ];
+        }
+        const parent: GridRow<RegisterTransactionRow> = {
+          kind: "node" as const,
+          id: entry.id,
+          node: asRegisterRow(
+            cache.get(entry.id) ?? placeholder(entry.id),
+            notBudgetedIds,
+          ),
+          depth: 0,
+        };
+        if (!expandedSplitIds.has(entry.id)) return [parent];
+        const children = childrenByParent.get(entry.id) ?? [];
+        return [
+          parent,
+          ...children.map((child) => ({
+            kind: "node" as const,
+            id: child.id,
+            node: asRegisterRow(child, notBudgetedIds),
+            depth: 1,
+          })),
+        ];
+      }),
+    [index.entries, cache, notBudgetedIds, expandedSplitIds, childrenByParent],
   );
 
   const patchRow = useCallback(
     (transactionId: string, patch: Partial<TransactionListRow>) => {
       setCache((current) => {
         const existing = current.get(transactionId);
-        if (!existing) return current;
-        const next = new Map(current);
-        next.set(transactionId, { ...existing, ...patch });
-        return next;
+        if (existing) {
+          const next = new Map(current);
+          next.set(transactionId, { ...existing, ...patch });
+          return next;
+        }
+        return current;
+      });
+      // A child edited in place — its envelope — lives in the child map, not the cache.
+      setChildrenByParent((current) => {
+        for (const [parentId, rows] of current) {
+          const at = rows.findIndex((row) => row.id === transactionId);
+          if (at === -1) continue;
+          const next = new Map(current);
+          const updated = [...rows];
+          updated[at] = { ...updated[at], ...patch };
+          next.set(parentId, updated);
+          return next;
+        }
+        return current;
       });
     },
     [],
@@ -230,9 +303,14 @@ export function useRegisterSource({
     (id: string | null) => {
       if (!id) return null;
       const row = cache.get(id);
-      return row ? asRegisterRow(row, notBudgetedIds) : null;
+      if (row) return asRegisterRow(row, notBudgetedIds);
+      for (const rows of childrenByParent.values()) {
+        const child = rows.find((entry) => entry.id === id);
+        if (child) return asRegisterRow(child, notBudgetedIds);
+      }
+      return null;
     },
-    [cache, notBudgetedIds],
+    [cache, notBudgetedIds, childrenByParent],
   );
 
   const putRow = useCallback((row: TransactionListRow) => {
@@ -255,6 +333,10 @@ export function useRegisterSource({
     loadExportRows,
     rowById,
     putRow,
+    expandedSplitIds,
+    toggleSplit,
+    childrenByParent,
+    refreshSplitChildren: loadSplitChildren,
     counts: { shown: index.shown, total: index.total },
     distinctValues: index.facets,
     groupIds: index.groupIds,

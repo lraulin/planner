@@ -13,6 +13,7 @@ import { categoryAssignmentRefusal } from "@/lib/finances/categoryEligibility";
 import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind, FinanceFlowKind } from "@/db/schema";
 import { CategorySelect } from "./CategorySelect";
+import { SplitEditor } from "./SplitEditor";
 import { FLOW_KINDS, flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
@@ -38,6 +39,8 @@ export function TransactionDrawer({
   onClose,
   onChanged,
   onCreateEnvelope,
+  onSplitChanged,
+  splitChildren,
 }: {
   transactionId: string | null;
   row: RegisterTransactionRow | null;
@@ -47,6 +50,8 @@ export function TransactionDrawer({
   onClose: () => void;
   onChanged: (id: string, patch: Partial<TransactionListRow>) => void;
   onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
+  onSplitChanged: () => void;
+  splitChildren: readonly TransactionListRow[];
 }) {
   const titleId = useId();
   if (!transactionId) return null;
@@ -69,6 +74,8 @@ export function TransactionDrawer({
           onClose={onClose}
           onChanged={onChanged}
           onCreateEnvelope={onCreateEnvelope}
+          onSplitChanged={onSplitChanged}
+          splitChildren={splitChildren}
         />
       ) : (
         <p role="alert" className="px-5 py-4 text-[0.875rem] text-priority-a">
@@ -98,6 +105,8 @@ function TransactionForm({
   onClose,
   onChanged,
   onCreateEnvelope,
+  onSplitChanged,
+  splitChildren,
 }: {
   row: RegisterTransactionRow;
   catalog: EnvelopeCatalog;
@@ -106,6 +115,8 @@ function TransactionForm({
   onClose: () => void;
   onChanged: (id: string, patch: Partial<TransactionListRow>) => void;
   onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
+  onSplitChanged: () => void;
+  splitChildren: readonly TransactionListRow[];
 }) {
   const [draft, setDraft] = useState(() => ({
     notes: row.notes,
@@ -236,6 +247,7 @@ function TransactionForm({
               </div>
             </div>
             {catalog.envelopes.length > 0 &&
+              row.splitChildCount === 0 &&
               (envelopeRefusal ? (
                 <ReadOnly label="Category">
                   <span className="text-ink-muted">Not budgeted</span>
@@ -267,6 +279,18 @@ function TransactionForm({
               <p className="text-[0.75rem] text-select-edge">{learningNotice}</p>
             ) : null}
           </Section>
+
+          {row.parentId === null && catalog.envelopes.length > 0 ? (
+            <Section title="Split">
+              <SplitEditor
+                row={row}
+                existing={splitChildren}
+                catalog={catalog}
+                onCreateEnvelope={onCreateEnvelope}
+                onSplitChanged={onSplitChanged}
+              />
+            </Section>
+          ) : null}
 
           <Section title="Classification">
             <SelectField<FinanceFlowKind>

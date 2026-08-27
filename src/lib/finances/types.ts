@@ -251,6 +251,25 @@ export type TransactionListRow = {
    */
   payeeId: string | null;
   payeeName: string | null;
+  /**
+   * How many children this row is split into, and the parent it is a child of
+   * (`agent-os/specs/2026-08-26-2022-split-transactions/` D1).
+   *
+   * `splitChildCount` is 0 on every ordinary row, so the Category cell can read "Split (2)"
+   * without a second lookup. `parentId` is null on everything the register indexes: children
+   * are reached only by expanding their parent, never by sorting, filtering or searching (D8).
+   */
+  splitChildCount: number;
+  parentId: string | null;
+  /**
+   * The children do not sum to the parent, because the bank changed the amount after the
+   * split was written (D5).
+   *
+   * Surfaced rather than silently rebalanced: moving money between envelopes with no record
+   * is exactly the failure splits exist to prevent. Cents, signed the parent's way; 0 when
+   * the split balances, which is every split this app wrote.
+   */
+  splitImbalanceCents: number;
 };
 
 export type TransactionFilter = {

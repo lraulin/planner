@@ -11,7 +11,7 @@ import {
 } from "react";
 import { formatUsd } from "@/lib/finances/money";
 import { FINANCE_GROUP_BY_VALUES } from "@/lib/finances/grouping";
-import type { FinanceAccountRow } from "@/lib/finances/types";
+import type { FinanceAccountRow, TransactionListRow } from "@/lib/finances/types";
 import {
   claimedPayeeMap,
   trackAsBillRefusal,
@@ -177,6 +177,9 @@ function AccountBalances({ accounts }: { accounts: FinanceAccountRow[] }) {
  * not six years of history; search still sees every row. Drawer open/close and envelope
  * edits patch the in-memory row; reloading the list on those paths is a freeze.
  */
+/** Stable identity: the split editor resets its draft when this prop changes. */
+const EMPTY_SPLIT_CHILDREN: TransactionListRow[] = [];
+
 export function FinancesView({
   initialPrepared,
   initialAccounts,
@@ -316,6 +319,10 @@ export function FinancesView({
     loadExportRows,
     rowById,
     putRow,
+    expandedSplitIds,
+    toggleSplit,
+    refreshSplitChildren,
+    childrenByParent,
   } = register;
   const { order, onIdsChange } = useNavigableIds(index.nodeIds);
   const multi = useMultiSelect(order, null);
@@ -448,8 +455,18 @@ export function FinancesView({
       tagColors,
       onSetEnvelope,
       onCreateEnvelope,
+      expandedSplitIds,
+      onToggleSplit: toggleSplit,
     }),
-    [envelopeCatalog, offBudgetAccountIds, tagColors, onSetEnvelope, onCreateEnvelope],
+    [
+      envelopeCatalog,
+      offBudgetAccountIds,
+      tagColors,
+      onSetEnvelope,
+      onCreateEnvelope,
+      expandedSplitIds,
+      toggleSplit,
+    ],
   );
 
   useEffect(() => {
@@ -458,6 +475,15 @@ export function FinancesView({
       if (result.ok && result.data) putRow(result.data);
     });
   }, [openId, rowById, putRow]);
+
+  // The drawer's split editor is handed its children rather than fetching them itself
+  // (the `set-state-in-effect` rule, and the parent stays the source of truth).
+  useEffect(() => {
+    if (!openId) return;
+    const row = rowById(openId);
+    if (!row || row.splitChildCount === 0 || childrenByParent.has(openId)) return;
+    void refreshSplitChildren(openId);
+  }, [openId, rowById, childrenByParent, refreshSplitChildren]);
 
   const openDrawer = useCallback((id: string) => setOpenId(id), [setOpenId]);
   const closeDrawer = useCallback(() => {
@@ -498,6 +524,14 @@ export function FinancesView({
       const row = rowId ? (rowById(rowId) ?? undefined) : undefined;
       const cannotTrack =
         rowId === null ? "Select a row first" : trackAsBillRefusal(row, claimedByPayee);
+      const cannotSplit =
+        rowId === null
+          ? "Select a row first"
+          : row?.parentId
+            ? "A split part cannot itself be split."
+            : row?.transferGroupId
+              ? "A transfer cannot be split."
+              : null;
       return catalogCapabilities({
         // A transaction is not typed in, it arrives from the bank — so the catalog's
         // "make a new one" verb is the import, not a blank row.
@@ -540,6 +574,23 @@ export function FinancesView({
             title: cannotTrack ?? undefined,
             run: () => {
               if (rowId && !cannotTrack) setBillRowId(rowId);
+            },
+          },
+          {
+            // A command without a menu entry is not shipped (`components/data-grid`).
+            // The editor itself lives in the drawer, so this opens it there.
+            id: "record.split",
+            label: row?.splitChildCount ? "Edit the split…" : "Split…",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "convert",
+            rowMenu: true,
+            keywords: "split divide parts share itemize",
+            disabled: Boolean(cannotSplit),
+            title: cannotSplit ?? undefined,
+            run: () => {
+              if (rowId && !cannotSplit) openDrawer(rowId);
             },
           },
         ],
@@ -734,6 +785,13 @@ export function FinancesView({
         onClose={closeDrawer}
         onChanged={patchRow}
         onCreateEnvelope={onCreateEnvelope}
+        splitChildren={(openId && childrenByParent.get(openId)) || EMPTY_SPLIT_CHILDREN}
+        onSplitChanged={() => {
+          // The parent's child count and imbalance live in the index, and the expanded
+          // children in their own map — a structural change has to refresh both.
+          if (openId) void refreshSplitChildren(openId);
+          void reload();
+        }}
       />
       {categoryPickerOpen ? (
         <ModalShell

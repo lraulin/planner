@@ -33,6 +33,9 @@ function row(
     budgetCategoryId: null,
     budgetCategoryName: extras.budgetCategoryName ?? null,
     payeeId: null,
+    parentId: null,
+    splitChildCount: 0,
+    splitImbalanceCents: 0,
     payeeName: null,
   };
 }

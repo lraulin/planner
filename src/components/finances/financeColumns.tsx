@@ -27,7 +27,15 @@ export type FinanceColumnCtx = {
   onSetEnvelope: (transactionId: string, categoryId: string | null) => void;
   onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
   tagColors: Readonly<Record<string, string | null>>;
+  /** Split parents whose children are currently shown beneath them. */
+  expandedSplitIds: ReadonlySet<string>;
+  onToggleSplit: (transactionId: string) => void;
 };
+
+/** A row is a split child when it names a parent; the register indexes only parents. */
+function isSplitChild(row: RegisterTransactionRow): boolean {
+  return row.parentId !== null;
+}
 
 export const FINANCE_COLUMN_IDS = REGISTER_VISIBLE_COLUMN_IDS;
 
@@ -81,6 +89,13 @@ function Amount({ cents, strong = false }: { cents: number | null; strong?: bool
   );
 }
 
+/** What a split parent's Category cell says instead of an envelope. */
+function splitLabel(row: RegisterTransactionRow): string {
+  return row.splitImbalanceCents === 0
+    ? `Split (${row.splitChildCount})`
+    : `Split (${row.splitChildCount}) — off by ${formatUsd(row.splitImbalanceCents)}`;
+}
+
 /**
  * The register's columns.
  *
@@ -122,14 +137,54 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     hideable: false,
     ...accessors("description"),
     compact: "primary",
-    render: (row) => (
-      <span
-        className="truncate text-[0.8125rem] font-medium text-ink"
-        title={row.node.description}
-      >
-        {row.node.description}
-      </span>
-    ),
+    render: (row, ctx) => {
+      // A child shows its own note where it has one — "Copilot: Track & Budget" is what
+      // makes a split readable, since every child inherits the same bank description.
+      if (isSplitChild(row.node)) {
+        const label = row.node.notes.trim() || row.node.description;
+        return (
+          <span className="flex min-w-0 items-center gap-1 pl-5" title={label}>
+            <span aria-hidden className="text-ink-faint">
+              &#9492;
+            </span>
+            <span className="truncate text-[0.8125rem] text-ink-muted">{label}</span>
+          </span>
+        );
+      }
+      if (row.node.splitChildCount === 0) {
+        return (
+          <span
+            className="truncate text-[0.8125rem] font-medium text-ink"
+            title={row.node.description}
+          >
+            {row.node.description}
+          </span>
+        );
+      }
+      const expanded = ctx.expandedSplitIds.has(row.node.id);
+      return (
+        <span className="flex min-w-0 items-center gap-1">
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={`${expanded ? "Hide" : "Show"} the parts of ${row.node.description}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              ctx.onToggleSplit(row.node.id);
+            }}
+            className="rounded px-0.5 text-ink-faint hover:text-ink"
+          >
+            {expanded ? "\u25BE" : "\u25B8"}
+          </button>
+          <span
+            className="truncate text-[0.8125rem] font-medium text-ink"
+            title={row.node.description}
+          >
+            {row.node.description}
+          </span>
+        </span>
+      );
+    },
   },
   {
     id: "payee",
@@ -154,16 +209,35 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     ...accessors("category"),
     compact: "meta",
     compactTextWithCtx: (row, ctx) =>
-      categoryAssignmentRefusal({
-        accountOffBudget: ctx.offBudgetAccountIds.has(row.node.accountId),
-        categoryAssignable: row.node.categoryAssignable,
-      })
-        ? "Not budgeted"
-        : (row.node.budgetCategoryName ?? "Categorize"),
+      row.node.splitChildCount > 0
+        ? splitLabel(row.node)
+        : categoryAssignmentRefusal({
+              accountOffBudget: ctx.offBudgetAccountIds.has(row.node.accountId),
+              categoryAssignable: row.node.categoryAssignable,
+            })
+          ? "Not budgeted"
+          : (row.node.budgetCategoryName ?? "Categorize"),
     // Editable in place rather than behind a row-menu command: the envelope for a row is a
     // one-keystroke decision made while reading the description next to it, and a menu of
     // twenty envelopes is not a menu (`components/ux-principles`).
     render: (row, ctx) => {
+      if (row.node.splitChildCount > 0) {
+        // No picker on a parent: it holds no envelope by design, and its children are
+        // where the Category lives. The drawer is the editor.
+        const imbalance = row.node.splitImbalanceCents;
+        return (
+          <span
+            className={`truncate text-[0.8125rem] ${imbalance === 0 ? "text-ink-muted" : "text-priority-a"}`}
+            title={
+              imbalance === 0
+                ? undefined
+                : `The bank's amount changed after this was split; ${formatUsd(imbalance)} is unallocated.`
+            }
+          >
+            {splitLabel(row.node)}
+          </span>
+        );
+      }
       const refusal = categoryAssignmentRefusal({
         accountOffBudget: ctx.offBudgetAccountIds.has(row.node.accountId),
         categoryAssignable: row.node.categoryAssignable,
