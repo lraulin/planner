@@ -84,10 +84,15 @@ function compareParts(
   right: GroupPart,
   dimension: AmazonGroupBy,
 ): number {
-  if (dimension === "year" || dimension === "month") {
+  // Year, month and order are newest-first so a card charge lines up with the
+  // orders at the top of the list. Channel stays A–Z.
+  if (dimension === "channel") {
+    return String(left.sort).localeCompare(String(right.sort));
+  }
+  if (typeof left.sort === "number" && typeof right.sort === "number") {
     return Number(right.sort) - Number(left.sort);
   }
-  return String(left.sort).localeCompare(String(right.sort));
+  return String(right.sort).localeCompare(String(left.sort));
 }
 
 function toGridRow(row: AmazonItemListRow): GridRow<AmazonItemListRow> {
@@ -158,4 +163,67 @@ export function groupAmazonItems(
   }
   closeTo(0);
   return out;
+}
+
+/** Paid cents of every item under each group header, nested groups included. */
+export function amazonGroupPaidCents(
+  rows: readonly GridRow<AmazonItemListRow>[],
+): Map<string, number> {
+  const paid = new Map<string, number>();
+  const stack: { id: string; depth: number }[] = [];
+  for (const row of rows) {
+    if (row.kind === "group") {
+      while (stack.length > 0 && stack[stack.length - 1].depth >= row.depth) {
+        stack.pop();
+      }
+      paid.set(row.id, 0);
+      stack.push({ id: row.id, depth: row.depth });
+      continue;
+    }
+    const cents = row.node.itemPaidCents ?? 0;
+    for (const frame of stack) {
+      paid.set(frame.id, (paid.get(frame.id) ?? 0) + cents);
+    }
+  }
+  return paid;
+}
+
+/**
+ * Match status and charge for an order group. Year/month buckets stay unlabeled — mixed
+ * orders in a month are not one match.
+ */
+export function amazonOrderGroupMatch(
+  rows: readonly GridRow<AmazonItemListRow>[],
+): Map<string, { matchLabel: string | null; chargeId: string | null }> {
+  const out = new Map<string, { matchLabel: string | null; chargeId: string | null }>();
+  const stack: { id: string; depth: number; isOrder: boolean }[] = [];
+  for (const row of rows) {
+    if (row.kind === "group") {
+      while (stack.length > 0 && stack[stack.length - 1].depth >= row.depth) {
+        stack.pop();
+      }
+      const isOrder = /(^|\|)order:/.test(row.id.slice("group:".length));
+      if (isOrder) out.set(row.id, { matchLabel: null, chargeId: null });
+      stack.push({ id: row.id, depth: row.depth, isOrder });
+      continue;
+    }
+    for (const frame of stack) {
+      if (!frame.isOrder) continue;
+      const current = out.get(frame.id) ?? { matchLabel: null, chargeId: null };
+      if (row.node.matchLabel === "Review" || current.matchLabel === null) {
+        current.matchLabel = row.node.matchLabel;
+      } else if (row.node.matchLabel === "Matched" && current.matchLabel !== "Review") {
+        current.matchLabel = "Matched";
+      }
+      if (!current.chargeId && row.node.chargeId) current.chargeId = row.node.chargeId;
+      out.set(frame.id, current);
+    }
+  }
+  return out;
+}
+
+export function amazonReviewChargeTitle(orderIds: readonly string[]): string {
+  if (orderIds.length === 1) return `Order ${orderIds[0]}`;
+  if (orderIds.length > 1) return `${orderIds.length} orders`;
+  return "Amazon charge";
 }

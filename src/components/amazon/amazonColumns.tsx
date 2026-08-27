@@ -10,7 +10,9 @@ import {
 } from "@/lib/amazon/amazonFields";
 import type { AmazonItemListRow } from "@/lib/amazon/types";
 
-export type AmazonColumnCtx = Record<string, never>;
+export type AmazonColumnCtx = {
+  onReview: (row: AmazonItemListRow) => void;
+};
 
 export const AMAZON_COLUMN_IDS = AMAZON_VISIBLE_COLUMN_IDS;
 
@@ -154,12 +156,21 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     width: "6rem",
     ...accessors("match"),
     compact: "meta",
-    render: (row) => (
-      <Text
-        value={row.node.matchLabel ?? ""}
-        muted={row.node.matchLabel !== "Review"}
-      />
-    ),
+    render: (row, ctx) =>
+      row.node.matchLabel === "Review" ? (
+        <button
+          type="button"
+          className="min-h-tap text-left text-[0.8125rem] text-[var(--select-edge)] underline-offset-2 hover:underline md:min-h-0"
+          onClick={(event) => {
+            event.stopPropagation();
+            ctx.onReview(row.node);
+          }}
+        >
+          Review
+        </button>
+      ) : (
+        <Text value={row.node.matchLabel ?? ""} />
+      ),
   },
   {
     id: "status",

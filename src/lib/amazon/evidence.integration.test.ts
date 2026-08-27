@@ -17,6 +17,7 @@ import {
   listAmazonChargeOrders,
   listAmazonCharges,
   listAmazonItems,
+  listAmazonReviewItems,
   listAmazonSubscriptions,
 } from "./queries";
 import { persistAmazonSnapshot } from "./reconcile";
@@ -279,5 +280,42 @@ describeDb("amazon snapshot evidence", () => {
     expect(await getAmazonSubscription(owner, subscription.id)).not.toBeNull();
     expect(await getAmazonCharge(owner, charge.id)).not.toBeNull();
     expect(await listAmazonItems(owner)).toHaveLength(1);
+  });
+
+  it("lists a review charge as its orders and items, never to a second user", async () => {
+    const owner = await makeUser();
+    const intruder = await makeUser();
+    await persistAmazonSnapshot(owner, snapshot());
+    const [charge] = await listAmazonCharges(owner);
+    await updateAmazonChargeReview(owner, charge.id, {
+      needsReview: true,
+      reviewReason: "date differs",
+    });
+
+    const listed = await listAmazonReviewItems(owner);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({
+      kind: "charge",
+      id: charge.id,
+      title: "2 orders",
+      reason: "date differs",
+    });
+    expect(listed[0].amazonOrderIds.slice().sort()).toEqual([
+      "114-1111111-1111111",
+      "114-2222222-2222222",
+    ]);
+    expect(listed[0].lines).toEqual([
+      expect.objectContaining({
+        amazonOrderId: "114-1111111-1111111",
+        productName: "Toilet paper",
+        itemPaidCents: 1899,
+      }),
+    ]);
+    expect(await listAmazonReviewItems(intruder)).toEqual([]);
+
+    const [item] = await listAmazonItems(owner);
+    expect(item.matchLabel).toBe("Review");
+    expect(item.chargeId).toBe(charge.id);
+    expect((await listAmazonItems(intruder))[0]?.chargeId).toBeUndefined();
   });
 });

@@ -7,9 +7,11 @@ import {
   useState,
   useSyncExternalStore,
   useTransition,
+  type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
 import { AMAZON_GROUP_BY_VALUES } from "@/lib/amazon/grouping";
+import { formatUsd } from "@/lib/finances/money";
 import type { AmazonItemListRow } from "@/lib/amazon/types";
 import {
   parseAmazonOrdersQuery,
@@ -43,9 +45,19 @@ import {
 } from "./amazonColumns";
 import { useAmazonSource } from "./useAmazonSource";
 
-const AMAZON_VIEWS = [{ id: "all", label: "All Orders" }] as const;
+const AMAZON_VIEWS = [
+  { id: "all", label: "All Orders" },
+  { id: "by-order", label: "By order" },
+] as const;
 
-function viewDefaults(collapsedYears: string[]): GridDefaults {
+function viewDefaults(viewId: string, collapsedYears: string[]): GridDefaults {
+  if (viewId === "by-order") {
+    return {
+      order: [...AMAZON_COLUMN_IDS],
+      sorts: [{ columnId: "date", direction: "desc" }],
+      groupBy: ["order"],
+    };
+  }
   return {
     order: [...AMAZON_COLUMN_IDS],
     sorts: [{ columnId: "date", direction: "desc" }],
@@ -83,6 +95,7 @@ export function AmazonOrdersView({
     items: SupplyItemRow[];
   } | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewChargeId, setReviewChargeId] = useState<string | null>(null);
   const router = useRouter();
   const today = useToday();
   const isClient = useIsClient();
@@ -96,7 +109,10 @@ export function AmazonOrdersView({
         menu: "item" as const,
         icon: "open" as const,
         keywords: "amazon subscribe save match review charge",
-        run: () => setReviewOpen(true),
+        run: () => {
+          setReviewChargeId(null);
+          setReviewOpen(true);
+        },
       },
     ],
     [],
@@ -104,7 +120,7 @@ export function AmazonOrdersView({
   useRegisterCommands(reviewCommands);
 
   const defaultsFor = useCallback(
-    () => viewDefaults(defaultCollapsedGroups),
+    (viewId: string) => viewDefaults(viewId, defaultCollapsedGroups),
     [defaultCollapsedGroups],
   );
   const views = useModuleViews({
@@ -155,7 +171,14 @@ export function AmazonOrdersView({
     onVisibleRange,
     loadExportRows,
     rowById,
+    groupPaidCents,
+    groupMatch,
   } = source;
+
+  const openReview = useCallback((chargeId: string | null) => {
+    setReviewChargeId(chargeId);
+    setReviewOpen(true);
+  }, []);
   const { order, onIdsChange } = useNavigableIds(index.nodeIds);
   const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } =
     useMultiSelect(order, null);
@@ -191,7 +214,7 @@ export function AmazonOrdersView({
             row?.matchLabel === "Review"
               ? undefined
               : "This line has no unresolved Amazon charge.",
-          onSelect: () => setReviewOpen(true),
+          onSelect: () => openReview(row?.chargeId ?? null),
         },
         {
           label: "Add to Supplies…",
@@ -217,7 +240,41 @@ export function AmazonOrdersView({
         },
       ];
     },
-    [rowById, router],
+    [rowById, router, openReview],
+  );
+
+  const columnCtx = useMemo(
+    () => ({
+      onReview: (row: AmazonItemListRow) => openReview(row.chargeId),
+    }),
+    [openReview],
+  );
+
+  const groupTotals = useCallback(
+    (_members: AmazonItemListRow[], group: { id: string }) => {
+      const paid = groupPaidCents.get(group.id);
+      const match = groupMatch.get(group.id);
+      const totals: Record<string, ReactNode> = {};
+      if (paid !== undefined) totals.paid = formatUsd(paid);
+      if (match?.matchLabel === "Review" && match.chargeId) {
+        totals.match = (
+          <button
+            type="button"
+            className="min-h-tap text-left text-[0.8125rem] font-semibold text-[var(--select-edge)] underline-offset-2 hover:underline md:min-h-0"
+            onClick={(event) => {
+              event.stopPropagation();
+              openReview(match.chargeId);
+            }}
+          >
+            Review
+          </button>
+        );
+      } else if (match?.matchLabel) {
+        totals.match = match.matchLabel;
+      }
+      return Object.keys(totals).length > 0 ? totals : null;
+    },
+    [groupPaidCents, groupMatch, openReview],
   );
 
   return (
@@ -238,7 +295,12 @@ export function AmazonOrdersView({
         rows={isClient ? gridRows : []}
         columns={gridState.columns}
         allColumns={amazonColumns}
-        columnCtx={{}}
+        columnCtx={columnCtx}
+        onOpenDetail={(id) => {
+          const row = rowById(id);
+          if (row?.matchLabel === "Review") openReview(row.chargeId);
+        }}
+        groupTotals={groupTotals}
         selectedId={selectedId}
         selectedIds={selectedIds}
         selectAllState={headerState}
@@ -324,7 +386,14 @@ export function AmazonOrdersView({
       >
         <AmazonSnapshotPanel />
       </FileImportHost>
-      <AmazonReviewDrawer open={reviewOpen} onClose={() => setReviewOpen(false)} />
+      <AmazonReviewDrawer
+        open={reviewOpen}
+        focusChargeId={reviewChargeId}
+        onClose={() => {
+          setReviewOpen(false);
+          setReviewChargeId(null);
+        }}
+      />
     </div>
   );
 }

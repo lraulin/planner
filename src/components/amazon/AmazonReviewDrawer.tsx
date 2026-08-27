@@ -14,9 +14,11 @@ import type { AmazonReviewRow } from "@/lib/amazon/queries";
 
 export function AmazonReviewDrawer({
   open,
+  focusChargeId,
   onClose,
 }: {
   open: boolean;
+  focusChargeId: string | null;
   onClose: () => void;
 }) {
   const titleId = useId();
@@ -62,10 +64,13 @@ export function AmazonReviewDrawer({
         return;
       }
       setItems(listed.data);
-      const first = listed.data[0] ?? null;
-      setSelectedId(first?.id ?? null);
-      if (first?.kind === "charge") {
-        const found = await listAmazonChargeCandidatesAction(first.id);
+      const focused =
+        (focusChargeId ? listed.data.find((row) => row.id === focusChargeId) : null) ??
+        listed.data[0] ??
+        null;
+      setSelectedId(focused?.id ?? null);
+      if (focused?.kind === "charge") {
+        const found = await listAmazonChargeCandidatesAction(focused.id);
         if (!found.ok) {
           setError(found.error);
           return;
@@ -77,7 +82,7 @@ export function AmazonReviewDrawer({
       setCandidates([]);
       setPicked(null);
     });
-  }, [open]);
+  }, [open, focusChargeId]);
 
   function save(close: boolean) {
     if (!selected || selected.kind !== "charge" || !picked) {
@@ -106,6 +111,9 @@ export function AmazonReviewDrawer({
     });
   }
 
+  const lineTotal =
+    selected?.lines.reduce((sum, line) => sum + (line.itemPaidCents ?? 0), 0) ?? 0;
+
   return (
     <Drawer open={open} onClose={onClose} labelledBy={titleId}>
       <DrawerHeader
@@ -131,19 +139,59 @@ export function AmazonReviewDrawer({
                   }`}
                 >
                   <div className="font-medium">{row.title}</div>
-                  <div className="text-[0.75rem] text-ink-muted">{row.reason}</div>
+                  <div className="text-[0.75rem] text-ink-muted">
+                    {row.amountCents !== null ? `${formatUsd(row.amountCents)} · ` : ""}
+                    {row.reason}
+                  </div>
                 </button>
               </li>
             ))}
           </ul>
         )}
         {selected?.kind === "charge" && (
-          <div className="mt-4 space-y-2">
+          <div className="mt-4 space-y-3">
             <p className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted">
-              Equal-amount Amazon rows
+              Order items
+            </p>
+            <p className="text-ink-muted">
+              Items in an order add up to what the card was charged. Match this total to
+              the posted Amazon row of the same amount.
+            </p>
+            {selected.lines.length === 0 ? (
+              <p className="text-ink-muted">No line items on the linked orders yet.</p>
+            ) : (
+              <ul className="space-y-1">
+                {selected.lines.map((line, index) => (
+                  <li
+                    key={`${line.amazonOrderId}:${index}`}
+                    className="flex justify-between gap-3"
+                  >
+                    <span className="min-w-0 truncate">
+                      {selected.amazonOrderIds.length > 1
+                        ? `${line.amazonOrderId} · ${line.productName}`
+                        : line.productName}
+                    </span>
+                    <span className="tabular text-ink-muted">
+                      {line.itemPaidCents === null
+                        ? "—"
+                        : formatUsd(line.itemPaidCents)}
+                    </span>
+                  </li>
+                ))}
+                <li className="flex justify-between gap-3 border-t border-rule pt-1 font-medium">
+                  <span>Order total</span>
+                  <span className="tabular">{formatUsd(lineTotal)}</span>
+                </li>
+              </ul>
+            )}
+            <p className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted">
+              Card charge of the same amount
             </p>
             {candidates.length === 0 ? (
-              <p className="text-ink-muted">No equal-amount Amazon row to approve.</p>
+              <p className="text-ink-muted">
+                No posted Amazon row of {formatUsd(selected.amountCents ?? lineTotal)}{" "}
+                to approve.
+              </p>
             ) : (
               candidates.map((row) => (
                 <label

@@ -27,7 +27,12 @@ import {
   amazonFields,
   amazonFilterValues,
 } from "./amazonFields";
-import { asAmazonGroupBy, groupAmazonItems } from "./grouping";
+import {
+  amazonGroupPaidCents,
+  amazonOrderGroupMatch,
+  asAmazonGroupBy,
+  groupAmazonItems,
+} from "./grouping";
 import type { AmazonItemListRow } from "./types";
 
 export const AMAZON_BLOCK_SIZE = 100;
@@ -46,7 +51,16 @@ export type AmazonOrdersQuery = {
 };
 
 export type AmazonOrdersIndexEntry =
-  | { kind: "group"; id: string; label: string; count: number; depth: number }
+  | {
+      kind: "group";
+      id: string;
+      label: string;
+      count: number;
+      depth: number;
+      paidCents: number;
+      matchLabel: string | null;
+      chargeId: string | null;
+    }
   | { kind: "node"; id: string };
 
 export type AmazonOrdersIndex = {
@@ -240,6 +254,8 @@ export function prepareAmazonOrders(
   );
   const matched = passingRows(items, query);
   const grouped = groupAmazonItems(matched, query.groupBy);
+  const paidByGroup = amazonGroupPaidCents(grouped);
+  const matchByGroup = amazonOrderGroupMatch(grouped);
   const collapsed = applyGroupCollapse(grouped, new Set(query.collapsedGroups));
   const keys = query.sorts.flatMap((entry) => {
     const field = amazonFields[entry.columnId as keyof typeof amazonFields];
@@ -262,12 +278,16 @@ export function prepareAmazonOrders(
   }
   for (const row of display) {
     if (row.kind === "group") {
+      const match = matchByGroup.get(row.id);
       entries.push({
         kind: "group",
         id: row.id,
         label: row.label,
         count: row.count,
         depth: row.depth,
+        paidCents: paidByGroup.get(row.id) ?? 0,
+        matchLabel: match?.matchLabel ?? null,
+        chargeId: match?.chargeId ?? null,
       });
       continue;
     }

@@ -177,4 +177,6 @@ export type AmazonItemListRow = {
   refundCount: number;
   billName: string | null;
   matchLabel: string | null;
+  /** The Amazon charge this order is waiting on or already matched to. */
+  chargeId: string | null;
 };

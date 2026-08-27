@@ -12,6 +12,7 @@ import {
   financeBudgetCategories,
 } from "@/db/schema";
 import { numericStringToCents } from "@/lib/finances/money";
+import { amazonReviewChargeTitle } from "./grouping";
 import {
   AMAZON_BLOCK_SIZE,
   parseAmazonOrdersQuery,
@@ -207,6 +208,7 @@ function toListRow(
     refundCount: refunds.get(row.amazonOrderId) ?? 0,
     billName: null,
     matchLabel: null,
+    chargeId: null,
     lineId: row.externalId,
   };
 }
@@ -291,17 +293,26 @@ async function stampItemEvidence(
   return rows.map((row) => {
     const billId = billByLine.get(row.lineId) ?? uniqueBillByAsin.get(row.asin) ?? null;
     const chargeIds = chargesByOrder.get(row.amazonOrderId) ?? [];
+    const reviewId = chargeIds.find((id) => reviewCharges.has(id)) ?? null;
+    const matchedId = chargeIds.find((id) => matchedCharges.has(id)) ?? null;
     let matchLabel: string | null = null;
-    if (chargeIds.some((id) => matchedCharges.has(id))) matchLabel = "Matched";
-    else if (chargeIds.some((id) => reviewCharges.has(id))) matchLabel = "Review";
+    if (reviewId) matchLabel = "Review";
+    else if (matchedId) matchLabel = "Matched";
     const { lineId: _lineId, ...rest } = row;
     return {
       ...rest,
       billName: billId ? (billNameById.get(billId) ?? null) : null,
       matchLabel,
+      chargeId: reviewId ?? matchedId,
     };
   });
 }
+
+export type AmazonReviewLine = {
+  amazonOrderId: string;
+  productName: string;
+  itemPaidCents: number | null;
+};
 
 export type AmazonReviewRow = {
   kind: "charge" | "subscription";
@@ -310,6 +321,8 @@ export type AmazonReviewRow = {
   reason: string;
   date: string;
   amountCents: number | null;
+  amazonOrderIds: string[];
+  lines: AmazonReviewLine[];
 };
 
 export async function listAmazonReviewItems(
@@ -332,15 +345,70 @@ export async function listAmazonReviewItems(
         ),
       ),
   ]);
+  const chargeIds = charges.map((row) => row.id);
+  const links =
+    chargeIds.length === 0
+      ? []
+      : await db
+          .select({
+            chargeId: amazonChargeOrders.chargeId,
+            amazonOrderId: amazonChargeOrders.amazonOrderId,
+          })
+          .from(amazonChargeOrders)
+          .where(
+            and(
+              eq(amazonChargeOrders.userId, userId),
+              inArray(amazonChargeOrders.chargeId, chargeIds),
+            ),
+          );
+  const orderIds = [...new Set(links.map((row) => row.amazonOrderId))];
+  const itemRows =
+    orderIds.length === 0
+      ? []
+      : await db
+          .select({
+            amazonOrderId: amazonOrderItems.amazonOrderId,
+            productName: amazonOrderItems.productName,
+            itemPaid: amazonOrderItems.itemPaid,
+          })
+          .from(amazonOrderItems)
+          .where(
+            and(
+              eq(amazonOrderItems.userId, userId),
+              inArray(amazonOrderItems.amazonOrderId, orderIds),
+            ),
+          );
+  const ordersByCharge = new Map<string, string[]>();
+  for (const link of links) {
+    const list = ordersByCharge.get(link.chargeId) ?? [];
+    list.push(link.amazonOrderId);
+    ordersByCharge.set(link.chargeId, list);
+  }
+  const linesByOrder = new Map<string, AmazonReviewLine[]>();
+  for (const row of itemRows) {
+    const list = linesByOrder.get(row.amazonOrderId) ?? [];
+    list.push({
+      amazonOrderId: row.amazonOrderId,
+      productName: row.productName,
+      itemPaidCents: numericStringToCents(row.itemPaid),
+    });
+    linesByOrder.set(row.amazonOrderId, list);
+  }
+
   return [
-    ...charges.map((row) => ({
-      kind: "charge" as const,
-      id: row.id,
-      title: `Payment ${row.amazonPaymentId}`,
-      reason: row.reviewReason,
-      date: row.paymentDate ?? "",
-      amountCents: numericStringToCents(row.amount),
-    })),
+    ...charges.map((row) => {
+      const amazonOrderIds = [...new Set(ordersByCharge.get(row.id) ?? [])];
+      return {
+        kind: "charge" as const,
+        id: row.id,
+        title: amazonReviewChargeTitle(amazonOrderIds),
+        reason: row.reviewReason,
+        date: row.paymentDate ?? "",
+        amountCents: numericStringToCents(row.amount),
+        amazonOrderIds,
+        lines: amazonOrderIds.flatMap((orderId) => linesByOrder.get(orderId) ?? []),
+      };
+    }),
     ...subscriptions.map((row) => ({
       kind: "subscription" as const,
       id: row.id,
@@ -348,6 +416,8 @@ export async function listAmazonReviewItems(
       reason: row.reviewReason,
       date: row.nextDeliveryDate ?? "",
       amountCents: null,
+      amazonOrderIds: [] as string[],
+      lines: [] as AmazonReviewLine[],
     })),
   ];
 }

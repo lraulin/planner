@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { customFilter, optionsFilter } from "@/lib/grid/customFilter";
+import { amazonReviewChargeTitle } from "./grouping";
 import type { AmazonItemListRow } from "./types";
 import {
   parseAmazonOrdersQuery,
@@ -33,6 +34,7 @@ function item(
     refundCount: 0,
     billName: null,
     matchLabel: null,
+    chargeId: null,
     ...over,
   };
 }
@@ -48,6 +50,13 @@ function query(over: Partial<AmazonOrdersQuery> = {}): AmazonOrdersQuery {
     ...over,
   });
 }
+
+describe("amazonReviewChargeTitle", () => {
+  it("names a charge by its orders, not by a payment id", () => {
+    expect(amazonReviewChargeTitle(["114-aaa"])).toBe("Order 114-aaa");
+    expect(amazonReviewChargeTitle(["114-aaa", "114-bbb"])).toBe("2 orders");
+  });
+});
 
 describe("parseAmazonOrdersQuery", () => {
   it("drops unknown columns, caps search, and ignores a hidden-column sort", () => {
@@ -152,6 +161,50 @@ describe("prepareAmazonOrders", () => {
         query({ groupBy: [], filters: { paid: greaterThanZero } }),
       ).index.nodeIds,
     ).toEqual(["paid"]);
+  });
+
+  it("puts the order total on the order group, not on each item", () => {
+    const prepared = prepareAmazonOrders(
+      [
+        item({
+          id: "a",
+          orderDate: "2026-08-01",
+          amazonOrderId: "114-aaa",
+          itemPaidCents: 1800,
+        }),
+        item({
+          id: "b",
+          orderDate: "2026-08-01",
+          amazonOrderId: "114-aaa",
+          itemPaidCents: 314,
+          matchLabel: "Review",
+          chargeId: "charge-1",
+        }),
+        item({
+          id: "c",
+          orderDate: "2026-08-02",
+          amazonOrderId: "114-bbb",
+          itemPaidCents: 500,
+        }),
+      ],
+      query({ groupBy: ["order"] }),
+    );
+    const groups = prepared.index.entries.filter((entry) => entry.kind === "group");
+    expect(groups).toHaveLength(2);
+    const first = groups.find(
+      (entry) => entry.kind === "group" && entry.label === "114-aaa",
+    );
+    const second = groups.find(
+      (entry) => entry.kind === "group" && entry.label === "114-bbb",
+    );
+    expect(first?.kind === "group" && first.paidCents).toBe(2114);
+    expect(first?.kind === "group" && first.matchLabel).toBe("Review");
+    expect(first?.kind === "group" && first.chargeId).toBe("charge-1");
+    expect(second?.kind === "group" && second.paidCents).toBe(500);
+    expect(groups.map((entry) => (entry.kind === "group" ? entry.label : ""))).toEqual([
+      "114-bbb",
+      "114-aaa",
+    ]);
   });
 });
 

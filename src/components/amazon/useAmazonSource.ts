@@ -41,6 +41,7 @@ function placeholder(id: string): AmazonItemListRow {
     refundCount: 0,
     billName: null,
     matchLabel: null,
+    chargeId: null,
   };
 }
 
@@ -203,10 +204,36 @@ export function useAmazonSource({
     [cache],
   );
 
+  const groupPaidCents = useMemo(() => {
+    const paid = new Map<string, number>();
+    for (const entry of index.entries) {
+      if (entry.kind === "group") paid.set(entry.id, entry.paidCents);
+    }
+    return paid;
+  }, [index.entries]);
+
+  const groupMatch = useMemo(() => {
+    const match = new Map<
+      string,
+      { matchLabel: string | null; chargeId: string | null }
+    >();
+    for (const entry of index.entries) {
+      if (entry.kind === "group") {
+        match.set(entry.id, {
+          matchLabel: entry.matchLabel,
+          chargeId: entry.chargeId,
+        });
+      }
+    }
+    return match;
+  }, [index.entries]);
+
   return {
     index,
     gridRows,
     pendingRowIds,
+    groupPaidCents,
+    groupMatch,
     error,
     setError,
     onVisibleRange,

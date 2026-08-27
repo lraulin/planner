@@ -123,9 +123,10 @@ refunded or incomplete stays in review.
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                                                                                       | Why                                                                                        |
-| --- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| 1   | Orders uses the Register windowed index (100-row blocks) rather than hydrating every receipt | Thousands of line items froze the page once Bill/Match evidence was stamped onto every row |
+| #   | Change                                                                                                                    | Why                                                                                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 1   | Orders uses the Register windowed index (100-row blocks) rather than hydrating every receipt                              | Thousands of line items froze the page once Bill/Match evidence was stamped onto every row  |
+| 2   | Match Review is a link into order-level review; Group by Order headers carry the item total; newest orders sit at the top | Rows are items; the card charge matches the order total, which Group by Order makes visible |
 
 ## Task 1: Save spec documentation
 
