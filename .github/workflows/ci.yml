@@ -1,0 +1,73 @@
+# The gate for branches that never touch Lee's machine.
+#
+# Every other gate here is a git hook (.husky/pre-commit, .husky/pre-push), which covers
+# every commit that originates locally and nothing else. A Dependabot branch never fires a
+# hook, so before this workflow no PR had ever had lint, typecheck or a test run against it.
+#
+# pull_request only, deliberately. CI on push would duplicate the pre-push hook and report
+# after the Vercel deploy had already started; see
+# agent-os/specs/2026-08-27-0736-pull-request-ci/.
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+# Nothing here writes to the repo. pull_request (not pull_request_target) also keeps fork
+# code out of a privileged context.
+permissions:
+  contents: read
+
+# A Dependabot rebase supersedes its own in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+
+    # Matches docker-compose.yml, so DATABASE_URL is the same string developers use.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: planner
+          POSTGRES_PASSWORD: planner
+          POSTGRES_DB: planner
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U planner -d planner"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://planner:planner@localhost:5432/planner
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Migrate rather than push: it is what production does, and it makes CI the only place
+      # the full migration chain is applied to an empty database on every run. A dead service
+      # container fails here, before the tests get a chance to skip.
+      - run: npm run db:migrate
+
+      # The npm scripts directly, not scripts/gate.sh — that exists to keep a passing gate
+      # silent for agents reading hook output, and a CI failure wants its full log.
+      - run: npm run lint
+      - run: npm run typecheck
+
+      # Chained on purpose: vitest applies isolation and worker count per process, not per
+      # project (see vitest.config.ts). Do not collapse this to one vitest invocation.
+      - run: npm test

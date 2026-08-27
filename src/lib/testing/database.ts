@@ -13,6 +13,11 @@ import postgres from "postgres";
  * skips, because "Docker isn't running" should never block a commit. An *unset*
  * DATABASE_URL still throws from `@/db` at import, because that means the environment
  * was never set up, and its error already names the fix (copy `.env.example`).
+ *
+ * Under CI there is no third option: a developer with Docker down is a convenience, a
+ * workflow whose Postgres service never came up is a broken gate. Skipping there would
+ * turn a dead service container into a green build — the exact failure `.husky/pre-push`
+ * was written to close for pushes. So in CI an unreachable database throws.
  */
 export async function databaseReachable(): Promise<boolean> {
   const url = process.env.DATABASE_URL;
@@ -26,7 +31,15 @@ export async function databaseReachable(): Promise<boolean> {
   try {
     await probe`select 1`;
     return true;
-  } catch {
+  } catch (cause) {
+    if (process.env.CI) {
+      throw new Error(
+        `No Postgres at DATABASE_URL, and CI is set. The integration tests must not skip ` +
+          `in CI: a green run there would mean the service container is broken, not that ` +
+          `the database code is fine.`,
+        { cause },
+      );
+    }
     return false;
   } finally {
     await probe.end({ timeout: 1 });
