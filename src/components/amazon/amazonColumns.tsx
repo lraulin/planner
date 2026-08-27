@@ -16,6 +16,8 @@ export const AMAZON_COLUMN_IDS = [
   "discounts",
   "payment",
   "sns",
+  "bill",
+  "match",
   "status",
   "channel",
   "website",
@@ -155,6 +157,31 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     sortValue: (row) => (row.node.subscribeAndSave ? 1 : 0),
     compact: "meta",
     render: (row) => <Text value={row.node.subscribeAndSave ? "Yes" : ""} />,
+  },
+  {
+    id: "bill",
+    label: "Bill",
+    width: "10rem",
+    filterKind: "text",
+    filterValue: (row) => row.node.billName,
+    sortValue: (row) => row.node.billName ?? "",
+    compact: "meta",
+    render: (row) => <Text value={row.node.billName ?? ""} />,
+  },
+  {
+    id: "match",
+    label: "Match",
+    width: "6rem",
+    filterKind: "enum",
+    filterValue: (row) => row.node.matchLabel,
+    sortValue: (row) => row.node.matchLabel ?? "",
+    compact: "meta",
+    render: (row) => (
+      <Text
+        value={row.node.matchLabel ?? ""}
+        muted={row.node.matchLabel !== "Review"}
+      />
+    ),
   },
   {
     id: "status",

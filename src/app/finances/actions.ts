@@ -144,6 +144,16 @@ import {
 } from "@/lib/finances/tags/mutations";
 import { listFinanceTags, type FinanceTagRow } from "@/lib/finances/tags/queries";
 import {
+  applyAmazonSnapshotText,
+  approveAmazonChargeMatch,
+  listAmazonChargeCandidates,
+  previewAmazonSnapshotText,
+  type AmazonChargeCandidate,
+  type AmazonSnapshotApplyResult,
+} from "@/lib/amazon/apply";
+import type { AmazonPreview } from "@/lib/amazon/preview";
+import { listAmazonReviewItems, type AmazonReviewRow } from "@/lib/amazon/queries";
+import {
   run,
   runQuery,
   runWithData,
@@ -762,4 +772,37 @@ export async function addSupplyFromAmazonItemAction(
   asin: string,
 ): Promise<ActionResult> {
   return run((userId) => addSupplyItemFromAmazon(userId, asin), { revalidate: [] });
+}
+
+export async function previewAmazonSnapshotAction(
+  text: string,
+): Promise<DataActionResult<AmazonPreview>> {
+  return runWithData((userId) => previewAmazonSnapshotText(userId, text), {
+    revalidate: [],
+  });
+}
+
+export async function applyAmazonSnapshotAction(
+  text: string,
+): Promise<DataActionResult<AmazonSnapshotApplyResult>> {
+  return runWithData((userId) => applyAmazonSnapshotText(userId, text));
+}
+
+export async function listAmazonReviewItemsAction(): Promise<
+  QueryResult<AmazonReviewRow[]>
+> {
+  return runQuery((userId) => listAmazonReviewItems(userId));
+}
+
+export async function listAmazonChargeCandidatesAction(
+  chargeId: string,
+): Promise<QueryResult<AmazonChargeCandidate[]>> {
+  return runQuery((userId) => listAmazonChargeCandidates(userId, chargeId));
+}
+
+export async function approveAmazonChargeMatchAction(
+  chargeId: string,
+  transactionId: string,
+): Promise<ActionResult> {
+  return run((userId) => approveAmazonChargeMatch(userId, chargeId, transactionId));
 }

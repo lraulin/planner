@@ -9,6 +9,9 @@ import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { FileImportHost } from "@/components/import/FileImportHost";
 import { AmazonImportPanel } from "@/components/settings/AmazonImportPanel";
+import { AmazonSnapshotPanel } from "@/components/amazon/AmazonSnapshotPanel";
+import { AmazonReviewDrawer } from "@/components/amazon/AmazonReviewDrawer";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
@@ -36,6 +39,8 @@ function viewDefaults(): GridDefaults {
       "paid",
       "payment",
       "sns",
+      "bill",
+      "match",
       "status",
       "channel",
       "orderId",
@@ -61,7 +66,24 @@ export function AmazonOrdersView({
     asin: string;
     items: SupplyItemRow[];
   } | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const router = useRouter();
+
+  const reviewCommands = useMemo(
+    () => [
+      {
+        id: "amazon.review-matches",
+        label: "Review Amazon matches…",
+        group: "view" as const,
+        menu: "item" as const,
+        icon: "open" as const,
+        keywords: "amazon subscribe save match review charge",
+        run: () => setReviewOpen(true),
+      },
+    ],
+    [],
+  );
+  useRegisterCommands(reviewCommands);
 
   if (initialItems !== seen) {
     setSeen(initialItems);
@@ -121,6 +143,15 @@ export function AmazonOrdersView({
       const row = rows.find((candidate) => candidate.id === rowId);
       const asin = row?.asin ?? "";
       return [
+        {
+          label: "Review Amazon match…",
+          disabled: row?.matchLabel !== "Review",
+          title:
+            row?.matchLabel === "Review"
+              ? undefined
+              : "This line has no unresolved Amazon charge.",
+          onSelect: () => setReviewOpen(true),
+        },
         {
           label: "Add to Supplies…",
           disabled: pending || asin === "",
@@ -234,6 +265,16 @@ export function AmazonOrdersView({
       >
         <AmazonImportPanel embedded />
       </FileImportHost>
+      <FileImportHost
+        commandId="import.amazon-snapshot"
+        label="Import Amazon subscription snapshot…"
+        keywords="amazon subscribe save snapshot payments bills"
+        title="Import Amazon subscription snapshot"
+        width="max-w-2xl"
+      >
+        <AmazonSnapshotPanel />
+      </FileImportHost>
+      <AmazonReviewDrawer open={reviewOpen} onClose={() => setReviewOpen(false)} />
     </div>
   );
 }

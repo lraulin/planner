@@ -141,35 +141,35 @@ polish.
 
 ## Task 3: Receipt evidence schema and reconciliation
 
-- [ ] Add per-user subscription, charge, charge-order, match and allocation tables.
-- [ ] Generate, inspect and apply the Drizzle migration with snapshot and journal entry.
-- [ ] Reconcile browser rows into the existing canonical Amazon order/item records.
-- [ ] Cover upsert idempotence and cross-user read/change/delete refusal in integration tests.
+- [x] Add per-user subscription, charge, charge-order, match and allocation tables.
+- [x] Generate, inspect and apply the Drizzle migration with snapshot and journal entry.
+- [x] Reconcile browser rows into the existing canonical Amazon order/item records.
+- [x] Cover upsert idempotence and cross-user read/change/delete refusal in integration tests.
 
 ## Task 4: Import preview and apply
 
-- [ ] Build pure preview decisions for Bill creates/drift, exact matches and review work.
-- [ ] Revalidate the raw capture and decisions server-side; atomically store evidence and
+- [x] Build pure preview decisions for Bill creates/drift, exact matches and review work.
+- [x] Revalidate the raw capture and decisions server-side; atomically store evidence and
       approved effects.
-- [ ] Return stable result counts through thin finance actions.
+- [x] Return stable result counts through thin finance actions.
 
 ## Task 5: Subscription Bill sync
 
-- [ ] Create/link Bills by subscription id and preserve user-owned Bill fields on refresh.
-- [ ] Link only blank, unambiguous Supply envelopes.
-- [ ] Extend Bill last-charge evidence without creating Amazon product payees.
+- [x] Create/link Bills by subscription id and preserve user-owned Bill fields on refresh.
+- [x] Link only blank, unambiguous Supply envelopes.
+- [x] Extend Bill last-charge evidence without creating Amazon product payees.
 
 ## Task 6: Exact matcher and split application
 
-- [ ] Implement strict automatic candidate selection and proportional receipt allocation.
-- [ ] Apply direct categories or exact balanced splits in one domain transaction.
-- [ ] Persist automatic/manual provenance and protect later manual edits.
+- [x] Implement strict automatic candidate selection and proportional receipt allocation.
+- [x] Apply direct categories or exact balanced splits in one domain transaction.
+- [x] Persist automatic/manual provenance and protect later manual edits.
 
 ## Task 7: Orders capture and review UI
 
-- [ ] Add the File command, capture modal/sheet, preview and inline errors.
-- [ ] Add Bill/Match grid columns and the persistent review drawer/sheet.
-- [ ] Keep every desktop action discoverable and tappable below `md`.
+- [x] Add the File command, capture modal/sheet, preview and inline errors.
+- [x] Add Bill/Match grid columns and the persistent review drawer/sheet.
+- [x] Keep every desktop action discoverable and tappable below `md`.
 
 ## Task 8: Verify, freeze spec, update roadmap
 
