@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { supplyMergeDecision, type SupplyMergeIdentity } from "./merge";
+import {
+  preservedOptionBrand,
+  supplyMergeDecision,
+  type SupplyMergeIdentity,
+} from "./merge";
 
 function identity(over: Partial<SupplyMergeIdentity> = {}): SupplyMergeIdentity {
   return {
@@ -50,5 +54,20 @@ describe("supplyMergeDecision", () => {
     expect(decision.discardedRates).toEqual([]);
     expect(decision.discardedGroups).toEqual([]);
     expect(decision.discardedEnvelopes).toEqual([]);
+  });
+});
+
+describe("preservedOptionBrand", () => {
+  it("keeps a brand that is already set", () => {
+    expect(preservedOptionBrand("Fancy Feast Grilled", "Canned Cat Food")).toBe(
+      "Fancy Feast Grilled",
+    );
+  });
+
+  it("takes the item name when Amazon left brand empty", () => {
+    expect(preservedOptionBrand("", "C4 Performance Energy Drink 12ct")).toBe(
+      "C4 Performance Energy Drink 12ct",
+    );
+    expect(preservedOptionBrand("   ", "C4 24ct")).toBe("C4 24ct");
   });
 });

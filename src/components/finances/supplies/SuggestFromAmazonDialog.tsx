@@ -67,6 +67,7 @@ export function SuggestFromAmazonDialog({
               },
         option: {
           vendor: "Amazon",
+          brand: suggestion.name,
           qtyPerItem: suggestion.qtyPerItem,
           costPerOrderCents: suggestion.costPerOrderCents,
           pricedOn: suggestion.lastOrderDate,

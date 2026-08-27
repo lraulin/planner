@@ -95,6 +95,18 @@ export function supplyMergeDecision(
   };
 }
 
+/**
+ * Specific product names live on the offer line (`brand`), not only on the item.
+ *
+ * Amazon create used to write the product title onto the item and leave brand empty, so a
+ * merge that deleted the source item also deleted the only copy of "C4 24ct". An empty
+ * brand takes the item name; a brand that is already set (Fancy Feast Grilled) is left
+ * alone. The generic label — Energy Drink, Cat Food — is the group the user types.
+ */
+export function preservedOptionBrand(brand: string, itemName: string): string {
+  return brand.trim() === "" ? itemName : brand;
+}
+
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
 }

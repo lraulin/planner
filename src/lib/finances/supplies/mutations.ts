@@ -9,6 +9,7 @@ import {
 import { parsePackCount } from "./packSize";
 import { listAmazonRepeatPurchases, listSupplyItems } from "./queries";
 import {
+  preservedOptionBrand,
   supplyMergeDecision,
   supplyMergeIdentity,
   type SupplyMergeDecision,
@@ -349,7 +350,12 @@ export async function createSupplyItemFromSuggestion(
 ): Promise<string> {
   const { option, ...item } = input;
   const itemId = await createSupplyItem(userId, item);
-  await createSupplyOption(userId, { ...option, itemId, inUse: true });
+  await createSupplyOption(userId, {
+    ...option,
+    itemId,
+    inUse: true,
+    brand: preservedOptionBrand(option.brand ?? "", item.name),
+  });
   return itemId;
 }
 
@@ -418,10 +424,12 @@ export async function previewSupplyMerge(
 /**
  * Fold `sourceIds` into `targetId`.
  *
- * One transaction: reparent options with `in_use` cleared (the partial unique index cannot
- * hold two in-use offers on one item), promote a source's in-use offer only if the target
- * has none, then delete the source items. Options move first — `onDelete: cascade` would
- * otherwise wipe them.
+ * One transaction: copy empty option brands from their item names (so Amazon product
+ * titles survive on each offer line), reparent options with `in_use` cleared (the partial
+ * unique index cannot hold two in-use offers on one item), promote a source's in-use offer
+ * only if the target has none, then delete the source items. Options move first —
+ * `onDelete: cascade` would otherwise wipe them. The generic label (Energy Drink, Cat
+ * Food) is the group the user types; merge does not invent it.
  */
 export async function mergeSupplyItems(
   userId: string,
@@ -447,11 +455,26 @@ export async function mergeSupplyItems(
       )
       .limit(1);
 
+    const namedItems = await tx
+      .select({
+        id: financeSupplyItems.id,
+        name: financeSupplyItems.name,
+      })
+      .from(financeSupplyItems)
+      .where(
+        and(
+          eq(financeSupplyItems.userId, userId),
+          inArray(financeSupplyItems.id, [targetId, ...sources]),
+        ),
+      );
+    const nameByItem = new Map(namedItems.map((item) => [item.id, item.name]));
+
     const sourceOptions = await tx
       .select({
         id: financeSupplyOptions.id,
         itemId: financeSupplyOptions.itemId,
         inUse: financeSupplyOptions.inUse,
+        brand: financeSupplyOptions.brand,
       })
       .from(financeSupplyOptions)
       .where(
@@ -474,17 +497,36 @@ export async function mergeSupplyItems(
       }
     }
 
-    if (sourceOptions.length > 0) {
+    const now = new Date();
+
+    // Specific product names live on the offer. Amazon create left brand empty and put the
+    // title on the item, so fill that in before the source item is deleted.
+    const targetName = nameByItem.get(targetId) ?? "";
+    await tx
+      .update(financeSupplyOptions)
+      .set({ brand: targetName, updatedAt: now })
+      .where(
+        and(
+          eq(financeSupplyOptions.userId, userId),
+          eq(financeSupplyOptions.itemId, targetId),
+          eq(financeSupplyOptions.brand, ""),
+        ),
+      );
+
+    for (const option of sourceOptions) {
+      const itemName = nameByItem.get(option.itemId) ?? "";
       await tx
         .update(financeSupplyOptions)
-        .set({ itemId: targetId, inUse: false, updatedAt: new Date() })
+        .set({
+          itemId: targetId,
+          inUse: false,
+          brand: preservedOptionBrand(option.brand, itemName),
+          updatedAt: now,
+        })
         .where(
           and(
             eq(financeSupplyOptions.userId, userId),
-            inArray(
-              financeSupplyOptions.id,
-              sourceOptions.map((option) => option.id),
-            ),
+            eq(financeSupplyOptions.id, option.id),
           ),
         );
     }
@@ -548,6 +590,7 @@ async function amazonSupplyPrefill(userId: string, asin: string) {
     rate,
     option: {
       vendor: "Amazon",
+      brand: purchase.productName,
       qtyPerItem: packCount,
       costPerOrderCents: purchase.latestUnitPriceCents ?? 0,
       pricedOn: purchase.lastOrderDate,
@@ -603,7 +646,6 @@ export async function addSupplyOptionFromAmazon(
   return createSupplyOption(userId, {
     ...prefill.option,
     itemId,
-    brand: prefill.purchase.productName,
     inUse: inUse === undefined,
   });
 }

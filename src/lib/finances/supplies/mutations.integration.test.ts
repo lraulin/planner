@@ -305,6 +305,43 @@ describeDb("supply worksheet", () => {
       expect(
         items[0].options.find((option) => option.asin === "B07TWELVE")?.inUse,
       ).toBe(true);
+      // Amazon left brand empty; the product title was the item name. Merge must keep
+      // both titles on the offer lines so the user can name the item/group generically.
+      expect(
+        items[0].options.find((option) => option.asin === "B07TWELVE")?.brand,
+      ).toBe("C4 12ct");
+      expect(
+        items[0].options.find((option) => option.asin === "B07TWENTY4")?.brand,
+      ).toBe("C4 24ct");
+    });
+
+    it("does not overwrite a brand that was already the specific product name", async () => {
+      const cans = await createSupplyItemFromSuggestion(owner, {
+        name: "Canned Cat Food",
+        rate: { rateBasis: "units_per_day", unitsPerDayMilli: 4000 },
+        option: {
+          brand: "Fancy Feast Grilled",
+          vendor: "Walmart",
+          qtyPerItem: 42,
+          asin: "B00CAT42",
+        },
+      });
+      const pate = await createSupplyItemFromSuggestion(owner, {
+        name: "Canned Cat Food (pate)",
+        rate: { rateBasis: "units_per_day", unitsPerDayMilli: 4000 },
+        option: {
+          brand: "Fancy Feast Pate",
+          vendor: "Amazon",
+          qtyPerItem: 24,
+          asin: "B00CAT24",
+        },
+      });
+      await mergeSupplyItems(owner, cans, [pate]);
+      const [item] = await listSupplyItems(owner);
+      expect(item.options.map((option) => option.brand).sort()).toEqual([
+        "Fancy Feast Grilled",
+        "Fancy Feast Pate",
+      ]);
     });
 
     it("promotes a source in-use offer when the target has none", async () => {
@@ -340,6 +377,22 @@ describeDb("supply worksheet", () => {
   });
 
   describe("amazon attach", () => {
+    it("puts the product title on the offer line when creating a new item", async () => {
+      await buy(owner, {
+        asin: "B07NEWITEM",
+        productName: "C4 Performance Energy Drink, 12-Count",
+        orderDate: "2026-01-01",
+      });
+      await buy(owner, {
+        asin: "B07NEWITEM",
+        productName: "C4 Performance Energy Drink, 12-Count",
+        orderDate: "2026-03-01",
+      });
+      await addSupplyItemFromAmazon(owner, "B07NEWITEM");
+      const [item] = await listSupplyItems(owner);
+      expect(item.options[0].brand).toBe("C4 Performance Energy Drink, 12-Count");
+    });
+
     it("puts the offer on the chosen item without rewriting its rate", async () => {
       await buy(owner, {
         asin: "B07ATTACH",
