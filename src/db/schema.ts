@@ -17,6 +17,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import type { AmazonOrderSummaryLine } from "@/lib/amazon/orderSummary";
 
 /**
  * The four levels of the Achieve hierarchy. Nesting within a level is unlimited —
@@ -3205,6 +3206,19 @@ export const amazonOrders = pgTable(
     paymentLast4: text("payment_last4"),
     website: text("website").notNull().default(""),
     currency: text("currency").notNull().default("USD"),
+    // Amazon's own printed order summary. The grand total is the authority on what the
+    // order cost; summing the item lines misses order-level tax and the Subscribe & Save
+    // saving, which is how an order the card was charged $23.66 for read as $23.49.
+    // See `agent-os/specs/2026-08-27-1521-amazon-order-totals-register-link/`.
+    itemsSubtotal: numeric("items_subtotal", { precision: 14, scale: 2 }),
+    shippingHandling: numeric("shipping_handling", { precision: 14, scale: 2 }),
+    promotion: numeric("promotion", { precision: 14, scale: 2 }),
+    tax: numeric("tax", { precision: 14, scale: 2 }),
+    grandTotal: numeric("grand_total", { precision: 14, scale: 2 }),
+    // Verbatim label/amount pairs, so a line we do not classify — a gift card, a tip, a
+    // state delivery fee — is stored rather than silently dropped.
+    summaryLines: jsonb("summary_lines").$type<AmazonOrderSummaryLine[]>(),
+    summarySource: text("summary_source"),
     externalSource: text("external_source").notNull(),
     externalId: text("external_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -3212,6 +3226,10 @@ export const amazonOrders = pgTable(
   },
   (table) => [
     uniqueIndex("amazon_orders_user_order_uq").on(table.userId, table.amazonOrderId),
+    check(
+      "amazon_orders_summary_source",
+      sql`${table.summarySource} is null or ${table.summarySource} in ('printed', 'derived')`,
+    ),
     uniqueIndex("amazon_orders_external_ref_uq").on(
       table.userId,
       table.externalSource,
