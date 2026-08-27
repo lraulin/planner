@@ -1,9 +1,15 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { amazonOrderItems, users } from "@/db/schema";
-import { numericStringToCents } from "@/lib/finances/money";
+import {
+  amazonOrderItems,
+  financeAccounts,
+  financeTransactions,
+  users,
+} from "@/db/schema";
+import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { approveAmazonChargeMatch } from "./apply";
 import { importAmazonSlim } from "./import";
 import {
   deleteAmazonCharge,
@@ -443,6 +449,69 @@ describeDb("amazon snapshot evidence", () => {
     expect(item.orderGrandTotalCents).toBe(1814);
     expect(item.orderSummaryStatus).toBe("reconciled");
     expect(item.registerLabel).toBeNull();
+  });
+
+  it("reaches every matched bank row of a multi-shipment order", async () => {
+    const userId = await makeUser();
+    const shipments = [
+      {
+        paymentId: "114-1111111-1111111|2026-08-01|3448|-1000|0",
+        date: "2026-08-01",
+        amountCents: -1000,
+        status: "completed" as const,
+        cardLast4: "3448",
+        instrumentKind: "card" as const,
+        amazonOrderIds: ["114-1111111-1111111"],
+      },
+      {
+        paymentId: "114-1111111-1111111|2026-08-05|3448|-814|0",
+        date: "2026-08-05",
+        amountCents: -814,
+        status: "completed" as const,
+        cardLast4: "3448",
+        instrumentKind: "card" as const,
+        amazonOrderIds: ["114-1111111-1111111"],
+      },
+    ];
+    await persistAmazonSnapshot(userId, snapshot({ payments: shipments }));
+    const charges = await listAmazonCharges(userId);
+    expect(charges).toHaveLength(2);
+
+    const [account] = await db
+      .insert(financeAccounts)
+      .values({
+        userId,
+        name: "Chase",
+        kind: "credit_card",
+        externalKey: "3448",
+        externalSource: "test",
+      })
+      .returning({ id: financeAccounts.id });
+    const rows = await db
+      .insert(financeTransactions)
+      .values(
+        shipments.map((row) => ({
+          userId,
+          accountId: account.id,
+          transactionDate: row.date,
+          amount: centsToNumericString(row.amountCents),
+          description: "AMAZON MKTPL*ABC",
+          externalSource: "test",
+          externalId: row.paymentId,
+        })),
+      )
+      .returning({ id: financeTransactions.id });
+    for (const [index, charge] of charges
+      .slice()
+      .sort((a, b) => (a.paymentDate ?? "").localeCompare(b.paymentDate ?? ""))
+      .entries()) {
+      await approveAmazonChargeMatch(userId, charge.id, rows[index].id);
+    }
+
+    const [item] = await listAmazonItems(userId);
+    expect(item.registerLabel).toBe("2 rows");
+    // Two rows is not one date, so there is no single transaction to point at.
+    expect(item.registerTransactionId).toBeNull();
   });
 
   it("refuses a second user every read, change and delete of the first user's evidence", async () => {
