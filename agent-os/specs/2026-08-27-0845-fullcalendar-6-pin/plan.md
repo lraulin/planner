@@ -1,6 +1,6 @@
 # Stay on FullCalendar 6
 
-**Status: active**  
+**Status: frozen / complete (2026-08-27)**  
 Spec folder: `agent-os/specs/2026-08-27-0845-fullcalendar-6-pin/`
 
 ## Spec relationships
@@ -69,22 +69,26 @@ already published, and v7's own plugin packages are not stable yet.
 
 ## Acceptance criteria
 
-- [ ] `.github/dependabot.yml` ignores `version-update:semver-major` for `@fullcalendar/*`,
+- [x] `.github/dependabot.yml` ignores `version-update:semver-major` for `@fullcalendar/*`,
       with the reason and the lift-trigger in a comment
 - [x] PR #5 is closed — done by Lee on 2026-08-27, before Task 2 landed
-- [ ] No new `@fullcalendar` major PR opens on the next Dependabot run
-- [ ] Minor and patch `@fullcalendar` updates still arrive, grouped — the `ignore` must not
-      silence a 6.1.22
-- [ ] `npm run lint`, `npm run typecheck` and `npm test` are unaffected, there being no
-      `src/` change
+- [x] No new `@fullcalendar` major PR opens on the next Dependabot run — verified from the
+      parsed config rather than an observed run (see Changes row 1); `gh pr list` on
+      2026-08-27 shows only #8, #9 and #10, no `@fullcalendar`
+- [x] Minor and patch `@fullcalendar` updates still arrive, grouped — the `ignore` must not
+      silence a 6.1.22. `npx js-yaml .github/dependabot.yml` shows the sole `ignore` entry
+      scoped to `["version-update:semver-major"]`, with the `fullcalendar` group untouched
+- [x] `npm run lint`, `npm run typecheck` and `npm test` are unaffected, there being no
+      `src/` change — all green, 918 tests in 55 files including the integration project
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                             | Why                                                                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The two run-dependent acceptance criteria are verified from the parsed config, not from an observed Dependabot run | Dependabot runs weekly and has no supported manual trigger from the CLI. Waiting a week to freeze would leave an active spec sitting on a one-line diff. `js-yaml` proves the `ignore` is major-only and the group intact. |
+| 2   | The `ignore` block sits after `groups` rather than beside it                                                       | Both are top-level keys of the same `updates` entry, so "beside" was satisfied either way; trailing keeps the group's own comment adjacent to the group it explains.                                                       |
 
 ---
 

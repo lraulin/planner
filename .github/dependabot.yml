@@ -28,3 +28,16 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # FullCalendar 7 is a repackaging, not a bump, and it is not finished. @fullcalendar/
+      # timegrid, daygrid, interaction, list and multimonth have no stable 7 — their 7.x
+      # line stops at 7.0.0-rc.0 and `latest` is still 6.1.21 — because v7 ships them as
+      # subpath entrypoints of @fullcalendar/react, with @fullcalendar/core reduced to a
+      # types-only package peering on @full-ui/headless-calendar. Migrating therefore means
+      # removing four dependencies and adding a new peer, which Dependabot cannot express:
+      # PR #5 bumped react alone and could not be made to pass. v6.1.21 carries no advisory.
+      # Delete this block when @fullcalendar/timegrid@7 reaches `latest`, or immediately if
+      # a v6 advisory lands. Majors only — 6.1.22 must still arrive, grouped.
+      # See agent-os/specs/2026-08-27-0845-fullcalendar-6-pin
+      - dependency-name: "@fullcalendar/*"
+        update-types: ["version-update:semver-major"]
