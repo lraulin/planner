@@ -43,7 +43,12 @@ import {
 } from "./preview";
 import { parseAmazonSnapshot } from "./snapshot";
 import { canManuallyMatch } from "./match";
-import { listAmazonChargeOrders, listAmazonCharges } from "./queries";
+import { subscriptionSavingCents } from "./orderSummary";
+import {
+  listAmazonChargeOrders,
+  listAmazonCharges,
+  listAmazonOrderSummaries,
+} from "./queries";
 
 export type AmazonSnapshotApplyResult = {
   preview: AmazonPreview;
@@ -344,6 +349,10 @@ export async function approveAmazonChargeMatch(
         asin: row.asin,
         status: row.status,
         billId: row.billId,
+      })),
+      orderSavings: (await listAmazonOrderSummaries(userId, orderIds)).map((row) => ({
+        amazonOrderId: row.amazonOrderId,
+        subscriptionSavingCents: subscriptionSavingCents(row.lines),
       })),
     }),
     billBySubscription,

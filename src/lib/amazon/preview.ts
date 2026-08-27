@@ -4,7 +4,13 @@
  * decides.
  */
 
-import { allocateCharge, stampBillIds, type ChargeAllocation } from "./allocate";
+import {
+  allocateCharge,
+  stampBillIds,
+  type ChargeAllocation,
+  type OrderSavingRef,
+} from "./allocate";
+import { subscriptionSavingCents } from "./orderSummary";
 import { exactMatchCharge, type MatchAccount, type MatchTransaction } from "./match";
 import type {
   AmazonSnapshot,
@@ -218,6 +224,7 @@ export function previewAmazonSnapshot(input: PreviewInput): AmazonPreview {
       })),
   ];
 
+  const orderSavings = orderSavingsOf(input);
   const settledCharges = new Set(input.matches.map((row) => row.paymentId));
   const settledTxns = new Set(input.matches.map((row) => row.transactionId));
   const matches: MatchDecision[] = [];
@@ -251,6 +258,7 @@ export function previewAmazonSnapshot(input: PreviewInput): AmazonPreview {
                 subscriptionId: item.subscriptionId,
               })),
               subscriptions: subscriptionRefs,
+              orderSavings,
             }),
             proposedBills,
           );
@@ -347,6 +355,17 @@ export function previewAmazonSnapshot(input: PreviewInput): AmazonPreview {
   };
 }
 
+/** The subscription saving Amazon printed on each order, for the allocator. */
+function orderSavingsOf(input: Pick<PreviewInput, "snapshot">): OrderSavingRef[] {
+  return input.snapshot.orders.flatMap((order) => {
+    if (!order.summary) return [];
+    const saving = subscriptionSavingCents(order.summary.lines);
+    return saving === 0
+      ? []
+      : [{ amazonOrderId: order.amazonOrderId, subscriptionSavingCents: saving }];
+  });
+}
+
 export function uniqueBillName(
   subscription: Pick<
     AmazonSnapshotSubscription,
@@ -392,6 +411,7 @@ function expectedAmounts(input: PreviewInput): Map<string, number> {
         status: row.status,
         billId: null,
       })),
+      orderSavings: orderSavingsOf(input),
     });
     for (const line of allocation.lines) {
       const subscriptionId = line.amazonSubscriptionId;
