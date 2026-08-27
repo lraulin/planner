@@ -172,6 +172,7 @@ export function AmazonOrdersView({
     loadExportRows,
     rowById,
     groupPaidCents,
+    groupOrderTotals,
     groupMatch,
   } = source;
 
@@ -253,9 +254,33 @@ export function AmazonOrdersView({
   const groupTotals = useCallback(
     (_members: AmazonItemListRow[], group: { id: string }) => {
       const paid = groupPaidCents.get(group.id);
+      const orderTotals = groupOrderTotals.get(group.id);
       const match = groupMatch.get(group.id);
       const totals: Record<string, ReactNode> = {};
-      if (paid !== undefined) totals.paid = formatUsd(paid);
+      const grandTotalCents = orderTotals?.grandTotalCents ?? null;
+      if (grandTotalCents !== null) {
+        totals.orderTotal =
+          orderTotals && orderTotals.unreconciledOrders > 0 ? (
+            <span
+              className="tabular"
+              title={`${orderTotals.unreconciledOrders} order(s) here do not reconcile to Amazon's own total.`}
+            >
+              {formatUsd(grandTotalCents)}{" "}
+              <span className="text-[var(--chart-spend)]">!</span>
+            </span>
+          ) : (
+            formatUsd(grandTotalCents)
+          );
+      }
+      // Amazon's grand total is the authority. The item sum only earns a place when the
+      // two disagree — that gap is order-level tax or a discount, and hiding it is what
+      // made an order the card was charged $23.66 for read as $23.49.
+      if (
+        paid !== undefined &&
+        (grandTotalCents === null || paid !== grandTotalCents)
+      ) {
+        totals.paid = formatUsd(paid);
+      }
       if (match?.matchLabel === "Review" && match.chargeId) {
         totals.match = (
           <button
@@ -274,7 +299,7 @@ export function AmazonOrdersView({
       }
       return Object.keys(totals).length > 0 ? totals : null;
     },
-    [groupPaidCents, groupMatch, openReview],
+    [groupPaidCents, groupOrderTotals, groupMatch, openReview],
   );
 
   return (

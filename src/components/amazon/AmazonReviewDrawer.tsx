@@ -154,8 +154,9 @@ export function AmazonReviewDrawer({
               Order items
             </p>
             <p className="text-ink-muted">
-              Items in an order add up to what the card was charged. Match this total to
-              the posted Amazon row of the same amount.
+              Amazon&rsquo;s own grand total is what the card was charged; the item
+              lines do not include order-level tax or the subscription saving. Match the
+              grand total to the posted Amazon row of the same amount.
             </p>
             {selected.lines.length === 0 ? (
               <p className="text-ink-muted">No line items on the linked orders yet.</p>
@@ -179,10 +180,72 @@ export function AmazonReviewDrawer({
                   </li>
                 ))}
                 <li className="flex justify-between gap-3 border-t border-rule pt-1 font-medium">
-                  <span>Order total</span>
+                  <span>Item lines</span>
                   <span className="tabular">{formatUsd(lineTotal)}</span>
                 </li>
               </ul>
+            )}
+            {selected.summaries.length > 0 && (
+              <>
+                <p className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted">
+                  What Amazon printed
+                </p>
+                {selected.summaries.map((summary) => (
+                  <div key={summary.amazonOrderId} className="space-y-1">
+                    {selected.amazonOrderIds.length > 1 && (
+                      <p className="text-[0.75rem] text-ink-muted">
+                        {summary.amazonOrderId}
+                      </p>
+                    )}
+                    <ul className="space-y-1">
+                      {summary.lines.map((line, index) => (
+                        <li
+                          key={`${summary.amazonOrderId}:${index}`}
+                          className={`flex justify-between gap-3 ${
+                            line.kind === "grandTotal"
+                              ? "border-t border-rule pt-1 font-medium"
+                              : ""
+                          }`}
+                        >
+                          <span className="min-w-0 truncate">
+                            {line.label}
+                            {line.kind === "unknown" ? (
+                              <span
+                                className="ml-1 text-[var(--chart-spend)]"
+                                title="Planner does not recognise this line, so it is not counted in the check below."
+                              >
+                                ?
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="tabular text-ink-muted">
+                            {formatUsd(line.amountCents)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {summary.check.status === "unbalanced" && (
+                      <p className="text-[0.75rem] text-[var(--chart-spend)]">
+                        These lines add up to {formatUsd(summary.check.recognisedCents)}
+                        , which is{" "}
+                        {formatUsd(Math.abs(summary.check.differenceCents ?? 0))} away
+                        from the grand total. Do not trust the split until that is
+                        explained.
+                      </p>
+                    )}
+                    {summary.check.status === "incomplete" && (
+                      <p className="text-[0.75rem] text-ink-muted">
+                        Amazon printed a total but no breakdown to check it against.
+                      </p>
+                    )}
+                    {summary.source === "derived" && (
+                      <p className="text-[0.75rem] text-ink-muted">
+                        Derived from the privacy-request export, not printed by Amazon.
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </>
             )}
             <p className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted">
               Card charge of the same amount

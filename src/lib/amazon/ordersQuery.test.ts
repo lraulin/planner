@@ -35,6 +35,10 @@ function item(
     billName: null,
     matchLabel: null,
     chargeId: null,
+    orderGrandTotalCents: null,
+    orderSummaryStatus: null,
+    registerLabel: null,
+    registerTransactionId: null,
     ...over,
   };
 }

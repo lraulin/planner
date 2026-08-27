@@ -9,7 +9,12 @@
 
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { amazonChargeOrders, amazonCharges, amazonSubscriptions } from "@/db/schema";
+import {
+  amazonChargeMatches,
+  amazonChargeOrders,
+  amazonCharges,
+  amazonSubscriptions,
+} from "@/db/schema";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { persistSlim } from "./import";
 import { isAmazonChargeKey } from "./snapshot";
@@ -33,6 +38,7 @@ export type AmazonSnapshotPersistResult = AmazonImportResult & {
   chargesUpdated: number;
   chargesUnchanged: number;
   chargeOrdersCreated: number;
+  orderTotalChargesCreated: number;
 };
 
 export async function persistAmazonSnapshot(
@@ -44,7 +50,8 @@ export async function persistAmazonSnapshot(
   const evidence = await db.transaction(async (tx) => {
     const subscriptions = await upsertSubscriptions(tx, userId, snapshot);
     const charges = await upsertCharges(tx, userId, snapshot);
-    return { subscriptions, charges };
+    const standIns = await ensureOrderTotalCharges(tx, userId, snapshot);
+    return { subscriptions, charges, standIns };
   });
   return {
     ...receipts,
@@ -55,7 +62,120 @@ export async function persistAmazonSnapshot(
     chargesUpdated: evidence.charges.updated,
     chargesUnchanged: evidence.charges.unchanged,
     chargeOrdersCreated: evidence.charges.linksCreated,
+    orderTotalChargesCreated: evidence.standIns,
   };
+}
+
+/**
+ * A stand-in charge for an order whose grand total is known but whose charge evidence is not.
+ *
+ * Manual review may link an order to a register row of the same grand total when Amazon gave
+ * us no charge to go on. Rather than a second linking mechanism, the order borrows the one
+ * that already exists: a charge row carrying the order's own total, which `exactMatchCharge`
+ * refuses automatically (its status is not `completed` and its instrument is not a card) and
+ * `canManuallyMatch` will approve only against an equal-amount posted Amazon row.
+ *
+ * A zero total gets nothing. A gift-card-funded order really was charged nothing, and
+ * inventing a $0.00 charge for it would be inventing a payment.
+ */
+async function ensureOrderTotalCharges(
+  tx: Executor,
+  userId: string,
+  snapshot: AmazonSnapshot,
+): Promise<number> {
+  const charges = await tx
+    .select()
+    .from(amazonCharges)
+    .where(eq(amazonCharges.userId, userId));
+  const links = await tx
+    .select()
+    .from(amazonChargeOrders)
+    .where(eq(amazonChargeOrders.userId, userId));
+  const matches = await tx
+    .select({ chargeId: amazonChargeMatches.chargeId })
+    .from(amazonChargeMatches)
+    .where(eq(amazonChargeMatches.userId, userId));
+
+  const matched = new Set(matches.map((row) => row.chargeId));
+  const chargeById = new Map(charges.map((row) => [row.id, row]));
+  const realOrderIds = new Set<string>();
+  const standInByOrder = new Map<string, (typeof charges)[number]>();
+  for (const link of links) {
+    const charge = chargeById.get(link.chargeId);
+    if (!charge) continue;
+    if (charge.externalSource === AMAZON_FEEDS.orderTotal) {
+      standInByOrder.set(link.amazonOrderId, charge);
+    } else {
+      realOrderIds.add(link.amazonOrderId);
+    }
+  }
+
+  let created = 0;
+  for (const order of snapshot.orders) {
+    const grandTotalCents = order.summary?.grandTotalCents ?? null;
+    const standIn = standInByOrder.get(order.amazonOrderId);
+    if (realOrderIds.has(order.amazonOrderId) || !grandTotalCents) {
+      // Amazon told us about the real charge, so the stand-in has done its job. Keep it if
+      // the user already approved a link through it; the match is theirs, not ours.
+      if (standIn && !matched.has(standIn.id)) {
+        await tx
+          .delete(amazonCharges)
+          .where(
+            and(eq(amazonCharges.id, standIn.id), eq(amazonCharges.userId, userId)),
+          );
+      }
+      continue;
+    }
+    const paymentId = [
+      order.amazonOrderId,
+      order.orderDate,
+      "",
+      -grandTotalCents,
+      0,
+    ].join("|");
+    const values = {
+      userId,
+      amazonPaymentId: paymentId,
+      paymentDate: order.orderDate || null,
+      amount: centsToNumericString(-grandTotalCents),
+      status: "unknown",
+      cardLast4: null,
+      instrumentKind: "other",
+      needsReview: true,
+      reviewReason:
+        "No Amazon charge evidence for this order. Link it to a register row of the same total.",
+      capturedOn: snapshot.capturedOn || null,
+      externalSource: AMAZON_FEEDS.orderTotal,
+      externalId: paymentId,
+    };
+    if (!standIn) {
+      const [row] = await tx
+        .insert(amazonCharges)
+        .values(values)
+        .returning({ id: amazonCharges.id });
+      if (!row) throw new Error("Could not store the Amazon order total.");
+      await tx.insert(amazonChargeOrders).values({
+        userId,
+        chargeId: row.id,
+        amazonOrderId: order.amazonOrderId,
+      });
+      created += 1;
+      continue;
+    }
+    if (standIn.amazonPaymentId === paymentId || matched.has(standIn.id)) continue;
+    await tx
+      .update(amazonCharges)
+      .set({
+        amazonPaymentId: paymentId,
+        externalId: paymentId,
+        paymentDate: values.paymentDate,
+        amount: values.amount,
+        capturedOn: values.capturedOn,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(amazonCharges.id, standIn.id), eq(amazonCharges.userId, userId)));
+  }
+  return created;
 }
 
 function slimFromSnapshot(snapshot: AmazonSnapshot): SlimAmazonOrders {

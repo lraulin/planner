@@ -102,6 +102,42 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     render: (row) => <Amount cents={row.node.itemPaidCents} />,
   },
   {
+    id: "orderTotal",
+    label: "Order total",
+    fieldLabel: "Order total (Amazon's)",
+    width: "7rem",
+    align: "right",
+    ...accessors("orderTotal"),
+    compact: "meta",
+    render: (row) =>
+      row.node.orderGrandTotalCents === null ? null : (
+        <span className="tabular text-[0.8125rem] text-ink">
+          {formatUsd(row.node.orderGrandTotalCents)}
+          {row.node.orderSummaryStatus !== null &&
+          row.node.orderSummaryStatus !== "reconciled" ? (
+            <span
+              className="ml-1 text-[var(--chart-spend)]"
+              title={
+                row.node.orderSummaryStatus === "unbalanced"
+                  ? "Amazon's summary lines do not add up to this total."
+                  : "Amazon printed a total but no breakdown to check it against."
+              }
+            >
+              !
+            </span>
+          ) : null}
+        </span>
+      ),
+  },
+  {
+    id: "register",
+    label: "Register",
+    width: "6.5rem",
+    ...accessors("register"),
+    compact: "meta",
+    render: (row) => <Text value={row.node.registerLabel ?? ""} />,
+  },
+  {
     id: "unitPrice",
     label: "Unit price",
     width: "6.5rem",

@@ -6,7 +6,7 @@ import { importFinanceCsvFiles } from "@/lib/finances/import";
 import { listSplitChildren, listTransactions } from "@/lib/finances/queries";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { applyAmazonSnapshotText } from "./apply";
-import { listAmazonSubscriptions } from "./queries";
+import { listAmazonItems, listAmazonSubscriptions } from "./queries";
 import { parseAmazonOrderSummary } from "./orderSummary";
 import { serializeAmazonSnapshot, SNAPSHOT_SOURCE, SNAPSHOT_VERSION } from "./snapshot";
 import { AMAZON_SNS_GROUP } from "./preview";
@@ -165,6 +165,14 @@ describeDb("amazon snapshot apply", () => {
     expect(children.some((child) => child.budgetCategoryId === tp?.billId)).toBe(true);
     if (shopping) {
       expect(children.some((child) => child.budgetCategoryId === shopping)).toBe(true);
+    }
+
+    // The order reaches the register through its charge's match, not through anything
+    // stored on the order.
+    for (const row of await listAmazonItems(userId)) {
+      expect(row.registerLabel).toBe("2026-08-01");
+      expect(row.registerTransactionId).toBe(parent.id);
+      expect(row.orderGrandTotalCents).toBe(2114);
     }
 
     const second = await applyAmazonSnapshotText(userId, snapshotText());

@@ -42,6 +42,10 @@ function placeholder(id: string): AmazonItemListRow {
     billName: null,
     matchLabel: null,
     chargeId: null,
+    orderGrandTotalCents: null,
+    orderSummaryStatus: null,
+    registerLabel: null,
+    registerTransactionId: null,
   };
 }
 
@@ -212,6 +216,22 @@ export function useAmazonSource({
     return paid;
   }, [index.entries]);
 
+  const groupOrderTotals = useMemo(() => {
+    const totals = new Map<
+      string,
+      { grandTotalCents: number | null; unreconciledOrders: number }
+    >();
+    for (const entry of index.entries) {
+      if (entry.kind === "group") {
+        totals.set(entry.id, {
+          grandTotalCents: entry.grandTotalCents,
+          unreconciledOrders: entry.unreconciledOrders,
+        });
+      }
+    }
+    return totals;
+  }, [index.entries]);
+
   const groupMatch = useMemo(() => {
     const match = new Map<
       string,
@@ -233,6 +253,7 @@ export function useAmazonSource({
     gridRows,
     pendingRowIds,
     groupPaidCents,
+    groupOrderTotals,
     groupMatch,
     error,
     setError,

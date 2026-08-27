@@ -6,7 +6,7 @@
  */
 
 import { VERCEL_BODY_MAX_BYTES } from "@/lib/http/uploadLimits";
-import type { AmazonOrderSummary } from "./orderSummary";
+import type { AmazonOrderSummary, AmazonSummaryStatus } from "./orderSummary";
 
 export const SLIM_VERSION = 1;
 export const SLIM_SOURCE = "amazon-data-request";
@@ -141,6 +141,12 @@ export const AMAZON_FEEDS = {
   replacement: "amazon:replacement",
   subscription: "amazon:subscription",
   charge: "amazon:charge",
+  /**
+   * A stand-in charge for an order whose grand total is known but whose charge evidence is
+   * not. It exists so manual review can link the order to a register row of the same total
+   * through the ordinary charge machinery; it can never match automatically.
+   */
+  orderTotal: "amazon:order-total",
 } as const;
 
 export type AmazonImportResult = {
@@ -186,4 +192,11 @@ export type AmazonItemListRow = {
   matchLabel: string | null;
   /** The Amazon charge this order is waiting on or already matched to. */
   chargeId: string | null;
+  /** Amazon's own grand total for this row's order — never the sum of its item lines. */
+  orderGrandTotalCents: number | null;
+  /** Whether that grand total agrees with the summary lines. `null` when none was stored. */
+  orderSummaryStatus: AmazonSummaryStatus | null;
+  /** The register row(s) this order reaches through its charges' matches. */
+  registerLabel: string | null;
+  registerTransactionId: string | null;
 };

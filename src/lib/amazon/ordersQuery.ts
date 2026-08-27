@@ -28,6 +28,7 @@ import {
   amazonFilterValues,
 } from "./amazonFields";
 import {
+  amazonGroupOrderTotals,
   amazonGroupPaidCents,
   amazonOrderGroupMatch,
   asAmazonGroupBy,
@@ -58,6 +59,9 @@ export type AmazonOrdersIndexEntry =
       count: number;
       depth: number;
       paidCents: number;
+      /** Amazon's grand total for the orders under this header, not the item sum. */
+      grandTotalCents: number | null;
+      unreconciledOrders: number;
       matchLabel: string | null;
       chargeId: string | null;
     }
@@ -255,6 +259,7 @@ export function prepareAmazonOrders(
   const matched = passingRows(items, query);
   const grouped = groupAmazonItems(matched, query.groupBy);
   const paidByGroup = amazonGroupPaidCents(grouped);
+  const orderTotalsByGroup = amazonGroupOrderTotals(grouped);
   const matchByGroup = amazonOrderGroupMatch(grouped);
   const collapsed = applyGroupCollapse(grouped, new Set(query.collapsedGroups));
   const keys = query.sorts.flatMap((entry) => {
@@ -279,6 +284,7 @@ export function prepareAmazonOrders(
   for (const row of display) {
     if (row.kind === "group") {
       const match = matchByGroup.get(row.id);
+      const totals = orderTotalsByGroup.get(row.id);
       entries.push({
         kind: "group",
         id: row.id,
@@ -286,6 +292,8 @@ export function prepareAmazonOrders(
         count: row.count,
         depth: row.depth,
         paidCents: paidByGroup.get(row.id) ?? 0,
+        grandTotalCents: totals?.grandTotalCents ?? null,
+        unreconciledOrders: totals?.unreconciledOrders ?? 0,
         matchLabel: match?.matchLabel ?? null,
         chargeId: match?.chargeId ?? null,
       });

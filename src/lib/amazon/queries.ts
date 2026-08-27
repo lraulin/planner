@@ -10,6 +10,7 @@ import {
   amazonRefunds,
   amazonSubscriptions,
   financeBudgetCategories,
+  financeTransactions,
 } from "@/db/schema";
 import { numericStringToCents } from "@/lib/finances/money";
 import { amazonReviewChargeTitle } from "./grouping";
@@ -50,6 +51,8 @@ const ITEM_LIST_COLUMNS = {
   shippingOption: amazonOrderItems.shippingOption,
   website: amazonOrders.website,
   currency: amazonOrders.currency,
+  grandTotal: amazonOrders.grandTotal,
+  summaryLines: amazonOrders.summaryLines,
   externalId: amazonOrderItems.externalId,
 };
 
@@ -189,10 +192,14 @@ function toListRow(
     shippingOption: string;
     website: string;
     currency: string;
+    grandTotal: string | null;
+    summaryLines: unknown;
     externalId: string;
   },
   refunds: Map<string, number>,
 ): AmazonItemListRow & { lineId: string } {
+  const grandTotalCents = numericStringToCents(row.grandTotal);
+  const lines = asAmazonSummaryLines(row.summaryLines);
   return {
     id: row.id,
     orderId: row.orderId,
@@ -217,6 +224,13 @@ function toListRow(
     billName: null,
     matchLabel: null,
     chargeId: null,
+    orderGrandTotalCents: grandTotalCents,
+    orderSummaryStatus:
+      grandTotalCents === null && lines.length === 0
+        ? null
+        : checkAmazonOrderSummary({ lines, grandTotalCents }).status,
+    registerLabel: null,
+    registerTransactionId: null,
     lineId: row.externalId,
   };
 }
@@ -253,8 +267,17 @@ async function stampItemEvidence(
       db
         .select({
           chargeId: amazonChargeMatches.chargeId,
+          transactionId: amazonChargeMatches.transactionId,
+          transactionDate: financeTransactions.transactionDate,
         })
         .from(amazonChargeMatches)
+        .innerJoin(
+          financeTransactions,
+          and(
+            eq(financeTransactions.id, amazonChargeMatches.transactionId),
+            eq(financeTransactions.userId, userId),
+          ),
+        )
         .where(eq(amazonChargeMatches.userId, userId)),
       db
         .select({
@@ -289,6 +312,7 @@ async function stampItemEvidence(
     ),
   );
   const matchedCharges = new Set(matches.map((row) => row.chargeId));
+  const matchByCharge = new Map(matches.map((row) => [row.chargeId, row]));
   const reviewCharges = new Set(
     charges.filter((row) => row.needsReview).map((row) => row.id),
   );
@@ -306,12 +330,26 @@ async function stampItemEvidence(
     let matchLabel: string | null = null;
     if (reviewId) matchLabel = "Review";
     else if (matchedId) matchLabel = "Matched";
+    // The order's register link is derived: order → its charges → their matched rows. A
+    // multi-shipment order reaches one row per charge, so the count is shown rather than a
+    // single date pretending to be the whole story.
+    const linked = chargeIds.flatMap((id) => {
+      const match = matchByCharge.get(id);
+      return match ? [match] : [];
+    });
     const { lineId: _lineId, ...rest } = row;
     return {
       ...rest,
       billName: billId ? (billNameById.get(billId) ?? null) : null,
       matchLabel,
       chargeId: reviewId ?? matchedId,
+      registerLabel:
+        linked.length === 0
+          ? null
+          : linked.length === 1
+            ? linked[0].transactionDate
+            : `${linked.length} rows`,
+      registerTransactionId: linked.length === 1 ? linked[0].transactionId : null,
     };
   });
 }
@@ -394,6 +432,11 @@ export type AmazonReviewRow = {
   amountCents: number | null;
   amazonOrderIds: string[];
   lines: AmazonReviewLine[];
+  /**
+   * Amazon's printed summary for each order the charge covers, verbatim. Shown beside the
+   * item allocations so an unexplained amount is visible rather than smeared across lines.
+   */
+  summaries: AmazonOrderSummaryRow[];
 };
 
 export async function listAmazonReviewItems(
@@ -455,6 +498,8 @@ export async function listAmazonReviewItems(
     list.push(link.amazonOrderId);
     ordersByCharge.set(link.chargeId, list);
   }
+  const summaries = await listAmazonOrderSummaries(userId, orderIds);
+  const summaryByOrder = new Map(summaries.map((row) => [row.amazonOrderId, row]));
   const linesByOrder = new Map<string, AmazonReviewLine[]>();
   for (const row of itemRows) {
     const list = linesByOrder.get(row.amazonOrderId) ?? [];
@@ -478,6 +523,10 @@ export async function listAmazonReviewItems(
         amountCents: numericStringToCents(row.amount),
         amazonOrderIds,
         lines: amazonOrderIds.flatMap((orderId) => linesByOrder.get(orderId) ?? []),
+        summaries: amazonOrderIds.flatMap((orderId) => {
+          const summary = summaryByOrder.get(orderId);
+          return summary ? [summary] : [];
+        }),
       };
     }),
     ...subscriptions.map((row) => ({
@@ -489,6 +538,7 @@ export async function listAmazonReviewItems(
       amountCents: null,
       amazonOrderIds: [] as string[],
       lines: [] as AmazonReviewLine[],
+      summaries: [] as AmazonOrderSummaryRow[],
     })),
   ];
 }

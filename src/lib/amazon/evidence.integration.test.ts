@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { amazonOrderItems, users } from "@/db/schema";
+import { numericStringToCents } from "@/lib/finances/money";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importAmazonSlim } from "./import";
 import {
@@ -24,7 +25,7 @@ import {
 import { persistAmazonSnapshot } from "./reconcile";
 import { parseAmazonOrderSummary } from "./orderSummary";
 import { SNAPSHOT_SOURCE, SNAPSHOT_VERSION, type AmazonSnapshot } from "./snapshot";
-import { SLIM_SOURCE, SLIM_VERSION } from "./types";
+import { AMAZON_FEEDS, SLIM_SOURCE, SLIM_VERSION } from "./types";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -388,6 +389,60 @@ describeDb("amazon snapshot evidence", () => {
       row.amazonPaymentId.startsWith("114-1111111-1111111|"),
     );
     expect(current?.needsReview).toBe(false);
+  });
+
+  it("stands in for an order with no charge evidence, and steps aside when the charge arrives", async () => {
+    const userId = await makeUser();
+    await persistAmazonSnapshot(userId, snapshot({ payments: [] }));
+    const standIns = (await listAmazonCharges(userId)).filter(
+      (row) => row.externalSource === AMAZON_FEEDS.orderTotal,
+    );
+    expect(standIns).toHaveLength(1);
+    // It carries the order's grand total, and can never match automatically.
+    expect(numericStringToCents(standIns[0].amount)).toBe(-1814);
+    expect(standIns[0].status).toBe("unknown");
+    expect(standIns[0].instrumentKind).toBe("other");
+    expect(standIns[0].needsReview).toBe(true);
+
+    await persistAmazonSnapshot(userId, snapshot());
+    expect(
+      (await listAmazonCharges(userId)).filter(
+        (row) => row.externalSource === AMAZON_FEEDS.orderTotal,
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not invent a charge for a gift-card-funded $0.00 order", async () => {
+    const userId = await makeUser();
+    await persistAmazonSnapshot(
+      userId,
+      snapshot({
+        payments: [],
+        orders: [
+          {
+            amazonOrderId: "114-1111111-1111111",
+            orderDate: "2026-07-31",
+            orderStatus: "Shipped",
+            subscribeAndSave: true,
+            summary: parseAmazonOrderSummary([
+              { label: "Item(s) Subtotal:", amount: "$0.00" },
+              { label: "Grand Total:", amount: "$0.00" },
+            ]),
+          },
+        ],
+      }),
+    );
+    expect(await listAmazonCharges(userId)).toEqual([]);
+  });
+
+  it("carries Amazon's grand total and the register link onto every item row", async () => {
+    const userId = await makeUser();
+    await persistAmazonSnapshot(userId, snapshot());
+    const [item] = await listAmazonItems(userId);
+    // Not the $18.99 item line — the $18.14 Amazon actually charged.
+    expect(item.orderGrandTotalCents).toBe(1814);
+    expect(item.orderSummaryStatus).toBe("reconciled");
+    expect(item.registerLabel).toBeNull();
   });
 
   it("refuses a second user every read, change and delete of the first user's evidence", async () => {

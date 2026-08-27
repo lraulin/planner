@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AmazonItemListRow } from "./types";
 import {
+  amazonGroupOrderTotals,
   amazonGroupPaidCents,
   amazonOrderGroupMatch,
   groupAmazonItems,
@@ -31,6 +32,10 @@ function item(
     billName: null,
     matchLabel: null,
     chargeId: null,
+    orderGrandTotalCents: null,
+    orderSummaryStatus: null,
+    registerLabel: null,
+    registerTransactionId: null,
     ...over,
   };
 }
@@ -118,5 +123,69 @@ describe("amazonOrderGroupMatch", () => {
       matchLabel: "Review",
       chargeId: "charge-1",
     });
+  });
+});
+
+describe("amazonGroupOrderTotals", () => {
+  it("counts an order's grand total once however many lines it has", () => {
+    const grouped = groupAmazonItems(
+      [
+        item({
+          id: "a",
+          orderDate: "2026-08-01",
+          amazonOrderId: "o1",
+          orderGrandTotalCents: 2366,
+          orderSummaryStatus: "reconciled",
+        }),
+        item({
+          id: "b",
+          orderDate: "2026-08-01",
+          amazonOrderId: "o1",
+          orderGrandTotalCents: 2366,
+          orderSummaryStatus: "reconciled",
+        }),
+      ],
+      ["order"],
+    );
+    const totals = amazonGroupOrderTotals(grouped);
+    const [group] = [...totals.values()];
+    expect(group.grandTotalCents).toBe(2366);
+    // The item sum is what got this wrong in the first place: two lines, one receipt.
+    expect([...amazonGroupPaidCents(grouped).values()][0]).toBe(200);
+  });
+
+  it("adds up distinct orders in a month and counts the ones that do not reconcile", () => {
+    const grouped = groupAmazonItems(
+      [
+        item({
+          id: "a",
+          orderDate: "2026-08-01",
+          amazonOrderId: "o1",
+          orderGrandTotalCents: 2366,
+          orderSummaryStatus: "reconciled",
+        }),
+        item({
+          id: "b",
+          orderDate: "2026-08-02",
+          amazonOrderId: "o2",
+          orderGrandTotalCents: 1000,
+          orderSummaryStatus: "unbalanced",
+        }),
+      ],
+      ["month"],
+    );
+    const [group] = [...amazonGroupOrderTotals(grouped).values()];
+    expect(group.grandTotalCents).toBe(3366);
+    expect(group.unreconciledOrders).toBe(1);
+  });
+
+  it("leaves a group with no stored total null rather than showing $0.00", () => {
+    const grouped = groupAmazonItems(
+      [item({ id: "a", orderDate: "2026-08-01", amazonOrderId: "o1" })],
+      ["order"],
+    );
+    const [group] = [...amazonGroupOrderTotals(grouped).values()];
+    expect(group.grandTotalCents).toBeNull();
+    expect(group.unreconciledOrders).toBe(0);
   });
 });
