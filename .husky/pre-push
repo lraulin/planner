@@ -1,8 +1,14 @@
-# The full suite, including the integration tests that need `npm run db:up`.
+# The full suite, including the integration tests that need Postgres.
 #
-# Push is the right boundary for these: pre-commit stays fast and Docker-independent,
-# but nothing reaches origin without the database-backed mutation tests having run. If
-# Postgres is unreachable they skip loudly rather than failing — see
-# src/lib/testing/database.ts for why that tradeoff is deliberate. scripts/gate.sh stays
-# silent on success but always lets that skip warning through.
+# Push is the right boundary for these: pre-commit stays fast and Docker-independent, but
+# nothing reaches origin without the database-backed mutation tests having actually run.
+# "Actually" is why the container is started here rather than assumed: integration tests
+# skip loudly instead of failing when Postgres is unreachable (see
+# src/lib/testing/database.ts for why that is right for a manual `npm test`), which used to
+# mean a push with Docker stopped shipped unverified database code to a Vercel deploy.
+#
+# docker-compose.yml defines a pg_isready healthcheck, so `--wait` blocks until the database
+# answers and exits non-zero if it never does. If Docker Desktop itself is not running this
+# fails with Docker's own message — a hard stop, which is the point.
+bash scripts/gate.sh "postgres" docker compose up -d --wait
 bash scripts/gate.sh "tests" npm test
