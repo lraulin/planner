@@ -62,7 +62,12 @@ are the one gate that cannot be automated into a hook:
   mocking Drizzle, no tests that restate the implementation.
 - `npm run test:unit` passing does **not** mean the database tests ran — they skip when
   Postgres is down. Check for the skip warning after changing `mutations.ts` or
-  `queries.ts`.
+  `queries.ts`. Pushing no longer lets that slide: `.husky/pre-push` starts the container
+  itself and stops hard if Docker is not running.
+- **Unit tests run non-isolated**, which is what makes the whole unit suite ~2s. Files
+  sharing a worker share module registries, so a unit test must not mutate module-level
+  state. `npm test` chains `test:unit` then `test:integration` because Vitest applies
+  isolation and worker count per process, not per project.
 - **A green gate is not proof the app runs.** Nothing above evaluates a `"use server"`
   module: the tests never import one, and `next build` compiles the routes without
   rendering them because every page is `force-dynamic`. That gap once shipped a

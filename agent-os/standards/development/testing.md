@@ -70,10 +70,23 @@ chart"` survives a rewrite. `"calls db.update with the right args"` does not.
 | Unit tests             | `foo.test.ts` beside `foo.ts`, no database, must stay hermetic    |
 | Integration tests      | `foo.integration.test.ts`, real Postgres, one fresh user per test |
 | Run everything         | `npm test`                                                        |
-| Run only the fast ones | `npm run test:unit`                                               |
+| Run only the fast ones | `npm run test:unit` — the whole unit suite in about two seconds   |
+
+The two suites are Vitest **projects** (`unit` and `integration`), selected by name rather
+than by filename glob. Both run their files in parallel; the unit project additionally runs
+**non-isolated**, which is where most of that two seconds came from. Non-isolated means unit
+files sharing a worker share module registries, so **a unit test must not mutate module-level
+state** — no reassigning a module's exported binding, no writing to a module-scope cache. That
+is already how these tests are written, because the standard above keeps real logic in
+`src/lib/**` and out of anything stateful.
 
 Integration tests **skip loudly** when Postgres is unreachable, so a stopped container
 never blocks a commit — see `src/lib/testing/database.ts`. That means a green
 `npm run test:unit` does **not** mean the database logic passed. Check for the skip
 warning before trusting a green run on a change that touched `src/lib/**/mutations.ts` or
 `queries.ts`.
+
+It does, however, block a **push**. `.husky/pre-push` runs `docker compose up -d --wait`
+before the suite, so the container is started rather than assumed and a Docker daemon that
+is not running is a hard stop. The skip path exists for a manual `npm test` with Docker
+down; it can no longer carry unverified database code to origin.
