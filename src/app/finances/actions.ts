@@ -152,7 +152,19 @@ import {
   type AmazonSnapshotApplyResult,
 } from "@/lib/amazon/apply";
 import type { AmazonPreview } from "@/lib/amazon/preview";
-import { listAmazonReviewItems, type AmazonReviewRow } from "@/lib/amazon/queries";
+import {
+  loadAmazonBlock,
+  loadAmazonExportRows,
+  loadAmazonPrepared,
+  listAmazonReviewItems,
+  type AmazonReviewRow,
+} from "@/lib/amazon/queries";
+import {
+  AMAZON_BLOCK_SIZE,
+  type AmazonOrdersPrepared,
+  type AmazonOrdersRowBlock,
+} from "@/lib/amazon/ordersQuery";
+import type { AmazonItemListRow } from "@/lib/amazon/types";
 import {
   run,
   runQuery,
@@ -772,6 +784,25 @@ export async function addSupplyFromAmazonItemAction(
   asin: string,
 ): Promise<ActionResult> {
   return run((userId) => addSupplyItemFromAmazon(userId, asin), { revalidate: [] });
+}
+
+export async function loadAmazonIndexAction(
+  query: unknown,
+): Promise<QueryResult<AmazonOrdersPrepared>> {
+  return runQuery((userId) => loadAmazonPrepared(userId, query));
+}
+
+export async function loadAmazonBlockAction(
+  ids: readonly string[],
+): Promise<QueryResult<AmazonOrdersRowBlock>> {
+  const capped = ids.filter((id) => typeof id === "string").slice(0, AMAZON_BLOCK_SIZE);
+  return runQuery((userId) => loadAmazonBlock(userId, capped));
+}
+
+export async function loadAmazonExportAction(
+  query: unknown,
+): Promise<QueryResult<AmazonItemListRow[]>> {
+  return runQuery((userId) => loadAmazonExportRows(userId, query));
 }
 
 export async function previewAmazonSnapshotAction(

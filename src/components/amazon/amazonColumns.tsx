@@ -1,30 +1,31 @@
 "use client";
 
-import type { ColumnDef } from "@/components/grid/columns";
+import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
 import { formatUsd } from "@/lib/finances/money";
+import {
+  AMAZON_VISIBLE_COLUMN_IDS,
+  amazonFields,
+  type AmazonFieldId,
+} from "@/lib/amazon/amazonFields";
 import type { AmazonItemListRow } from "@/lib/amazon/types";
 
 export type AmazonColumnCtx = Record<string, never>;
 
-export const AMAZON_COLUMN_IDS = [
-  "date",
-  "product",
-  "qty",
-  "paid",
-  "unitPrice",
-  "discounts",
-  "payment",
-  "sns",
-  "bill",
-  "match",
-  "status",
-  "channel",
-  "website",
-  "orderId",
-  "asin",
-  "refunded",
-] as const;
+export const AMAZON_COLUMN_IDS = AMAZON_VISIBLE_COLUMN_IDS;
+
+function accessors(id: AmazonFieldId) {
+  const field = amazonFields[id];
+  return {
+    filterKind: field.filterKind,
+    filterValue: field.filterValue
+      ? (row: NodeGridRow<AmazonItemListRow>) => field.filterValue!(row.node)
+      : undefined,
+    sortValue: field.sortValue
+      ? (row: NodeGridRow<AmazonItemListRow>) => field.sortValue!(row.node)
+      : undefined,
+  };
+}
 
 function Text({ value, muted = true }: { value: string; muted?: boolean }) {
   return (
@@ -50,9 +51,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     label: "Date",
     width: "7rem",
     hideable: false,
-    filterKind: "date",
-    filterValue: (row) => row.node.orderDate || null,
-    sortValue: (row) => row.node.orderDate,
+    ...accessors("date"),
     compact: "meta",
     render: (row) =>
       row.node.orderDate ? (
@@ -67,9 +66,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     label: "Product",
     width: "minmax(14rem,1.8fr)",
     hideable: false,
-    filterKind: "text",
-    filterValue: (row) => row.node.productName || null,
-    sortValue: (row) => row.node.productName.toLowerCase(),
+    ...accessors("product"),
     compact: "primary",
     render: (row) => (
       <span
@@ -85,9 +82,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     label: "Qty",
     width: "3.5rem",
     align: "right",
-    filterKind: "text",
-    filterValue: (row) => String(row.node.quantity),
-    sortValue: (row) => row.node.quantity,
+    ...accessors("qty"),
     compact: "meta",
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-ink-muted">
@@ -100,10 +95,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     label: "Paid",
     width: "6.5rem",
     align: "right",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.node.itemPaidCents === null ? null : formatUsd(row.node.itemPaidCents),
-    sortValue: (row) => row.node.itemPaidCents,
+    ...accessors("paid"),
     compact: "meta",
     render: (row) => <Amount cents={row.node.itemPaidCents} />,
   },
@@ -112,10 +104,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     label: "Unit price",
     width: "6.5rem",
     align: "right",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.node.unitPriceCents === null ? null : formatUsd(row.node.unitPriceCents),
-    sortValue: (row) => row.node.unitPriceCents,
+    ...accessors("unitPrice"),
     compact: "meta",
     render: (row) => <Amount cents={row.node.unitPriceCents} />,
   },
@@ -124,10 +113,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     label: "Discounts",
     width: "6.5rem",
     align: "right",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.node.discountsCents === null ? null : formatUsd(row.node.discountsCents),
-    sortValue: (row) => row.node.discountsCents,
+    ...accessors("discounts"),
     compact: "meta",
     render: (row) => <Amount cents={row.node.discountsCents} />,
   },
@@ -135,9 +121,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     id: "payment",
     label: "Payment",
     width: "5.5rem",
-    filterKind: "enum",
-    filterValue: (row) => row.node.paymentLast4,
-    sortValue: (row) => row.node.paymentLast4 ?? "",
+    ...accessors("payment"),
     compact: "meta",
     render: (row) => (
       <Text
@@ -152,9 +136,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     label: "S&S",
     fieldLabel: "Subscribe & Save",
     width: "3.5rem",
-    filterKind: "enum",
-    filterValue: (row) => (row.node.subscribeAndSave ? "Yes" : "No"),
-    sortValue: (row) => (row.node.subscribeAndSave ? 1 : 0),
+    ...accessors("sns"),
     compact: "meta",
     render: (row) => <Text value={row.node.subscribeAndSave ? "Yes" : ""} />,
   },
@@ -162,9 +144,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     id: "bill",
     label: "Bill",
     width: "10rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.billName,
-    sortValue: (row) => row.node.billName ?? "",
+    ...accessors("bill"),
     compact: "meta",
     render: (row) => <Text value={row.node.billName ?? ""} />,
   },
@@ -172,9 +152,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     id: "match",
     label: "Match",
     width: "6rem",
-    filterKind: "enum",
-    filterValue: (row) => row.node.matchLabel,
-    sortValue: (row) => row.node.matchLabel ?? "",
+    ...accessors("match"),
     compact: "meta",
     render: (row) => (
       <Text
@@ -187,9 +165,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     id: "status",
     label: "Status",
     width: "7rem",
-    filterKind: "enum",
-    filterValue: (row) => row.node.orderStatus || null,
-    sortValue: (row) => row.node.orderStatus,
+    ...accessors("status"),
     compact: "meta",
     render: (row) => <Text value={row.node.orderStatus} />,
   },
@@ -197,9 +173,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     id: "channel",
     label: "Channel",
     width: "6rem",
-    filterKind: "enum",
-    filterValue: (row) => (row.node.channel === "digital" ? "Digital" : "Retail"),
-    sortValue: (row) => row.node.channel,
+    ...accessors("channel"),
     compact: "meta",
     render: (row) => (
       <Text value={row.node.channel === "digital" ? "Digital" : "Retail"} />
@@ -209,9 +183,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     id: "website",
     label: "Website",
     width: "7rem",
-    filterKind: "enum",
-    filterValue: (row) => row.node.website || null,
-    sortValue: (row) => row.node.website,
+    ...accessors("website"),
     compact: "meta",
     render: (row) => <Text value={row.node.website} />,
   },
@@ -219,9 +191,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     id: "orderId",
     label: "Order",
     width: "10rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.amazonOrderId || null,
-    sortValue: (row) => row.node.amazonOrderId,
+    ...accessors("orderId"),
     compact: "meta",
     render: (row) => <Text value={row.node.amazonOrderId} />,
   },
@@ -229,9 +199,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     id: "asin",
     label: "ASIN",
     width: "7rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.asin || null,
-    sortValue: (row) => row.node.asin,
+    ...accessors("asin"),
     compact: "meta",
     render: (row) => <Text value={row.node.asin} />,
   },
@@ -239,9 +207,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     id: "refunded",
     label: "Refunded",
     width: "5.5rem",
-    filterKind: "enum",
-    filterValue: (row) => (row.node.refundCount > 0 ? "Yes" : "No"),
-    sortValue: (row) => row.node.refundCount,
+    ...accessors("refunded"),
     compact: "meta",
     render: (row) => <Text value={row.node.refundCount > 0 ? "Yes" : ""} />,
   },

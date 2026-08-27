@@ -7,7 +7,7 @@ import { listTransactions } from "@/lib/finances/queries";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importAmazonSlim } from "./import";
 import { deleteAmazonItem } from "./mutations";
-import { getAmazonItem, listAmazonItems } from "./queries";
+import { getAmazonItem, listAmazonItems, listAmazonItemsByIds } from "./queries";
 import { SLIM_SOURCE, SLIM_VERSION, type SlimAmazonOrders } from "./types";
 
 const dbReachable = await databaseReachable();
@@ -119,6 +119,7 @@ describeDb("amazon import", () => {
     expect(after[0].orderStatus).toBe("Closed");
 
     expect(await listAmazonItems(userB)).toEqual([]);
+    expect(await listAmazonItemsByIds(userB, [rows[0].id])).toEqual([]);
     expect(await getAmazonItem(userB, rows[0].id)).toBeNull();
     expect(await deleteAmazonItem(userB, rows[0].id)).toBe(false);
     expect(await getAmazonItem(userA, rows[0].id)).not.toBeNull();

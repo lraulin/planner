@@ -123,9 +123,9 @@ refunded or incomplete stays in review.
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                       | Why                                                                                        |
+| --- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 1   | Orders uses the Register windowed index (100-row blocks) rather than hydrating every receipt | Thousands of line items froze the page once Bill/Match evidence was stamped onto every row |
 
 ## Task 1: Save spec documentation
 

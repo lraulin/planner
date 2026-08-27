@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   amazonChargeMatches,
@@ -12,43 +12,49 @@ import {
   financeBudgetCategories,
 } from "@/db/schema";
 import { numericStringToCents } from "@/lib/finances/money";
+import {
+  AMAZON_BLOCK_SIZE,
+  parseAmazonOrdersQuery,
+  prepareAmazonOrders,
+  type AmazonOrdersPrepared,
+  type AmazonOrdersRowBlock,
+} from "./ordersQuery";
 import type { AmazonChannel, AmazonItemListRow } from "./types";
+
+const ITEM_LIST_COLUMNS = {
+  id: amazonOrderItems.id,
+  orderId: amazonOrderItems.orderId,
+  amazonOrderId: amazonOrderItems.amazonOrderId,
+  channel: amazonOrderItems.channel,
+  orderDate: amazonOrders.orderDate,
+  orderStatus: amazonOrders.orderStatus,
+  productName: amazonOrderItems.productName,
+  asin: amazonOrderItems.asin,
+  quantity: amazonOrderItems.quantity,
+  unitPrice: amazonOrderItems.unitPrice,
+  itemPaid: amazonOrderItems.itemPaid,
+  discounts: amazonOrderItems.discounts,
+  paymentLast4: amazonOrders.paymentLast4,
+  paymentMethod: amazonOrders.paymentMethod,
+  subscribeAndSave: amazonOrderItems.subscribeAndSave,
+  shipmentStatus: amazonOrderItems.shipmentStatus,
+  shippingOption: amazonOrderItems.shippingOption,
+  website: amazonOrders.website,
+  currency: amazonOrders.currency,
+  externalId: amazonOrderItems.externalId,
+};
 
 /**
  * Every Amazon line item for the user, newest order first. Refund count is per order
  * so a cancelled/refunded purchase is visible on the row.
+ *
+ * The Orders page does not send this whole list to the browser — it prepares an index
+ * and a 100-row window (`loadAmazonPrepared`). Tests and the server pipeline still need
+ * the full set.
  */
 export async function listAmazonItems(userId: string): Promise<AmazonItemListRow[]> {
-  const refundCount = sql<number>`coalesce((
-    select count(*)::int from ${amazonRefunds}
-    where ${amazonRefunds.userId} = ${userId}
-      and ${amazonRefunds.amazonOrderId} = ${amazonOrders.amazonOrderId}
-  ), 0)`;
-
   const rows = await db
-    .select({
-      id: amazonOrderItems.id,
-      orderId: amazonOrderItems.orderId,
-      amazonOrderId: amazonOrderItems.amazonOrderId,
-      channel: amazonOrderItems.channel,
-      orderDate: amazonOrders.orderDate,
-      orderStatus: amazonOrders.orderStatus,
-      productName: amazonOrderItems.productName,
-      asin: amazonOrderItems.asin,
-      quantity: amazonOrderItems.quantity,
-      unitPrice: amazonOrderItems.unitPrice,
-      itemPaid: amazonOrderItems.itemPaid,
-      discounts: amazonOrderItems.discounts,
-      paymentLast4: amazonOrders.paymentLast4,
-      paymentMethod: amazonOrders.paymentMethod,
-      subscribeAndSave: amazonOrderItems.subscribeAndSave,
-      shipmentStatus: amazonOrderItems.shipmentStatus,
-      shippingOption: amazonOrderItems.shippingOption,
-      website: amazonOrders.website,
-      currency: amazonOrders.currency,
-      externalId: amazonOrderItems.externalId,
-      refundCount,
-    })
+    .select(ITEM_LIST_COLUMNS)
     .from(amazonOrderItems)
     .innerJoin(
       amazonOrders,
@@ -59,8 +65,126 @@ export async function listAmazonItems(userId: string): Promise<AmazonItemListRow
     )
     .where(eq(amazonOrderItems.userId, userId))
     .orderBy(desc(amazonOrders.orderDate), desc(amazonOrderItems.amazonOrderId));
+  const refunds = await refundCountsByOrder(userId);
+  return stampItemEvidence(
+    userId,
+    rows.map((row) => toListRow(row, refunds)),
+  );
+}
 
-  const mapped = rows.map((row) => ({
+/** User-scoped detail rows for an Orders block, preserving the requested order. */
+export async function listAmazonItemsByIds(
+  userId: string,
+  ids: readonly string[],
+): Promise<AmazonItemListRow[]> {
+  const wanted = [...new Set(ids)].slice(0, AMAZON_BLOCK_SIZE);
+  if (wanted.length === 0) return [];
+  const rows = await db
+    .select(ITEM_LIST_COLUMNS)
+    .from(amazonOrderItems)
+    .innerJoin(
+      amazonOrders,
+      and(
+        eq(amazonOrders.id, amazonOrderItems.orderId),
+        eq(amazonOrders.userId, userId),
+      ),
+    )
+    .where(
+      and(eq(amazonOrderItems.userId, userId), inArray(amazonOrderItems.id, wanted)),
+    );
+  const refunds = await refundCountsByOrder(
+    userId,
+    rows.map((row) => row.amazonOrderId),
+  );
+  const stamped = await stampItemEvidence(
+    userId,
+    rows.map((row) => toListRow(row, refunds)),
+  );
+  const byId = new Map(stamped.map((row) => [row.id, row]));
+  return wanted.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+}
+
+export async function loadAmazonPrepared(
+  userId: string,
+  rawQuery: unknown,
+): Promise<AmazonOrdersPrepared> {
+  const items = await listAmazonItems(userId);
+  return prepareAmazonOrders(items, parseAmazonOrdersQuery(rawQuery));
+}
+
+export async function loadAmazonBlock(
+  userId: string,
+  ids: readonly string[],
+): Promise<AmazonOrdersRowBlock> {
+  const rows = await listAmazonItemsByIds(userId, ids.slice(0, AMAZON_BLOCK_SIZE));
+  return { queryKey: "", offset: 0, rows };
+}
+
+export async function loadAmazonExportRows(
+  userId: string,
+  rawQuery: unknown,
+): Promise<AmazonItemListRow[]> {
+  const items = await listAmazonItems(userId);
+  const prepared = prepareAmazonOrders(items, parseAmazonOrdersQuery(rawQuery));
+  const byId = new Map(items.map((row) => [row.id, row]));
+  return prepared.index.nodeIds.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+}
+
+async function refundCountsByOrder(
+  userId: string,
+  amazonOrderIds?: readonly string[],
+): Promise<Map<string, number>> {
+  if (amazonOrderIds && amazonOrderIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      amazonOrderId: amazonRefunds.amazonOrderId,
+      n: sql<number>`count(*)::int`,
+    })
+    .from(amazonRefunds)
+    .where(
+      amazonOrderIds
+        ? and(
+            eq(amazonRefunds.userId, userId),
+            inArray(amazonRefunds.amazonOrderId, [...new Set(amazonOrderIds)]),
+          )
+        : eq(amazonRefunds.userId, userId),
+    )
+    .groupBy(amazonRefunds.amazonOrderId);
+  return new Map(rows.map((row) => [row.amazonOrderId, row.n]));
+}
+
+function toListRow(
+  row: {
+    id: string;
+    orderId: string;
+    amazonOrderId: string;
+    channel: string;
+    orderDate: string | null;
+    orderStatus: string;
+    productName: string;
+    asin: string;
+    quantity: number;
+    unitPrice: string | null;
+    itemPaid: string | null;
+    discounts: string | null;
+    paymentLast4: string | null;
+    paymentMethod: string;
+    subscribeAndSave: boolean;
+    shipmentStatus: string;
+    shippingOption: string;
+    website: string;
+    currency: string;
+    externalId: string;
+  },
+  refunds: Map<string, number>,
+): AmazonItemListRow & { lineId: string } {
+  return {
     id: row.id,
     orderId: row.orderId,
     amazonOrderId: row.amazonOrderId,
@@ -80,12 +204,11 @@ export async function listAmazonItems(userId: string): Promise<AmazonItemListRow
     shippingOption: row.shippingOption,
     website: row.website,
     currency: row.currency,
-    refundCount: row.refundCount,
+    refundCount: refunds.get(row.amazonOrderId) ?? 0,
     billName: null,
     matchLabel: null,
     lineId: row.externalId,
-  }));
-  return stampItemEvidence(userId, mapped);
+  };
 }
 
 async function stampItemEvidence(
@@ -233,8 +356,8 @@ export async function getAmazonItem(
   userId: string,
   id: string,
 ): Promise<AmazonItemListRow | null> {
-  const rows = await listAmazonItems(userId);
-  return rows.find((row) => row.id === id) ?? null;
+  const [row] = await listAmazonItemsByIds(userId, [id]);
+  return row ?? null;
 }
 
 export async function countAmazonItems(userId: string): Promise<number> {

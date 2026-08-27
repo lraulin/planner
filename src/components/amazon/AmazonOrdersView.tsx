@@ -1,10 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
-import type { GridRow } from "@/lib/tree/slice";
-import { AMAZON_GROUP_BY_VALUES, groupAmazonItems } from "@/lib/amazon/grouping";
+import { AMAZON_GROUP_BY_VALUES } from "@/lib/amazon/grouping";
 import type { AmazonItemListRow } from "@/lib/amazon/types";
+import {
+  parseAmazonOrdersQuery,
+  type AmazonOrdersPrepared,
+} from "@/lib/amazon/ordersQuery";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { FileImportHost } from "@/components/import/FileImportHost";
@@ -16,7 +26,7 @@ import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
-import { collectDistinctValues } from "@/lib/grid/distinct";
+import { useToday } from "@/components/grid/useToday";
 import { isTypingTarget } from "@/lib/keyboard";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import {
@@ -26,48 +36,56 @@ import {
 } from "@/app/finances/actions";
 import { SupplyItemPickerDialog } from "@/components/finances/supplies/SupplyItemPickerDialog";
 import type { SupplyItemRow } from "@/lib/finances/supplies/queries";
-import { amazonColumns, type AmazonColumnCtx } from "./amazonColumns";
+import {
+  amazonColumns,
+  AMAZON_COLUMN_IDS,
+  type AmazonColumnCtx,
+} from "./amazonColumns";
+import { useAmazonSource } from "./useAmazonSource";
 
 const AMAZON_VIEWS = [{ id: "all", label: "All Orders" }] as const;
 
-function viewDefaults(): GridDefaults {
+function viewDefaults(collapsedYears: string[]): GridDefaults {
   return {
-    order: [
-      "date",
-      "product",
-      "qty",
-      "paid",
-      "payment",
-      "sns",
-      "bill",
-      "match",
-      "status",
-      "channel",
-      "orderId",
-      "refunded",
-    ],
+    order: [...AMAZON_COLUMN_IDS],
     sorts: [{ columnId: "date", direction: "desc" }],
     groupBy: ["year", "month"],
+    collapsedGroups: collapsedYears,
   };
 }
 
+function subscribeNever() {
+  return () => {};
+}
+
+/** False during SSR and hydration; true after the client has painted the shell. */
+function useIsClient() {
+  return useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
+}
+
 export function AmazonOrdersView({
-  initialItems,
+  initialPrepared,
+  todayKey,
+  defaultCollapsedGroups,
 }: {
-  initialItems: AmazonItemListRow[];
+  initialPrepared: AmazonOrdersPrepared;
+  todayKey: string;
+  defaultCollapsedGroups: string[];
 }) {
-  const [rows, setRows] = useState(initialItems);
-  const [seen, setSeen] = useState(initialItems);
-  const [counts, setCounts] = useState({ shown: 0, total: 0 });
-  const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [supplyPicker, setSupplyPicker] = useState<{
     asin: string;
     items: SupplyItemRow[];
   } | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const router = useRouter();
+  const today = useToday();
+  const isClient = useIsClient();
 
   const reviewCommands = useMemo(
     () => [
@@ -85,34 +103,60 @@ export function AmazonOrdersView({
   );
   useRegisterCommands(reviewCommands);
 
-  if (initialItems !== seen) {
-    setSeen(initialItems);
-    setRows(initialItems);
-  }
-
+  const defaultsFor = useCallback(
+    () => viewDefaults(defaultCollapsedGroups),
+    [defaultCollapsedGroups],
+  );
   const views = useModuleViews({
     moduleId: "amazon",
     builtIn: AMAZON_VIEWS,
     defaultViewId: "all",
     columns: amazonColumns,
-    defaultsFor: viewDefaults,
+    defaultsFor,
   });
   const gridState = views.grid;
 
-  const gridRows: GridRow<AmazonItemListRow>[] = useMemo(
-    () => groupAmazonItems(rows, gridState.groupBy),
-    [rows, gridState.groupBy],
-  );
-  const distinctValues = useMemo(
+  const ordersQuery = useMemo(
     () =>
-      collectDistinctValues(
-        amazonColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
+      parseAmazonOrdersQuery({
+        search: gridState.search,
+        filters: gridState.filters,
+        advancedFilter: gridState.advancedFilter,
+        sorts: gridState.sorts,
+        groupBy: gridState.groupBy,
+        collapsedGroups: [...gridState.collapsedGroups],
+        visibleColumnIds: gridState.columns.map((column) => column.id),
+        today: today ?? todayKey,
+      }),
+    [
+      gridState.search,
+      gridState.filters,
+      gridState.advancedFilter,
+      gridState.sorts,
+      gridState.groupBy,
+      gridState.collapsedGroups,
+      gridState.columns,
+      today,
+      todayKey,
+    ],
   );
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const { order, onIdsChange } = useNavigableIds(rowIds);
+  const source = useAmazonSource({
+    initial: initialPrepared,
+    query: ordersQuery,
+  });
+  const {
+    index,
+    gridRows,
+    pendingRowIds,
+    distinctValues,
+    counts,
+    groupIds,
+    error: sourceError,
+    onVisibleRange,
+    loadExportRows,
+    rowById,
+  } = source;
+  const { order, onIdsChange } = useNavigableIds(index.nodeIds);
   const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } =
     useMultiSelect(order, null);
 
@@ -133,14 +177,11 @@ export function AmazonOrdersView({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [move]);
 
-  /**
-   * The discovery path for the Supplies worksheet: you notice you keep rebuying something
-   * while looking at what you bought. Adding lands on the worksheet, because the rate it
-   * infers is a guess that wants correcting where the totals are visible.
-   */
+  const displayError = error ?? sourceError;
+
   const rowMenu = useCallback(
     (rowId: string | null): MenuItem[] => {
-      const row = rows.find((candidate) => candidate.id === rowId);
+      const row = rowById(rowId);
       const asin = row?.asin ?? "";
       return [
         {
@@ -154,7 +195,7 @@ export function AmazonOrdersView({
         },
         {
           label: "Add to Supplies…",
-          disabled: pending || asin === "",
+          disabled: asin === "",
           title: asin === "" ? "This line item has no ASIN to track." : undefined,
           onSelect: () => {
             setError(null);
@@ -176,7 +217,7 @@ export function AmazonOrdersView({
         },
       ];
     },
-    [rows, pending, router],
+    [rowById, router],
   );
 
   return (
@@ -187,14 +228,14 @@ export function AmazonOrdersView({
         allColumns={amazonColumns}
         distinctValues={distinctValues}
         counts={counts}
-        error={error}
+        error={displayError}
         views={views}
         groupDimensions={AMAZON_GROUP_BY_VALUES}
         groupIds={groupIds}
       />
 
       <DataGrid<AmazonColumnCtx, AmazonItemListRow>
-        rows={gridRows}
+        rows={isClient ? gridRows : []}
         columns={gridState.columns}
         allColumns={amazonColumns}
         columnCtx={{}}
@@ -216,7 +257,12 @@ export function AmazonOrdersView({
         advancedFilter={gridState.advancedFilter}
         search={gridState.search}
         distinctValues={distinctValues}
-        onCountsChange={setCounts}
+        preparedCounts={counts}
+        preparedDisplay
+        virtualize={isClient}
+        pendingRowIds={pendingRowIds}
+        onVisibleRange={onVisibleRange}
+        loadExportRows={loadExportRows}
         onNavigableIdsChange={onIdsChange}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
@@ -224,14 +270,18 @@ export function AmazonOrdersView({
         columnControls={gridState.columnControls}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
-        onGroupIdsChange={setGroupIds}
         density={gridState.density}
         empty={
-          <p className="mx-auto max-w-lg p-6 text-center text-[0.9375rem] text-ink-muted">
-            No Amazon orders yet. Run{" "}
-            <code className="text-ink">npm run amazon:slim</code> on the privacy-request
-            zip, then import the JSON from File → Import Amazon orders…
-          </p>
+          !isClient ? (
+            <div className="min-h-0 flex-1" />
+          ) : (
+            <p className="mx-auto max-w-lg p-6 text-center text-[0.9375rem] text-ink-muted">
+              No Amazon orders yet. Run{" "}
+              <code className="text-ink">npm run amazon:slim</code> on the
+              privacy-request zip, then import the JSON from File → Import Amazon
+              orders…
+            </p>
+          )
         }
       />
 

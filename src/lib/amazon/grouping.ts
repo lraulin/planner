@@ -115,7 +115,12 @@ export function groupAmazonItems(
   });
 
   const out: GridRow<AmazonItemListRow>[] = [];
-  type Frame = { key: string; rowIndex: number; count: number };
+  type Frame = {
+    dimension: AmazonGroupBy;
+    key: string;
+    rowIndex: number;
+    count: number;
+  };
   const stack: Frame[] = [];
 
   function closeTo(depth: number) {
@@ -131,17 +136,22 @@ export function groupAmazonItems(
       const dimension = groupBy[level];
       const part = partOf(row, dimension);
       const frame = stack[level];
-      if (frame && frame.key === part.key) continue;
+      if (frame?.dimension === dimension && frame.key === part.key) continue;
       closeTo(level);
-      stack.push({ key: part.key, rowIndex: out.length, count: 0 });
+      const path = [
+        ...stack.map((entry) => `${entry.dimension}:${encodeURIComponent(entry.key)}`),
+        `${dimension}:${encodeURIComponent(part.key)}`,
+      ];
+      const rowIndex = out.length;
       out.push({
         kind: "group",
-        id: `g:${stack.map((item) => item.key).join("/")}`,
+        id: `group:${path.join("|")}`,
         label: part.label,
         count: 0,
         depth: level,
         collapsed: false,
       });
+      stack.push({ dimension, key: part.key, rowIndex, count: 0 });
     }
     for (const frame of stack) frame.count += 1;
     out.push(toGridRow(row));
