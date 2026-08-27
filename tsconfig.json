@@ -26,6 +26,11 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    // TypeScript's wildcards skip dot-directories, so the .well-known routes are outside
+    // the program on a clean checkout. Locally they sneak in through `.next/types`, which
+    // is generated and absent in CI — where the type-aware lint rules then failed with
+    // "not found by the project service". Name them explicitly instead.
+    "src/app/.well-known/**/*.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
