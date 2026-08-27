@@ -1,6 +1,6 @@
 # Split transactions — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** — verified 2026-08-26.
 
 ## Scope
 

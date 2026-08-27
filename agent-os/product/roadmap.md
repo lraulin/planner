@@ -1115,10 +1115,16 @@ period)` so money already spent stops being held twice and only going over bites
      anything. Group headers read "Pets — est. $121.70/mo · funded from Groceries",
      which is the signal that Pets wants its own envelope. `Suggest from Amazon` reads
      the order history already ingested above, so the sheet is not typed from scratch.
-     **Nothing here writes the budget**: attributing one Walmart charge across
-     envelopes needs split transactions, and that friction is what would stop the sheet
-     being kept up. Matching supply items to `finance_transactions` remains the next
-     spec, as above.
+     ✅ **Split transactions shipped 2026-08-26** —
+     `specs/2026-08-26-2022-split-transactions/`. This was the blocker named here
+     twice: one bank row can now be divided into children that each carry their own
+     amount and envelope, so a charge covering two things reaches two envelopes.
+     `Distribute` closes the tax remainder **in proportion to price**, which is where
+     Actual's even-split does not help. Splits stay rare by design — nothing creates
+     one automatically, no rule action can, and the register hides children until
+     asked. Matching supply items to `finance_transactions` remains the next spec, as
+     above; with splits in place, writing the budget from the sheet is no longer
+     blocked on the model.
 
 - **Eventually:** **Plaid** (or equivalent) remains a metered fallback if SimpleFIN
   staleness is unacceptable. Live bank sync shipped 2026-08-16 —

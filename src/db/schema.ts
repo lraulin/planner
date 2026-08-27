@@ -3367,8 +3367,11 @@ export const amazonReplacements = pgTable(
  * per item is `in_use` and drives the totals. Switching pack size then never means re-typing
  * how fast you go through the stuff.
  *
- * Nothing here writes the budget. Attributing one Walmart charge across several envelopes
- * needs split transactions, and that friction is what would stop the sheet being kept up.
+ * Nothing here writes the budget yet. That used to be blocked on the model — attributing one
+ * Walmart charge across several envelopes had nowhere to go — and no longer is:
+ * `agent-os/specs/2026-08-26-2022-split-transactions/` divides a charge into children that
+ * each carry an amount and an envelope. Writing the budget from this sheet is now a matter
+ * of matching supply items to transactions, which is its own spec.
  */
 
 /** How an item's consumption rate is stated. Exactly one of the two columns is populated. */

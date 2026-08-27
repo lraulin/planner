@@ -1,6 +1,6 @@
 # Split transactions
 
-**Status: active**
+**Status: frozen / complete** — verified 2026-08-26.
 Spec folder: `agent-os/specs/2026-08-26-2022-split-transactions/`
 
 ## Spec relationships
@@ -206,30 +206,36 @@ deviation from `agent-os/standards/components/responsive.md`, recorded in `stand
 
 ## Acceptance criteria
 
-- [ ] The $34.97 Apple charge splits into $13.78 Software and $21.19 Fitness via `Distribute`,
+- [x] The $34.97 Apple charge splits into $13.78 Software and $21.19 Fitness via `Distribute`,
       and both envelopes' Activity move by exactly those amounts.
-- [ ] Account balance, reconcile, and the statement check are **unchanged** by splitting a row —
+- [x] Account balance, reconcile, and the statement check are **unchanged** by splitting a row —
       the same numbers before and after.
-- [ ] Splitting a row does **not** increase the account's transaction count.
-- [ ] A split parent is **not** counted in the Budget page's backlog / discrepancy figure.
-- [ ] An unbalanced split is rejected by the mutation, with the shortfall named in the error.
-- [ ] `splitRemainder` unit tests cover: proportional and even strategies, the exact-sum
+- [x] Splitting a row does **not** increase the account's transaction count.
+- [x] A split parent is **not** counted in the Budget page's backlog / discrepancy figure.
+- [x] An unbalanced split is rejected by the mutation, with the shortfall named in the error.
+- [x] `splitRemainder` unit tests cover: proportional and even strategies, the exact-sum
       invariant, odd-cent determinism, zero and negative amounts, and a single child.
-- [ ] Cross-user integration test: a second user cannot read, split, rebalance or delete the
+- [x] Cross-user integration test: a second user cannot read, split, rebalance or delete the
       first user's transaction — **and cannot attach a child to the first user's parent**, which
       is the novel cross-user hole this schema opens.
-- [ ] Deleting a parent deletes its children; deleting the last child unsplits the parent.
-- [ ] Re-importing the source file leaves the split intact and creates no duplicate row.
-- [ ] lint, typecheck, Postgres tests with no skip warning, production build, `npm run smoke`,
+- [x] Deleting a parent deletes its children; deleting the last child unsplits the parent.
+- [x] Re-importing the source file leaves the split intact and creates no duplicate row.
+- [x] lint, typecheck, Postgres tests with no skip warning, production build, `npm run smoke`,
       and a browser pass on the Register and Budget pages.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                         | Why                                                                                                                                                                                                                                                                                                       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The two row-set filters became a shared module, `src/lib/finances/splitRows.ts` (`moneyRows` / `bankRows`).                    | D2 says every aggregate must declare which set it means. Two exported conditions with the reasoning on them make that declaration visible at the call site, where an inline `eq(isParent, false)` would just look like noise a later edit could drop.                                                     |
+| 2   | `listTransactions` returns bank rows, so reconcile, analytics and the statement check inherit the answer.                      | They all read the register's ledger rather than querying themselves. Filtering once at the shared reader is a smaller surface than repeating the same filter in each, and D2's row set for all three is the same.                                                                                         |
+| 3   | The shortfall message reads direction against the **parent's sign**, not against zero.                                         | On a card charge every amount is negative, so the first draft called a $1.98 under-allocation "over by" — the exact case the spec pins. Caught by the acceptance test.                                                                                                                                    |
+| 4   | A split parent is refused an envelope by the bulk and single Category writes, via a new `categoryAssignmentRefusal` reason.    | D3 says a parent holds none. Nothing in the plan stopped the existing Category writers from putting one there, which would double-count the parent against its own children. Clearing is refused too: a parent's null envelope is the split, not an absence, so a "successful" no-op would be misleading. |
+| 5   | The drawer's split editor is **handed** its children by the Register rather than fetching them itself.                         | A fetch-on-mount effect is the `set-state-in-effect` lint, and the repo's answer to it (`MetricDrawer`) is that the parent loads detail and passes it in. Same shape here.                                                                                                                                |
+| 6   | `TransactionListRow` carries `splitImbalanceCents`, computed in the same correlated subquery as the child count.               | D5 says a parent amount change flags rather than rebalances, but did not say where the flag lives. It is on the row, so the Category cell can say "off by" without a second read.                                                                                                                         |
+| 7   | Two duplicated copies of the register's column list (`listTransactions`, `getTransaction`) were collapsed onto the shared one. | Adding three columns to a list that existed three times is how the fourth copy drifts. Not scope creep — the same edit had to land in each.                                                                                                                                                               |
 
 ## Task 1: Save spec documentation
 
