@@ -63,7 +63,9 @@ are the one gate that cannot be automated into a hook:
 - `npm run test:unit` passing does **not** mean the database tests ran — they skip when
   Postgres is down. Check for the skip warning after changing `mutations.ts` or
   `queries.ts`. Pushing no longer lets that slide: `.husky/pre-push` starts the container
-  itself and stops hard if Docker is not running.
+  itself and stops hard if Docker is not running, and in CI (`CI` set) an unreachable
+  database throws rather than skipping — `.github/workflows/ci.yml` is the gate for
+  branches that never reach this machine, Dependabot's above all.
 - **Unit tests run non-isolated**, which is what makes the whole unit suite ~2s. Files
   sharing a worker share module registries, so a unit test must not mutate module-level
   state. `npm test` chains `test:unit` then `test:integration` because Vitest applies

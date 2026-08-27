@@ -65,12 +65,13 @@ chart"` survives a rewrite. `"calls db.update with the right args"` does not.
 
 ## Mechanics
 
-|                        |                                                                   |
-| ---------------------- | ----------------------------------------------------------------- |
-| Unit tests             | `foo.test.ts` beside `foo.ts`, no database, must stay hermetic    |
-| Integration tests      | `foo.integration.test.ts`, real Postgres, one fresh user per test |
-| Run everything         | `npm test`                                                        |
-| Run only the fast ones | `npm run test:unit` — the whole unit suite in about two seconds   |
+|                        |                                                                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Unit tests             | `foo.test.ts` beside `foo.ts`, no database, must stay hermetic                                                  |
+| Integration tests      | `foo.integration.test.ts`, real Postgres, one fresh user per test                                               |
+| Run everything         | `npm test`                                                                                                      |
+| Run only the fast ones | `npm run test:unit` — the whole unit suite in about two seconds                                                 |
+| Gates                  | pre-commit (lint, typecheck, unit), pre-push (everything, Postgres started first), and CI on every pull request |
 
 The two suites are Vitest **projects** (`unit` and `integration`), selected by name rather
 than by filename glob. Both run their files in parallel; the unit project additionally runs
@@ -90,3 +91,9 @@ It does, however, block a **push**. `.husky/pre-push` runs `docker compose up -d
 before the suite, so the container is started rather than assumed and a Docker daemon that
 is not running is a hard stop. The skip path exists for a manual `npm test` with Docker
 down; it can no longer carry unverified database code to origin.
+
+**And it does not exist at all in CI.** With `CI` set, an unreachable database throws
+instead of skipping: a workflow whose Postgres service never came up is a broken gate, not
+a developer convenience, and a skip there would report green for database code that never
+ran. That covers the branches a hook structurally cannot — anything opened as a pull request
+without passing through this machine, Dependabot's bumps above all.
