@@ -6,6 +6,7 @@
  */
 
 import { VERCEL_BODY_MAX_BYTES } from "@/lib/http/uploadLimits";
+import type { AmazonOrderSummary } from "./orderSummary";
 
 export const SLIM_VERSION = 1;
 export const SLIM_SOURCE = "amazon-data-request";
@@ -24,6 +25,12 @@ export type SlimOrder = {
   paymentLast4: string | null;
   website: string;
   currency: string;
+  /**
+   * Amazon's printed order summary. The browser capture carries one; a privacy-zip document
+   * has none on disk and gets a `derived` one at persist time. Optional because slim files
+   * written before this existed are still valid.
+   */
+  summary?: AmazonOrderSummary | null;
 };
 
 export type SlimItem = {

@@ -17,6 +17,7 @@ import {
   listAmazonChargeOrders,
   listAmazonCharges,
   listAmazonItems,
+  listAmazonOrderSummaries,
   listAmazonReviewItems,
   listAmazonSubscriptions,
 } from "./queries";
@@ -70,7 +71,7 @@ function snapshot(overrides?: Partial<AmazonSnapshot>): AmazonSnapshot {
     ],
     payments: [
       {
-        paymentId: "pay-111",
+        paymentId: "114-1111111-1111111|2026-08-01|3448|-2114|0",
         date: "2026-08-01",
         amountCents: -2114,
         status: "completed",
@@ -231,7 +232,7 @@ describeDb("amazon snapshot evidence", () => {
       snapshot({
         payments: [
           {
-            paymentId: "pay-111",
+            paymentId: "114-1111111-1111111|2026-08-01|3448|-2114|0",
             date: "2026-08-01",
             amountCents: -2114,
             status: "completed",
@@ -249,6 +250,144 @@ describeDb("amazon snapshot evidence", () => {
       "114-2222222-2222222",
       "114-3333333-3333333",
     ]);
+  });
+
+  it("stores Amazon's printed summary and does not rewrite it on a re-capture", async () => {
+    const userId = await makeUser();
+    await persistAmazonSnapshot(userId, snapshot());
+    const [summary] = await listAmazonOrderSummaries(userId, ["114-1111111-1111111"]);
+    expect(summary).toMatchObject({
+      itemsSubtotalCents: 1899,
+      promotionCents: -200,
+      taxCents: 115,
+      grandTotalCents: 1814,
+      source: "printed",
+    });
+    expect(summary.check.status).toBe("reconciled");
+    expect(summary.lines.map((line) => line.label)).toContain("Subscription saving");
+
+    const again = await persistAmazonSnapshot(userId, snapshot());
+    expect(again.ordersUnchanged).toBeGreaterThan(0);
+  });
+
+  it("flags an order whose printed lines do not add up to its grand total", async () => {
+    const userId = await makeUser();
+    await persistAmazonSnapshot(
+      userId,
+      snapshot({
+        orders: [
+          {
+            amazonOrderId: "114-1111111-1111111",
+            orderDate: "2026-07-31",
+            orderStatus: "Shipped",
+            subscribeAndSave: true,
+            // The subscription saving Amazon printed is missing, which is exactly the
+            // capture defect this spec fixes.
+            summary: parseAmazonOrderSummary([
+              { label: "Item(s) Subtotal:", amount: "$18.99" },
+              { label: "Estimated tax to be collected:", amount: "$1.15" },
+              { label: "Grand Total:", amount: "$18.14" },
+            ]),
+          },
+        ],
+      }),
+    );
+    const [summary] = await listAmazonOrderSummaries(userId, ["114-1111111-1111111"]);
+    expect(summary.check.status).toBe("unbalanced");
+    expect(summary.check.differenceCents).toBe(-200);
+  });
+
+  it("derives a zip order's summary and never lets it overwrite a printed one", async () => {
+    const userId = await makeUser();
+    const zipText = JSON.stringify({
+      version: SLIM_VERSION,
+      source: SLIM_SOURCE,
+      generatedAt: "2026-08-14T18:00:00.000Z",
+      orders: [
+        {
+          amazonOrderId: "114-1111111-1111111",
+          channel: "retail",
+          orderDate: "2026-07-31",
+          orderStatus: "Closed",
+          paymentMethod: "Visa - 3448",
+          paymentLast4: "3448",
+          website: "Amazon.com",
+          currency: "USD",
+        },
+      ],
+      items: [
+        {
+          lineId: "114-1111111-1111111:B00TOILET1:0",
+          amazonOrderId: "114-1111111-1111111",
+          channel: "retail",
+          asin: "B00TOILET1",
+          productName: "Toilet paper 12-pack",
+          quantity: 2,
+          unitPriceCents: 999,
+          unitPriceTaxCents: 0,
+          itemPaidCents: 1899,
+          itemTaxCents: 115,
+          discountsCents: 200,
+          shippingChargeCents: 0,
+          shippingOption: "std-sns-us",
+          shipmentStatus: "Shipped",
+          subscribeAndSave: true,
+          shipDate: "2026-08-01",
+          orderDate: "2026-07-31",
+          orderStatus: "Closed",
+          paymentMethod: "Visa - 3448",
+          paymentLast4: "3448",
+          website: "Amazon.com",
+          currency: "USD",
+        },
+      ],
+      refunds: [],
+      returns: [],
+      replacements: [],
+    });
+    await importAmazonSlim({ userId, text: zipText });
+    const [derived] = await listAmazonOrderSummaries(userId, ["114-1111111-1111111"]);
+    expect(derived.source).toBe("derived");
+    expect(derived.grandTotalCents).toBe(1814);
+
+    await persistAmazonSnapshot(userId, snapshot());
+    const [printed] = await listAmazonOrderSummaries(userId, ["114-1111111-1111111"]);
+    expect(printed.source).toBe("printed");
+
+    // A later zip import must not replace Amazon's own receipt with a re-derivation.
+    await importAmazonSlim({ userId, text: zipText });
+    const [kept] = await listAmazonOrderSummaries(userId, ["114-1111111-1111111"]);
+    expect(kept.source).toBe("printed");
+    expect(kept.grandTotalCents).toBe(1814);
+  });
+
+  it("flags a charge captured before order totals rather than leaving a silent duplicate", async () => {
+    const userId = await makeUser();
+    await persistAmazonSnapshot(
+      userId,
+      snapshot({
+        payments: [
+          {
+            paymentId: "pay-111",
+            date: "2026-08-01",
+            amountCents: -2114,
+            status: "completed",
+            cardLast4: "3448",
+            instrumentKind: "card",
+            amazonOrderIds: ["114-1111111-1111111"],
+          },
+        ],
+      }),
+    );
+    await persistAmazonSnapshot(userId, snapshot());
+    const charges = await listAmazonCharges(userId);
+    const superseded = charges.find((row) => row.amazonPaymentId === "pay-111");
+    expect(superseded?.needsReview).toBe(true);
+    expect(superseded?.reviewReason).toMatch(/re-capture supersedes it/);
+    const current = charges.find((row) =>
+      row.amazonPaymentId.startsWith("114-1111111-1111111|"),
+    );
+    expect(current?.needsReview).toBe(false);
   });
 
   it("refuses a second user every read, change and delete of the first user's evidence", async () => {
@@ -284,9 +423,15 @@ describeDb("amazon snapshot evidence", () => {
     expect(await deleteAmazonCharge(intruder, charge.id)).toBe(false);
     expect(await deleteAmazonItem(intruder, item.id)).toBe(false);
 
+    expect(await listAmazonOrderSummaries(intruder)).toEqual([]);
+    expect(await listAmazonOrderSummaries(intruder, ["114-1111111-1111111"])).toEqual(
+      [],
+    );
+
     expect(await getAmazonSubscription(owner, subscription.id)).not.toBeNull();
     expect(await getAmazonCharge(owner, charge.id)).not.toBeNull();
     expect(await listAmazonItems(owner)).toHaveLength(1);
+    expect(await listAmazonOrderSummaries(owner)).toHaveLength(1);
   });
 
   it("lists a review charge as its orders and items, never to a second user", async () => {

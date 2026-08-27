@@ -8,8 +8,14 @@ import {
   amazonReturns,
 } from "@/db/schema";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
+import { deriveAmazonOrderSummary, type AmazonOrderSummary } from "./orderSummary";
 import { parseSlimJson } from "./slim";
-import { AMAZON_FEEDS, type AmazonImportResult, type SlimAmazonOrders } from "./types";
+import {
+  AMAZON_FEEDS,
+  type AmazonImportResult,
+  type SlimAmazonOrders,
+  type SlimItem,
+} from "./types";
 
 type Db = typeof db;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -54,11 +60,38 @@ export async function importAmazonSlim(
   return persistSlim(input.userId, parsed.data);
 }
 
+/**
+ * Give every order a summary the privacy zip does not print.
+ *
+ * Only on the zip path. A browser capture already carries Amazon's own summary, and its
+ * item rows deliberately have no tax or discounts — deriving from them would reproduce the
+ * exact item-sum total this spec exists to replace.
+ */
+function withDerivedSummaries(document: SlimAmazonOrders): SlimAmazonOrders {
+  const itemsByOrder = new Map<string, SlimItem[]>();
+  for (const item of document.items) {
+    const list = itemsByOrder.get(item.amazonOrderId) ?? [];
+    list.push(item);
+    itemsByOrder.set(item.amazonOrderId, list);
+  }
+  return {
+    ...document,
+    orders: document.orders.map((order) => {
+      if (order.summary) return order;
+      const items = itemsByOrder.get(order.amazonOrderId) ?? [];
+      if (items.length === 0) return order;
+      return { ...order, summary: deriveAmazonOrderSummary(items) };
+    }),
+  };
+}
+
 export async function persistSlim(
   userId: string,
-  document: SlimAmazonOrders,
+  input: SlimAmazonOrders,
   options: { enrich?: boolean } = {},
 ): Promise<AmazonImportResult> {
+  const enrich = options.enrich === true;
+  const document = enrich ? input : withDerivedSummaries(input);
   return db.transaction(async (tx) => {
     const orders = await upsertOrders(tx, userId, document, options.enrich === true);
     const items = await upsertItems(tx, userId, document, options.enrich === true);
@@ -87,6 +120,90 @@ export async function persistSlim(
 
 type Counts = { created: number; updated: number; unchanged: number };
 
+type SummaryColumns = {
+  itemsSubtotal: string | null;
+  shippingHandling: string | null;
+  promotion: string | null;
+  tax: string | null;
+  grandTotal: string | null;
+  summaryLines: AmazonOrderSummary["lines"] | null;
+  summarySource: string | null;
+};
+
+function summaryColumns(summary: AmazonOrderSummary | null): SummaryColumns {
+  if (!summary) {
+    return {
+      itemsSubtotal: null,
+      shippingHandling: null,
+      promotion: null,
+      tax: null,
+      grandTotal: null,
+      summaryLines: null,
+      summarySource: null,
+    };
+  }
+  return {
+    itemsSubtotal: money(summary.itemsSubtotalCents),
+    shippingHandling: money(summary.shippingHandlingCents),
+    promotion: money(summary.promotionCents),
+    tax: money(summary.taxCents),
+    grandTotal: money(summary.grandTotalCents),
+    summaryLines: summary.lines,
+    summarySource: summary.source,
+  };
+}
+
+/**
+ * Which summary survives an upsert.
+ *
+ * Amazon's printed summary outranks a derived one, and no summary at all never clears one
+ * we already have — a zip import after a capture must not throw away the real receipt, and
+ * a capture that could not reach an order's detail page must not blank it either.
+ */
+function keptSummary(
+  incoming: AmazonOrderSummary | null,
+  found: SummaryColumns,
+): SummaryColumns {
+  if (!incoming) return storedSummaryColumns(found);
+  if (incoming.source === "derived" && found.summarySource === "printed") {
+    return storedSummaryColumns(found);
+  }
+  return summaryColumns(incoming);
+}
+
+/**
+ * Compare summary lines field by field.
+ *
+ * `jsonb` reorders an object's keys on the way back out of Postgres, so stringifying both
+ * sides reports every re-import as a change and rewrites rows that did not move.
+ */
+function sameSummaryLines(
+  stored: AmazonOrderSummary["lines"] | null,
+  next: AmazonOrderSummary["lines"] | null,
+): boolean {
+  const left = stored ?? [];
+  const right = next ?? [];
+  if (left.length !== right.length) return false;
+  return left.every(
+    (line, index) =>
+      line.label === right[index].label &&
+      line.amountCents === right[index].amountCents &&
+      line.kind === right[index].kind,
+  );
+}
+
+function storedSummaryColumns(found: SummaryColumns): SummaryColumns {
+  return {
+    itemsSubtotal: found.itemsSubtotal,
+    shippingHandling: found.shippingHandling,
+    promotion: found.promotion,
+    tax: found.tax,
+    grandTotal: found.grandTotal,
+    summaryLines: found.summaryLines,
+    summarySource: found.summarySource,
+  };
+}
+
 async function upsertOrders(
   tx: Executor,
   userId: string,
@@ -112,6 +229,7 @@ async function upsertOrders(
       paymentLast4: order.paymentLast4,
       website: order.website,
       currency: order.currency || "USD",
+      ...summaryColumns(order.summary ?? null),
       externalSource: AMAZON_FEEDS.order,
       externalId: order.amazonOrderId,
     };
@@ -120,6 +238,7 @@ async function upsertOrders(
       toInsert.push(values);
       continue;
     }
+    const summary = keptSummary(order.summary ?? null, found);
     const next = enrich
       ? {
           ...values,
@@ -129,8 +248,9 @@ async function upsertOrders(
           paymentLast4: values.paymentLast4 ?? found.paymentLast4,
           website: values.website || found.website,
           currency: values.currency || found.currency,
+          ...summary,
         }
-      : values;
+      : { ...values, ...summary };
     const changed =
       found.channel !== next.channel ||
       !sameDate(found.orderDate, next.orderDate ?? "") ||
@@ -138,7 +258,20 @@ async function upsertOrders(
       !sameText(found.paymentMethod, next.paymentMethod) ||
       !sameText(found.paymentLast4, next.paymentLast4) ||
       !sameText(found.website, next.website) ||
-      !sameText(found.currency, next.currency);
+      !sameText(found.currency, next.currency) ||
+      !sameText(found.summarySource, next.summarySource) ||
+      !sameMoney(found.grandTotal, numericStringToCents(next.grandTotal ?? null)) ||
+      !sameMoney(
+        found.itemsSubtotal,
+        numericStringToCents(next.itemsSubtotal ?? null),
+      ) ||
+      !sameMoney(
+        found.shippingHandling,
+        numericStringToCents(next.shippingHandling ?? null),
+      ) ||
+      !sameMoney(found.promotion, numericStringToCents(next.promotion ?? null)) ||
+      !sameMoney(found.tax, numericStringToCents(next.tax ?? null)) ||
+      !sameSummaryLines(found.summaryLines, next.summaryLines);
     if (!changed) {
       counts.unchanged += 1;
       continue;
@@ -153,6 +286,13 @@ async function upsertOrders(
         paymentLast4: next.paymentLast4,
         website: next.website,
         currency: next.currency,
+        itemsSubtotal: next.itemsSubtotal,
+        shippingHandling: next.shippingHandling,
+        promotion: next.promotion,
+        tax: next.tax,
+        grandTotal: next.grandTotal,
+        summaryLines: next.summaryLines,
+        summarySource: next.summarySource,
         updatedAt: new Date(),
       })
       .where(and(eq(amazonOrders.id, found.id), eq(amazonOrders.userId, userId)));

@@ -12,6 +12,7 @@ import { db } from "@/db";
 import { amazonChargeOrders, amazonCharges, amazonSubscriptions } from "@/db/schema";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { persistSlim } from "./import";
+import { isAmazonChargeKey } from "./snapshot";
 import {
   AMAZON_FEEDS,
   SLIM_SOURCE,
@@ -76,6 +77,7 @@ function slimFromSnapshot(snapshot: AmazonSnapshot): SlimAmazonOrders {
     paymentLast4: last4ByOrder.get(order.amazonOrderId) ?? null,
     website: "Amazon.com",
     currency: "USD",
+    summary: order.summary,
   }));
   const orderById = new Map(
     snapshot.orders.map((order) => [order.amazonOrderId, order]),
@@ -122,6 +124,7 @@ function slimFromSnapshot(snapshot: AmazonSnapshot): SlimAmazonOrders {
       paymentLast4: last4,
       website: "Amazon.com",
       currency: "USD",
+      summary: null,
     });
   }
   return {
@@ -289,6 +292,23 @@ async function upsertCharges(
       chargeId,
       row.amazonOrderIds,
     );
+  }
+
+  // v1 minted a charge id from the page wording, so those rows can never be produced again
+  // and a re-capture would leave them beside the charge they duplicate. Flag rather than
+  // delete: some of them carry a match and a split the user already reviewed.
+  for (const row of existing) {
+    if (isAmazonChargeKey(row.amazonPaymentId)) continue;
+    if (row.needsReview) continue;
+    await tx
+      .update(amazonCharges)
+      .set({
+        needsReview: true,
+        reviewReason:
+          "Captured before order totals; re-capture supersedes it. Check for a duplicate.",
+        updatedAt: new Date(),
+      })
+      .where(and(eq(amazonCharges.id, row.id), eq(amazonCharges.userId, userId)));
   }
   return counts;
 }

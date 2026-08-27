@@ -14,6 +14,14 @@ import {
 import { numericStringToCents } from "@/lib/finances/money";
 import { amazonReviewChargeTitle } from "./grouping";
 import {
+  asAmazonSummaryLines,
+  asAmazonSummarySource,
+  checkAmazonOrderSummary,
+  type AmazonOrderSummaryLine,
+  type AmazonSummaryCheck,
+  type AmazonSummarySource,
+} from "./orderSummary";
+import {
   AMAZON_BLOCK_SIZE,
   parseAmazonOrdersQuery,
   prepareAmazonOrders,
@@ -304,6 +312,69 @@ async function stampItemEvidence(
       billName: billId ? (billNameById.get(billId) ?? null) : null,
       matchLabel,
       chargeId: reviewId ?? matchedId,
+    };
+  });
+}
+
+export type AmazonOrderSummaryRow = {
+  amazonOrderId: string;
+  orderDate: string;
+  itemsSubtotalCents: number | null;
+  shippingHandlingCents: number | null;
+  promotionCents: number | null;
+  taxCents: number | null;
+  grandTotalCents: number | null;
+  source: AmazonSummarySource | null;
+  lines: AmazonOrderSummaryLine[];
+  check: AmazonSummaryCheck;
+};
+
+/**
+ * Amazon's printed money for the named orders, with the reconciliation check attached.
+ *
+ * The check travels with the row rather than being recomputed by each caller, so the grid
+ * header and the review drawer cannot disagree about whether an order adds up.
+ */
+export async function listAmazonOrderSummaries(
+  userId: string,
+  amazonOrderIds?: readonly string[],
+): Promise<AmazonOrderSummaryRow[]> {
+  if (amazonOrderIds && amazonOrderIds.length === 0) return [];
+  const rows = await db
+    .select({
+      amazonOrderId: amazonOrders.amazonOrderId,
+      orderDate: amazonOrders.orderDate,
+      itemsSubtotal: amazonOrders.itemsSubtotal,
+      shippingHandling: amazonOrders.shippingHandling,
+      promotion: amazonOrders.promotion,
+      tax: amazonOrders.tax,
+      grandTotal: amazonOrders.grandTotal,
+      summaryLines: amazonOrders.summaryLines,
+      summarySource: amazonOrders.summarySource,
+    })
+    .from(amazonOrders)
+    .where(
+      amazonOrderIds
+        ? and(
+            eq(amazonOrders.userId, userId),
+            inArray(amazonOrders.amazonOrderId, [...new Set(amazonOrderIds)]),
+          )
+        : eq(amazonOrders.userId, userId),
+    );
+  return rows.map((row) => {
+    const lines = asAmazonSummaryLines(row.summaryLines);
+    const grandTotalCents = numericStringToCents(row.grandTotal);
+    return {
+      amazonOrderId: row.amazonOrderId,
+      orderDate: row.orderDate ?? "",
+      itemsSubtotalCents: numericStringToCents(row.itemsSubtotal),
+      shippingHandlingCents: numericStringToCents(row.shippingHandling),
+      promotionCents: numericStringToCents(row.promotion),
+      taxCents: numericStringToCents(row.tax),
+      grandTotalCents,
+      source: asAmazonSummarySource(row.summarySource),
+      lines,
+      check: checkAmazonOrderSummary({ lines, grandTotalCents }),
     };
   });
 }
