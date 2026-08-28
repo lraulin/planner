@@ -817,6 +817,48 @@ describeDb("budget mutations", () => {
     expect(data.goals[`${MONTH}|${bills}`]).toBe(12_000);
   });
 
+  it("round-trips a weekly line and keeps it from a second user", async () => {
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const groceries = ids.get("Recurring spend")!;
+    const weekly = {
+      id: "w1",
+      directive: "template" as const,
+      type: "weekly" as const,
+      priority: 0,
+      amountCents: 18_000,
+      weekday: 0,
+    };
+
+    await saveEnvelopeTemplates(userId, groceries, [weekly]);
+
+    const stored = (await loadBudget(userId, MONTH)).categories.find(
+      (row) => row.id === groceries,
+    );
+    expect(stored?.templates).toEqual([weekly]);
+
+    // A second user must fail to read it, change it, or clear it.
+    const intruderId = await makeUser();
+    expect(
+      (await loadBudget(intruderId, MONTH)).categories.find(
+        (row) => row.id === groceries,
+      ),
+    ).toBeUndefined();
+    await expect(
+      saveEnvelopeTemplates(intruderId, groceries, [
+        { ...weekly, amountCents: 100, weekday: 3 },
+      ]),
+    ).rejects.toThrow(/does not exist/);
+    await expect(saveEnvelopeTemplates(intruderId, groceries, [])).rejects.toThrow(
+      /does not exist/,
+    );
+
+    const after = (await loadBudget(userId, MONTH)).categories.find(
+      (row) => row.id === groceries,
+    );
+    expect(after?.templates).toEqual([weekly]);
+  });
+
   it("Underfunded clamps to Ready to Assign and keeps the full ask as the goal", async () => {
     const { checkingId } = await seedAccounts(userId);
     await addTransactions(userId, [
