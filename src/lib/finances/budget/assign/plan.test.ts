@@ -30,6 +30,15 @@ const by = (cents: number, month: string, id = "b1"): Template => ({
   month,
 });
 
+const weekly = (cents: number, weekday: number, id = "w1"): Template => ({
+  id,
+  directive: "template",
+  type: "weekly",
+  priority: 0,
+  amountCents: cents,
+  weekday,
+});
+
 const remainder = (weight = 1, id = "r1"): Template => ({
   id,
   directive: "template",
@@ -314,6 +323,38 @@ describe("neededAssigned", () => {
       balanceCents: -40_000,
     });
     expect(neededAssigned(overspent, MONTH, new Map()).needed).toBe(40_000);
+  });
+});
+
+describe("weekly templates through Underfunded", () => {
+  /** Sunday groceries at $180: August 2026 has five Sundays, September four. */
+  const groceries = (over: Partial<AssignEnvelope> = {}) =>
+    envelope({ templates: [weekly(18_000, 0)], ...over });
+
+  it("asks the calendar's occurrence count, not a fixed four", () => {
+    expect(neededAssigned(groceries(), "2026-08-01", new Map()).needed).toBe(90_000);
+    expect(neededAssigned(groceries(), "2026-09-01", new Map()).needed).toBe(72_000);
+  });
+
+  it("tops up mid-month to the whole month's total", () => {
+    const result = run("underfunded", [groceries({ assignedCents: 36_000 })]);
+    expect(result.lines[0]?.deltaCents).toBe(54_000);
+    expect(result.lines[0]?.toAssignedCents).toBe(90_000);
+  });
+
+  it("does not let carry-in reduce the ask (D3)", () => {
+    const withCarry = groceries({ carryInCents: 50_000, balanceCents: 50_000 });
+    expect(neededAssigned(withCarry, "2026-08-01", new Map()).needed).toBe(90_000);
+    const result = run("underfunded", [withCarry]);
+    expect(result.lines[0]?.deltaCents).toBe(90_000);
+  });
+
+  it("ranks alongside a simple line, ahead of an envelope with no ask", () => {
+    const spare = envelope({ id: "fun", name: "Fun", templates: [remainder()] });
+    const result = run("underfunded", [spare, groceries()], {
+      readyToAssignCents: 90_000,
+    });
+    expect(result.lines[0]?.categoryId).toBe("food");
   });
 });
 

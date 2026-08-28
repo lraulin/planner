@@ -33,6 +33,15 @@ const by = (cents: number, month: string): Template => ({
   month,
 });
 
+const weekly = (cents: number, weekday: number): Template => ({
+  id: "w1",
+  directive: "template",
+  type: "weekly",
+  priority: 0,
+  amountCents: cents,
+  weekday,
+});
+
 const remainder = (): Template => ({
   id: "r1",
   directive: "template",
@@ -131,6 +140,18 @@ describe("envelopeIndicator", () => {
     expect(indicator.state).toBe("underfunded");
     expect(indicator.moreNeededCents).toBe(50_000);
     expect(indicator.copy).toBe("$500.00 more needed this month");
+  });
+
+  it("gives a weekly envelope the this-month horizon, not a sinking one", () => {
+    // Five Sundays in August 2026 at $180.
+    const row = envelope({
+      templates: [weekly(18_000, 0)],
+      assignedCents: 0,
+      balanceCents: 0,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("underfunded");
+    expect(indicator.copy).toBe("$900.00 more needed this month");
   });
 
   it("never puts On Track on a simple monthly template", () => {

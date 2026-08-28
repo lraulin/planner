@@ -15,7 +15,7 @@ import { monthLabel, monthName, shiftMonthKey, type MonthKey } from "./envelope"
 import { neededAssigned } from "./assign/plan";
 import type { AssignEnvelope } from "./assign/types";
 import { monthsUntilBy, runBy } from "./templates/by";
-import { bys, simples } from "./templates/demand";
+import { bys, simples, weeklies } from "./templates/demand";
 import { monthsUntilDate } from "./templates/monthSpan";
 import type { BillSnapshot } from "./templates/schedule";
 
@@ -91,7 +91,9 @@ function horizonOf(
     };
   }
 
-  if (simples(envelope.templates).length > 0) return { kind: "this-month" };
+  if (simples(envelope.templates).length + weeklies(envelope.templates).length > 0) {
+    return { kind: "this-month" };
+  }
 
   if (envelope.kind !== "bill") return { kind: "none" };
   const snapshot = bills.get(envelope.id);
