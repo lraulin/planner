@@ -1,7 +1,7 @@
 "use client";
 
 import { formatUsd } from "@/lib/finances/money";
-import type { BudgetMonth } from "@/lib/finances/budget/envelope";
+import { readyToAssignNote, type BudgetMonth } from "@/lib/finances/budget/envelope";
 
 /**
  * Ready to Assign, and the five terms that make it.
@@ -38,11 +38,7 @@ export function BudgetSummary({
           {formatUsd(ready)}
         </span>
         <span className="text-[0.8125rem] text-ink-muted">
-          {ready > 0
-            ? "unassigned from on-budget accounts"
-            : ready < 0
-              ? "assigned more than you have"
-              : "every dollar has a job"}
+          {readyToAssignNote(ready)}
         </span>
         {onAssign ? (
           <button

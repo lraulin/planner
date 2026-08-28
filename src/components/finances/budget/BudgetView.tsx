@@ -5,6 +5,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type ReactNode,
@@ -24,6 +25,16 @@ import {
 import type { Command } from "@/lib/commands/registry";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
+import { downloadTextFile } from "@/components/grid/downloadCsv";
+import {
+  exportFilename,
+  exportMimeType,
+  gridCopyCommands,
+  gridExportCommands,
+  gridExportFormatOf,
+} from "@/lib/grid/exportCsv";
+import { writeClipboardText } from "@/lib/tree/copyAsText";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { ContextMenu, type MenuItem } from "@/components/grid/ContextMenu";
 import { DataGrid } from "@/components/grid/DataGrid";
@@ -40,9 +51,12 @@ import {
   type BudgetMonth,
 } from "@/lib/finances/budget/envelope";
 import {
-  budgetGridExportPlan,
-  type BudgetTableId,
-} from "@/lib/finances/budget/gridScopes";
+  budgetExportDocument,
+  gridExportSection,
+  serializeBudgetExport,
+  totalsCaption,
+  type BudgetExportDocument,
+} from "@/lib/finances/budget/export";
 import type { BudgetData } from "@/lib/finances/budget/queries";
 import {
   budgetRows,
@@ -94,6 +108,12 @@ import { TemplateDrawer } from "./TemplateDrawer";
 import { ReviewDrawer } from "./ReviewDrawer";
 
 /**
+ * Which table last had the focus ring. Selection and the inspector read it; export no
+ * longer does — the page exports one document, so there is nothing left to disambiguate.
+ */
+type BudgetTable = "envelopes" | "bills" | "savings";
+
+/**
  * The budget, one month at a time: **Income**, **Spending** (Regular above Bills), **Savings**.
  *
  * **Sections, not one grid.** Bills and ordinary envelopes stay separate tables so the All
@@ -131,6 +151,8 @@ export function BudgetView({
   const params = useSearchParams();
   const compact = useIsCompact();
   const inspectorTitleId = useId();
+  // The export writes dates the way the rest of the app does, not a second format.
+  const formatDate = useDateFormatter();
   const [pending, startTransition] = useTransition();
   const [, startEvidenceLoad] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +163,7 @@ export function BudgetView({
   const [move, setMove] = useState<{ from: BudgetRow; targets: BudgetRow[] } | null>(
     null,
   );
-  const [focusedTable, setFocusedTable] = useState<BudgetTableId>("envelopes");
+  const [focusedTable, setFocusedTable] = useState<BudgetTable>("envelopes");
   const [editing, setEditing] = useState<string | null>(null);
   const [editingPayeesFor, setEditingPayeesFor] = useState<BudgetRow | null>(null);
   // Both are stamped with the envelope they belong to, so selecting another row shows an
@@ -184,7 +206,6 @@ export function BudgetView({
     (billGrid.switches["show-hidden"] ?? false) ||
     (envelopeGrid.switches["show-hidden"] ?? false) ||
     (savingsGrid.switches["show-hidden"] ?? false);
-  const exportPlan = budgetGridExportPlan(focusedTable);
 
   const month = findMonth(data.months, data.month);
   const rows = useMemo(
@@ -432,6 +453,15 @@ export function BudgetView({
         .reduce((total, row) => total + row.activityCents, 0),
     [rows],
   );
+  // Spending totals from one row set: the two tables each own a subtotal, and the footer
+  // sums both. Savings is held out. They are computed from the same `budgetTotals` so a
+  // bill can never be counted in one and missed in the other. Above the early return
+  // because the export document needs them too, and that is a hook.
+  const totals = budgetTotals(spendingRows);
+  const billTotals = budgetTotals(sections.bills);
+  const envelopeTotals = budgetTotals(sections.envelopes);
+  const savingsTotals = budgetTotals(sections.savings);
+
   const assignInputs = useMemo(() => {
     const envelopes = rows.map((row) => assignEnvelopeFromRow(row, previous));
     return {
@@ -466,6 +496,110 @@ export function BudgetView({
       }),
     }));
   }, [month, data.month, data.todayKey, assignInputs, bannerScope]);
+
+  /**
+   * The whole page as one document (`agent-os/specs/2026-08-28-0759-budget-single-export/`).
+   *
+   * Registered here rather than by the three `DataGrid`s, which pass `exportCommands={false}`:
+   * a budget whose parts sum to one figure should not export as three files that do not.
+   * Each table contributes the columns it is actually showing, so hiding Assigned on Bills
+   * still drops it from that section and only that one.
+   */
+  const exportDocument = useMemo((): BudgetExportDocument | null => {
+    if (!month) return null;
+    return budgetExportDocument({
+      month,
+      accountPoolCents:
+        data.month === monthKeyOf(data.todayKey) ? data.accountPoolCents : undefined,
+      income: sections.income,
+      receivedCents: receivedThisMonthCents,
+      expectedIncomeCents: forecast.comparison.income.monthlyCents,
+      spendingTotals: totals,
+      tables: [
+        gridExportSection(
+          "Regular spending",
+          totalsCaption(envelopeTotals),
+          envelopeGrid.columns,
+          envelopeGridRows.filter((row) => row.kind === "node"),
+        ),
+        gridExportSection(
+          "Bills",
+          totalsCaption(billTotals),
+          billGrid.columns,
+          billGridRows.filter((row) => row.kind === "node"),
+        ),
+        gridExportSection(
+          "Savings",
+          totalsCaption(savingsTotals),
+          savingsGrid.columns,
+          savingsGridRows.filter((row) => row.kind === "node"),
+        ),
+      ],
+      forecast,
+      formatDate,
+    });
+  }, [
+    month,
+    data.month,
+    data.todayKey,
+    data.accountPoolCents,
+    sections.income,
+    receivedThisMonthCents,
+    forecast,
+    totals,
+    envelopeTotals,
+    billTotals,
+    savingsTotals,
+    envelopeGrid.columns,
+    billGrid.columns,
+    savingsGrid.columns,
+    envelopeGridRows,
+    billGridRows,
+    savingsGridRows,
+    formatDate,
+  ]);
+
+  /**
+   * Identity-stable, with the document read from a ref at run time.
+   *
+   * Putting the document in this memo's deps re-registers on every render that rebuilds it
+   * and trips `useRegisterCommands`' churn guard — the same trap `DataGrid` avoids the same
+   * way (`2026-08-14-1021-grid-export-formats` D7).
+   */
+  const exportRef = useRef(exportDocument);
+  useEffect(() => {
+    exportRef.current = exportDocument;
+  });
+  const exportCommands = useMemo((): Command[] => {
+    const write = (format: ReturnType<typeof gridExportFormatOf>, toFile: boolean) => {
+      const doc = exportRef.current;
+      if (!doc || !format) return;
+      const text = serializeBudgetExport(format, doc);
+      if (!toFile) {
+        void writeClipboardText(text);
+        return;
+      }
+      downloadTextFile(exportFilename(doc.title, format), text, exportMimeType(format));
+    };
+    const downloads = gridExportCommands(() => {}).map((command) => {
+      const format = gridExportFormatOf(command.id);
+      return {
+        ...command,
+        run: () => write(format, true),
+        alternate: {
+          label: command.alternate?.label ?? "",
+          title: command.alternate?.title,
+          run: () => write(format, false),
+        },
+      };
+    });
+    const copies = gridCopyCommands(() => {}).map((command) => ({
+      ...command,
+      run: () => write(gridExportFormatOf(command.id), false),
+    }));
+    return [...downloads, ...copies];
+  }, []);
+  useRegisterCommands(exportCommands);
 
   const commands = useMemo((): Command[] => {
     const assignCommands: Command[] = ASSIGN_OPTIONS.map((option) => {
@@ -675,13 +809,6 @@ export function BudgetView({
     ];
   }
 
-  // Spending totals from one row set: the two tables each own a subtotal, and the footer
-  // sums both. Savings is held out. They are computed from the same `budgetTotals` so a
-  // bill can never be counted in one and missed in the other.
-  const totals = budgetTotals(spendingRows);
-  const billTotals = budgetTotals(sections.bills);
-  const envelopeTotals = budgetTotals(sections.envelopes);
-  const savingsTotals = budgetTotals(sections.savings);
   const editingRow = rows.find((row) => row.id === editing) ?? null;
   const backlog = data.uncategorizedCount;
 
@@ -919,8 +1046,7 @@ export function BudgetView({
                   envelopeSelect.select(id, mods);
                 }}
                 onOpenDetail={() => setInspecting(true)}
-                commandScope={exportPlan.envelopes.commandScope}
-                exportFocused={exportPlan.envelopes.exportFocused}
+                exportCommands={false}
                 /*
                  * The same menu the Available cell opens, reachable by right-click and — the
                  * reason it is here — by long-press on a phone, where the compact row draws the
@@ -969,8 +1095,7 @@ export function BudgetView({
                   billSelect.select(id, mods);
                 }}
                 onOpenDetail={() => setInspecting(true)}
-                commandScope={exportPlan.bills.commandScope}
-                exportFocused={exportPlan.bills.exportFocused}
+                exportCommands={false}
                 rowMenu={(rowId) => {
                   const row = rows.find((candidate) => candidate.id === rowId);
                   return row ? balanceMenu(row) : [];
@@ -1013,8 +1138,7 @@ export function BudgetView({
                 savingsSelect.select(id, mods);
               }}
               onOpenDetail={() => setInspecting(true)}
-              commandScope={exportPlan.savings.commandScope}
-              exportFocused={exportPlan.savings.exportFocused}
+              exportCommands={false}
               rowMenu={(rowId) => {
                 const row = rows.find((candidate) => candidate.id === rowId);
                 return row ? balanceMenu(row) : [];

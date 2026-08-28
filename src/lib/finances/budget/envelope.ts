@@ -136,6 +136,19 @@ export function monthLabel(month: MonthKey): string {
   return `${monthName(month)} ${month.slice(0, 4)}`;
 }
 
+/**
+ * What Ready to Assign *means* at this figure, in words.
+ *
+ * Beside the arithmetic for the same reason `terms` is: the summary card and the export both
+ * say it, and two copies would eventually disagree about which sign is the good one. Zero is
+ * the target — in zero-based budgeting a surplus is money without a job, not success.
+ */
+export function readyToAssignNote(cents: number): string {
+  if (cents > 0) return "unassigned from on-budget accounts";
+  if (cents < 0) return "assigned more than you have";
+  return "every dollar has a job";
+}
+
 // ─────────────────────────────── Inputs ───────────────────────────────
 
 /**

@@ -55,11 +55,6 @@ import {
 import { writeClipboardText } from "@/lib/tree/copyAsText";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import type { Command } from "@/lib/commands/registry";
-import {
-  scopeCommand,
-  scopedFormatLabel,
-  type CommandScope,
-} from "@/lib/commands/scope";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { CompactRow, type RowSwipe } from "./CompactRow";
 import type { SelectAllState, SelectMods } from "@/lib/grid/selection";
@@ -237,8 +232,6 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   onToggleSelectAll,
   gutter = "checkbox",
   exportCommands: registerExportCommands = true,
-  commandScope,
-  exportFocused = false,
   preparedDisplay = false,
   virtualize = false,
   pendingRowIds,
@@ -293,20 +286,13 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    */
   gutter?: "checkbox" | "handle";
   /**
-   * Register File ▸ Export / Copy for this grid. Default true so a lone grid keeps
-   * the catalog complete. Two grids on one page pass `commandScope` so each export
-   * names its grid; turning this off hides Export from File entirely.
+   * Register File ▸ Export / Copy for this grid. Default true so a lone grid keeps the
+   * catalog complete. A page with more than one grid turns it off and registers its own
+   * export instead — the Budget exports the page as one document
+   * (`agent-os/specs/2026-08-28-0759-budget-single-export/` D1), which is what removed the
+   * scoped per-grid rows this prop used to be paired with.
    */
   exportCommands?: boolean;
-  /** Stamp export ids/labels when two grids share File ▸ Export. */
-  commandScope?: CommandScope;
-  /**
-   * Also register the unscoped File ▸ Export / Copy rows, acting on this grid.
-   * Dual-grid pages set this on the focused grid so `CSV` means the one with the
-   * focus ring, and the scoped `CSV — Subscriptions & bills` rows stay as well
-   * (`navigation.md`).
-   */
-  exportFocused?: boolean;
   /**
    * Rows are already the display list: do not filter, search, sort, or collapse them.
    * Register uses this with a server-prepared index. Every other grid omits it.
@@ -839,20 +825,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     });
     return [...downloads, ...copies];
   }, []);
-  const scopedExportCommands = useMemo(() => {
-    if (!commandScope) return exportCommands;
-    const scoped = exportCommands.map((command) =>
-      scopeCommand(
-        command,
-        commandScope,
-        scopedFormatLabel(command.label, commandScope),
-      ),
-    );
-    return exportFocused ? [...exportCommands, ...scoped] : scoped;
-  }, [exportCommands, commandScope, exportFocused]);
-  useRegisterCommands(
-    registerExportCommands ? scopedExportCommands : EMPTY_EXPORT_COMMANDS,
-  );
+  useRegisterCommands(registerExportCommands ? exportCommands : EMPTY_EXPORT_COMMANDS);
 
   /**
    * Achieve's header cycle: unsorted → ascending → descending → unsorted.
