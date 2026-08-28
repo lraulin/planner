@@ -107,7 +107,7 @@ import type {
 import type { MonthKey } from "@/lib/finances/budget/envelope";
 import type { AssignOption } from "@/lib/finances/budget/assign/types";
 import type { BudgetPreset } from "@/lib/finances/budget/presets";
-import type { EnvelopeSectionKind, EnvelopeStatus } from "@/db/schema";
+import type { EnvelopeKind, EnvelopeStatus } from "@/db/schema";
 import {
   finalizeTransactionIngestion,
   transactionIngestionWatermark,
@@ -517,7 +517,7 @@ export async function moveBudgetStructureItemIntoGroupAction(
 export async function createBudgetCategoryAction(
   groupId: string | null,
   name: string,
-  kind: EnvelopeSectionKind = "spending",
+  kind: EnvelopeKind = "spending",
 ): Promise<DataActionResult<string>> {
   return runWithData((userId) => createBudgetCategory(userId, { groupId, name, kind }));
 }

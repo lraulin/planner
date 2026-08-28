@@ -8,9 +8,7 @@ import {
   financeCategoryGroups,
   financePayees,
   financeTransactions,
-  ENVELOPE_SECTION_KINDS,
   type EnvelopeKind,
-  type EnvelopeSectionKind,
 } from "@/db/schema";
 import { serializeBudget } from "@/lib/settings/finances";
 import { writeUserSetting } from "@/lib/settings/mutations";
@@ -538,20 +536,31 @@ export async function createCategoryGroup(
   return row.id;
 }
 
+/**
+ * The minimum legal bill facet: monthly, active, scheduled, nothing else known.
+ *
+ * `finance_budget_categories_bill_facet` requires `cadenceMonths` on a bill, so a bill typed
+ * in by name has to arrive with one. Monthly is the overwhelmingly common cadence and the
+ * one the inspector opens on; amount, next charge and a real cadence are finished there
+ * (`agent-os/specs/2026-08-28-1527-inline-budget-structure/` D1).
+ */
+const DEFAULT_BILL_FACET = {
+  cadenceMonths: 1,
+  status: "active" as const,
+  scheduled: true,
+} satisfies Partial<typeof financeBudgetCategories.$inferInsert>;
+
 export async function createBudgetCategory(
   userId: string,
   params: {
     groupId?: string | null;
     name: string;
-    kind?: EnvelopeSectionKind;
+    kind?: EnvelopeKind;
   },
 ): Promise<string> {
   const name = params.name.trim();
   if (name === "") throw new Error("An envelope needs a name.");
   const kind = params.kind ?? "spending";
-  if (!(ENVELOPE_SECTION_KINDS as readonly string[]).includes(kind)) {
-    throw new Error("A bill is created from Review, not as a blank envelope.");
-  }
   const groupId = params.groupId ?? null;
   if (groupId !== null) await requireGroup(userId, groupId);
   const last = await lastBudgetChildSortKey(userId, groupId);
@@ -563,6 +572,7 @@ export async function createBudgetCategory(
       groupId,
       name,
       kind,
+      ...(kind === "bill" ? DEFAULT_BILL_FACET : {}),
       sortKey: last === null ? sortKey.first() : sortKey.after(last),
     })
     .returning({ id: financeBudgetCategories.id });
@@ -575,7 +585,7 @@ export type BudgetCategoryEdit = {
   hidden?: boolean;
   notes?: string;
   groupId?: string | null;
-  kind?: EnvelopeSectionKind;
+  kind?: EnvelopeKind;
 };
 
 export async function updateBudgetCategory(
@@ -611,15 +621,9 @@ export async function updateBudgetCategory(
 
   const name = edit.name?.trim();
   if (name !== undefined && name === "") throw new Error("An envelope needs a name.");
-  if (edit.kind !== undefined && edit.kind !== category.kind) {
-    if (!(ENVELOPE_SECTION_KINDS as readonly string[]).includes(edit.kind)) {
-      throw new Error(
-        "A bill is created from Review, not by changing an envelope's section.",
-      );
-    }
-  }
-
-  const leavingBill = category.kind === "bill" && edit.kind !== undefined;
+  const leavingBill =
+    category.kind === "bill" && edit.kind !== undefined && edit.kind !== "bill";
+  const becomingBill = category.kind !== "bill" && edit.kind === "bill";
 
   await db
     .update(financeBudgetCategories)
@@ -631,6 +635,7 @@ export async function updateBudgetCategory(
       ...(movedSortKey === undefined ? {} : { sortKey: movedSortKey }),
       ...(edit.kind === undefined ? {} : { kind: edit.kind }),
       ...(edit.kind === "income" ? { target: null } : {}),
+      ...(becomingBill ? DEFAULT_BILL_FACET : {}),
       ...(leavingBill
         ? {
             status: "active" as const,

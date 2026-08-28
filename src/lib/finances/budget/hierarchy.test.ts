@@ -7,6 +7,7 @@ import {
   budgetEnvelopeLabel,
   budgetGroupDepths,
   descendantEnvelopeIds,
+  moveDestinations,
   nestedBudgetGridRows,
   resolveBudgetDrop,
 } from "./hierarchy";
@@ -196,5 +197,72 @@ describe("budget hierarchy", () => {
         "inside",
       ),
     ).toBeNull();
+  });
+});
+
+describe("moveDestinations", () => {
+  // Two sections that must never mix, and a nest deep enough to move a group into itself.
+  const groups = [
+    group("income-grp", null, "A"),
+    group("spending-grp", null, "B"),
+    group("bills", "spending-grp", "A"),
+    group("utilities", "bills", "A"),
+    group("empty", null, "C"),
+  ];
+  const categories = [
+    category("paycheck", "income-grp", "A", "income"),
+    category("groceries", "spending-grp", "B"),
+    category("electric", "utilities", "A", "bill"),
+  ];
+
+  it("never offers a group that is the moving group or one of its descendants", () => {
+    const ids = moveDestinations(groups, categories, {
+      kind: "group",
+      id: "bills",
+    }).map((entry) => entry.id);
+    expect(ids).not.toContain("bills");
+    expect(ids).not.toContain("utilities");
+  });
+
+  it("never offers a group across a section boundary", () => {
+    const ids = moveDestinations(groups, categories, {
+      kind: "category",
+      id: "paycheck",
+    }).map((entry) => entry.id);
+    expect(ids).not.toContain("spending-grp");
+    expect(ids).not.toContain("bills");
+    expect(ids).not.toContain("utilities");
+  });
+
+  it("offers a group with no envelopes yet, whose section is not yet stated", () => {
+    const ids = moveDestinations(groups, categories, {
+      kind: "category",
+      id: "paycheck",
+    }).map((entry) => entry.id);
+    expect(ids).toContain("empty");
+  });
+
+  it("treats a bill as spending, so it may move within the spending branch", () => {
+    const ids = moveDestinations(groups, categories, {
+      kind: "category",
+      id: "electric",
+    }).map((entry) => entry.id);
+    expect(ids).toContain("bills");
+    expect(ids).toContain("spending-grp");
+    expect(ids).not.toContain("income-grp");
+  });
+
+  it("omits the group the item already sits in", () => {
+    const ids = moveDestinations(groups, categories, {
+      kind: "category",
+      id: "groceries",
+    }).map((entry) => entry.id);
+    expect(ids).not.toContain("spending-grp");
+  });
+
+  it("returns nothing for an item that is not in the structure", () => {
+    expect(moveDestinations(groups, categories, { kind: "group", id: "nope" })).toEqual(
+      [],
+    );
   });
 });

@@ -21,7 +21,7 @@ import {
 } from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
-import type { EnvelopeSectionKind } from "@/db/schema";
+import type { EnvelopeKind } from "@/db/schema";
 import {
   budgetChildren,
   descendantGroupIds,
@@ -31,7 +31,7 @@ import {
 import type { BudgetCategoryRow, BudgetGroupRow } from "@/lib/finances/budget/queries";
 import { pageSectionOf } from "@/lib/finances/budget/rows";
 
-const SECTION_OPTIONS: { value: EnvelopeSectionKind; label: string }[] = [
+const SECTION_OPTIONS: { value: EnvelopeKind; label: string }[] = [
   { value: "spending", label: "Spending" },
   { value: "income", label: "Income" },
   { value: "savings", label: "Savings" },
@@ -41,7 +41,7 @@ function defaultSectionForGroup(
   groups: readonly BudgetGroupRow[],
   categories: readonly BudgetCategoryRow[],
   groupId: string,
-): EnvelopeSectionKind {
+): EnvelopeKind {
   const section = groupPageSection(groups, categories, groupId);
   if (section === "income" || section === "savings" || section === "spending") {
     return section;
@@ -72,11 +72,11 @@ export function BudgetStructureDrawer({
   const titleId = useId();
   const [newGroup, setNewGroup] = useState("");
   const [newRootEnvelope, setNewRootEnvelope] = useState("");
-  const [newRootKind, setNewRootKind] = useState<EnvelopeSectionKind>("spending");
+  const [newRootKind, setNewRootKind] = useState<EnvelopeKind>("spending");
   const [newEnvelope, setNewEnvelope] = useState<Record<string, string>>({});
-  const [newEnvelopeKind, setNewEnvelopeKind] = useState<
-    Record<string, EnvelopeSectionKind>
-  >({});
+  const [newEnvelopeKind, setNewEnvelopeKind] = useState<Record<string, EnvelopeKind>>(
+    {},
+  );
   const [newSubgroup, setNewSubgroup] = useState<Record<string, string>>({});
   const [dragging, setDragging] = useState<BudgetStructureRef | null>(null);
   const [deleting, setDeleting] = useState<DeleteTarget | null>(null);
@@ -169,9 +169,7 @@ export function BudgetStructureDrawer({
               <select
                 aria-label="Section for new envelope"
                 value={newRootKind}
-                onChange={(event) =>
-                  setNewRootKind(event.target.value as EnvelopeSectionKind)
-                }
+                onChange={(event) => setNewRootKind(event.target.value as EnvelopeKind)}
                 className={inputClass}
               >
                 {SECTION_OPTIONS.map((option) => (
@@ -335,7 +333,7 @@ function StructureGroup({
   pending: boolean;
   dragging: BudgetStructureRef | null;
   newEnvelope: Record<string, string>;
-  newEnvelopeKind: Record<string, EnvelopeSectionKind>;
+  newEnvelopeKind: Record<string, EnvelopeKind>;
   newSubgroup: Record<string, string>;
   run: Run;
   onDragStart: (target: BudgetStructureRef) => void;
@@ -343,7 +341,7 @@ function StructureGroup({
   onDrop: (event: DragEvent<HTMLElement>, target: BudgetStructureRef) => void;
   onMoveRelative: (target: BudgetStructureRef, direction: -1 | 1) => void;
   onNewEnvelope: Dispatch<SetStateAction<Record<string, string>>>;
-  onNewEnvelopeKind: Dispatch<SetStateAction<Record<string, EnvelopeSectionKind>>>;
+  onNewEnvelopeKind: Dispatch<SetStateAction<Record<string, EnvelopeKind>>>;
   onNewSubgroup: Dispatch<SetStateAction<Record<string, string>>>;
   onDelete: (target: DeleteTarget) => void;
 }) {
@@ -471,7 +469,7 @@ function StructureGroup({
               onChange={(event) =>
                 onNewEnvelopeKind((current) => ({
                   ...current,
-                  [group.id]: event.target.value as EnvelopeSectionKind,
+                  [group.id]: event.target.value as EnvelopeKind,
                 }))
               }
               className={inputClass}
@@ -585,7 +583,7 @@ function EnvelopeEditor({
             if (next === "bill") return;
             run(() =>
               updateBudgetCategoryAction(category.id, {
-                kind: next as EnvelopeSectionKind,
+                kind: next as EnvelopeKind,
               }),
             );
           }}

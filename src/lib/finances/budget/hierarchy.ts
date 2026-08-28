@@ -305,3 +305,57 @@ export function resolveBudgetDrop(
     depth: parentGroupId ? (budgetGroupDepths(groups).get(parentGroupId) ?? 0) + 1 : 0,
   };
 }
+
+/**
+ * The groups a "Move to group…" menu may legally offer for one item.
+ *
+ * Two refusals, both of which the drag path (`resolveBudgetDrop`) already enforces: a group
+ * may not move inside itself or any of its own descendants, and an item may not cross a
+ * section boundary — income, spending and savings do not share a branch. A destination whose
+ * section is unknown (empty) or `mixed` is allowed, because neither states a conflict.
+ *
+ * The item's current parent is excluded too: moving somewhere it already is, is not a move.
+ */
+export function moveDestinations(
+  groups: readonly BudgetGroupRow[],
+  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "kind">[],
+  moving: BudgetStructureRef,
+): BudgetGroupRow[] {
+  const movingGroup =
+    moving.kind === "group"
+      ? groups.find((entry) => entry.id === moving.id)
+      : undefined;
+  const movingCategory =
+    moving.kind === "category"
+      ? categories.find((entry) => entry.id === moving.id)
+      : undefined;
+  if (!movingGroup && !movingCategory) return [];
+
+  const parentId = movingGroup
+    ? movingGroup.parentGroupId
+    : (movingCategory?.groupId ?? null);
+
+  const excluded = movingGroup
+    ? descendantGroupIds(groups, movingGroup.id)
+    : new Set<string>();
+  if (movingGroup) excluded.add(movingGroup.id);
+
+  const movingSection = movingCategory
+    ? pageSectionOf(movingCategory.kind)
+    : groupPageSection(groups, categories, movingGroup!.id);
+
+  return groups.filter((entry) => {
+    if (excluded.has(entry.id)) return false;
+    if (entry.id === parentId) return false;
+    const destination = groupPageSection(groups, categories, entry.id);
+    if (
+      movingSection === null ||
+      destination === null ||
+      movingSection === "mixed" ||
+      destination === "mixed"
+    ) {
+      return true;
+    }
+    return movingSection === destination;
+  });
+}

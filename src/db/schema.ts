@@ -2477,10 +2477,6 @@ export type EnvelopeStatus = (typeof ENVELOPE_STATUSES)[number];
 export const ENVELOPE_KINDS = ["income", "spending", "bill", "savings"] as const;
 export type EnvelopeKind = (typeof ENVELOPE_KINDS)[number];
 
-/** Page sections a user can pick; a bill is created from Review, not this list. */
-export const ENVELOPE_SECTION_KINDS = ["income", "spending", "savings"] as const;
-export type EnvelopeSectionKind = (typeof ENVELOPE_SECTION_KINDS)[number];
-
 /**
  * PayPal (and later, other rails) naming a register row the bank feed left opaque.
  *

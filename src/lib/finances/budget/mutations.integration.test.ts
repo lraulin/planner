@@ -29,7 +29,7 @@ import {
   setTransactionBudgetCategories,
   updateBudgetCategory,
 } from "./mutations";
-import { updateAccount } from "../mutations";
+import { updateAccount, upsertBillEnvelope } from "../mutations";
 import {
   createPayee,
   replaceCommitmentPayees,
@@ -240,6 +240,70 @@ describeDb("budget mutations", () => {
         (category) => category.id === savings.id,
       )?.kind,
     ).toBe("savings");
+  });
+
+  it("creates a bill from a name alone, monthly and otherwise blank", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+
+    const id = await createBudgetCategory(userId, { name: "Netflix", kind: "bill" });
+
+    const created = (await loadBudget(userId, MONTH)).categories.find(
+      (category) => category.id === id,
+    )!;
+    expect(created.kind).toBe("bill");
+    // Monthly is the minimum the bill-facet CHECK will accept; everything else is unknown
+    // until the inspector says otherwise.
+    expect(created.bill).toMatchObject({
+      cadenceMonths: 1,
+      status: "active",
+      scheduled: true,
+      expectedCents: null,
+      cadenceDays: null,
+      dueDay: null,
+      anchorDate: null,
+      url: "",
+    });
+  });
+
+  it("round-trips an envelope through Bills and back, legal both ways", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const id = await createBudgetCategory(userId, { name: "Internet" });
+
+    await updateBudgetCategory(userId, id, { kind: "bill" });
+    const asBill = (await loadBudget(userId, MONTH)).categories.find(
+      (category) => category.id === id,
+    )!;
+    expect(asBill.kind).toBe("bill");
+    expect(asBill.bill?.cadenceMonths).toBe(1);
+
+    await updateBudgetCategory(userId, id, { kind: "spending" });
+    const asSpending = (await loadBudget(userId, MONTH)).categories.find(
+      (category) => category.id === id,
+    )!;
+    expect(asSpending.kind).toBe("spending");
+    // Leaving Bills clears the facet, or the CHECK would reject the row.
+    expect(asSpending.bill).toBeNull();
+  });
+
+  it("leaves a bill's own facet alone when nothing about its section changes", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const id = await createBudgetCategory(userId, { name: "Hulu", kind: "bill" });
+    await upsertBillEnvelope(userId, {
+      name: "Hulu",
+      cadence: { unit: "month", n: 12 },
+      expectedCents: 9_900,
+    });
+
+    await updateBudgetCategory(userId, id, { name: "Hulu+", kind: "bill" });
+
+    const after = (await loadBudget(userId, MONTH)).categories.find(
+      (category) => category.id === id,
+    )!;
+    expect(after.name).toBe("Hulu+");
+    expect(after.bill).toMatchObject({ cadenceMonths: 12, expectedCents: 9_900 });
   });
 
   it("auto-maps by category and flow, and leaves an on-budget transfer alone", async () => {
@@ -1155,6 +1219,16 @@ describeDb("budget mutations — cross-user isolation", () => {
     ).rejects.toThrow(/does not exist/);
     await expect(
       createBudgetCategory(intruderId, { groupId: owned.groupId, name: "Smuggled" }),
+    ).rejects.toThrow(/does not exist/);
+    await expect(
+      createBudgetCategory(intruderId, {
+        groupId: owned.groupId,
+        name: "Smuggled bill",
+        kind: "bill",
+      }),
+    ).rejects.toThrow(/does not exist/);
+    await expect(
+      updateBudgetCategory(intruderId, owned.categoryId, { kind: "bill" }),
     ).rejects.toThrow(/does not exist/);
     await expect(
       createCategoryGroup(intruderId, {

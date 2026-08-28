@@ -10,7 +10,7 @@
  * Spec: `agent-os/specs/2026-08-22-1948-zero-based-budget/` D5.
  */
 
-import type { EnvelopeSectionKind } from "@/db/schema";
+import type { EnvelopeKind } from "@/db/schema";
 
 export const BUDGET_PRESETS = ["minimal", "detailed"] as const;
 export type BudgetPreset = (typeof BUDGET_PRESETS)[number];
@@ -18,7 +18,7 @@ export type BudgetPreset = (typeof BUDGET_PRESETS)[number];
 export type PresetCategory = {
   name: string;
   /** Section this envelope belongs to. Omitted means ordinary spending. */
-  kind?: EnvelopeSectionKind;
+  kind?: EnvelopeKind;
 };
 
 export type PresetGroup = {
