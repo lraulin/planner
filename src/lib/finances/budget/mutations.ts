@@ -23,7 +23,7 @@ import { numericStringToCents } from "../money";
 import { applyPayeeAutoCategories, applyPayeeClaims } from "../payees/claims";
 import { learnFromCategoryEdit } from "../payees/learn";
 import {
-  budgetChildren,
+  budgetSiblings,
   resolveBudgetDrop,
   type BudgetDropZone,
   type BudgetStructureRef,
@@ -869,10 +869,15 @@ export async function moveBudgetStructureItem(
   );
   if (!placement) throw new Error("That item cannot move there.");
 
-  const siblings = budgetChildren(
+  const movingKind =
+    moving.kind === "group"
+      ? structure.groups.find((group) => group.id === moving.id)!.kind
+      : structure.categories.find((category) => category.id === moving.id)!.kind;
+  const siblings = budgetSiblings(
     structure.groups,
     structure.categories,
     placement.parentGroupId,
+    movingKind,
   );
   const keyOf = (ref: BudgetStructureRef | null) =>
     ref === null

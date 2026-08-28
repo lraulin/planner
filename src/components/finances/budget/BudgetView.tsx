@@ -94,8 +94,8 @@ import {
   type AssignResult,
 } from "@/lib/finances/budget/assign/types";
 import {
-  budgetChildren,
   budgetGroupDepths,
+  budgetSiblings,
   descendantEnvelopeIds,
   moveDestinations,
   type BudgetStructureRef,
@@ -991,7 +991,17 @@ export function BudgetView({
   }
 
   function structureSiblings(moving: BudgetStructureRef) {
-    return budgetChildren(data.groups, data.categories, structureParentId(moving));
+    const kind =
+      moving.kind === "group"
+        ? data.groups.find((entry) => entry.id === moving.id)?.kind
+        : data.categories.find((entry) => entry.id === moving.id)?.kind;
+    if (!kind) return [];
+    return budgetSiblings(
+      data.groups,
+      data.categories,
+      structureParentId(moving),
+      kind,
+    );
   }
 
   /**

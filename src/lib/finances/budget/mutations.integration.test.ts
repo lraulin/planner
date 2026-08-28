@@ -38,7 +38,7 @@ import {
 import { applyPayeeAutoCategories } from "../payees/claims";
 import { loadBudget } from "./queries";
 import { categoryMonth, findMonth } from "./envelope";
-import { budgetChildren } from "./hierarchy";
+import { budgetChildren, budgetSiblings } from "./hierarchy";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -219,6 +219,29 @@ describeDb("budget mutations", () => {
     const after = await loadBudget(userId, MONTH);
     expect(after.categories.find((row) => row.id === savings.id)?.kind).toBe("savings");
     expect(findMonth(after.months, MONTH)?.readyToAssignCents).toBe(ready);
+  });
+
+  it("reorders a root-level envelope past its own section's neighbour", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const first = await createBudgetCategory(userId, { name: "Netflix", kind: "bill" });
+    const second = await createBudgetCategory(userId, { name: "Hulu", kind: "bill" });
+
+    // Both sit at the section root alongside spending and savings envelopes. Ordering is
+    // per-section, so Netflix's neighbour is Hulu — not whichever row happens to be next in
+    // the shared root list.
+    await moveBudgetStructureItem(
+      userId,
+      { kind: "category", id: second },
+      { kind: "category", id: first },
+      "before",
+    );
+
+    const data = await loadBudget(userId, MONTH);
+    const bills = budgetSiblings(data.groups, data.categories, null, "bill").map(
+      (item) => item.id,
+    );
+    expect(bills.indexOf(second)).toBe(bills.indexOf(first) - 1);
   });
 
   it("keeps a group and its envelopes in one section", async () => {

@@ -1,6 +1,8 @@
 import type { GridRow } from "@/lib/tree/slice";
 import { compare as compareSortKeys } from "@/lib/tree/sortKey";
 
+import type { EnvelopeKind } from "@/db/schema";
+
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
 import type { BudgetRow } from "./rows";
 
@@ -51,6 +53,31 @@ export function budgetChildren(
         sortKey: category.sortKey,
       })),
   ].sort(compareItems);
+}
+
+/**
+ * The ordered run one item actually sits in — its siblings *within its own section*.
+ *
+ * Inside a group this is just `budgetChildren`: a group holds one kind, so its children
+ * already agree. **At the section root it is not.** The four tables are four independent
+ * orderings sharing one `parent_group_id IS NULL`, so an unfiltered sibling list interleaves
+ * a bill with a savings envelope, and "move up" then aims at a row in another table — which
+ * `resolveBudgetDrop` refuses, so the move silently does nothing.
+ *
+ * Root-level envelopes were rare while every one lived in a seeded section group; they are
+ * the normal case since `agent-os/specs/2026-08-28-1613-group-kind/`.
+ */
+export function budgetSiblings(
+  groups: readonly BudgetGroupRow[],
+  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "sortKey" | "kind">[],
+  parentGroupId: string | null,
+  kind: EnvelopeKind,
+): StructureItem[] {
+  return budgetChildren(
+    groups.filter((group) => group.kind === kind),
+    categories.filter((category) => category.kind === kind),
+    parentGroupId,
+  );
 }
 
 /** Every descendant group id, excluding the root itself. Cycles are invalid stored data. */
@@ -258,7 +285,7 @@ export function resolveBudgetDrop(
     if (parentGroupId === movingGroup.id || descendants.has(parentGroupId)) return null;
   }
 
-  const siblings = budgetChildren(groups, categories, parentGroupId).filter(
+  const siblings = budgetSiblings(groups, categories, parentGroupId, movingKind).filter(
     (item) => item.kind !== moving.kind || item.id !== moving.id,
   );
   if (zone === "inside") {

@@ -5,6 +5,7 @@ import type { BudgetRow } from "./rows";
 import {
   budgetChildren,
   budgetEnvelopeLabel,
+  budgetSiblings,
   budgetGroupDepths,
   descendantEnvelopeIds,
   moveDestinations,
@@ -267,5 +268,50 @@ describe("moveDestinations", () => {
     expect(moveDestinations(groups, categories, { kind: "group", id: "nope" })).toEqual(
       [],
     );
+  });
+});
+
+describe("budgetSiblings", () => {
+  // Four tables share one `parent_group_id IS NULL`, so a bill and a savings envelope are
+  // both "root children" while being in different orderings on screen.
+  const groups = [group("bills", null, "B", "bill")];
+  const categories = [
+    category("rent", null, "A", "bill"),
+    category("groceries", null, "C"),
+    category("emergency", null, "D", "savings"),
+    category("electric", "bills", "A", "bill"),
+  ];
+
+  it("returns only the moving item's own section at the root", () => {
+    expect(
+      budgetSiblings(groups, categories, null, "bill").map((item) => item.id),
+    ).toEqual(["rent", "bills"]);
+    expect(
+      budgetSiblings(groups, categories, null, "savings").map((item) => item.id),
+    ).toEqual(["emergency"]);
+  });
+
+  it("makes a root envelope's neighbour one it can actually move past", () => {
+    // The bug this exists to stop: with every root child in one list, Rent's neighbour was
+    // Groceries — a spending envelope — and `resolveBudgetDrop` refused the move, so "Move
+    // down" did nothing at all.
+    const siblings = budgetSiblings(groups, categories, null, "bill");
+    const index = siblings.findIndex((item) => item.id === "rent");
+    const next = siblings[index + 1];
+    expect(
+      resolveBudgetDrop(
+        groups,
+        categories,
+        { kind: "category", id: "rent" },
+        { kind: next.kind, id: next.id },
+        "after",
+      ),
+    ).not.toBeNull();
+  });
+
+  it("is just the children inside a group, which already share a kind", () => {
+    expect(
+      budgetSiblings(groups, categories, "bills", "bill").map((item) => item.id),
+    ).toEqual(["electric"]);
   });
 });
