@@ -1,5 +1,7 @@
 # Standards for YNAB target engine
 
+**Status: frozen / complete** (2026-08-28)
+
 Applied as of standards commit `2920aa766f203439f2136c831f01ccd182c0654d`. References, not
 copies — see AGENTS.md. `git show <sha>:agent-os/standards/<path>` recovers exactly what applied.
 

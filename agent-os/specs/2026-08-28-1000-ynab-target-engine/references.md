@@ -1,5 +1,7 @@
 # References for YNAB target engine
 
+**Status: frozen / complete** (2026-08-28)
+
 ## Governing specs
 
 ### `agent-os/specs/2026-08-27-1949-weekly-envelope-targets/` (frozen 2026-08-27)

@@ -1003,9 +1003,10 @@ period)` so money already spent stops being held twice and only going over bites
   month / 3-month average / Set all to zero are gone. Ready to Assign has Assign (Auto:
   eight options, Manually: amount + To), never consuming more than you have. A shortfall
   or multi-envelope split still previews; a single fully funded envelope writes immediately
-  (`agent-os/specs/2026-08-25-0831-assign-skip-full-single/`). Underfunded reads templates +
-  bill cadence + overspend. Right-click Assign targets one envelope. The shortfall is the
-  preview (partial / not funded), not a negative headline.
+  (`agent-os/specs/2026-08-25-0831-assign-skip-full-single/`). Underfunded reads the
+  envelope's target (or a bill's derived one) plus overspend. Right-click Assign targets
+  one envelope. The shortfall is the preview (partial / not funded), not a negative
+  headline.
   ✅ **Category by kind + payee auto-category shipped 2026-08-24.**
   `agent-os/specs/2026-08-24-1522-category-by-kind-and-history/`. Register Category is
   grouped Income / Bills / Regular spending / Savings, each with New {type}…. A claim files
@@ -1040,7 +1041,16 @@ period)` so money already spent stops being held twice and only going over bites
   **all** spending in the envelope over up to 12 complete months, never only the anchor-day
   trips. The drawer's vocabulary was the other half of the fix — "refill" and "set aside"
   are gone, replaced by **Add every month** (a contribution, leftovers stay put) and
-  **Keep available** (a balance, what is there counts toward it).
+  **Keep available** (a balance, what is there counts toward it). Superseded the next day
+  by the YNAB target engine below — the weekly type and the carry-in-never-reduces rule
+  did not survive.
+  ✅ **YNAB target engine shipped 2026-08-28.**
+  `agent-os/specs/2026-08-28-1000-ynab-target-engine/`. One nullable target per envelope,
+  with behaviour (`add` / `upTo` / `balance`) and cadence as explicit axes. Balance-style
+  asks measure against Available, so Groceries with one Sunday left and $58.06 sitting
+  there asks $152.90, not $211.21 of extra assignment. A bill with no stored target
+  derives one from its cadence. Remainder is gone; leftover Ready to Assign stays in
+  Ready to Assign. The drawer offers the seven sentences, never "refill" vs "set aside".
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
   budget states a shortfall per bill envelope rather than as one collapsed number, and
   Assign → Underfunded names which envelopes will not be funded. The scan layer makes those
@@ -1060,11 +1070,13 @@ period)` so money already spent stops being held twice and only going over bites
   membership changes rebase opening once; existing off-budget savings were cut over
   without rewriting the ledger.
 - **Next — earmarked savings (open question, not yet designed).** Bills and recurring
-  spend both accrue toward a charge that is _coming_. There is no way to hold money for
-  something with no date: an emergency fund, or saving toward a specific thing. The
-  shape is a **quasi-account** — a named sub-balance carved out of a real account, with
-  a target and progress. Savings envelopes already name a job inside the one-pool budget;
-  what this would add is a target and progress on that job, without a reallocation surface.
+  spend both accrue toward a charge that is _coming_. A `balance` + `none` target can now
+  name a floor ("needed eventually") without funding Underfunded; what is still missing
+  is the **sweep** that moves leftover money into that floor after a pay period is
+  survived, and a surface that cannot raid it. The shape is a **quasi-account** — a named
+  sub-balance carved out of a real account, with a target and progress. Savings envelopes
+  already name a job inside the one-pool budget; the floor is the target, the sweep is
+  the remaining work.
 
   **Funded by a sweep, not by an allocation.** Money moves to savings _after_ a pay
   period is survived, not out of the paycheck that starts it. The user's rule

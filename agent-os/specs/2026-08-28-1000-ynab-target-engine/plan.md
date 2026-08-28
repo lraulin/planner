@@ -1,7 +1,9 @@
 # YNAB target engine
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-28)  
 Spec folder: `agent-os/specs/2026-08-28-1000-ynab-target-engine/`
+
+This is the as-built record. Further change opens a new delta-spec.
 
 ## Spec relationships
 
@@ -146,9 +148,9 @@ that has already happened. `wholeOccurrences` ignores today: an `add` line is a 
 not coverage of trips, so `weekly-envelope-targets` D2's "whole month, always" survives exactly
 where its argument still holds.
 
-`schedule` counts from the bill's `nextDueKey` forward (`occurrencesInMonth` in
-`templates/schedule.ts`), not from a static day-of-month. That is what keeps a **late bill
-asking** instead of falling silent the day after it was due.
+`schedule` counts from the bill's `expectedKey` — the charge being waited for, which may
+be in the past — not from `nextDueKey`. That is what keeps a **late unpaid bill asking**
+and a paid one quiet: `nextDueKey` rolls forward the day after the due date either way.
 
 **Spread** (`year`, `by`, `none`) — the ask is due at a future month, so divide the hole:
 
@@ -241,26 +243,26 @@ longer implement, and leaving the name in place would keep pointing the next rea
 
 ## Acceptance criteria
 
-- [ ] Groceries (`upTo`, week/Sunday, $210.96) on 2026-08-28 with Available $58.06 reads
+- [x] Groceries (`upTo`, week/Sunday, $210.96) on 2026-08-28 with Available $58.06 reads
       **"$152.90 more needed this month"**, and Assign → Underfunded offers the same figure —
       necessarily, because both call one function.
-- [ ] The same target viewed in September asks 4 × $210.96 less whatever August leaves behind;
+- [x] The same target viewed in September asks 4 × $210.96 less whatever August leaves behind;
       viewed in July it asks nothing.
-- [ ] A bill already paid this month asks nothing. A bill past its due date and still unpaid
+- [x] A bill already paid this month asks nothing. A bill past its due date and still unpaid
       keeps asking.
-- [ ] A monthly bill still asks its full amount in the due month and $0 in every other
+- [x] A monthly bill still asks its full amount in the due month and $0 in every other
       (`month-ahead-zero-based` D1), through the derived target.
-- [ ] "Keep $500 available" with carry-in $400 and $200 spent asks **$300**.
-- [ ] A $100,000 `balance` due next month asks $50,000 this month; past its deadline with
+- [x] "Keep $500 available" with carry-in $400 and $200 spent asks **$300**.
+- [x] A $100,000 `balance` due next month asks $50,000 this month; past its deadline with
       $95,000 available it asks the whole $5,000 hole at once.
-- [ ] The same target with no deadline reads "needed eventually" and contributes nothing to
+- [x] The same target with no deadline reads "needed eventually" and contributes nothing to
       Underfunded.
-- [ ] `parseTarget` rejects every pairing outside D2's table, a user-supplied `schedule`
+- [x] `parseTarget` rejects every pairing outside D2's table, a user-supplied `schedule`
       cadence, a non-integer or non-positive `amountCents`, weekday 7 / −1 / 1.5, and
       `month.day` of 0 or 32.
-- [ ] A target round-trips through save and load, and a second user cannot read, change or
+- [x] A target round-trips through save and load, and a second user cannot read, change or
       delete the first user's target.
-- [ ] The drawer contains no list, no priority, and neither the word "refill" nor "set aside".
+- [x] The drawer contains no list, no priority, and neither the word "refill" nor "set aside".
 
 ## Changes from original plan
 
@@ -391,8 +393,14 @@ that `goal_def`, `runSimple`, `runBy` and `runPeriodic` no longer govern anythin
   plan**, mark both **Status: frozen / complete** with the date, and list leftovers as new work.
 - Update `agent-os/product/roadmap.md` if this closes a listed item.
 
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Delete the leftover Actual template modules under `src/lib/finances/budget/templates/`
+  once nothing imports them. `suggest.ts` (the history hint) still lives there; `apply.ts`
+  kept its name while switching to `targetDemand`.
+- Production/Neon schema: local Docker was migrated (`0082_envelope_target`). A deploy
+  against Neon still has to run the same migration.
+
 ---
 
-**While this spec is active:** a material change to requirements, design, or scope — including
-feedback on what was actually built — goes into this file and `shape.md`, plus a row in
-**Changes from original plan**. Skip pure implementation details. Freeze when verified.
+This document is frozen. Further change opens a new delta-spec.
