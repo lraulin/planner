@@ -283,6 +283,14 @@ export const accounts = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
+    /**
+     * The identity namespace `account_id` belongs to — Better Auth 1.7's account key.
+     * Credential rows carry the synthetic `local:credential`; an OAuth provider carries
+     * its real issuer (`https://accounts.google.com`), so two providers cannot mint
+     * colliding subjects. Sign-in matches on it, which is why a row written without one
+     * is invisible to `signInEmail` rather than merely untidy.
+     */
+    issuer: text("issuer").notNull(),
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
@@ -295,7 +303,10 @@ export const accounts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("accounts_user_idx").on(table.userId)],
+  (table) => [
+    index("accounts_user_idx").on(table.userId),
+    uniqueIndex("accounts_issuer_account_id_uq").on(table.issuer, table.accountId),
+  ],
 );
 
 /** Better Auth email verification / reset tokens (unused in MVP flows, table required). */

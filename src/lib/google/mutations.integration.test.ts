@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, appointments, contacts, users } from "@/db/schema";
+import { GOOGLE_ISSUER } from "@/lib/auth/accountKey";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import type { GoogleCalendarListEntry } from "./client";
 import {
@@ -53,6 +54,7 @@ async function linkGoogle(userId: string): Promise<void> {
     userId,
     accountId: `google-${crypto.randomUUID()}`,
     providerId: "google",
+    issuer: GOOGLE_ISSUER,
     accessToken: "token",
   });
 }

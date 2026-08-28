@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, users } from "@/db/schema";
+import { CREDENTIAL_ISSUER, GOOGLE_ISSUER } from "@/lib/auth/accountKey";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { getGoogleAccessToken, googleAccountId, GoogleNotLinkedError } from "./client";
 
@@ -38,6 +39,7 @@ async function linkGoogle(userId: string): Promise<string> {
       userId,
       accountId: `google-${crypto.randomUUID()}`,
       providerId: "google",
+      issuer: GOOGLE_ISSUER,
       accessToken: "token",
     })
     .returning({ id: accounts.id });
@@ -79,6 +81,7 @@ describeDb("googleAccountId", () => {
       userId,
       accountId: userId,
       providerId: "credential",
+      issuer: CREDENTIAL_ISSUER,
       password: "hash",
     });
 

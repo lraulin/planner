@@ -2,6 +2,7 @@ import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts } from "@/db/schema";
+import { credentialAccountFor } from "./accountKey";
 import { MIN_PASSWORD_LENGTH } from "./passwordPolicy";
 
 const WRONG_CURRENT = "Current password is incorrect.";
@@ -26,7 +27,7 @@ export async function changePassword(
   const [row] = await db
     .select({ id: accounts.id, password: accounts.password })
     .from(accounts)
-    .where(and(eq(accounts.userId, userId), eq(accounts.providerId, "credential")))
+    .where(credentialAccountFor(userId))
     .limit(1);
 
   if (!row?.password) {

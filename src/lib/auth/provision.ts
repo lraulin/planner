@@ -1,8 +1,9 @@
 import { hashPassword } from "better-auth/crypto";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, users } from "@/db/schema";
 import { normalizeEmail } from "@/lib/auth/identity";
+import { CREDENTIAL_ISSUER, credentialAccountFor } from "./accountKey";
 import { MIN_PASSWORD_LENGTH } from "./passwordPolicy";
 
 export { MIN_PASSWORD_LENGTH };
@@ -183,8 +184,9 @@ export async function createCredentialUser(input: {
 
 /**
  * The credential row Better Auth checks at sign-in. `accountId` is the user's own id for
- * this provider — that is what the existing seed wrote, and Better Auth treats the pair
- * (`providerId`, `accountId`) as the account's identity with the credential provider.
+ * this provider, and `issuer` is the namespace that id belongs to — Better Auth reads the
+ * pair (`issuer`, `accountId`) as the account's identity and will not consider a row whose
+ * issuer does not match, however correct the password is.
  */
 async function upsertCredential(userId: string, password: string): Promise<void> {
   const hashed = await hashPassword(password);
@@ -192,7 +194,7 @@ async function upsertCredential(userId: string, password: string): Promise<void>
   const [existing] = await db
     .select({ id: accounts.id })
     .from(accounts)
-    .where(and(eq(accounts.userId, userId), eq(accounts.providerId, "credential")))
+    .where(credentialAccountFor(userId))
     .limit(1);
 
   if (existing) {
@@ -207,6 +209,7 @@ async function upsertCredential(userId: string, password: string): Promise<void>
     userId,
     accountId: userId,
     providerId: "credential",
+    issuer: CREDENTIAL_ISSUER,
     password: hashed,
   });
 }
