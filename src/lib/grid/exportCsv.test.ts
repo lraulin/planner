@@ -14,6 +14,7 @@ import {
   serializeGridExport,
   tableToCsv,
   tableToJson,
+  tableToMarkdown,
   tableToRecords,
   tableToYaml,
   yamlScalar,
@@ -102,6 +103,61 @@ describe("tableToCsv", () => {
       { name: "Task", note: null, depth: 1 },
     ]);
     expect(csv).toBe("Name,Note\nGoal,\nTask,\n");
+  });
+});
+
+describe("tableToMarkdown", () => {
+  it("writes a pipe table with a rule under the header", () => {
+    expect(
+      tableToMarkdown(columns, [
+        { name: "Write brief", note: "due Friday", depth: 0 },
+        { name: "Review", note: null, depth: 1 },
+      ]),
+    ).toBe(
+      "| Name | Note |\n| --- | --- |\n| Write brief | due Friday |\n| Review |  |\n",
+    );
+  });
+
+  it("escapes a pipe and folds a newline into a space", () => {
+    // A raw pipe ends the cell and a raw newline ends the row: either one silently
+    // reshapes the table into a different one that still renders.
+    expect(
+      tableToMarkdown(columns, [{ name: "a|b", note: "one\ntwo", depth: 0 }]),
+    ).toBe("| Name | Note |\n| --- | --- |\n| a\\|b | one two |\n");
+  });
+
+  it("right-aligns only the columns the host marked as money", () => {
+    const money = [
+      { id: "name", header: "Envelope", value: (row: Row) => row.name },
+      {
+        id: "amount",
+        header: "Assigned",
+        value: (row: Row) => row.note ?? "",
+        align: "right" as const,
+      },
+    ];
+    expect(tableToMarkdown(money, [])).toBe(
+      "| Envelope | Assigned |\n| --- | ---: |\n",
+    );
+  });
+
+  it("draws depth into the first cell only when the host asks", () => {
+    const rows = [
+      { name: "Goal", note: null, depth: 0 },
+      { name: "Task", note: null, depth: 1 },
+    ];
+    expect(tableToMarkdown(columns, rows)).toContain("| Task |  |");
+    expect(tableToMarkdown(columns, rows, (row) => row.depth)).toContain(
+      `| ${"\u00a0".repeat(4)}Task |  |`,
+    );
+  });
+
+  it("still writes the header when the table is empty", () => {
+    expect(tableToMarkdown(columns, [])).toBe("| Name | Note |\n| --- | --- |\n");
+  });
+
+  it("returns empty when there is no exportable column", () => {
+    expect(tableToMarkdown([], [{ name: "x", note: null, depth: 0 }])).toBe("");
   });
 });
 
@@ -205,6 +261,9 @@ describe("serializeGridExport", () => {
     expect(serializeGridExport("csv", columns, rows)).toBe(tableToCsv(columns, rows));
     expect(serializeGridExport("json", columns, rows)).toBe(tableToJson(columns, rows));
     expect(serializeGridExport("yaml", columns, rows)).toBe(tableToYaml(columns, rows));
+    expect(serializeGridExport("markdown", columns, rows)).toBe(
+      tableToMarkdown(columns, rows),
+    );
   });
 });
 
@@ -214,13 +273,22 @@ describe("exportFilename", () => {
     expect(exportFilename("Today's task list", "json")).toBe("Today_s_task_list.json");
     expect(exportFilename("  Agenda  ", "yaml")).toBe("Agenda.yaml");
     expect(exportFilename("   ", "csv")).toBe("grid.csv");
+    // `.markdown` is a valid extension nothing actually uses.
+    expect(exportFilename("Budget — September 2026", "markdown")).toBe(
+      "Budget_September_2026.md",
+    );
   });
 });
 
 describe("gridExportCommands", () => {
   it("lives in File ▸ Export as a format picker, not on the toolbar or the row menu", () => {
     const commands = gridExportCommands(() => {});
-    expect(commands.map((command) => command.label)).toEqual(["CSV", "JSON", "YAML"]);
+    expect(commands.map((command) => command.label)).toEqual([
+      "CSV",
+      "JSON",
+      "YAML",
+      "Markdown",
+    ]);
     expect(commands[0]).toMatchObject({
       id: "grid.export-csv",
       menu: "file",
@@ -228,8 +296,7 @@ describe("gridExportCommands", () => {
       group: "view",
     });
     expect(gridExportFormatOf("grid.export-csv")).toBe("csv");
-    expect(gridExportFormatOf("grid.export-csv.bills")).toBe("csv");
-    expect(gridExportFormatOf("grid.copy-yaml.spend")).toBe("yaml");
+    expect(gridExportFormatOf("grid.export-markdown")).toBe("markdown");
     expect(commands.every((command) => command.toolbar === undefined)).toBe(true);
     expect(commands.every((command) => command.rowMenu === undefined)).toBe(true);
     expect(unplacedCommands(commands)).toEqual([]);
@@ -237,8 +304,8 @@ describe("gridExportCommands", () => {
   });
 
   it("folds Export into a submenu after Plan and before Account", () => {
-    // Declared taxonomy, not build order — see MENU_SECTIONS.file. Three formats
-    // clear the two-command floor, so Export is a fly-out rather than three File rows.
+    // Declared taxonomy, not build order — see MENU_SECTIONS.file. Four formats
+    // clear the two-command floor, so Export is a fly-out rather than four File rows.
     const file = buildMenus([
       {
         id: "app.sign-out",
@@ -279,6 +346,7 @@ describe("gridExportCommands", () => {
       "CSV",
       "JSON",
       "YAML",
+      "Markdown",
     ]);
   });
 
@@ -301,6 +369,7 @@ describe("gridCopyCommands", () => {
       "Copy CSV to Clipboard",
       "Copy JSON to Clipboard",
       "Copy YAML to Clipboard",
+      "Copy Markdown to Clipboard",
     ]);
     expect(commands[0]).toMatchObject({
       id: "grid.copy-csv",
@@ -350,6 +419,10 @@ describe("gridExportFormatOf", () => {
   it("reads the format off either family of ids", () => {
     expect(gridExportFormatOf("grid.export-yaml")).toBe("yaml");
     expect(gridExportFormatOf("grid.copy-json")).toBe("json");
+    expect(gridExportFormatOf("grid.export-markdown")).toBe("markdown");
     expect(gridExportFormatOf("grid.export-xls")).toBeNull();
+    // Nothing stamps a scope onto an export id any more — the Budget page was the only
+    // dual-grid host and it exports one document now.
+    expect(gridExportFormatOf("grid.export-csv.bills")).toBeNull();
   });
 });

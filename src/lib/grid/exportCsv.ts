@@ -11,17 +11,14 @@ import { escapeCsvField } from "@/lib/csv/text";
 import type { Command } from "@/lib/commands/registry";
 import { parseDepthForest, type ForestNode } from "./forest";
 
-export const GRID_EXPORT_FORMATS = ["csv", "json", "yaml"] as const;
+export const GRID_EXPORT_FORMATS = ["csv", "json", "yaml", "markdown"] as const;
 export type GridExportFormat = (typeof GRID_EXPORT_FORMATS)[number];
-
-export const GRID_EXPORT_CSV_ID = "grid.export-csv";
-export const GRID_EXPORT_JSON_ID = "grid.export-json";
-export const GRID_EXPORT_YAML_ID = "grid.export-yaml";
 
 export const FORMAT_LABEL: Record<GridExportFormat, string> = {
   csv: "CSV",
   json: "JSON",
   yaml: "YAML",
+  markdown: "Markdown",
 };
 
 export type GridExportDestination = "file" | "clipboard";
@@ -32,14 +29,7 @@ export function copyClipboardLabel(format: GridExportFormat): string {
 
 export function gridExportFormatOf(id: string): GridExportFormat | null {
   for (const format of GRID_EXPORT_FORMATS) {
-    if (
-      id === `grid.export-${format}` ||
-      id === `grid.copy-${format}` ||
-      id.startsWith(`grid.export-${format}.`) ||
-      id.startsWith(`grid.copy-${format}.`)
-    ) {
-      return format;
-    }
+    if (id === `grid.export-${format}` || id === `grid.copy-${format}`) return format;
   }
   return null;
 }
@@ -48,6 +38,7 @@ const FORMAT_MIME: Record<GridExportFormat, string> = {
   csv: "text/csv;charset=utf-8",
   json: "application/json;charset=utf-8",
   yaml: "application/yaml;charset=utf-8",
+  markdown: "text/markdown;charset=utf-8",
 };
 
 /** The slice of a column definition the exporter reads. */
@@ -63,6 +54,8 @@ export type ExportColumn<TRow> = {
   id: string;
   header: string;
   value: (row: TRow) => string;
+  /** Markdown only, and only where the host knows the column is money. */
+  align?: "right";
 };
 
 /**
@@ -110,6 +103,43 @@ export function tableToCsv<TRow>(
     columns.map((column) => escapeCsvField(column.value(row))).join(","),
   );
   return [header, ...lines].join("\n") + "\n";
+}
+
+/**
+ * A GitHub-flavoured pipe table: header, alignment rule, one line per row. Flat like CSV —
+ * a Markdown table has no nesting either — and header-only when empty for the same reason.
+ *
+ * `indent` draws depth into the first cell for hosts that want the tree visible (the Budget
+ * document uses it for forecast items); grids pass nothing and stay flat.
+ */
+export function tableToMarkdown<TRow>(
+  columns: readonly ExportColumn<TRow>[],
+  rows: readonly TRow[],
+  indent?: (row: TRow) => number,
+): string {
+  if (columns.length === 0) return "";
+  const header = `| ${columns.map((column) => markdownCell(column.header)).join(" | ")} |`;
+  const rule = `| ${columns
+    .map((column) => (column.align === "right" ? "---:" : "---"))
+    .join(" | ")} |`;
+  const lines = rows.map((row) => {
+    const cells = columns.map((column, index) => {
+      const text = markdownCell(column.value(row));
+      const depth = index === 0 ? (indent?.(row) ?? 0) : 0;
+      return depth > 0 ? `${"\u00a0".repeat(depth * 4)}${text}` : text;
+    });
+    return `| ${cells.join(" | ")} |`;
+  });
+  return [header, rule, ...lines].join("\n") + "\n";
+}
+
+/**
+ * A pipe ends the cell and a newline ends the row, so both have to go. Escaping the pipe
+ * (`\\|`) is the GFM spelling; a newline has no in-cell spelling at all, so it becomes a
+ * space rather than a `<br>` this document would then have to be HTML to render.
+ */
+function markdownCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
 }
 
 /**
@@ -204,13 +234,21 @@ function yamlRecord(record: ExportRecord, indent: number): string {
   return out;
 }
 
+/** Extensions, where the format name is not one. Markdown files are `.md`, not `.markdown`. */
+const FORMAT_EXTENSION: Record<GridExportFormat, string> = {
+  csv: "csv",
+  json: "json",
+  yaml: "yaml",
+  markdown: "md",
+};
+
 export function exportFilename(label: string, format: GridExportFormat): string {
   const slug = label
     .trim()
     .replace(/[^\w.-]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 80);
-  return `${slug || "grid"}.${format}`;
+  return `${slug || "grid"}.${FORMAT_EXTENSION[format]}`;
 }
 
 /** @deprecated Use {@link exportFilename} — kept so existing CSV call sites stay obvious. */
@@ -229,6 +267,7 @@ export function serializeGridExport<TRow extends DepthExportRow>(
 ): string {
   if (format === "csv") return tableToCsv(columns, rows);
   if (format === "json") return tableToJson(columns, rows);
+  if (format === "markdown") return tableToMarkdown(columns, rows);
   return tableToYaml(columns, rows);
 }
 
@@ -240,6 +279,13 @@ export function serializeGridExport<TRow extends DepthExportRow>(
  * `alternate` is the Option-held copy. Pulldown menus swap to it; the Commands panel
  * keeps the download label. `gridCopyCommands` is the always-visible twin.
  */
+const EXPORT_TITLE: Record<GridExportFormat, string> = {
+  csv: "Download the rows and columns currently on screen",
+  json: "Download the current view as JSON, keeping parent/child nesting",
+  yaml: "Download the current view as YAML, keeping parent/child nesting",
+  markdown: "Download the current view as a Markdown table",
+};
+
 export function gridExportCommands(
   run: (format: GridExportFormat, destination?: GridExportDestination) => void,
 ): Command[] {
@@ -251,10 +297,7 @@ export function gridExportCommands(
     section: "Export",
     icon: "export",
     keywords: `export download spreadsheet save ${format} excel`,
-    title:
-      format === "csv"
-        ? "Download the rows and columns currently on screen"
-        : `Download the current view as ${FORMAT_LABEL[format]}, keeping parent/child nesting`,
+    title: EXPORT_TITLE[format],
     alternate: {
       label: copyClipboardLabel(format),
       title: `Copy the current view as ${FORMAT_LABEL[format]} to the clipboard`,
