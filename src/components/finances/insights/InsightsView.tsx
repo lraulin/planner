@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   coverageGap,
   effectiveCategory,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/finances/analytics";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
+import { insightsCommands } from "@/lib/finances/insightsCommands";
 import type { StoredBillRow } from "@/lib/finances/commitments";
 import {
   unresolvedPaypalInflows,
@@ -47,6 +48,7 @@ import {
 } from "@/components/settings/SettingsProvider";
 import { useToday } from "@/components/grid/useToday";
 import { ToolbarSegments } from "@/components/tabs/tabChrome";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { AssetDebtChart } from "./AssetDebtChart";
 import { CarryingCostTable } from "./CarryingCostTable";
 import { CashFlowChart } from "./CashFlowChart";
@@ -120,6 +122,31 @@ export function InsightsView({
   const { value: view, patch } = useSetting(INSIGHTS_SCOPE, INSIGHTS_CODEC);
   const [reclassified, setReclassified] = useState<string | null>(null);
   const [reclassifying, setReclassifying] = useState(false);
+
+  const reclassify = useCallback(() => {
+    setReclassifying(true);
+    void reclassifyAction().then((result) => {
+      setReclassifying(false);
+      if (result.ok && result.data) {
+        setReclassified(
+          `Reclassified ${result.data.updated.toLocaleString()} of ${result.data.scanned.toLocaleString()} rows.`,
+        );
+      } else if (!result.ok) {
+        setReclassified(result.error);
+      }
+    });
+  }, []);
+
+  const commands = useMemo(
+    () =>
+      insightsCommands({
+        hasRows: rows.length > 0,
+        reclassifying,
+        reclassify,
+      }),
+    [rows.length, reclassifying, reclassify],
+  );
+  useRegisterCommands(commands);
 
   const filterOptions = useMemo(() => insightsFilterOptions(rows), [rows]);
   const unresolvedPaypal = useMemo(
@@ -706,19 +733,7 @@ export function InsightsView({
               <button
                 type="button"
                 disabled={reclassifying}
-                onClick={() => {
-                  setReclassifying(true);
-                  void reclassifyAction().then((result) => {
-                    setReclassifying(false);
-                    if (result.ok && result.data) {
-                      setReclassified(
-                        `Reclassified ${result.data.updated.toLocaleString()} of ${result.data.scanned.toLocaleString()} rows.`,
-                      );
-                    } else if (!result.ok) {
-                      setReclassified(result.error);
-                    }
-                  });
-                }}
+                onClick={reclassify}
                 className="min-h-tap rounded border border-rule bg-surface-raised px-3 text-[0.8125rem] text-ink disabled:opacity-50"
               >
                 Reclassify…
