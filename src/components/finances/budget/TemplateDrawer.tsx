@@ -12,6 +12,7 @@ import {
   type Draft,
   type RemainderDraft,
   type SimpleDraft,
+  type WeeklyDraft,
 } from "@/lib/finances/budget/templates/draft";
 import {
   applyTemplates,
@@ -22,7 +23,11 @@ import {
   TEMPLATE_TYPES,
   type TemplateType,
 } from "@/lib/finances/budget/templates/types";
-import { monthLabel, type MonthKey } from "@/lib/finances/budget/envelope";
+import { monthKeyOf, monthLabel, type MonthKey } from "@/lib/finances/budget/envelope";
+import type { AssignHistoryMonth } from "@/lib/finances/budget/assign/types";
+import { suggestWeeklyAmountCents } from "@/lib/finances/budget/templates/suggest";
+import { countWeekdayInMonth } from "@/lib/finances/budget/templates/weekly";
+import { weekdayLongLabel } from "@/lib/dateFormat";
 import { formatUsd } from "@/lib/finances/money";
 
 const inputClass =
@@ -30,14 +35,35 @@ const inputClass =
 
 const labelClass = "flex flex-col gap-1 text-[0.75rem] text-ink-muted";
 
+/**
+ * Two different jobs, named rather than described (spec D6).
+ *
+ * A **contribution** says what this month costs; its leftovers stay put until you move them.
+ * A **balance** says how much should be sitting there; what is already there counts toward it,
+ * so the ask shrinks. The words "refill" and "set aside" are deliberately absent — they were
+ * adjectives on two behaviours, which is what made the balance job look like the obvious
+ * choice for groceries.
+ */
 const TYPE_LABELS: Record<TemplateType, string> = {
-  simple: "Monthly amount",
+  simple: "Add every month",
+  weekly: "Amount each weekday",
   by: "Save up by",
   remainder: "Remainder",
 };
 
+/** The add buttons read as verbs; the labels above read as nouns and do not fit after "Add". */
+const ADD_LABELS: Record<TemplateType, string> = {
+  simple: "Add a monthly amount",
+  weekly: "Add an amount each weekday",
+  by: "Add a save-up target",
+  remainder: "Add a remainder share",
+};
+
 const TYPE_HELP: Record<TemplateType, string> = {
-  simple: "A fixed amount each month, a ceiling to refill to, or both.",
+  simple:
+    "This month costs a fixed amount. Leftovers stay put until you move them. Can also keep a balance available instead.",
+  weekly:
+    "An amount for each Friday (or any weekday) in the month — five-Friday months ask for five.",
   by: "Reach an amount by a month, spreading the rest over the months left.",
   remainder:
     "Take a share of whatever Ready to Assign is left after every other envelope.",
@@ -59,6 +85,7 @@ export function TemplateDrawer({
   month,
   todayKey,
   readyToAssignCents,
+  history,
   onClose,
   onSaved,
 }: {
@@ -66,6 +93,7 @@ export function TemplateDrawer({
   month: MonthKey;
   todayKey: string;
   readyToAssignCents: number;
+  history: readonly AssignHistoryMonth[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -164,7 +192,7 @@ export function TemplateDrawer({
             >
               <div className="flex items-baseline gap-2">
                 <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
-                  {TYPE_LABELS[draft.type]}
+                  {lineLabel(draft)}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[0.8125rem] text-ink">
                   {lineSummary(draft)}
@@ -172,7 +200,7 @@ export function TemplateDrawer({
                 <button
                   type="button"
                   onClick={() => edit(drafts.filter((row) => row.id !== draft.id))}
-                  title={`Remove this ${TYPE_LABELS[draft.type].toLowerCase()} line`}
+                  title={`Remove this ${lineLabel(draft).toLowerCase()} line`}
                   className="min-h-tap flex-none rounded px-2 text-[0.75rem] text-ink-muted hover:bg-surface hover:text-ink md:min-h-0"
                 >
                   Remove
@@ -181,6 +209,10 @@ export function TemplateDrawer({
 
               <DraftFields
                 draft={draft}
+                month={month}
+                todayKey={todayKey}
+                envelopeId={envelope.id}
+                history={history}
                 onChange={(patch) => update(draft.id, patch)}
               />
             </li>
@@ -202,7 +234,7 @@ export function TemplateDrawer({
               title={TYPE_HELP[type]}
               className="min-h-tap rounded border border-rule px-3 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
             >
-              Add {TYPE_LABELS[type].toLowerCase()}
+              {ADD_LABELS[type]}
             </button>
           ))}
         </div>
@@ -246,6 +278,12 @@ export function TemplateDrawer({
   );
 }
 
+/** The line's eyebrow. A weekly line names its own weekday rather than saying "weekday". */
+function lineLabel(draft: Draft): string {
+  if (draft.type === "weekly") return `Amount each ${weekdayLongLabel(draft.weekday)}`;
+  return TYPE_LABELS[draft.type];
+}
+
 function lineSummary(draft: Draft): string {
   const single = draftsToTemplates([draft]);
   if (!single.ok) return "Incomplete";
@@ -254,14 +292,33 @@ function lineSummary(draft: Draft): string {
 
 function DraftFields({
   draft,
+  month,
+  todayKey,
+  envelopeId,
+  history,
   onChange,
 }: {
   draft: Draft;
+  month: MonthKey;
+  todayKey: string;
+  envelopeId: string;
+  history: readonly AssignHistoryMonth[];
   onChange: (patch: Partial<Draft>) => void;
 }) {
   switch (draft.type) {
     case "simple":
       return <SimpleFields draft={draft} onChange={onChange} />;
+    case "weekly":
+      return (
+        <WeeklyFields
+          draft={draft}
+          month={month}
+          todayKey={todayKey}
+          envelopeId={envelopeId}
+          history={history}
+          onChange={onChange}
+        />
+      );
     case "by":
       return <ByFields draft={draft} onChange={onChange} />;
     case "remainder":
@@ -279,7 +336,7 @@ function SimpleFields({
   return (
     <div className="mt-2 flex flex-wrap items-end gap-3">
       <label className={labelClass}>
-        Each month
+        Add every month
         <input
           type="text"
           inputMode="decimal"
@@ -290,7 +347,7 @@ function SimpleFields({
         />
       </label>
       <label className={labelClass}>
-        Up to
+        Keep available
         <input
           type="text"
           inputMode="decimal"
@@ -310,17 +367,103 @@ function SimpleFields({
         <span
           title={
             draft.limit.trim() === ""
-              ? "Set a limit first — hold only means anything with one"
-              : "Keep money already over the limit instead of assigning it away"
+              ? "Set a Keep available amount first — hold only means anything with one"
+              : "Keep money already over that amount instead of assigning it away"
           }
         >
           Hold what is over
         </span>
       </label>
       <p className="w-full text-[0.75rem] text-ink-faint">
-        Leave <em>each month</em> blank to refill to the limit instead of adding a fixed
-        amount.
+        <em>Add every month</em> is a contribution: this month costs that much, and
+        anything left over stays put until you move it. <em>Keep available</em> is a
+        balance: what is already sitting here counts toward it, so a quiet month asks
+        for less. Leave <em>Add every month</em> blank to use the balance alone.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Weekday plus a per-occurrence amount — the whole line (D4).
+ *
+ * The suggestion divides *all* spending in the envelope by the weekday occurrences over the
+ * same months, and says so: the mid-week milk run is real demand on this envelope, and a
+ * figure drawn from the anchor-day receipts alone would underfund it every month.
+ */
+function WeeklyFields({
+  draft,
+  month,
+  todayKey,
+  envelopeId,
+  history,
+  onChange,
+}: {
+  draft: WeeklyDraft;
+  month: MonthKey;
+  todayKey: string;
+  envelopeId: string;
+  history: readonly AssignHistoryMonth[];
+  onChange: (patch: Partial<WeeklyDraft>) => void;
+}) {
+  const suggested = useMemo(
+    () =>
+      suggestWeeklyAmountCents({
+        history,
+        categoryId: envelopeId,
+        weekday: draft.weekday,
+        currentMonth: monthKeyOf(todayKey),
+      }),
+    [history, envelopeId, draft.weekday, todayKey],
+  );
+
+  const occurrences = countWeekdayInMonth(month, draft.weekday);
+  const dayName = weekdayLongLabel(draft.weekday);
+  const single = draftsToTemplates([draft]);
+  const amountCents =
+    single.ok && single.templates[0].type === "weekly"
+      ? single.templates[0].amountCents
+      : null;
+
+  return (
+    <div className="mt-2 flex flex-wrap items-end gap-3">
+      <label className={labelClass}>
+        Day of the week
+        <select
+          value={draft.weekday}
+          onChange={(event) => onChange({ weekday: Number(event.target.value) })}
+          className={inputClass}
+        >
+          {[0, 1, 2, 3, 4, 5, 6].map((weekday) => (
+            <option key={weekday} value={weekday}>
+              {weekdayLongLabel(weekday)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className={labelClass}>
+        Each {dayName}
+        <input
+          type="text"
+          inputMode="decimal"
+          value={draft.amount}
+          onChange={(event) => onChange({ amount: event.target.value })}
+          className={`tabular w-32 text-right ${inputClass}`}
+        />
+      </label>
+      <p className="w-full text-[0.75rem] text-ink-faint">
+        {suggested === null
+          ? `${monthLabel(month)} has ${occurrences} ${dayName}s, so it asks for ${occurrences} × this amount. Not enough history yet to suggest one.`
+          : `History suggests ${formatUsd(suggested)} — all spending in this envelope, not only the ${dayName} trips, divided by its ${dayName}s. ${monthLabel(month)} has ${occurrences}.`}
+      </p>
+      {amountCents === null ? null : (
+        <p className="w-full text-[0.75rem] text-ink-muted">
+          {monthLabel(month)}: {occurrences} {dayName}s × {formatUsd(amountCents)} ={" "}
+          <span className="tabular text-ink">
+            {formatUsd(amountCents * occurrences)}
+          </span>
+        </p>
+      )}
     </div>
   );
 }

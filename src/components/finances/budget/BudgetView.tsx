@@ -1072,6 +1072,7 @@ export function BudgetView({
           month={data.month}
           todayKey={data.todayKey}
           readyToAssignCents={month.readyToAssignCents}
+          history={assignInputs.history}
           onClose={() => setEditing(null)}
           onSaved={() => router.refresh()}
         />
