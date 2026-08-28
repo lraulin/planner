@@ -672,6 +672,7 @@ export function BudgetView({
   const ctx: BudgetColumnCtx = {
     pending,
     indicators,
+    month: data.month,
     onAssign: (row, cents) =>
       run(() =>
         budgetOperationAction({
@@ -854,6 +855,7 @@ export function BudgetView({
     <BudgetInspector
       key={selectedRow?.id ?? "empty"}
       row={selectedRow}
+      month={data.month}
       carryInCents={
         selectedRow
           ? templateCarryIn(previous ? categoryMonth(previous, selectedRow.id) : null)

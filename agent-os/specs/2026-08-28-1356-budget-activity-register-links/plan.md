@@ -1,6 +1,6 @@
 # Budget Activity → filtered Register
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-28)  
 Spec folder: `agent-os/specs/2026-08-28-1356-budget-activity-register-links/`
 
 ## Spec relationships
@@ -35,23 +35,24 @@ Product alignment: Budget/Register fidelity to Actual, not a named roadmap item.
 
 ## Acceptance criteria
 
-- [ ] On `/finances/budget`, each Regular / Bills / Savings Activity number is a link to `/finances/register?view=activity&category=<id>&month=<budget month>`.
-- [ ] The inspector Activity line is the same link.
-- [ ] The Register shows exactly the transactions that summed to that Activity figure (D3). Their amounts sum to it.
-- [ ] `$0.00` still links; empty state names envelope and month.
-- [ ] Group/section/income figures are not links.
-- [ ] Browser Back returns to the Budget month you left. Visiting Register from the page bar does not restore a stale activity view.
-- [ ] Below `md`, tapping Activity navigates; tapping the name still opens the inspector sheet.
-- [ ] Pure tests cover the contributing-set filter (split parent vs child, on-budget transfer, off-budget-leg transfer, month bounds, other envelope). No React component tests.
-- [ ] `npm run test:unit`, lint, typecheck; `npm run smoke` with the dev server up; browser-verified desktop and 390-wide.
+- [x] On `/finances/budget`, each Regular / Bills / Savings Activity number is a link to `/finances/register?view=activity&category=<id>&month=<budget month>`.
+- [x] The inspector Activity line is the same link.
+- [x] The Register shows exactly the transactions that summed to that Activity figure (D3). Their amounts sum to it.
+- [x] `$0.00` still links; empty state names envelope and month.
+- [x] Group/section/income figures are not links.
+- [x] Browser Back returns to the Budget month you left. Visiting Register from the page bar does not restore a stale activity view.
+- [x] Below `md`, tapping Activity navigates; tapping the name still opens the inspector sheet.
+- [x] Pure tests cover the contributing-set filter (split parent vs child, on-budget transfer, off-budget-leg transfer, month bounds, other envelope). No React component tests.
+- [x] `npm run test:unit`, lint, typecheck; `npm run smoke` with the dev server up; browser-verified desktop and 390-wide.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                     | Why                                                                                                                                                                 |
+| --- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Activity view loads **money rows** (split children), not the ordinary Register's bank rows                 | D3's contributing set is leaves. The bank-row index would drop the children that summed to the figure and show nothing for a split. Ordinary Register is unchanged. |
+| 2   | Below `md`, the Activity control is rendered in the name cell (the Activity column is `compact: "hidden"`) | Compact rows do not render the Activity column; D7 still needs a 44px link that does not open the inspector.                                                        |
 
 ## Task 1: Save Spec Documentation
 

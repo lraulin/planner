@@ -17,6 +17,12 @@ import {
   trackAsBillRefusal,
   type ClaimedPayee,
 } from "@/lib/finances/registerBillDraft";
+import { monthLabel } from "@/lib/finances/budget/envelope";
+import {
+  activityEmptyCopy,
+  activityViewFilters,
+  parseActivityRegisterParams,
+} from "@/lib/finances/registerActivity";
 import {
   parseRegisterQuery,
   type RegisterPrepared,
@@ -56,7 +62,7 @@ import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { idsForFieldEdit } from "@/lib/grid/selection";
 import { isTypingTarget } from "@/lib/keyboard";
 import { useRegisterSource } from "./useRegisterSource";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { FinanceImportPanel } from "./FinanceImportPanel";
 import { CategorySelect } from "./CategorySelect";
@@ -75,7 +81,7 @@ import {
   type FinanceColumnCtx,
 } from "./financeColumns";
 
-const FINANCE_VIEWS = [
+const FINANCE_VIEW_CORE = [
   { id: "all", label: "All Transactions" },
   { id: "uncategorized", label: "Uncategorized" },
   { id: "tag", label: "Tag" },
@@ -83,7 +89,11 @@ const FINANCE_VIEWS = [
 
 function viewDefaults(
   viewId: string,
-  tag: string | null,
+  extras: {
+    tag: string | null;
+    envelopeName: string | null;
+    month: string | null;
+  },
   collapsedYears: string[],
 ): GridDefaults {
   return {
@@ -96,9 +106,11 @@ function viewDefaults(
     filters:
       viewId === "uncategorized"
         ? { category: optionsFilter(["Uncategorized"]) }
-        : viewId === "tag" && tag
-          ? { tags: optionsFilter([tag]) }
-          : {},
+        : viewId === "tag" && extras.tag
+          ? { tags: optionsFilter([extras.tag]) }
+          : viewId === "activity" && extras.envelopeName && extras.month
+            ? activityViewFilters(extras.envelopeName, extras.month)
+            : {},
   };
 }
 
@@ -232,10 +244,27 @@ export function FinancesView({
   const [, startTransition] = useTransition();
   const isClient = useIsClient();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
-  // Tag deep-links live on the client so the Register page does not subscribe to
-  // searchParams — that subscription reloaded every transaction whenever the
-  // drawer wrote `?detail=`.
-  const initialTag = useSearchParams().get("tag");
+  const router = useRouter();
+  const pathname = usePathname();
+  // Tag / Activity deep-links live on the client so the Register page does not
+  // subscribe to searchParams — that subscription reloaded every transaction
+  // whenever the drawer wrote `?detail=`.
+  const searchParams = useSearchParams();
+  const initialTag = searchParams.get("tag");
+  const activityView = useMemo(
+    () =>
+      parseActivityRegisterParams({
+        category: searchParams.get("category"),
+        month: searchParams.get("month"),
+      }),
+    [searchParams],
+  );
+  const activityActive =
+    searchParams.get("view") === "activity" && activityView !== null;
+  const activityEnvelopeName = activityView
+    ? (catalog.envelopes.find((envelope) => envelope.id === activityView.categoryId)
+        ?.name ?? "Activity")
+    : null;
 
   if (initialPrepared !== seenPrepared || initialClaimed !== seenClaimed) {
     setSeenPrepared(initialPrepared);
@@ -245,26 +274,67 @@ export function FinancesView({
   }
 
   const collapsedYears = defaultCollapsedGroups;
+  const financeViews = useMemo(
+    () =>
+      activityActive && activityView && activityEnvelopeName
+        ? [
+            ...FINANCE_VIEW_CORE,
+            {
+              id: "activity",
+              label: `${activityEnvelopeName} · ${monthLabel(activityView.month)}`,
+            },
+          ]
+        : [...FINANCE_VIEW_CORE],
+    [activityActive, activityEnvelopeName, activityView],
+  );
   const defaultsFor = useCallback(
-    (viewId: string) => viewDefaults(viewId, initialTag, collapsedYears),
-    [initialTag, collapsedYears],
+    (viewId: string) =>
+      viewDefaults(
+        viewId,
+        {
+          tag: initialTag,
+          envelopeName: activityEnvelopeName,
+          month: activityView?.month ?? null,
+        },
+        collapsedYears,
+      ),
+    [initialTag, activityEnvelopeName, activityView, collapsedYears],
   );
   const views = useModuleViews({
     moduleId: "finances",
-    builtIn: FINANCE_VIEWS,
+    builtIn: financeViews,
     defaultViewId: "all",
     columns: financeColumns,
     defaultsFor,
   });
   const gridState = views.grid;
   useEffect(() => {
-    if (views.base === "uncategorized" || views.base === "tag") {
+    if (
+      views.base === "uncategorized" ||
+      views.base === "tag" ||
+      views.base === "activity"
+    ) {
       gridState.clearViewState();
     }
     // Deep links are task entry points: they must open on their exact row set rather than
     // inheriting an unrelated Register search from the previous visit.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deep-link mount reset
   }, []);
+  useEffect(() => {
+    // Activity is URL-only. A valid activity URL must keep its params; leftover
+    // category/month on any other view must not become the next Register visit.
+    if (activityActive) return;
+    const leftoverView = searchParams.get("view") === "activity";
+    if (!searchParams.get("category") && !searchParams.get("month") && !leftoverView) {
+      return;
+    }
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("category");
+    next.delete("month");
+    if (leftoverView) next.delete("view");
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [activityActive, searchParams, pathname, router]);
   const offBudgetAccountIds = useMemo(
     () =>
       new Set(
@@ -278,6 +348,8 @@ export function FinancesView({
       parseRegisterQuery({
         viewId: views.base,
         tag: initialTag,
+        category: activityView?.categoryId ?? null,
+        month: activityView ? searchParams.get("month") : null,
         search: gridState.search,
         filters: gridState.filters,
         advancedFilter: gridState.advancedFilter,
@@ -290,6 +362,8 @@ export function FinancesView({
     [
       views.base,
       initialTag,
+      activityView,
+      searchParams,
       gridState.search,
       gridState.filters,
       gridState.advancedFilter,
@@ -720,6 +794,10 @@ export function FinancesView({
           ) : views.base === "tag" ? (
             <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
               No transactions use {initialTag ? `#${initialTag}` : "this tag"}.
+            </p>
+          ) : views.base === "activity" && activityEnvelopeName && activityView ? (
+            <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
+              {activityEmptyCopy(activityEnvelopeName, activityView.month)}
             </p>
           ) : (
             <div className="mx-auto w-full max-w-2xl p-6">

@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { AmountCell } from "@/components/grid/cells";
 import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
+import type { MonthKey } from "@/lib/finances/budget/envelope";
 import type { BillEnvelopeEdit } from "@/lib/finances/mutations";
 import { formatUsd } from "@/lib/finances/money";
+import { activityRegisterHref } from "@/lib/finances/registerActivity";
 import type { Cadence } from "@/lib/finances/recurringBills";
 import type { EnvelopeIndicator } from "@/lib/finances/budget/indicator";
 import { type BudgetBillRow, type BudgetRow } from "@/lib/finances/budget/rows";
@@ -33,6 +36,8 @@ export type BudgetColumnCtx = {
   pending: boolean;
   /** Live funding scan, keyed by envelope id. */
   indicators: ReadonlyMap<string, EnvelopeIndicator>;
+  /** Budget month on screen, for Activity → Register links. */
+  month: MonthKey;
 };
 
 const IDLE: EnvelopeIndicator = {
@@ -46,6 +51,35 @@ const IDLE: EnvelopeIndicator = {
 
 function indicatorOf(ctx: BudgetColumnCtx, id: string): EnvelopeIndicator {
   return ctx.indicators.get(id) ?? IDLE;
+}
+
+function stopRowClick(event: { stopPropagation: () => void }) {
+  event.stopPropagation();
+}
+
+export function ActivityAmountLink({
+  categoryId,
+  month,
+  cents,
+  className = "",
+}: {
+  categoryId: string;
+  month: MonthKey;
+  cents: number;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={activityRegisterHref(categoryId, month)}
+      onClick={stopRowClick}
+      onPointerDown={stopRowClick}
+      className={`tabular inline-flex min-h-tap items-center justify-end underline-offset-2 hover:underline md:min-h-0 ${
+        cents === 0 ? "text-ink-faint" : "text-ink"
+      } ${className}`}
+    >
+      {formatUsd(cents)}
+    </Link>
+  );
 }
 
 function assignedCell<T extends BudgetRow>(row: NodeGridRow<T>, ctx: BudgetColumnCtx) {
@@ -78,12 +112,15 @@ function moneyColumns<T extends BudgetRow>(): ColumnDef<BudgetColumnCtx, T>[] {
       label: "Activity",
       width: "7rem",
       align: "right",
-      render: (row) => (
-        <span
-          className={`tabular ${row.node.activityCents === 0 ? "text-ink-faint" : "text-ink"}`}
-        >
-          {formatUsd(row.node.activityCents)}
-        </span>
+      // Live link lives in the name cell below `md`; a meta chip would duplicate it.
+      compact: "hidden",
+      render: (row, ctx) => (
+        <ActivityAmountLink
+          categoryId={row.node.id}
+          month={ctx.month}
+          cents={row.node.activityCents}
+          className="hidden w-full md:inline-flex"
+        />
       ),
       sortValue: (row) => row.node.activityCents,
       compactText: (row) => formatUsd(row.node.activityCents),
@@ -147,6 +184,12 @@ function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnC
               <FundingBar indicator={indicator} />
             </div>
           ) : null}
+          <ActivityAmountLink
+            categoryId={row.node.id}
+            month={ctx.month}
+            cents={row.node.activityCents}
+            className="self-start md:hidden"
+          />
         </div>
       );
     },

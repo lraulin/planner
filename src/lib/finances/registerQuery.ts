@@ -6,8 +6,11 @@
  * never returns every transaction record.
  */
 
+import { asRecordId } from "@/lib/url/viewState";
 import { effectiveFlow } from "./analytics";
+import { monthKeyFromParam, type MonthKey } from "./budget/envelope";
 import { categoryAssignableIds, categoryEligibleIds } from "./categoryEligibility";
+import { activityContributionIds } from "./registerActivity";
 import { asFinanceGroupBy, groupTransactions } from "./grouping";
 import {
   REGISTER_FIELD_ID_SET,
@@ -36,11 +39,15 @@ export const REGISTER_BLOCK_SIZE = 100;
 export const REGISTER_SEARCH_MAX = 200;
 export const REGISTER_PREFETCH = 25;
 
-export type RegisterViewId = "all" | "uncategorized" | "tag";
+export type RegisterViewId = "all" | "uncategorized" | "tag" | "activity";
 
 export type RegisterQuery = {
   viewId: RegisterViewId;
   tag: string | null;
+  /** Envelope id when `viewId` is `activity`; otherwise null. */
+  category: string | null;
+  /** Budget month (`YYYY-MM-01`) when `viewId` is `activity`; otherwise null. */
+  month: MonthKey | null;
   search: string;
   filters: Record<string, ColumnFilter>;
   advancedFilter: CrossColumnFilter | null;
@@ -54,6 +61,8 @@ export type RegisterQuery = {
 export type RegisterQueryContext = {
   offBudgetAccountIds: ReadonlySet<string>;
   budgetStartMonth: string | null;
+  /** Stale pending rows Budget already dropped from Activity; default none. */
+  supersededPendingIds?: ReadonlySet<string>;
 };
 
 export type RegisterIndexEntry =
@@ -87,13 +96,20 @@ export type RegisterPrepared = {
   block: RegisterRowBlock<RegisterTransactionRow>;
 };
 
-const VIEW_IDS: ReadonlySet<string> = new Set(["all", "uncategorized", "tag"]);
+const VIEW_IDS: ReadonlySet<string> = new Set([
+  "all",
+  "uncategorized",
+  "tag",
+  "activity",
+]);
 const FIELD_KINDS = registerFieldKinds();
 
 export function registerQueryKey(query: RegisterQuery): string {
   return JSON.stringify({
     viewId: query.viewId,
     tag: query.tag,
+    category: query.category,
+    month: query.month,
     search: query.search,
     filters: query.filters,
     advancedFilter: query.advancedFilter,
@@ -202,10 +218,17 @@ export function parseRegisterQuery(value: unknown): RegisterQuery {
       ? (value as Record<string, unknown>)
       : {};
   const visibleColumnIds = asVisibleColumnIds(record.visibleColumnIds);
-  const viewId = asViewId(record.viewId);
+  let viewId = asViewId(record.viewId);
+  const category = asRecordId(record.category);
+  const month = monthKeyFromParam(
+    typeof record.month === "string" ? record.month : null,
+  );
+  if (viewId === "activity" && (!category || !month)) viewId = "all";
   return {
     viewId,
     tag: viewId === "tag" ? asTag(record.tag) : null,
+    category: viewId === "activity" ? category : null,
+    month: viewId === "activity" ? month : null,
     search: asSearch(record.search),
     filters: asFilters(record.filters),
     advancedFilter: allowListedAdvanced(parseCrossColumnFilter(record.advancedFilter)),
@@ -270,6 +293,16 @@ function viewRows(
   }
   if (query.viewId === "tag" && query.tag) {
     return ledger.filter((row) => (row.tags ?? []).includes(query.tag as string));
+  }
+  if (query.viewId === "activity" && query.category && query.month) {
+    const ids = activityContributionIds(
+      ledger,
+      ctx.offBudgetAccountIds,
+      query.category,
+      query.month,
+      ctx.supersededPendingIds ?? new Set(),
+    );
+    return ledger.filter((row) => ids.has(row.id));
   }
   return [...ledger];
 }

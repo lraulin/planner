@@ -124,7 +124,8 @@ import {
 } from "@/lib/finances/queries";
 import type { TrackAsBillDraft } from "@/lib/finances/registerBillDraft";
 import type { RegisterPrepared, RegisterRowBlock } from "@/lib/finances/registerQuery";
-import { REGISTER_BLOCK_SIZE } from "@/lib/finances/registerQuery";
+import { parseRegisterQuery, REGISTER_BLOCK_SIZE } from "@/lib/finances/registerQuery";
+import { loadWorkingPendingSelection } from "@/lib/finances/workingPendingQuery";
 import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { parseBudget } from "@/lib/settings/finances";
@@ -214,16 +215,32 @@ export async function listTransactionsAction(
   return runQuery((userId) => listTransactions(userId, filter));
 }
 
-async function registerContext(userId: string) {
+async function registerContext(userId: string, rawQuery?: unknown) {
   const [accounts, storedBudget] = await Promise.all([
     listAccounts(userId),
     readSetting(userId, BUDGET_SCOPE),
   ]);
+  const parsed = rawQuery !== undefined ? parseRegisterQuery(rawQuery) : null;
+  const supersededPendingIds =
+    parsed?.viewId === "activity"
+      ? new Set(
+          (
+            await loadWorkingPendingSelection(
+              userId,
+              accounts.map((account) => ({
+                id: account.id,
+                scrapeBalanceAsOf: account.scrapeBalanceAsOf,
+              })),
+            )
+          ).supersededTransactionIds,
+        )
+      : undefined;
   return {
     offBudgetAccountIds: new Set(
       accounts.filter((account) => account.offBudget).map((account) => account.id),
     ),
     budgetStartMonth: parseBudget(storedBudget).startMonth,
+    supersededPendingIds,
   };
 }
 
@@ -231,7 +248,7 @@ export async function loadRegisterIndexAction(
   query: unknown,
 ): Promise<QueryResult<RegisterPrepared>> {
   return runQuery(async (userId) =>
-    loadRegisterPrepared(userId, query, await registerContext(userId)),
+    loadRegisterPrepared(userId, query, await registerContext(userId, query)),
   );
 }
 
@@ -248,7 +265,7 @@ export async function loadRegisterExportAction(
   query: unknown,
 ): Promise<QueryResult<TransactionListRow[]>> {
   return runQuery(async (userId) =>
-    loadRegisterExportRows(userId, query, await registerContext(userId)),
+    loadRegisterExportRows(userId, query, await registerContext(userId, query)),
   );
 }
 

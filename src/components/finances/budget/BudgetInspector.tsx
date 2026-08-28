@@ -18,10 +18,11 @@ import {
 } from "@/lib/finances/budget/rows";
 import { summarize } from "@/lib/finances/budget/targets/types";
 import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
+import type { MonthKey } from "@/lib/finances/budget/envelope";
 import { formatUsd } from "@/lib/finances/money";
 import { FilesHereSection } from "./FilesHereSection";
 import { UrlCell, withScheme } from "./UrlCell";
-import type { BillPatch } from "./budgetColumns";
+import { ActivityAmountLink, type BillPatch } from "./budgetColumns";
 
 const fieldClass =
   "min-h-tap w-full rounded border border-rule bg-surface px-2 py-1.5 text-base text-ink outline-none focus:border-select-edge md:min-h-0 md:py-1 md:text-[0.8125rem]";
@@ -60,6 +61,7 @@ export function BudgetInspector({
   onMergePayees,
   onRemovePayeeRouting,
   onFileWaiting,
+  month,
 }: {
   row: BudgetRow | null;
   carryInCents: number;
@@ -77,6 +79,7 @@ export function BudgetInspector({
   onMergePayees: () => void;
   onRemovePayeeRouting: (evidenceRow: PayeeEvidenceRow) => void;
   onFileWaiting: (evidenceRow: PayeeEvidenceRow) => void;
+  month: MonthKey;
 }) {
   const titleId = useId();
   const [notesDraft, setNotesDraft] = useState(row?.notes ?? "");
@@ -126,7 +129,17 @@ export function BudgetInspector({
           <dt className="text-ink-muted">Assigned this month</dt>
           <dd className="tabular text-ink">{formatUsd(breakdown.assignedCents)}</dd>
           <dt className="text-ink-muted">Activity</dt>
-          <dd className="tabular text-ink">{formatUsd(breakdown.activityCents)}</dd>
+          <dd className="tabular text-right">
+            {row.isIncome ? (
+              <span className="text-ink">{formatUsd(breakdown.activityCents)}</span>
+            ) : (
+              <ActivityAmountLink
+                categoryId={row.id}
+                month={month}
+                cents={breakdown.activityCents}
+              />
+            )}
+          </dd>
         </dl>
       </section>
 

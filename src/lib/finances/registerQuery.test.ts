@@ -424,3 +424,112 @@ describe("registerQueryKey", () => {
     expect(registerQueryKey(left)).toBe(registerQueryKey(right));
   });
 });
+
+describe("activity view", () => {
+  it("degrades missing or garbage category/month to All Transactions", () => {
+    expect(parseRegisterQuery({ viewId: "activity" }).viewId).toBe("all");
+    expect(
+      parseRegisterQuery({
+        viewId: "activity",
+        category: "groceries",
+        month: "2026-13",
+      }).viewId,
+    ).toBe("all");
+    expect(
+      parseRegisterQuery({
+        viewId: "activity",
+        category: "groceries",
+        month: "2026-08",
+      }),
+    ).toMatchObject({
+      viewId: "activity",
+      category: "groceries",
+      month: "2026-08-01",
+    });
+  });
+
+  it("shows the contributing set: child not parent, no on-budget transfer, month bounds", () => {
+    const ledger = [
+      tx({
+        id: "parent",
+        transactionDate: "2026-08-10",
+        amountCents: -5000,
+        splitChildCount: 2,
+        budgetCategoryId: null,
+      }),
+      tx({
+        id: "child",
+        transactionDate: "2026-08-10",
+        amountCents: -2000,
+        parentId: "parent",
+        budgetCategoryId: "groceries",
+        budgetCategoryName: "Groceries",
+      }),
+      tx({
+        id: "spend",
+        transactionDate: "2026-08-31",
+        amountCents: -1500,
+        budgetCategoryId: "groceries",
+        budgetCategoryName: "Groceries",
+      }),
+      tx({
+        id: "refund",
+        transactionDate: "2026-08-15",
+        amountCents: 400,
+        derivedFlow: "refund",
+        budgetCategoryId: "groceries",
+        budgetCategoryName: "Groceries",
+      }),
+      tx({
+        id: "next-month",
+        transactionDate: "2026-09-01",
+        amountCents: -900,
+        budgetCategoryId: "groceries",
+        budgetCategoryName: "Groceries",
+      }),
+      tx({
+        id: "other-envelope",
+        transactionDate: "2026-08-12",
+        amountCents: -700,
+        budgetCategoryId: "rent",
+        budgetCategoryName: "Rent",
+      }),
+      tx({
+        id: "card-out",
+        transactionDate: "2026-08-10",
+        amountCents: -3000,
+        derivedFlow: "internal_transfer",
+        transferGroupId: "inside",
+        budgetCategoryId: "groceries",
+        budgetCategoryName: "Groceries",
+      }),
+      tx({
+        id: "card-in",
+        accountId: "card",
+        transactionDate: "2026-08-10",
+        amountCents: 3000,
+        derivedFlow: "internal_transfer",
+        transferGroupId: "inside",
+        budgetCategoryId: "groceries",
+        budgetCategoryName: "Groceries",
+      }),
+    ];
+    const prepared = prepareRegister(
+      ledger,
+      query({
+        viewId: "activity",
+        category: "groceries",
+        month: "2026-08",
+        groupBy: [],
+      }),
+      EMPTY_CTX,
+    );
+    expect(prepared.index.nodeIds.sort()).toEqual(["child", "refund", "spend"]);
+    const byId = new Map(ledger.map((row) => [row.id, row]));
+    const sum = prepared.index.nodeIds.reduce(
+      (total, id) => total + (byId.get(id)?.amountCents ?? 0),
+      0,
+    );
+    expect(sum).toBe(-3100);
+  });
+});

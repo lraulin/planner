@@ -255,7 +255,9 @@ export async function listAccounts(
 export async function listTransactions(
   userId: string,
   filter: TransactionFilter = {},
+  options?: { rowSet?: "bank" | "money" },
 ): Promise<TransactionListRow[]> {
+  const rowSet = options?.rowSet === "money" ? moneyRows : bankRows;
   const rows = await db
     .select(TRANSACTION_LIST_COLUMNS)
     .from(financeTransactions)
@@ -274,9 +276,10 @@ export async function listTransactions(
         eq(financePayees.userId, userId),
       ),
     )
-    // Bank rows: this is a register, and a split's children are not transactions the bank
-    // made. They are reached through their parent (D8), never listed alongside it.
-    .where(and(bankRows, ...scopeConditions(userId, filter)))
+    // Bank rows for the ordinary register (split children are reached through their
+    // parent, D8). Money leaves for the Activity view, whose contributing set is the
+    // children, not the parent (`2026-08-28-1356-budget-activity-register-links` D3).
+    .where(and(rowSet, ...scopeConditions(userId, filter)))
     .orderBy(
       desc(financeTransactions.transactionDate),
       // Same-day rows need a tiebreak or their order shifts between loads, which reads as
@@ -389,8 +392,13 @@ export async function loadRegisterPrepared(
   rawQuery: unknown,
   ctx: RegisterQueryContext,
 ): Promise<RegisterPrepared> {
-  const ledger = await listTransactions(userId);
-  return prepareRegister(ledger, parseRegisterQuery(rawQuery), ctx);
+  const query = parseRegisterQuery(rawQuery);
+  const ledger = await listTransactions(
+    userId,
+    {},
+    query.viewId === "activity" ? { rowSet: "money" } : undefined,
+  );
+  return prepareRegister(ledger, query, ctx);
 }
 
 export async function loadRegisterBlock(
@@ -406,9 +414,14 @@ export async function loadRegisterExportRows(
   rawQuery: unknown,
   ctx: RegisterQueryContext,
 ): Promise<TransactionListRow[]> {
-  const ledger = await listTransactions(userId);
+  const query = parseRegisterQuery(rawQuery);
+  const ledger = await listTransactions(
+    userId,
+    {},
+    query.viewId === "activity" ? { rowSet: "money" } : undefined,
+  );
   const preparedLedger = annotateCategoryAssignability(ledger, ctx.offBudgetAccountIds);
-  const prepared = prepareRegister(preparedLedger, parseRegisterQuery(rawQuery), ctx);
+  const prepared = prepareRegister(preparedLedger, query, ctx);
   const byId = new Map(preparedLedger.map((row) => [row.id, row]));
   return prepared.index.nodeIds.flatMap((id) => {
     const row = byId.get(id);

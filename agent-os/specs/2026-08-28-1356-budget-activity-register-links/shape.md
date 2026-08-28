@@ -1,6 +1,6 @@
 # Budget Activity → filtered Register — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-28)
 
 ## Scope
 

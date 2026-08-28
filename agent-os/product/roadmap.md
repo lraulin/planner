@@ -1030,6 +1030,10 @@ period)` so money already spent stops being held twice and only going over bites
   notes live in a right pane on desktop and a full-screen sheet below `md`. Envelopes
   remain the obligation registry; unscheduled bills keep estimate language, not a fake
   date. The funding-indicators spec had left this pane out of scope.
+  ✅ **Budget Activity → Register shipped 2026-08-28.**
+  `agent-os/specs/2026-08-28-1356-budget-activity-register-links/`. Envelope Activity
+  (Regular, Bills, Savings, and the inspector line) drills to the Register filtered to
+  the transactions that summed to that figure.
   ✅ **Weekly envelope targets shipped 2026-08-27.**
   `agent-os/specs/2026-08-27-1949-weekly-envelope-targets/`. A fourth template type for
   ordinary spending anchored to a weekday: an amount and a weekday, whose monthly ask is
