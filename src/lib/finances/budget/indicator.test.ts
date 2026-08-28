@@ -27,6 +27,12 @@ const byDate = (cents: number, month: string): Target => ({
   amountCents: cents,
 });
 
+const yearlyUpTo = (cents: number, month: number): Target => ({
+  behavior: "upTo",
+  cadence: { unit: "year", month },
+  amountCents: cents,
+});
+
 const weeklyUpTo = (cents: number, weekday: number): Target => ({
   behavior: "upTo",
   cadence: { unit: "week", weekday },
@@ -253,15 +259,29 @@ describe("envelopeIndicator", () => {
     expect(indicator.bar?.fill01).toBeCloseTo(installment / 120_000);
   });
 
-  it("asks for the by-date remainder against the target month", () => {
+  it("labels a by-date installment as needed this month", () => {
+    // $700.05 by December is $140.01/month from August; $16.31 is already assigned.
     const row = envelope({
-      target: byDate(120_000, "2026-12"),
+      target: byDate(70_005, "2026-12"),
+      assignedCents: 1_631,
+      balanceCents: 1_631,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("underfunded");
+    expect(indicator.moreNeededCents).toBe(12_370);
+    expect(indicator.copy).toBe("$123.70 more needed this month");
+  });
+
+  it("labels a yearly target installment as needed this month", () => {
+    const row = envelope({
+      target: yearlyUpTo(120_000, 12),
       assignedCents: 0,
       balanceCents: 0,
     });
     const indicator = indicate(row);
     expect(indicator.state).toBe("underfunded");
-    expect(indicator.copy).toBe("$240.00 more needed by December 2026");
+    expect(indicator.moreNeededCents).toBe(24_000);
+    expect(indicator.copy).toBe("$240.00 more needed this month");
   });
 
   it("funds a by-date envelope that already holds the full target", () => {
@@ -330,16 +350,17 @@ describe("envelopeIndicator", () => {
     expect(funded.icon).toBe("pie");
   });
 
-  it("asks a sinking bill by its next due date", () => {
+  it("labels a quarterly derived bill installment as needed this month", () => {
     const row = billRow({
       id: "geico",
       name: "Geico",
-      nextDueKey: "2027-06-01",
+      nextDueKey: "2026-11-01",
     });
-    const bills = new Map([["geico", snapshot("geico", 600_000, "2027-06-01", 12)]]);
+    const bills = new Map([["geico", snapshot("geico", 60_000, "2026-11-01", 3)]]);
     const indicator = indicate(row, bills);
     expect(indicator.state).toBe("underfunded");
-    expect(indicator.copy).toMatch(/more needed by June 1$/);
+    expect(indicator.moreNeededCents).toBe(15_000);
+    expect(indicator.copy).toBe("$150.00 more needed this month");
   });
 
   it("does not ask a paused bill for more", () => {

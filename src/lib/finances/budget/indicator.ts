@@ -11,7 +11,7 @@
  */
 
 import { formatUsd } from "@/lib/finances/money";
-import { monthLabel, monthName, shiftMonthKey, type MonthKey } from "./envelope";
+import type { MonthKey } from "./envelope";
 import { neededAssigned } from "./assign/plan";
 import type { AssignEnvelope } from "./assign/types";
 import { monthsLeft, remainingOccurrences, scheduleSpreads } from "./targets/cadence";
@@ -43,7 +43,7 @@ export type EnvelopeIndicator = {
 type Horizon =
   | { kind: "none" }
   | { kind: "this-month"; periodTargetCents: number }
-  | { kind: "sinking"; targetCents: number; byLabel: string }
+  | { kind: "sinking"; targetCents: number }
   | { kind: "eventually"; holeCents: number };
 
 function clamp01(value: number): number {
@@ -58,10 +58,6 @@ function spentCents(envelope: AssignEnvelope): number {
 
 function fundedCents(envelope: AssignEnvelope): number {
   return envelope.carryInCents + envelope.assignedCents;
-}
-
-function dueDayLabel(dateKey: string): string {
-  return `${monthName(dateKey)} ${Number(dateKey.slice(8, 10))}`;
 }
 
 function isInactive(envelope: AssignEnvelope): boolean {
@@ -108,12 +104,10 @@ function horizonOf(
     case "schedule": {
       if (resolved.bill && scheduleSpreads(resolved.bill)) {
         const left = monthsLeft(target.cadence, month, resolved.bill);
-        const anchor = resolved.bill.expectedKey ?? resolved.bill.nextDueKey;
         if (left !== null && left > 0) {
           return {
             kind: "sinking",
             targetCents: target.amountCents,
-            byLabel: dueDayLabel(anchor),
           };
         }
       }
@@ -135,7 +129,6 @@ function horizonOf(
       return {
         kind: "sinking",
         targetCents: target.amountCents,
-        byLabel: monthLabel(shiftMonthKey(month, left)),
       };
     }
     case "by": {
@@ -147,7 +140,6 @@ function horizonOf(
       return {
         kind: "sinking",
         targetCents: target.amountCents,
-        byLabel: monthLabel(target.cadence.month),
       };
     }
     case "none":
@@ -219,14 +211,10 @@ export function envelopeIndicator(
   }
 
   if (asked && moreNeededCents > 0) {
-    const copy =
-      horizon.kind === "sinking"
-        ? `${formatUsd(moreNeededCents)} more needed by ${horizon.byLabel}`
-        : `${formatUsd(moreNeededCents)} more needed this month`;
     return {
       state: "underfunded",
       moreNeededCents,
-      copy,
+      copy: `${formatUsd(moreNeededCents)} more needed this month`,
       pill: "yellow",
       icon: "clock",
       bar: occurrenceBar,

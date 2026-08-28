@@ -1,6 +1,6 @@
 # Standards for monthly target installment copy
 
-**Status: active**
+**Status: frozen / complete** (2026-08-28)
 
 Applied as of standards commit `2920aa766f203439f2136c831f01ccd182c0654d`.
 References, not copies — `git show <sha>:agent-os/standards/<path>` recovers exactly what

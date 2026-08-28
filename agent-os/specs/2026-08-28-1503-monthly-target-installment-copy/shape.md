@@ -1,6 +1,6 @@
 # Monthly target installment copy — shaping notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-28)
 
 ## Reported case
 

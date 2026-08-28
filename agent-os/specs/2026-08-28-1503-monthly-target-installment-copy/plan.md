@@ -1,6 +1,6 @@
 # Monthly target installment copy
 
-**Status: active**
+**Status: frozen / complete** (2026-08-28)
 Spec folder: `agent-os/specs/2026-08-28-1503-monthly-target-installment-copy/`
 
 ## Spec relationships
@@ -48,17 +48,17 @@ changes.
 
 ## Acceptance criteria
 
-- [ ] Every underfunded current installment reads `"$X more needed this month"`.
-- [ ] A December 2026 target with $16.31 assigned and available reports a $123.70 monthly
+- [x] Every underfunded current installment reads `"$X more needed this month"`.
+- [x] A December 2026 target with $16.31 assigned and available reports a $123.70 monthly
       shortfall.
-- [ ] Stored `by` and `year` targets use monthly shortfall wording.
-- [ ] Yearly or quarterly derived bills use monthly shortfall wording.
-- [ ] Assigning the current installment changes a future sinking target to `On Track`.
-- [ ] `neededAssigned`, `moreNeededCents`, progress bars, colors, icons, and `Funded` states
+- [x] Stored `by` and `year` targets use monthly shortfall wording.
+- [x] Yearly or quarterly derived bills use monthly shortfall wording.
+- [x] Assigning the current installment changes a future sinking target to `On Track`.
+- [x] `neededAssigned`, `moreNeededCents`, progress bars, colors, icons, and `Funded` states
       are unchanged.
-- [ ] Deadline-free targets still say `"needed eventually"`.
-- [ ] The target editor still shows the full target and final deadline.
-- [ ] The targeted indicator test, full unit suite, lint, typecheck, browser flow, and smoke
+- [x] Deadline-free targets still say `"needed eventually"`.
+- [x] The target editor still shows the full target and final deadline.
+- [x] The targeted indicator test, full unit suite, lint, typecheck, browser flow, and smoke
       suite pass.
 
 ## Tasks
@@ -71,21 +71,46 @@ changes.
 
 ### Task 2 — Correct the shared indicator contract
 
-- [ ] Remove the private deadline-label path from the sinking horizon.
-- [ ] Give every positive current-installment shortfall monthly wording.
-- [ ] Add pure regression coverage for the reported amount, stored targets, derived sinking
+- [x] Remove the private deadline-label path from the sinking horizon.
+- [x] Give every positive current-installment shortfall monthly wording.
+- [x] Add pure regression coverage for the reported amount, stored targets, derived sinking
       bills, `On Track`, and deadline-free behavior.
-- [ ] Leave components, database code, target demand, and public contracts unchanged.
+- [x] Leave components, database code, target demand, and public contracts unchanged.
 
 ### Task 3 — Verify and freeze
 
-- [ ] Run the targeted indicator test, `npm run test:unit`, `npm run lint`, and
+- [x] Run the targeted indicator test, `npm run test:unit`, `npm run lint`, and
       `npm run typecheck`.
-- [ ] Verify the Geico-like Budget row, Assign → Underfunded amount, target editor summary,
+- [x] Verify the Geico-like Budget row, Assign → Underfunded amount, target editor summary,
       and `On Track` transition in the browser.
-- [ ] Run `npm run smoke` against the running Planner server.
-- [ ] Freeze the spec with recorded verification; do not update the roadmap.
-- [ ] Commit and push the verified change with the delta-spec trailer and root cause.
+- [x] Run `npm run smoke` against the running Planner server.
+- [x] Freeze the spec with recorded verification; do not update the roadmap.
+- [x] Commit and push the verified change with the delta-spec trailer and root cause.
+
+## As built
+
+`src/lib/finances/budget/indicator.ts` no longer carries a `byLabel` on the private sinking
+horizon. That horizon retains only `targetCents`, which still drives the sinking bar and
+`On Track`. The one underfunded branch now formats every positive current-installment gap
+as `"$X more needed this month"`.
+
+Pure tests pin the reported $123.70 case, stored `by` and `year` targets, a quarterly derived
+bill, the sinking `On Track` transition, and deadline-free `"needed eventually"` behavior.
+
+## Verification
+
+- `npx vitest run --project unit src/lib/finances/budget/indicator.test.ts` — 24 tests passed.
+- `npm run test:unit` — 313 files, 3,666 tests passed.
+- `npm run lint` — passed with zero warnings.
+- `npm run typecheck` — passed.
+- Browser, `/finances/budget` — a Geico target with $16.31 assigned/available displayed
+  `$123.70 more needed this month`; selecting only Geico made Assign → Underfunded offer
+$123.70; the inspector offered `Assign $123.70 to stay on track`.
+- Browser, target editor — displayed `Have $700.05 available by December 2026. This month
+asks $140.01.`
+- Browser, assignment — assigning $140.01 directly in the row changed Geico to `On Track`.
+- `npm run smoke` — all 61 routes rendered against the running dev server.
+- Roadmap deliberately unchanged; this is a correction to already-shipped scan-layer copy.
 
 ## Changes from original plan
 
