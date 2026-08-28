@@ -13,12 +13,14 @@ import type { MonthKey } from "../envelope";
 import { runBy } from "./by";
 import { billFundingDemand, type BillSnapshot } from "./schedule";
 import { applyLimit, limitOf, runSimple } from "./simple";
+import { runWeekly } from "./weekly";
 import {
   assertCents,
   type ByTemplate,
   type RemainderTemplate,
   type SimpleTemplate,
   type Template,
+  type WeeklyTemplate,
 } from "./types";
 
 export type DemandEnvelope = {
@@ -33,6 +35,10 @@ export function simples(templates: readonly Template[]): SimpleTemplate[] {
   return templates.filter((t): t is SimpleTemplate => t.type === "simple");
 }
 
+export function weeklies(templates: readonly Template[]): WeeklyTemplate[] {
+  return templates.filter((t): t is WeeklyTemplate => t.type === "weekly");
+}
+
 export function bys(templates: readonly Template[]): ByTemplate[] {
   return templates.filter((t): t is ByTemplate => t.type === "by");
 }
@@ -41,14 +47,17 @@ export function remainders(templates: readonly Template[]): RemainderTemplate[] 
   return templates.filter((t): t is RemainderTemplate => t.type === "remainder");
 }
 
-/** Bill cadence or a simple/`by` line — remainder is leftover, not an ask. */
+/** Bill cadence or a simple/weekly/`by` line — remainder is leftover, not an ask. */
 export function hasDemandAsk(envelope: {
   kind: EnvelopeKind;
   templates: readonly Template[];
 }): boolean {
   return (
     envelope.kind === "bill" ||
-    simples(envelope.templates).length + bys(envelope.templates).length > 0
+    simples(envelope.templates).length +
+      weeklies(envelope.templates).length +
+      bys(envelope.templates).length >
+      0
   );
 }
 
@@ -67,6 +76,10 @@ export function demandOf(
 
   for (const template of simples(envelope.templates)) {
     amount += runSimple(template, carryIn);
+  }
+  for (const template of weeklies(envelope.templates)) {
+    // D3: carry-in is deliberately not passed — a light week is spare cash, not lower demand.
+    amount += runWeekly(template, month);
   }
   const byTemplates = bys(envelope.templates);
   if (byTemplates.length > 0) {

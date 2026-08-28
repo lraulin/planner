@@ -21,6 +21,7 @@ import {
   type SimpleTemplate,
   type Template,
   type TemplateType,
+  type WeeklyTemplate,
 } from "./types";
 
 export type SimpleDraft = {
@@ -31,6 +32,15 @@ export type SimpleDraft = {
   /** Dollars as typed. Blank means "no limit". */
   limit: string;
   hold: boolean;
+};
+
+export type WeeklyDraft = {
+  id: string;
+  type: "weekly";
+  /** 0 = Sunday … 6 = Saturday. A select, so it can stay a number. */
+  weekday: number;
+  /** Dollars as typed, per occurrence. */
+  amount: string;
 };
 
 export type ByDraft = {
@@ -50,7 +60,7 @@ export type RemainderDraft = {
   weight: string;
 };
 
-export type Draft = SimpleDraft | ByDraft | RemainderDraft;
+export type Draft = SimpleDraft | WeeklyDraft | ByDraft | RemainderDraft;
 
 function dollars(cents: number): string {
   return (cents / 100).toFixed(2);
@@ -67,6 +77,13 @@ export function draftsFromTemplates(templates: readonly Template[]): Draft[] {
             template.monthlyCents === undefined ? "" : dollars(template.monthlyCents),
           limit: template.limit ? dollars(template.limit.amountCents) : "",
           hold: template.limit?.hold ?? false,
+        };
+      case "weekly":
+        return {
+          id: template.id,
+          type: "weekly",
+          weekday: template.weekday,
+          amount: dollars(template.amountCents),
         };
       case "by":
         return {
@@ -86,15 +103,17 @@ export function draftsFromTemplates(templates: readonly Template[]): Draft[] {
 /**
  * A blank line of the given type.
  *
- * `by` defaults to December of the current budget month's year — a savings target is nearly
- * always further out than next month, and a default that is already in the past would make the
- * first preview read as a bug.
+ * `weekly` defaults to Sunday. `by` defaults to December of the current budget month's year — a
+ * savings target is nearly always further out than next month, and a default that is already in
+ * the past would make the first preview read as a bug.
  */
 export function newDraft(type: TemplateType, month: MonthKey): Draft {
   const id = newTemplateId();
   switch (type) {
     case "simple":
       return { id, type: "simple", monthly: "", limit: "", hold: false };
+    case "weekly":
+      return { id, type: "weekly", weekday: 0, amount: "" };
     case "by":
       return {
         id,
@@ -152,6 +171,22 @@ function convert(draft: Draft): Template | string {
         if (typeof cents === "string") return cents;
         template.limit = { amountCents: cents, hold: draft.hold };
       }
+      return template;
+    }
+    case "weekly": {
+      const cents = money(draft.amount, "The weekly amount");
+      if (typeof cents === "string") return cents;
+      if (!Number.isInteger(draft.weekday) || draft.weekday < 0 || draft.weekday > 6) {
+        return "The weekly line needs a day of the week.";
+      }
+      const template: WeeklyTemplate = {
+        id: draft.id,
+        directive: "template",
+        type: "weekly",
+        priority: 0,
+        amountCents: cents,
+        weekday: draft.weekday,
+      };
       return template;
     }
     case "by": {

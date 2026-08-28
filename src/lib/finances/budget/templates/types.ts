@@ -9,10 +9,11 @@
  * Spec: `agent-os/specs/2026-08-22-2242-budget-goal-templates/` D1.
  */
 
+import { weekdayLongLabel } from "@/lib/dateFormat";
 import { formatUsd } from "@/lib/finances/money";
 import { monthName } from "../envelope";
 
-export const TEMPLATE_TYPES = ["simple", "by", "remainder"] as const;
+export const TEMPLATE_TYPES = ["simple", "weekly", "by", "remainder"] as const;
 export type TemplateType = (typeof TEMPLATE_TYPES)[number];
 
 export type TemplateLimit = {
@@ -35,6 +36,15 @@ export type SimpleTemplate = Base & {
   limit?: TemplateLimit;
 };
 
+export type WeeklyTemplate = Base & {
+  type: "weekly";
+  priority: number;
+  /** Per-occurrence amount; the month's ask is this times the occurrences in the month. */
+  amountCents: number;
+  /** 0 = Sunday … 6 = Saturday, the `weekdayOfDateKey` convention. */
+  weekday: number;
+};
+
 export type ByTemplate = Base & {
   type: "by";
   priority: number;
@@ -53,7 +63,7 @@ export type RemainderTemplate = Base & {
   weight: number;
 };
 
-export type Template = SimpleTemplate | ByTemplate | RemainderTemplate;
+export type Template = SimpleTemplate | WeeklyTemplate | ByTemplate | RemainderTemplate;
 
 const ID = /^[A-Za-z0-9_-]+$/;
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -109,6 +119,36 @@ function parseSimple(raw: Record<string, unknown>, id: string): SimpleTemplate |
     template.limit = limit;
   }
   if (template.monthlyCents === undefined && template.limit === undefined) return null;
+  if (typeof raw.description === "string") template.description = raw.description;
+  return template;
+}
+
+function parseWeekly(raw: Record<string, unknown>, id: string): WeeklyTemplate | null {
+  const priority = parsePriority(raw.priority);
+  if (priority === null) return null;
+  if (
+    typeof raw.amountCents !== "number" ||
+    !Number.isInteger(raw.amountCents) ||
+    raw.amountCents <= 0
+  ) {
+    return null;
+  }
+  if (
+    typeof raw.weekday !== "number" ||
+    !Number.isInteger(raw.weekday) ||
+    raw.weekday < 0 ||
+    raw.weekday > 6
+  ) {
+    return null;
+  }
+  const template: WeeklyTemplate = {
+    id,
+    directive: "template",
+    type: "weekly",
+    priority,
+    amountCents: raw.amountCents,
+    weekday: raw.weekday,
+  };
   if (typeof raw.description === "string") template.description = raw.description;
   return template;
 }
@@ -175,6 +215,8 @@ function parseOne(raw: unknown): Template | null {
   switch (raw.type) {
     case "simple":
       return parseSimple(raw, id);
+    case "weekly":
+      return parseWeekly(raw, id);
     case "by":
       return parseBy(raw, id);
     case "remainder":
@@ -221,6 +263,8 @@ export function summarize(template: Template): string {
         : null;
       return [monthly, limit].filter(Boolean).join(" ") || "simple";
     }
+    case "weekly":
+      return `${formatUsd(template.amountCents)} each ${weekdayLongLabel(template.weekday)}`;
     case "by": {
       const year = template.month.slice(0, 4);
       const when = `${monthName(`${template.month}-01`)} ${year}`;

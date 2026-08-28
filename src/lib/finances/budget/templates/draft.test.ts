@@ -140,7 +140,57 @@ describe("draftsFromTemplates", () => {
   });
 });
 
+describe("weekly drafts", () => {
+  it("converts a weekday and an amount into a weekly template", () => {
+    const result = draftsToTemplates([
+      { id: "line-1", type: "weekly", weekday: 5, amount: "45" },
+    ]);
+    expect(result).toEqual({
+      ok: true,
+      templates: [
+        {
+          id: "line-1",
+          directive: "template",
+          type: "weekly",
+          priority: 0,
+          amountCents: 4_500,
+          weekday: 5,
+        },
+      ],
+    });
+  });
+
+  it("rejects a weekly line with no amount", () => {
+    const result = draftsToTemplates([
+      { id: "line-1", type: "weekly", weekday: 0, amount: "" },
+    ]);
+    expect(result.ok).toBe(false);
+  });
+
+  it("round-trips a weekly line through drafts", () => {
+    const templates: Template[] = [
+      {
+        id: "w1",
+        directive: "template",
+        type: "weekly",
+        priority: 0,
+        amountCents: 18_000,
+        weekday: 0,
+      },
+    ];
+    expect(draftsToTemplates(draftsFromTemplates(templates))).toEqual({
+      ok: true,
+      templates,
+    });
+  });
+});
+
 describe("newDraft", () => {
+  it("defaults a weekly line to Sunday with no amount typed yet", () => {
+    const draft = newDraft("weekly", "2026-08");
+    expect(draft).toMatchObject({ type: "weekly", weekday: 0, amount: "" });
+  });
+
   it("defaults a by line to a month that is not already in the past", () => {
     const draft = newDraft("by", "2026-08");
     expect(draft.type === "by" && draft.month >= "2026-08").toBe(true);

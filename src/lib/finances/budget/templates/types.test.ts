@@ -16,6 +16,15 @@ const simple: Template = {
   monthlyCents: 5000,
 };
 
+const weekly: Template = {
+  id: "w1",
+  directive: "template",
+  type: "weekly",
+  priority: 0,
+  amountCents: 18_000,
+  weekday: 0,
+};
+
 describe("parseTemplates", () => {
   it("round-trips a valid list", () => {
     expect(parseTemplates([simple])).toEqual([simple]);
@@ -31,6 +40,22 @@ describe("parseTemplates", () => {
         { ...simple, id: "t1" },
       ]),
     ).toBeNull();
+  });
+
+  it("round-trips a weekly line", () => {
+    expect(parseTemplates([weekly])).toEqual([weekly]);
+  });
+
+  it("rejects a weekday outside 0–6 and a fractional one", () => {
+    expect(parseTemplates([{ ...weekly, weekday: 7 }])).toBeNull();
+    expect(parseTemplates([{ ...weekly, weekday: -1 }])).toBeNull();
+    expect(parseTemplates([{ ...weekly, weekday: 1.5 }])).toBeNull();
+    expect(parseTemplates([{ ...weekly, weekday: "0" }])).toBeNull();
+  });
+
+  it("rejects a weekly amount that is not positive integer cents", () => {
+    expect(parseTemplates([{ ...weekly, amountCents: 180.5 }])).toBeNull();
+    expect(parseTemplates([{ ...weekly, amountCents: 0 }])).toBeNull();
   });
 
   it("rejects a simple line with neither monthly nor limit", () => {
@@ -78,6 +103,7 @@ describe("summarize", () => {
         month: "2026-12",
       }),
     ).toBe("$10,000.00 by December 2026");
+    expect(summarize(weekly)).toBe("$180.00 each Sunday");
     expect(
       summarize({
         id: "t5",

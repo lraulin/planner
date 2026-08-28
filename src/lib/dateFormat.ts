@@ -90,6 +90,11 @@ const WEEKDAY_LONG = [
   "Saturday",
 ] as const;
 
+/** `weekdayLongLabel(0) === "Sunday"` — the `weekdayOfDateKey` convention. */
+export function weekdayLongLabel(weekday: number): string {
+  return WEEKDAY_LONG[weekday] ?? String(weekday);
+}
+
 type DateParts = {
   year: number;
   month: number;
