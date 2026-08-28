@@ -145,14 +145,14 @@ export function BudgetInspector({
                 : "No target. Assign what you have; leftover stays here."}
           </p>
         )}
-        {!bill && !row.isIncome ? (
+        {!row.isIncome ? (
           <button
             type="button"
             disabled={pending}
             onClick={() => onEditTarget(row)}
             className="mt-2 min-h-tap rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
           >
-            {hasTarget ? "Edit target…" : "Create target…"}
+            {bill || hasTarget ? "Edit target…" : "Create target…"}
           </button>
         ) : null}
       </section>

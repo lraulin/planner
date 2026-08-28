@@ -37,6 +37,12 @@ See `plan.md` D1–D8. Summary of the two biggest calls, made in conversation:
   discretionary and whatever else can just be envelopes now."
 - Bill cadence (not Actual's `RecurConfig`) wins as the one recurrence representation,
   chosen because it self-corrects from the bank feed rather than needing an explicit skip.
+- A claimed payee still controls recurrence dates, but target funding may also recognize a
+  full plain-monthly bill amount in Activity. This keeps merchant identity and envelope funding
+  as separate questions: a manual Category placement need not move the next charge to prove
+  that this month's bill was funded and spent.
+- Adding an alias immediately recomputes stored transaction payee identities. The alias list
+  and payee-based readers must not disagree until some later import happens to repair them.
 - Available to Spend is retired in this spec rather than kept running on re-sourced data —
   chosen specifically because "if it has to break, that's ok, and if it does, maybe we
   should clean it up."

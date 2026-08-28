@@ -28,8 +28,10 @@ import {
   setTransactionBudgetCategory,
 } from "../budget/mutations";
 import { applyPayeeAutoCategories } from "./claims";
+import { addPayeeAlias } from "./aliases";
 import { getPayee, listAliasRows, listPayees, previewPayeeMerge } from "./queries";
 import { payeeForDescription, payeeIndex } from "./resolve";
+import { lastChargeOnBill } from "../billLastCharge";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -246,6 +248,28 @@ describeDb("payee mutations", () => {
 
     const index = payeeIndex(await listAliasRows(userId));
     expect(payeeForDescription("WM SUPERCENTER #2", index)).not.toBe(other);
+  });
+
+  it("makes an added alias visible to bill recurrence immediately", async () => {
+    const rent = await makeBillEnvelope(userId, "Rent");
+    const payeeId = await createPayee(userId, { name: "Rent" });
+    await claimPayeeForCommitment(userId, payeeId, { id: rent.id });
+    const txId = await addTransaction(userId, accountId, {
+      description: "RENT:RAULIN",
+      amount: "-2100.00",
+    });
+
+    await addPayeeAlias(userId, payeeId, "RENT:RAULIN");
+
+    const [transaction] = await db
+      .select({
+        payeeId: financeTransactions.payeeId,
+        categoryId: financeTransactions.budgetCategoryId,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, txId));
+    expect(transaction).toEqual({ payeeId, categoryId: rent.id });
+    expect(await lastChargeOnBill(userId, rent.id)).toBe("2026-08-05");
   });
 
   it("renames without moving a single transaction or alias", async () => {
@@ -495,6 +519,7 @@ describeDb("payee mutations — cross-user isolation", () => {
       }),
     ).rejects.toThrow();
     await expect(addAlias(intruderId, ownedPayeeId, "TARGET")).rejects.toThrow();
+    await expect(addPayeeAlias(intruderId, ownedPayeeId, "TARGET")).rejects.toThrow();
     await expect(deletePayee(intruderId, ownedPayeeId)).rejects.toThrow();
     await expect(
       claimPayeeForCommitment(intruderId, ownedPayeeId, null),

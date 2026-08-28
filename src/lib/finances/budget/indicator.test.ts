@@ -297,6 +297,22 @@ describe("envelopeIndicator", () => {
     expect(funded.icon).toBe("check");
   });
 
+  it("marks a fully assigned and spent bill Fully Spent when its payee anchor lags", () => {
+    const bills = new Map([["rent", snapshot("rent", 210_000, "2026-08-01")]]);
+    const paid = indicate(
+      billRow({
+        assignedCents: 210_000,
+        activityCents: -210_000,
+        balanceCents: 0,
+      }),
+      bills,
+    );
+
+    expect(paid.moreNeededCents).toBe(0);
+    expect(paid.state).toBe("fully-spent");
+    expect(paid.copy).toBe("Fully Spent");
+  });
+
   it("puts a yearly sinking bill On Track after this month's installment", () => {
     const row = billRow({
       id: "geico",

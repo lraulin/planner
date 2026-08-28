@@ -81,6 +81,7 @@ function occurrenceDemand(
   todayKey: string,
   before: number,
   bill: ScheduleBill | null,
+  activityCents: number,
 ): number {
   const amount = assertCents(target.amountCents, "target amount");
   if (target.behavior === "add") {
@@ -88,12 +89,26 @@ function occurrenceDemand(
     // does not make the month cheaper (`weekly-envelope-targets` D2, where its argument holds).
     return amount * wholeOccurrences(target.cadence, month, bill ?? undefined);
   }
-  const remaining = remainingOccurrences(
+  const scheduled = remainingOccurrences(
     target.cadence,
     month,
     todayKey,
     bill ?? undefined,
   );
+  // A claimed payee remains the evidence that advances a bill's recurrence date. Target
+  // progress answers a different question: did this envelope fund its bill this month? For a
+  // plain monthly bill, a full expected amount in Activity is enough to answer yes even when
+  // the payee anchor lags (for example, after a manual Category placement). Do not apply this
+  // to shorter cadences: their aggregate monthly Activity cannot identify which occurrence it
+  // paid.
+  const paidFromActivity =
+    target.cadence.unit === "schedule" &&
+    bill?.cadenceDays === null &&
+    bill.cadenceMonths === 1 &&
+    assertCents(activityCents, "activity") <= -amount
+      ? 1
+      : 0;
+  const remaining = Math.max(0, scheduled - paidFromActivity);
   return Math.max(0, amount * remaining - before);
 }
 
@@ -119,9 +134,10 @@ export function demandForTarget(
   todayKey: string,
   before: number,
   bill: ScheduleBill | null = null,
+  activityCents = 0,
 ): number {
   return isOccurrenceCounted(target, bill)
-    ? occurrenceDemand(target, month, todayKey, before, bill)
+    ? occurrenceDemand(target, month, todayKey, before, bill, activityCents)
     : spreadDemand(target, month, before, bill);
 }
 
@@ -136,7 +152,14 @@ export function targetDemand(
   if (!target) return { amount: 0, eventuallyCents: null, errors };
   const before = availableBefore(envelope);
   return {
-    amount: demandForTarget(target, month, todayKey, before, bill),
+    amount: demandForTarget(
+      target,
+      month,
+      todayKey,
+      before,
+      bill,
+      envelope.activityCents,
+    ),
     eventuallyCents:
       target.cadence.unit === "none" ? Math.max(0, target.amountCents - before) : null,
     errors,

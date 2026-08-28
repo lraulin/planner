@@ -139,6 +139,28 @@ describe("a paid bill stops asking and a late one does not", () => {
       150_000,
     );
   });
+
+  it("counts a full monthly bill amount in Activity when its payee anchor lags", () => {
+    const stale = billsOf(
+      bill({ nextDueKey: "2026-08-01", expectedKey: "2026-08-01" }),
+    );
+    const spent = envelope({ activityCents: -150_000 });
+
+    // The envelope still needs $1,500 Assigned to cover what was spent, not another $1,500
+    // for an occurrence that Activity shows was already paid.
+    expect(targetDemand(spent, "2026-08-01", "2026-08-20", stale).amount).toBe(150_000);
+  });
+
+  it("does not mistake partial Activity for a paid monthly bill", () => {
+    const stale = billsOf(
+      bill({ nextDueKey: "2026-08-01", expectedKey: "2026-08-01" }),
+    );
+    const incidental = envelope({ activityCents: -1_200 });
+
+    expect(targetDemand(incidental, "2026-08-01", "2026-08-20", stale).amount).toBe(
+      151_200,
+    );
+  });
 });
 
 describe("yearly and quarterly bills still sink", () => {

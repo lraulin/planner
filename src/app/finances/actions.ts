@@ -2,7 +2,6 @@
 
 import { seedPayees, type SeedPayeesSummary } from "@/lib/finances/payees/backfill";
 import {
-  addAlias,
   clearPayeeRouting,
   deletePayee,
   mergePayees,
@@ -14,6 +13,7 @@ import {
   setPayeeNotes,
   updatePayeeDetails,
 } from "@/lib/finances/payees/mutations";
+import { addPayeeAlias } from "@/lib/finances/payees/aliases";
 import {
   listPayees,
   payeeEvidenceForCategory,
@@ -590,7 +590,7 @@ export async function addPayeeAliasAction(
   payeeId: string,
   alias: string,
 ): Promise<ActionResult> {
-  return run((userId) => addAlias(userId, payeeId, alias));
+  return run((userId) => addPayeeAlias(userId, payeeId, alias));
 }
 
 export async function removePayeeAliasAction(
