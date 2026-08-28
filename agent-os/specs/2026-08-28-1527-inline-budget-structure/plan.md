@@ -161,7 +161,8 @@ hide/show and `budget.review` stay. `budget.structure.manage` is removed.
       work from the row menu on all three tables and from the command catalog.
 - [ ] `Move to group…` never offers a destination that would cross a section boundary or nest
       a group inside its own descendant.
-- [ ] Deleting a non-empty group is disabled **with the reason**, not absent.
+- [ ] Deleting a non-empty group is disabled **with the reason**, not absent, and an empty
+      one can actually be deleted (needs `2026-08-28-1613-group-kind`; see Changes row 1).
 - [ ] `BudgetStructureDrawer.tsx` and `budget.structure.manage` no longer exist; nothing
       references them.
 - [ ] Changing an envelope's section to Bills and back leaves a legal row both ways (facet
@@ -176,9 +177,9 @@ hide/show and `budget.review` stay. `budget.structure.manage` is removed.
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                                   | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **A group with no envelopes renders nowhere, so `+ Group` and the empty-only group delete are both unreachable.** Split out as `agent-os/specs/2026-08-28-1613-group-kind/`, which gives `finance_category_groups` a `kind`. This spec is blocked on it. | Found driving Task 6 in a browser: created a bill in a new group, deleted the bill, and the group vanished from the page while surviving in the database. `nestedBudgetGridRows` drops zero-count groups, which was invisible while `BudgetStructureDrawer` listed groups directly — D3 deleted that drawer, so nothing shows an empty group any more. The cause is that a group has no stored section (`groupPageSection` derives it from its members), which is a model correction and gets its own spec per `clean-code.md`. |
 
 ---
 
