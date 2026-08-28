@@ -1,6 +1,6 @@
 # Weekly envelope targets
 
-**Status: active**  
+**Status: frozen / complete — 2026-08-27**  
 Spec folder: `agent-os/specs/2026-08-27-1949-weekly-envelope-targets/`
 
 ## Spec relationships
@@ -146,18 +146,23 @@ what you want for a pile that is supposed to sit at a size.
 
 ## Acceptance criteria
 
-- [ ] A Groceries envelope with one weekly line (Sunday, $180) asks **$900** in a 5-Sunday
+All verified: unit and integration suites green, `npm run smoke` across all 61 routes, and the
+weekly editor exercised on `/finances/budget` (Pizza: 4 Fridays × $45.00 = $180.00 alongside a
+$139.45 monthly line, total $319.45; Discretionary: "History suggests $537.64 — all spending in
+this envelope, not only the Sunday trips, divided by its Sundays. August 2026 has 5.").
+
+- [x] A Groceries envelope with one weekly line (Sunday, $180) asks **$900** in a 5-Sunday
       month and **$720** in a 4-Sunday month — the same figure on the grid, in the Underfunded
       preview, and in the drawer preview, because all three run `demandOf`.
-- [ ] Assigning $360 and re-running Underfunded on the 20th asks for the remaining $540, not a
+- [x] Assigning $360 and re-running Underfunded on the 20th asks for the remaining $540, not a
       reduced amount.
-- [ ] $500 of carry-in from last month does not reduce the ask (D3).
-- [ ] A weekly line has no `up to` field, and the drawer never uses the words "refill" or
+- [x] $500 of carry-in from last month does not reduce the ask (D3).
+- [x] A weekly line has no `up to` field, and the drawer never uses the words "refill" or
       "set aside" (D4, D6).
-- [ ] The amount field suggests a per-occurrence figure from history with the
+- [x] The amount field suggests a per-occurrence figure from history with the
       "includes all spending in this category" note, and it can be overwritten.
-- [ ] The funding indicator gives a weekly envelope the `this-month` horizon.
-- [ ] A weekly line round-trips through save and load; `parseTemplates` rejects a weekday of
+- [x] The funding indicator gives a weekly envelope the `this-month` horizon.
+- [x] A weekly line round-trips through save and load; `parseTemplates` rejects a weekday of
       7, −1 or 1.5, and a non-integer `amountCents`.
 
 ## Changes from original plan
@@ -165,9 +170,12 @@ what you want for a pile that is supposed to sit at a size.
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                        | Why                                                                                                                                                                                            |
+| --- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The drawer's **add buttons** got their own labels (`ADD_LABELS`) rather than reusing `TYPE_LABELS`.                           | D6's job names are nouns; `Add ${label.toLowerCase()}` rendered "Add add every month" in the browser. The eyebrow keeps the noun, the button reads as a verb.                                  |
+| 2   | The line **eyebrow names the concrete weekday** ("Amount each Sunday"), not the generic `TYPE_LABELS.weekly`.                 | Once a weekday is chosen, "amount each weekday" is a worse label than the day itself. `TYPE_LABELS.weekly` survives only for the type list.                                                    |
+| 3   | The suggestion excludes the **month containing today** rather than "complete months" defined against the viewed budget month. | The viewed month can be in the past or the future; a partial current month reads as a light month either way and would drag the figure down. `currentMonth` is `monthKeyOf(todayKey)`.         |
+| 4   | `parseWeekly` also rejects a **non-positive** `amountCents`, beyond the integer check the plan named.                         | A zero or negative per-occurrence amount has no meaning, and the drawer already refuses one — letting stored JSONB carry what the editor cannot produce is a gap the apply math would inherit. |
 
 ## Task 1: Save spec documentation
 

@@ -1,6 +1,6 @@
 # Weekly envelope targets — Shaping notes
 
-**Status: active**
+**Status: frozen / complete — 2026-08-27**
 
 ## Scope
 

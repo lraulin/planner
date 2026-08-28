@@ -1023,6 +1023,18 @@ period)` so money already spent stops being held twice and only going over bites
   notes live in a right pane on desktop and a full-screen sheet below `md`. Envelopes
   remain the obligation registry; unscheduled bills keep estimate language, not a fake
   date. The funding-indicators spec had left this pane out of scope.
+  ✅ **Weekly envelope targets shipped 2026-08-27.**
+  `agent-os/specs/2026-08-27-1949-weekly-envelope-targets/`. A fourth template type for
+  ordinary spending anchored to a weekday: an amount and a weekday, whose monthly ask is
+  the amount times **the occurrences the calendar actually holds** — $900 in a five-Sunday
+  August, $720 in a four-Sunday September. Neither a monthly average (which smears 4- and
+  5-occurrence months) nor a refill (which reads a light week as lower demand) could state
+  that. Carry-in deliberately does not reduce the ask: a quiet week leaves spare cash to
+  move, not a cheaper next week. The amount field suggests a per-occurrence figure from
+  **all** spending in the envelope over up to 12 complete months, never only the anchor-day
+  trips. The drawer's vocabulary was the other half of the fix — "refill" and "set aside"
+  are gone, replaced by **Add every month** (a contribution, leftovers stay put) and
+  **Keep available** (a balance, what is there counts toward it).
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
   budget states a shortfall per bill envelope rather than as one collapsed number, and
   Assign → Underfunded names which envelopes will not be funded. The scan layer makes those
