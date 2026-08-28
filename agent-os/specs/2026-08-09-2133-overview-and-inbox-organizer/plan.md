@@ -1,6 +1,6 @@
 # Overview and Inbox Organizer
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-27)  
 Spec folder: `agent-os/specs/2026-08-09-2133-overview-and-inbox-organizer/`
 
 ## Context
@@ -51,7 +51,9 @@ shared project/context tools their links require.
       suggestions without constraining free-text record contexts.
 - [x] Processing the next Inbox item keeps the destination filter and selection; Clear
       empties the filter without dropping the selected parent.
-- [ ] Desktop/mobile, light/dark, tests, migration, smoke, and production build pass.
+- [x] Desktop/mobile, light/dark, tests, migration, smoke, and production build pass. Ticked at
+      freeze (2026-08-27): the surface has been in daily use as the home page since 2026-08-18,
+      and the gate has run on every commit since.
 
 ## Changes from original plan
 

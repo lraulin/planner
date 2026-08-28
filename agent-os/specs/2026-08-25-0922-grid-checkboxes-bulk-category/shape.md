@@ -1,6 +1,6 @@
 # Grid checkboxes, bulk Register category, Outline Move to… — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 
 ## Scope
 

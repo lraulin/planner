@@ -1,6 +1,6 @@
 # References — grid checkboxes, bulk Register category, Outline Move to…
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 
 ## Governing specs
 

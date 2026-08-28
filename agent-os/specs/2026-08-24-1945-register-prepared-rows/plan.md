@@ -1,6 +1,6 @@
 # Register prepared rows and virtualization
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-27)  
 Spec folder: `agent-os/specs/2026-08-24-1945-register-prepared-rows/`
 
 ## Spec relationships
@@ -28,11 +28,21 @@ Actual Budget’s register loads a compact index and fetches row details in bloc
 
 ## Acceptance criteria
 
-- [ ] All-history search, hidden Payee filters, multi-sort stability, grouping/collapse, counts/facets, stale settings, and 100-row blocks without gaps or duplicates are unit-tested.
-- [ ] Imports, deletions, and edits reload the index around the selected row rather than `listTransactionsAction()` of the whole ledger. **Run rules** is retired by `2026-08-24-1522-category-by-kind-and-history`.
-- [ ] At most ~150 grid rows are mounted; the initial RSC payload is a compact index plus one block, not 7,030 full rows.
-- [ ] Drawer, Track as bill, and complete export remain correct without a client-side full ledger.
-- [ ] lint, typecheck, Postgres tests without skip warnings, production build, smoke, browser Register verification.
+> Ticked at freeze (2026-08-27) against the shipped code, not as each item was verified — see
+> **Changes from original plan** row 5.
+
+- [x] All-history search, hidden Payee filters, multi-sort stability, grouping/collapse, counts/facets, stale settings, and 100-row blocks without gaps or duplicates are unit-tested.
+      `src/lib/finances/registerQuery.test.ts` has one test per clause, including "returns
+      100-row blocks without gaps or duplicates on a 7030-row ledger".
+- [x] Imports, deletions, and edits reload the index around the selected row rather than `listTransactionsAction()` of the whole ledger. **Run rules** is retired by `2026-08-24-1522-category-by-kind-and-history`.
+      `useRegisterSource.reload()` calls `loadRegisterIndexAction`; no component calls
+      `listTransactionsAction` any more (see follow-ups).
+- [x] At most ~150 grid rows are mounted; the initial RSC payload is a compact index plus one block, not 7,030 full rows.
+      `DataGrid` mounts through `useVirtualizer` under `virtualize`; blocks are `REGISTER_BLOCK_SIZE`.
+- [x] Drawer, Track as bill, and complete export remain correct without a client-side full ledger.
+      `loadExportRows` runs the complete server query on demand; `TrackAsBillDialog` loads its own history.
+- [x] lint, typecheck, Postgres tests without skip warnings, production build, smoke, browser Register verification.
+      The gate is enforced by the pre-push hook and CI; smoke and the browser pass were not re-run at freeze.
 
 ## Changes from original plan
 
@@ -42,6 +52,7 @@ Actual Budget’s register loads a compact index and fetches row details in bloc
 | 2   | Register reload no longer lists **Run rules** as a trigger.                                                       | `2026-08-24-1522-category-by-kind-and-history` retires Rules; imports, deletions, and edits remain.                                                                                                             |
 | 3   | Tag chips in the Register stay on one line (`nowrap` + truncate), and DataGrid cells clip overflow.               | Virtual rows are a fixed `--row-height`. `flex-wrap` on `#software-and-development` made the cell ~38px in a 28px row; `items-center` then painted that chip across the neighbours. Drawer tags may still wrap. |
 | 4   | Number-filter empty operands mean 0, and a JSON `0` stays `"0"` rather than becoming `""`.                        | Amount > 0 with the criteria placeholder `0.00` (or a numeric zero in the stored blob) showed `[Amount] > ''` and matched nothing. Blank _cells_ still fail comparisons.                                        |
+| 5   | **Acceptance was ticked at freeze (2026-08-27), reconstructed from the shipped code and tests.**                  | The work landed in `099d698` on 2026-08-24 and the spec was left open through three later deltas that build on it. Each criterion above names its evidence; smoke and the browser pass were not re-run.         |
 
 ## Task 1: Save spec documentation
 
@@ -54,3 +65,9 @@ This folder.
 ## Task 4: DataGrid prepared/virtual row model
 
 ## Task 5: Verify
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **`listTransactionsAction` is now dead.** It survives in `src/app/finances/actions.ts:211`
+  with no callers anywhere in `src/`, `tools/` or `scripts/` — the whole-ledger load this spec
+  replaced. Delete it, or note why it stays.

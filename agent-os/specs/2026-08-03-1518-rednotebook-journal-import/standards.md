@@ -1,6 +1,6 @@
 # Standards applied — RedNotebook import + journal hierarchy
 
-**Status: active**
+**Status: frozen / complete** (2026-08-07)
 
 - **Testing:** pure parse/markup unit tests; import + journal path integration tests with
   second-user isolation. No component tests.

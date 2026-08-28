@@ -1,6 +1,6 @@
 # References for Overview and Inbox Organizer
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 
 ## Product and workflow
 

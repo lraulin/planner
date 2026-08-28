@@ -1,6 +1,6 @@
 # Supplies merge keeps product names on each offer line
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 Spec folder: `agent-os/specs/2026-08-27-1041-supply-merge-keeps-product-names/`
 
 ## Spec relationships
@@ -22,16 +22,23 @@ Lee's correction: those titles **are** the specific items and stay on each line.
 
 ## Acceptance criteria
 
-- [ ] Merging two Amazon-created items (empty brand, title on the item) leaves both titles as option brands under the survivor.
-- [ ] Merging items whose brands are already set (Fancy Feast Grilled / Pate) does not replace those brands with the item name.
-- [ ] Suggest from Amazon **Add** and Orders → New item write the product title onto the offer's brand, not only the item name.
-- [ ] A second user still cannot merge the first user's items.
+- [x] Merging two Amazon-created items (empty brand, title on the item) leaves both titles as option brands under the survivor.
+      `merge.test.ts` — "takes the item name when Amazon left brand empty"; the write is covered by
+      "reparents options onto the survivor, keeps one in-use, and deletes sources".
+- [x] Merging items whose brands are already set (Fancy Feast Grilled / Pate) does not replace those brands with the item name.
+      `merge.test.ts` — "keeps a brand that is already set"; `mutations.integration.test.ts` —
+      "does not overwrite a brand that was already the specific product name".
+- [x] Suggest from Amazon **Add** and Orders → New item write the product title onto the offer's brand, not only the item name.
+      `SuggestFromAmazonDialog.tsx`; `mutations.integration.test.ts` — "puts the product title on
+      the offer line when creating a new item".
+- [x] A second user still cannot merge the first user's items.
+      `mutations.integration.test.ts` — "does not let a second user preview or merge another user's items".
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                        | Why                                                                                                                                                                           |
+| --- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Acceptance was ticked at freeze (2026-08-27) against the tests, hours after the code shipped. | `1e87555` landed the whole change with unit and database coverage for all four criteria; nothing was left for a later pass. Each criterion above names the test that pins it. |
 
 ## Task 1: Save spec documentation
 

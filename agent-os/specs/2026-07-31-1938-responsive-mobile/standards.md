@@ -1,6 +1,6 @@
 # Standards for Responsive / Mobile
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 
 Unusually, this spec **writes** a standard as well as being governed by them. Rather than
 inlining full text that this spec is concurrently editing — which would go stale the moment

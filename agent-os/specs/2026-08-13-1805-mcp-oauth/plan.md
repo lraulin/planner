@@ -1,6 +1,6 @@
 # MCP OAuth for Grok connectors
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 Spec folder: `agent-os/specs/2026-08-13-1805-mcp-oauth/`
 
 ## Spec relationships
@@ -30,13 +30,24 @@ protected-resource metadata. Grok’s discovery then produced broken placeholder
 
 ## Acceptance criteria
 
-- [ ] Unauthenticated `POST /api/mcp` returns 401 whose `WWW-Authenticate` names the PRM URL.
-- [ ] `GET /.well-known/oauth-protected-resource` and `GET /.well-known/oauth-authorization-server` succeed without a session cookie.
-- [ ] Token endpoint exchanges a PKCE code for an access token that can `initialize` `/api/mcp`.
-- [ ] Grok form values work: client id `planner`, empty secret, `/oauth/authorize`, `/api/oauth/token`, scope `planner`, PKCE none.
+- [x] Unauthenticated `POST /api/mcp` returns 401 whose `WWW-Authenticate` names the PRM URL.
+      Pinned by `src/app/api/mcp/route.test.ts` — "rejects a missing bearer key before JSON-RPC".
+- [x] `GET /.well-known/oauth-protected-resource` and `GET /.well-known/oauth-authorization-server` succeed without a session cookie.
+      Routes under `src/app/.well-known/`; shapes pinned by `src/lib/oauth/metadata.test.ts`.
+- [x] Token endpoint exchanges a PKCE code for an access token that can `initialize` `/api/mcp`.
+      `src/app/api/oauth/token/route.test.ts` plus "accepts an OAuth access token issued for this
+      MCP resource" in the MCP boundary test.
+- [x] Grok form values work: client id `planner`, empty secret, `/oauth/authorize`, `/api/oauth/token`, scope `planner`, PKCE none.
+      Confirmed against a real Grok.com connector before freeze.
 
 ## Changes from original plan
 
-| #   | Change | Why |
-| --- | ------ | --- |
-|     |        |     |
+| #   | Change                                                                              | Why                                                                                                                                                                                                   |
+| --- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Acceptance was ticked at freeze (2026-08-27) rather than as each item was verified. | The code shipped in `5712eb0` on 2026-08-13 and the spec was then left open for two weeks. The first three criteria are ticked against named tests; the fourth against a real Grok connector sign-in. |
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- `agent-os/product/roadmap.md` still described OAuth as open under the MCP transport entry;
+  corrected at this freeze. Per-user keys and mapping a key to a real user beyond
+  `PLANNER_AGENT_USER_EMAIL` remain genuinely open.

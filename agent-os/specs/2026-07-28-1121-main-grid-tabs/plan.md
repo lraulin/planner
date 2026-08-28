@@ -1,6 +1,12 @@
 # Main Grid Tabs — Projects, Tasks, Goals, Wish List
 
+**Status: frozen / complete** (2026-07-28)  
 Spec folder: `agent-os/specs/2026-07-28-1121-main-grid-tabs/`
+
+> Status classified retroactively on 2026-08-27. This spec predates the status-line
+> convention and carries no acceptance checkboxes; the date above is its last
+> implementation commit. It is a historical as-built record — further change opens a
+> new delta-spec.
 
 ## Context
 

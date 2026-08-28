@@ -1,6 +1,6 @@
 # Supplies merge keeps product names — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 
 ## Scope
 

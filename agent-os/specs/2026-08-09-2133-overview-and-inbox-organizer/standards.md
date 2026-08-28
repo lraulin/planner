@@ -1,6 +1,6 @@
 # Standards for Overview and Inbox Organizer
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 
 The implementation uses references so the active code follows the current canonical
 standards rather than a copied snapshot.

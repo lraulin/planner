@@ -1,6 +1,6 @@
 # Standards — grid checkboxes, bulk Register category, Outline Move to…
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 
 Canonical standards are referenced rather than copied so this spec does not fork their
 instructions. Read these before implementation:

@@ -1,5 +1,13 @@
 # Scaffold + Outline Tab
 
+**Status: frozen / complete** (2026-07-27)  
+Spec folder: `agent-os/specs/2026-07-27-1100-scaffold-and-outline-tab/`
+
+> Status classified retroactively on 2026-08-27. This spec predates the status-line
+> convention and carries no acceptance checkboxes; the date above is its last
+> implementation commit. It is a historical as-built record — further change opens a
+> new delta-spec.
+
 ## Context
 
 `planner` is a web reimplementation of Effexis Achieve Planner, a Windows time-management

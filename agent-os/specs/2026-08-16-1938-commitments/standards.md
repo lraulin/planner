@@ -1,6 +1,6 @@
 # Standards for Commitments
 
-**Status: active**
+**Status: frozen / complete** — verified 2026-08-18
 
 Applied as of standards commit `d0625a6`. References, not copies — see AGENTS.md.
 

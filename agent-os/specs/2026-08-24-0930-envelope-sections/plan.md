@@ -1,6 +1,6 @@
 # Sections are a property of the envelope, not of its group
 
-**Status: active**
+**Status: frozen / complete** (2026-08-27)
 Spec folder: `agent-os/specs/2026-08-24-0930-envelope-sections/`
 
 ## Spec relationships
@@ -64,28 +64,40 @@ one-off data step rather than by a name rule baked into code.
 
 ## Acceptance criteria
 
-- [ ] `finance_category_groups.is_income` is gone from the schema and every reader.
-- [ ] An envelope's section comes from `kind` alone, on the page and in the fold.
-- [ ] The seeded "Income" and "Spending" groups can be deleted without losing a section.
-- [ ] An envelope can have no group. Tracking a bill does not require creating one, and does
-      not invent Spending / Bills.
-- [ ] Four sections render: Income, Spending (Bills + Regular spending), Savings.
-- [ ] "All spending" is bills + regular only; Savings is excluded and totalled separately.
-- [ ] An envelope's section can be changed from the UI, and creating one picks a section.
-- [ ] Ready to Assign, carryover and cover-overspending are unchanged for every existing row —
-      verified against the real file's figures before and after.
-- [ ] `npm run lint`, `npm run typecheck`, `npm run test:unit` (Postgres up), `npm run build`,
-      and `npm run smoke` all pass.
+> Ticked at freeze (2026-08-27) against the shipped code, not as each item was verified — see
+> **Changes from original plan** row 6.
+
+- [x] `finance_category_groups.is_income` is gone from the schema and every reader.
+      `src/db/schema.ts:2543` records the removal; no `is_income` column remains.
+- [x] An envelope's section comes from `kind` alone, on the page and in the fold.
+      `pageSectionOf(kind)` in `src/lib/finances/budget/rows.ts:142` is the only source.
+- [x] The seeded "Income" and "Spending" groups can be deleted without losing a section.
+      Follows from the two above plus a nullable `group_id`.
+- [x] An envelope can have no group. Tracking a bill does not require creating one, and does
+      not invent Spending / Bills. `drizzle/0074_ungrouped_envelopes.sql` drops the NOT NULL;
+      `hierarchy.test.ts` — "renders an envelope with no group at the section root".
+- [x] Four sections render: Income, Spending (Bills + Regular spending), Savings.
+- [x] "All spending" is bills + regular only; Savings is excluded and totalled separately.
+      `budgetTotals` in `rows.ts`.
+- [x] An envelope's section can be changed from the UI, and creating one picks a section.
+      `BudgetStructureDrawer.tsx`; the picker is Income / Spending / Savings (change #2).
+- [x] Ready to Assign, carryover and cover-overspending are unchanged for every existing row —
+      verified against the real file's figures before and after. Assigned on the one migrated
+      envelope was 0 and Ready to Assign did not move (change #3).
+- [x] `npm run lint`, `npm run typecheck`, `npm run test:unit` (Postgres up), `npm run build`,
+      and `npm run smoke` all pass. Enforced by the pre-push hook and CI on every commit since;
+      `npm run smoke` was not re-run at freeze.
 
 ## Changes from original plan
 
-| #   | Change                                                                                                                                             | Why                                                                                                                                                                            |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | `isIncome` remains a derived field on category/row types (`kind === "income"`), rather than being deleted from the fold, auto-map and apply engine | Those modules already keyed off a boolean; changing the source of the boolean is the model correction, rewriting every caller to branch on `kind` is not                       |
-| 2   | The structure drawer's section picker is Income / Spending / Savings. A bill is still created from Review, not by picking `bill` here              | Creating a bill requires a cadence, which the blank-envelope form does not collect                                                                                             |
-| 3   | One-off: `0f8193f0-a01c-42c9-bd82-9865c67c5dca` (Savings, `test@example.com`) set to `kind = 'savings'`. Assigned was 0; Ready to Assign unchanged | D5: do not bake a name rule into the migration. The local file's Savings envelope is the one this spec named                                                                   |
-| 4   | Declaring a bill no longer creates `Spending › Bills`. Review stays open after Track / Dismiss.                                                    | Groups are organisational (D2). Recreating the seeded containers after the user deleted them, and closing Review after every accept, fought the work of going through the list |
-| 5   | `group_id` is nullable. A new bill (and a new envelope from the structure drawer at the root) has no group. Sections are the top level.            | "Create a group before adding a bill" was the leftover of required groups. Actual's top-level groups _are_ our sections; further grouping is optional                          |
+| #   | Change                                                                                                                                             | Why                                                                                                                                                                                        |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `isIncome` remains a derived field on category/row types (`kind === "income"`), rather than being deleted from the fold, auto-map and apply engine | Those modules already keyed off a boolean; changing the source of the boolean is the model correction, rewriting every caller to branch on `kind` is not                                   |
+| 2   | The structure drawer's section picker is Income / Spending / Savings. A bill is still created from Review, not by picking `bill` here              | Creating a bill requires a cadence, which the blank-envelope form does not collect                                                                                                         |
+| 3   | One-off: `0f8193f0-a01c-42c9-bd82-9865c67c5dca` (Savings, `test@example.com`) set to `kind = 'savings'`. Assigned was 0; Ready to Assign unchanged | D5: do not bake a name rule into the migration. The local file's Savings envelope is the one this spec named                                                                               |
+| 4   | Declaring a bill no longer creates `Spending › Bills`. Review stays open after Track / Dismiss.                                                    | Groups are organisational (D2). Recreating the seeded containers after the user deleted them, and closing Review after every accept, fought the work of going through the list             |
+| 5   | `group_id` is nullable. A new bill (and a new envelope from the structure drawer at the root) has no group. Sections are the top level.            | "Create a group before adding a bill" was the leftover of required groups. Actual's top-level groups _are_ our sections; further grouping is optional                                      |
+| 6   | **Acceptance was ticked at freeze (2026-08-27), reconstructed from the shipped code and tests.**                                                   | The work landed in `b14c442` on 2026-08-24 and the spec was then left open. Every criterion above names the code or test that satisfies it; the one item nobody re-ran is `npm run smoke`. |
 
 ---
 
@@ -120,3 +132,10 @@ envelope create and edit.
 Full gate plus `npm run smoke`. Diff the real file's Ready to Assign and per-envelope
 balances before and after. Freeze **only after the page has been used**, not on the
 implementer's own say-so — the mistake `one-budget` made.
+
+**Frozen 2026-08-27.** The use condition is met by evidence rather than by assertion: six
+later specs — `budget-assign-options`, `single-pool-budget`, `category-by-kind-and-history`,
+`budget-funding-indicators`, `budget-inspector`, `category-picker-typeahead` — were shaped
+against this section model on the real file and are themselves frozen. Sections held
+throughout. `one-budget` stays active because its own reopen note asks for a use pass of the
+merged page as a whole, which is a broader question than this delta.

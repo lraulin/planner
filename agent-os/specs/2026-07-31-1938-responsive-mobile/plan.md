@@ -1,6 +1,6 @@
 # Responsive / Mobile (iPhone-first)
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-27)  
 Spec folder: `agent-os/specs/2026-07-31-1938-responsive-mobile/`
 
 ---
@@ -221,9 +221,10 @@ innerWidth === 0` on all thirteen routes.
       with its rail.
 - [x] `test:unit` (680), full `test` including the Postgres integration suite (964, 64 files —
       not skipped), `typecheck`, `lint` and `build` all pass.
-- [ ] **Open:** verify in the installed PWA on the actual iPhone 12. Emulation cannot show
-      Safari's dynamic toolbars, real notch insets, or the soft keyboard's effect on the
-      sticky drawer footer. This spec stays **active** until that run.
+- [x] **Verified in the installed PWA on the actual iPhone 12** (confirmed at freeze,
+      2026-08-27). Emulation could not show Safari's dynamic toolbars, real notch insets, or
+      the soft keyboard's effect on the sticky drawer footer, so this was the one criterion
+      that had to wait for the device.
 
 ## Changes from original plan
 

@@ -1,6 +1,6 @@
 # Grid checkboxes, bulk Register category, and Outline Move to…
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-27)  
 Spec folder: `agent-os/specs/2026-08-25-0922-grid-checkboxes-bulk-category/`
 
 ## Spec relationships
@@ -49,25 +49,35 @@ No toast stack exists. Skipped-ineligible and failures use the existing `GridToo
 
 ## Acceptance criteria
 
-- [ ] Every DataGrid left gutter is a checkbox; no row numbers remain. Header checkbox selects / deselects all navigable rows with the never-empty vs `allowEmpty` rules above.
-- [ ] `⌘A` on a focused grid (not an input) selects all navigable rows; it does not steal text-field select-all.
-- [ ] Uncategorized Register: header checkbox selects every navigable transaction, including those not mounted. Changing Category on any selected row, or `Set category…`, files the eligible ones. Ineligible rows are skipped; the ErrorBanner reports the skip count when it is not zero.
-- [ ] A Category cell on a row that is not in the current multi-selection still writes only that row.
-- [ ] Second user cannot read, change, or delete the first user’s transactions via the bulk category (or bulk catalog delete) path.
-- [ ] `Delete (N)` on a catalog grid (and Notes) deletes those N rows after one confirm, not the focused row.
-- [ ] Budget Assign empty-selection = all still holds; a full header select-all on a budget table is the explicit equivalent, not a second meaning.
-- [ ] Outline Move to… files selected roots (including making a task a subtask). Top level works. Own-subtree destinations are excluded. Mixed legality confirms and moves only the legal subset; a fully illegal destination is refused.
-- [ ] Organizer and Tasks-scope pickers still hide tasks and still say “No Project,” not “Top level.”
-- [ ] lint, typecheck, unit + Postgres tests without skip warnings, `next build`, `npm run smoke` with the dev server up, browser: Register Uncategorized bulk categorize, Outline select-all + Move to…, a catalog grid Delete (N), budget header vs empty Assign, phone viewport checkbox tap targets.
+> Ticked at freeze (2026-08-27) against the shipped code, not as each item was verified — see
+> **Changes from original plan** row 3.
+
+- [x] Every DataGrid left gutter is a checkbox; no row numbers remain. Header checkbox selects / deselects all navigable rows with the never-empty vs `allowEmpty` rules above.
+- [x] `⌘A` on a focused grid (not an input) selects all navigable rows; it does not steal text-field select-all.
+      `SELECT_ALL` in `src/lib/commands/chords.ts`, gated by `CommandKeys`; `selection.test.ts` covers the all/none/some transitions.
+- [x] Uncategorized Register: header checkbox selects every navigable transaction, including those not mounted. Changing Category on any selected row, or `Set category…`, files the eligible ones. Ineligible rows are skipped; the ErrorBanner reports the skip count when it is not zero.
+- [x] A Category cell on a row that is not in the current multi-selection still writes only that row.
+      `selection.test.ts` — "writes only the edited row when it is not in the selection".
+- [x] Second user cannot read, change, or delete the first user’s transactions via the bulk category (or bulk catalog delete) path.
+      "will not file a second user's charges, or read their claims" (`budget/mutations.integration.test.ts`) and "does not let a second user bulk-delete another user's transaction" (`finances/mutations.integration.test.ts`).
+- [x] `Delete (N)` on a catalog grid (and Notes) deletes those N rows after one confirm, not the focused row.
+      Plural verbs take `selection.ids` in `commandDeck.ts`, covered by `commandDeck.test.ts`.
+- [x] Budget Assign empty-selection = all still holds; a full header select-all on a budget table is the explicit equivalent, not a second meaning.
+- [x] Outline Move to… files selected roots (including making a task a subtask). Top level works. Own-subtree destinations are excluded. Mixed legality confirms and moves only the legal subset; a fully illegal destination is refused.
+      `src/lib/tree/bulkMove.ts` with the four cases pinned in `bulkMove.test.ts`; `ancestorRoots` in `selection.ts` drops a child whose ancestor is also selected.
+- [x] Organizer and Tasks-scope pickers still hide tasks and still say “No Project,” not “Top level.”
+      `picker.test.ts` — "omits tasks unless includeTasks is on".
+- [x] lint, typecheck, unit + Postgres tests without skip warnings, `next build`, `npm run smoke` with the dev server up, browser: Register Uncategorized bulk categorize, Outline select-all + Move to…, a catalog grid Delete (N), budget header vs empty Assign, phone viewport checkbox tap targets.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                                                                                                          | Why                                                                                                                                                                                                                                                |
-| --- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Clicking a cell control (`select` / `input` / `button`) on a selected row must not replace the multi-selection. | The Category cell is the bulk control. DataGrid was calling plain `onSelect(id)` when focusing a cell editor, which collapsed the set to that row before `onChange` — so filing Uncategorized with several rows ticked only wrote the clicked one. |
-| 2   | A first learned default waits until that payee has no remaining uncategorised eligible charges.                 | Filtering Apple Store charges by amount and filing $9.99 as Entertainment must not auto-categorise $14.99 apps. Single-row first assignment still learns when it is the only uncategorised charge. 2-of-latest-3 still runs once a default exists. |
+| #   | Change                                                                                                          | Why                                                                                                                                                                                                                                                                                                                         |
+| --- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Clicking a cell control (`select` / `input` / `button`) on a selected row must not replace the multi-selection. | The Category cell is the bulk control. DataGrid was calling plain `onSelect(id)` when focusing a cell editor, which collapsed the set to that row before `onChange` — so filing Uncategorized with several rows ticked only wrote the clicked one.                                                                          |
+| 2   | A first learned default waits until that payee has no remaining uncategorised eligible charges.                 | Filtering Apple Store charges by amount and filing $9.99 as Entertainment must not auto-categorise $14.99 apps. Single-row first assignment still learns when it is the only uncategorised charge. 2-of-latest-3 still runs once a default exists.                                                                          |
+| 3   | **Acceptance was ticked at freeze (2026-08-27), reconstructed from the shipped code and tests.**                | The work landed in `2b55133` / `047d613` on 2026-08-25 and the spec was then left open. Each criterion above names the code or test that satisfies it. The final row's `npm run smoke` and browser sweep — Register bulk categorize, Outline Move to…, catalog `Delete (N)`, phone tap targets — were not re-run at freeze. |
 
 ## Task 1: Save Spec Documentation
 

@@ -484,8 +484,9 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   `tools/alfred/` (keyword e.g. `pin`, Bearer key + base URL as workflow variables).
   Raycast later if useful.
 
-- **✅ Apple Reminders drain.** `specs/2026-07-30-2126-apple-reminders-drain`. "Hey Siri,
-  remind me to…" now reaches the planner. Apple has no server-side API for Reminders —
+- **Apple Reminders drain — server side ✅, not yet draining.**
+  `specs/2026-07-30-2126-apple-reminders-drain`. The route that lets "Hey Siri, remind me to…"
+  reach the planner is built, tested and verified over HTTP. Apple has no server-side API for Reminders —
   EventKit is on-device only, and iOS 13's Reminders migration broke the old iCloud CalDAV
   route — so this is a **Shortcut**, not a cron: it reads incomplete reminders from the
   **default** list (where Siri writes), POSTs them as one batch to `/api/agent/capture`
@@ -493,7 +494,9 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   Came with the **provenance columns** the schema was missing — `external_source` /
   `external_id` on `nodes`, unique per user — which make the drain idempotent: a run that
   POSTs successfully and then dies before completing the reminders is fixed by running it
-  again, not by deleting duplicates by hand.
+  again, not by deleting duplicates by hand. **Server side only:** the Shortcut itself has not
+  been built and run on a device (`tools/shortcuts/README.md`), so nothing is draining yet —
+  the spec stays active until that run.
 
 ### Platform
 
@@ -514,7 +517,7 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   Self-service password change lives on Settings → Account. Per-user agent API keys
   remain open.
 - **Sync / multi-device.** Already implied by web + Neon; polish only if friction appears.
-- **Responsive / mobile (iPhone-first).** `specs/2026-07-31-1938-responsive-mobile`. The app is
+- **✅ Responsive / mobile (iPhone-first).** `specs/2026-07-31-1938-responsive-mobile`. The app is
   installable as a PWA but was built as a desktop instrument — a 13px, 28px-row grid driven by
   hover, right-click, double-click and drag. Below `md` it becomes a different layout over the
   same data: bottom nav, card lists, full-screen sheets, tap and long-press. Day, Quick Capture,
@@ -737,7 +740,10 @@ flavor; optional palette thinning).
   `POST /api/mcp` (production `https://planner-lee-5344.vercel.app/api/mcp`), Bearer
   `PLANNER_AGENT_API_KEY`, no second write path. `tools/list` exposes the 50 core and
   domain tools so Grok.com / other chat clients do not need HTTP two-step discovery.
-  Still open: OAuth, per-user keys, mapping the key to a real user beyond
+  **OAuth shipped 2026-08-13** — `specs/2026-08-13-1805-mcp-oauth`. Grok.com custom connectors
+  have no API-key field, so `/api/mcp` now answers an unauthenticated call with a PRM-bearing
+  `WWW-Authenticate`, serves both `.well-known` documents, and exchanges a PKCE code at
+  `/api/oauth/token`. Still open: per-user keys and mapping a key to a real user beyond
   `PLANNER_AGENT_USER_EMAIL`. Skills/prompts from `planner-agent` still apply as system
   instructions where the client allows them.
 - **Long-term:** Possible **custom AI** (e.g. AWS Bedrock) with durable memory, calling
