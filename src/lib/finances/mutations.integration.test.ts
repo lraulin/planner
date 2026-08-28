@@ -716,8 +716,8 @@ describeDb("declared bill envelope isolation", () => {
   beforeEach(async () => {
     ownerId = await makeUser();
     intruderId = await makeUser();
-    await createCategoryGroup(ownerId, { name: "Household" });
-    await createCategoryGroup(intruderId, { name: "Household" });
+    await createCategoryGroup(ownerId, { name: "Household", kind: "spending" });
+    await createCategoryGroup(intruderId, { name: "Household", kind: "spending" });
     await upsertBillEnvelope(ownerId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
@@ -787,7 +787,7 @@ describeDb("stable bill envelope payee claims", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
-    await createCategoryGroup(userId, { name: "Household" });
+    await createCategoryGroup(userId, { name: "Household", kind: "spending" });
   });
 
   it("claims selected payees and preserves them when only cadence changes", async () => {
@@ -915,7 +915,7 @@ describeDb("subscription status", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
-    await createCategoryGroup(userId, { name: "Household" });
+    await createCategoryGroup(userId, { name: "Household", kind: "spending" });
     await upsertBillEnvelope(userId, {
       name: "Paramount+",
       cadence: { unit: "month", n: 1 },

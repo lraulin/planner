@@ -261,15 +261,15 @@ export function BudgetView({
   );
   const sections = useMemo(() => budgetSections(rows), [rows]);
   const billGridRows = useMemo(
-    () => sectionGridRows(data.groups, sections.bills, { showHidden }),
+    () => sectionGridRows(data.groups, "bill", sections.bills, { showHidden }),
     [data.groups, sections.bills, showHidden],
   );
   const envelopeGridRows = useMemo(
-    () => sectionGridRows(data.groups, sections.envelopes, { showHidden }),
+    () => sectionGridRows(data.groups, "spending", sections.envelopes, { showHidden }),
     [data.groups, sections.envelopes, showHidden],
   );
   const savingsGridRows = useMemo(
-    () => sectionGridRows(data.groups, sections.savings, { showHidden }),
+    () => sectionGridRows(data.groups, "savings", sections.savings, { showHidden }),
     [data.groups, sections.savings, showHidden],
   );
   const billRowIds = useMemo(() => billGridRows.map((row) => row.id), [billGridRows]);
@@ -1085,20 +1085,13 @@ export function BudgetView({
     const group = data.groups.find((entry) => entry.id === groupId);
     const name = group?.name ?? "this group";
     return [
+      // Only this group's own kind: a group is in exactly one table and holds only what
+      // belongs in it (`agent-os/specs/2026-08-28-1613-group-kind/` D2).
       {
         label: `New ${KIND_LABELS[kind].toLowerCase()} here`,
         icon: "new",
         onSelect: () => openComposer("envelope", kind, groupId),
       },
-      ...(kind === "spending"
-        ? ([
-            {
-              label: "New bill here",
-              icon: "new",
-              onSelect: () => openComposer("envelope", "bill", groupId),
-            },
-          ] satisfies MenuItem[])
-        : []),
       {
         label: "New subgroup here",
         icon: "insert-child",

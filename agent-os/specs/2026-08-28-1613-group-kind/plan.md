@@ -122,9 +122,12 @@ gone). `moveDestinations` becomes kind equality plus the descendant refusal — 
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                     | Why                                                                                                                                                                                                                                                                      |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **D5 narrowed: the presets stop seeding groups that _name a section_, not all groups.** `minimal` now seeds none; `detailed` keeps `Home`, `Everyday`, `Enjoyment` and `Obligations` as `spending` groups. | D5 was written from `minimal`, whose only groups are `Income` and `Spending`. `detailed`'s groups organise _within_ Regular spending and say something the section heading does not — deleting them would have removed the only real grouping the app ships.             |
+| 2   | **The migration dissolves income groups too, whatever their kind.**                                                                                                                                        | The Income section is a plain list, not a grid (`one-budget` D7), so it has no group chrome and gets none here. Without this the seeded `Income` group survives the migration into exactly the stranded state this spec exists to remove: legal, invisible, undeletable. |
+| 3   | **`seedBudget`'s "already set up" check moved from groups to envelopes.**                                                                                                                                  | A preset may now seed no groups at all, so checking groups would have let `minimal` be seeded repeatedly.                                                                                                                                                                |
+| 4   | **`budgetGridRows` deleted** rather than updated.                                                                                                                                                          | It was a one-line pass-through to `sectionGridRows` with no production caller — only its own test.                                                                                                                                                                       |
 
 ---
 
@@ -151,7 +154,8 @@ lone-root-header suppression.
 parent; `createBudgetCategory` validates envelope kind against the group; `updateBudgetCategory`
 clears `groupId` when the new kind no longer matches.
 
-`presets.ts` — flat envelope lists, no groups.
+`presets.ts` — a preset entry is a group _or_ a run of root-level envelopes, and carries one
+`kind` for itself and everything in it. See Changes row 1.
 
 Tests: `hierarchy.test.ts` and `rows.test.ts` for the pure rules; integration for the guard,
 the section-change eviction, and the second-user case on `createCategoryGroup`'s new argument.

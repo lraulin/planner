@@ -280,7 +280,7 @@ async function seedOwner(): Promise<Owned> {
       "expected the finance seed to create an account, row, and statement",
     );
   }
-  await createCategoryGroup(userId, { name: "Household" });
+  await createCategoryGroup(userId, { name: "Household", kind: "spending" });
   await upsertBillEnvelope(userId, {
     name: "Owner Insurance",
     cadence: { unit: "month", n: 6 },

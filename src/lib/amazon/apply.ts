@@ -532,7 +532,8 @@ async function ensureSnsGroup(userId: string): Promise<string> {
     )
     .limit(1);
   if (existing) return existing.id;
-  return createCategoryGroup(userId, { name: AMAZON_SNS_GROUP });
+  // Subscribe & Save deliveries are bills, so the group that holds them is a Bills group.
+  return createCategoryGroup(userId, { name: AMAZON_SNS_GROUP, kind: "bill" });
 }
 
 async function billByName(userId: string, name: string) {

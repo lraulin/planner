@@ -94,7 +94,12 @@ async function addTransaction(
 async function makeBillEnvelope(userId: string, name: string): Promise<{ id: string }> {
   const [group] = await db
     .insert(financeCategoryGroups)
-    .values({ userId, name: `${name} group ${crypto.randomUUID()}`, sortKey: "a0" })
+    .values({
+      userId,
+      name: `${name} group ${crypto.randomUUID()}`,
+      kind: "spending",
+      sortKey: "a0",
+    })
     .returning({ id: financeCategoryGroups.id });
   const [row] = await db
     .insert(financeBudgetCategories)
@@ -580,6 +585,7 @@ describeDb("payee auto-category", () => {
       .values({
         userId,
         name: `${name} group ${crypto.randomUUID()}`,
+        kind: "spending",
         sortKey: "a0",
       })
       .returning({ id: financeCategoryGroups.id });

@@ -479,9 +479,12 @@ export async function setCarryoverAction(
 
 export async function createCategoryGroupAction(
   name: string,
+  kind: EnvelopeKind,
   parentGroupId: string | null = null,
 ): Promise<DataActionResult<string>> {
-  return runWithData((userId) => createCategoryGroup(userId, { name, parentGroupId }));
+  return runWithData((userId) =>
+    createCategoryGroup(userId, { name, kind, parentGroupId }),
+  );
 }
 
 export async function renameCategoryGroupAction(

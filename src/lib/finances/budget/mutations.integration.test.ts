@@ -199,7 +199,7 @@ describeDb("budget mutations", () => {
     ).rejects.toThrow(/already been set up/);
   });
 
-  it("puts section on the envelope so the seeded Income group can be deleted", async () => {
+  it("keeps an envelope's section through a rename and a section round-trip", async () => {
     await seedAccounts(userId);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
     const before = await loadBudget(userId, MONTH);
@@ -213,33 +213,99 @@ describeDb("budget mutations", () => {
     });
     const ready = findMonth(before.months, MONTH)?.readyToAssignCents;
 
-    const incomeGroup = before.groups.find((group) => group.name === "Income")!;
-    const incomeEnvelope = before.categories.find(
-      (category) => category.name === "Income",
-    )!;
-    const payGroupId = await createCategoryGroup(userId, { name: "Pay" });
-    await moveBudgetStructureItemIntoGroup(
-      userId,
-      { kind: "category", id: incomeEnvelope.id },
-      payGroupId,
-    );
-    await deleteCategoryGroup(userId, incomeGroup.id);
-
-    const after = await loadBudget(userId, MONTH);
-    expect(after.groups.some((group) => group.id === incomeGroup.id)).toBe(false);
-    expect(
-      after.categories.find((category) => category.id === incomeEnvelope.id)?.kind,
-    ).toBe("income");
-    expect(findMonth(after.months, MONTH)?.readyToAssignCents).toBe(ready);
-
-    const savings = after.categories.find((category) => category.name === "Savings")!;
+    const savings = before.categories.find((category) => category.name === "Savings")!;
     await updateBudgetCategory(userId, savings.id, { kind: "spending" });
     await updateBudgetCategory(userId, savings.id, { kind: "savings" });
+    const after = await loadBudget(userId, MONTH);
+    expect(after.categories.find((row) => row.id === savings.id)?.kind).toBe("savings");
+    expect(findMonth(after.months, MONTH)?.readyToAssignCents).toBe(ready);
+  });
+
+  it("keeps a group and its envelopes in one section", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const billsGroup = await createCategoryGroup(userId, {
+      name: "Subscriptions",
+      kind: "bill",
+    });
+
+    // An envelope may not be created into a group of another kind...
+    await expect(
+      createBudgetCategory(userId, { groupId: billsGroup, name: "Groceries" }),
+    ).rejects.toThrow(/holds bill envelopes, not spending/);
+    // ...nor moved into one.
+    const groceries = await createBudgetCategory(userId, { name: "Groceries" });
+    await expect(
+      moveBudgetStructureItemIntoGroup(
+        userId,
+        { kind: "category", id: groceries },
+        billsGroup,
+      ),
+    ).rejects.toThrow();
+    // ...and a subgroup must match its parent.
+    await expect(
+      createCategoryGroup(userId, {
+        name: "Streaming",
+        kind: "spending",
+        parentGroupId: billsGroup,
+      }),
+    ).rejects.toThrow(/has to be bill/);
+
+    const netflix = await createBudgetCategory(userId, {
+      groupId: billsGroup,
+      name: "Netflix",
+      kind: "bill",
+    });
     expect(
-      (await loadBudget(userId, MONTH)).categories.find(
-        (category) => category.id === savings.id,
-      )?.kind,
-    ).toBe("savings");
+      (await loadBudget(userId, MONTH)).categories.find((row) => row.id === netflix)
+        ?.groupId,
+    ).toBe(billsGroup);
+  });
+
+  it("moves an envelope to the section root when its section changes under it", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const billsGroup = await createCategoryGroup(userId, {
+      name: "Subscriptions",
+      kind: "bill",
+    });
+    const netflix = await createBudgetCategory(userId, {
+      groupId: billsGroup,
+      name: "Netflix",
+      kind: "bill",
+    });
+
+    // The group cannot follow it into another table, so refusing would leave Change section
+    // dead-ending. It evicts to the section root instead.
+    await updateBudgetCategory(userId, netflix, { kind: "spending" });
+
+    const moved = (await loadBudget(userId, MONTH)).categories.find(
+      (row) => row.id === netflix,
+    )!;
+    expect(moved.kind).toBe("spending");
+    expect(moved.groupId).toBeNull();
+    // And the group survives, empty, so it can be filled again or deleted.
+    expect(
+      (await loadBudget(userId, MONTH)).groups.some((row) => row.id === billsGroup),
+    ).toBe(true);
+  });
+
+  it("seeds the minimal preset with no groups at all", async () => {
+    await seedAccounts(userId);
+    const result = await seedBudget(userId, {
+      preset: "minimal",
+      startMonth: MONTH,
+      todayKey: TODAY,
+    });
+    expect(result.categoryCount).toBe(5);
+
+    const data = await loadBudget(userId, MONTH);
+    // A group named for the section it is in says nothing the section heading does not.
+    expect(data.groups).toEqual([]);
+    expect(data.categories.every((row) => row.groupId === null)).toBe(true);
+    // Root-level envelopes must not share a sort key, or their order is decided by id.
+    const keys = data.categories.map((row) => row.sortKey);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 
   it("creates a bill from a name alone, monthly and otherwise blank", async () => {
@@ -1040,19 +1106,28 @@ describeDb("budget mutations", () => {
   it("nests and reorders groups and envelopes without changing their money", async () => {
     await seedAccounts(userId);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    // The presets seed no groups now, so this test makes the ones it nests.
+    const spendingId = await createCategoryGroup(userId, {
+      name: "Spending",
+      kind: "spending",
+    });
+    const incomeId = await createCategoryGroup(userId, {
+      name: "Income",
+      kind: "income",
+    });
     const before = await loadBudget(userId, MONTH);
-    const spending = before.groups.find((group) => group.name === "Spending")!;
-    const income = before.groups.find((group) => group.name === "Income")!;
     const billsEnvelope = before.categories.find(
       (category) => category.name === "Bills",
     )!;
 
     const billsGroupId = await createCategoryGroup(userId, {
       name: "Bill groups",
-      parentGroupId: spending.id,
+      kind: "spending",
+      parentGroupId: spendingId,
     });
     const utilitiesId = await createCategoryGroup(userId, {
       name: "Utilities",
+      kind: "spending",
       parentGroupId: billsGroupId,
     });
     await moveBudgetStructureItemIntoGroup(
@@ -1064,7 +1139,7 @@ describeDb("budget mutations", () => {
     const nested = await loadBudget(userId, MONTH);
     expect(
       nested.groups.find((group) => group.id === billsGroupId)?.parentGroupId,
-    ).toBe(spending.id);
+    ).toBe(spendingId);
     expect(nested.groups.find((group) => group.id === utilitiesId)?.parentGroupId).toBe(
       billsGroupId,
     );
@@ -1090,7 +1165,7 @@ describeDb("budget mutations", () => {
       moveBudgetStructureItem(
         userId,
         { kind: "category", id: billsEnvelope.id },
-        { kind: "group", id: income.id },
+        { kind: "group", id: incomeId },
         "inside",
       ),
     ).rejects.toThrow("cannot move");
@@ -1098,7 +1173,7 @@ describeDb("budget mutations", () => {
     await moveBudgetStructureItemIntoGroup(
       userId,
       { kind: "category", id: billsEnvelope.id },
-      spending.id,
+      spendingId,
     );
     await deleteCategoryGroup(userId, utilitiesId);
     await deleteCategoryGroup(userId, billsGroupId);
@@ -1115,10 +1190,12 @@ describeDb("budget mutations", () => {
       "before",
     );
     const reordered = await loadBudget(userId, MONTH);
+    // Both are at the section root: the move above put Bills beside Discretionary, which
+    // the presets leave ungrouped.
     const spendingOrder = budgetChildren(
       reordered.groups,
       reordered.categories,
-      spending.id,
+      null,
     ).map((child) => child.id);
     expect(spendingOrder.indexOf(billsEnvelope.id)).toBe(
       spendingOrder.indexOf(discretionary.id) - 1,
@@ -1159,15 +1236,19 @@ describeDb("budget mutations — cross-user isolation", () => {
     await autoMapBudgetCategories(ownerId, MONTH);
 
     const ids = await envelopes(ownerId);
-    const [group] = await db
-      .select({ id: financeBudgetCategories.groupId })
-      .from(financeBudgetCategories)
-      .where(eq(financeBudgetCategories.id, ids.get("Bills")!));
-    if (group?.id == null)
-      throw new Error("expected the seeded Bills envelope to have a group");
+    // The presets seed no groups, so the owner gets one here for the intruder to fail at.
+    const groupId = await createCategoryGroup(ownerId, {
+      name: "Owned group",
+      kind: "spending",
+    });
+    await moveBudgetStructureItemIntoGroup(
+      ownerId,
+      { kind: "category", id: ids.get("Bills")! },
+      groupId,
+    );
 
     owned = {
-      groupId: group.id,
+      groupId,
       categoryId: ids.get("Bills")!,
       transactionId: txId,
       accountId: checkingId,
@@ -1233,6 +1314,7 @@ describeDb("budget mutations — cross-user isolation", () => {
     await expect(
       createCategoryGroup(intruderId, {
         name: "Smuggled",
+        kind: "spending",
         parentGroupId: owned.groupId,
       }),
     ).rejects.toThrow(/does not exist/);

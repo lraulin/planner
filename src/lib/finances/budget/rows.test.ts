@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { buildBudget, findMonth, type BudgetMonth } from "./envelope";
 import {
   balanceTone,
-  budgetGridRows,
   budgetRows,
   budgetSections,
   budgetTotals,
@@ -19,6 +18,7 @@ const GROUPS: BudgetGroupRow[] = [
     id: "income",
     parentGroupId: null,
     name: "Income",
+    kind: "income",
     sortKey: "a",
     hidden: false,
   },
@@ -26,6 +26,7 @@ const GROUPS: BudgetGroupRow[] = [
     id: "spending",
     parentGroupId: null,
     name: "Spending",
+    kind: "spending",
     sortKey: "b",
     hidden: false,
   },
@@ -109,34 +110,6 @@ describe("budgetRows", () => {
     const rows = budgetRows(GROUPS, CATEGORIES, august());
     expect(rows.find((row) => row.id === "pay")?.isIncome).toBe(true);
     expect(rows.find((row) => row.id === "food")?.isIncome).toBe(false);
-  });
-});
-
-describe("budgetGridRows", () => {
-  it("interleaves group headers and counts only what is shown", () => {
-    const rows = budgetRows(GROUPS, CATEGORIES, august());
-    const grid = budgetGridRows(GROUPS, rows);
-
-    expect(grid.map((row) => `${row.kind}:${row.id}`)).toEqual([
-      "group:income",
-      "node:pay",
-      "group:spending",
-      "node:food",
-      "node:fun",
-    ]);
-    expect(grid.find((row) => row.id === "spending")).toMatchObject({ count: 2 });
-  });
-
-  it("shows a hidden envelope only when asked, so it can be brought back", () => {
-    const rows = budgetRows(GROUPS, CATEGORIES, august());
-    const grid = budgetGridRows(GROUPS, rows, { showHidden: true });
-    expect(grid.map((row) => row.id)).toContain("old");
-    expect(grid.find((row) => row.id === "spending")).toMatchObject({ count: 3 });
-  });
-
-  it("drops a group with nothing under it rather than drawing an empty header", () => {
-    const grid = budgetGridRows(GROUPS, []);
-    expect(grid).toEqual([]);
   });
 });
 
@@ -253,37 +226,78 @@ describe("budgetSections", () => {
 });
 
 describe("sectionGridRows", () => {
-  it("drops a lone top-level group header and unindents its rows", () => {
-    // Every spending row sits under one "Spending" group, and the section is already titled
-    // — two headers saying the same word, one above each table.
+  it("interleaves group headers and counts only what is shown", () => {
     const rows = budgetRows(GROUPS, CATEGORIES, august());
-    const spending = rows.filter((row) => !row.isIncome);
-    const grid = sectionGridRows(GROUPS, spending, { showHidden: true });
+    const grid = sectionGridRows(
+      GROUPS,
+      "spending",
+      rows.filter((row) => !row.isIncome),
+    );
 
-    expect(grid.every((row) => row.kind === "node")).toBe(true);
-    expect(grid.map((row) => row.depth)).toEqual([0, 0, 0]);
+    expect(grid.map((row) => `${row.kind}:${row.id}`)).toEqual([
+      "group:spending",
+      "node:food",
+      "node:fun",
+    ]);
+    expect(grid.find((row) => row.id === "spending")).toMatchObject({ count: 2 });
+  });
+
+  it("shows a hidden envelope only when asked, so it can be brought back", () => {
+    const rows = budgetRows(GROUPS, CATEGORIES, august());
+    const grid = sectionGridRows(
+      GROUPS,
+      "spending",
+      rows.filter((row) => !row.isIncome),
+      { showHidden: true },
+    );
+    expect(grid.map((row) => row.id)).toContain("old");
+    expect(grid.find((row) => row.id === "spending")).toMatchObject({ count: 3 });
+  });
+
+  it("hands each table only its own groups", () => {
+    // The Income group must not draw a header above the spending table, which is what would
+    // happen if every table were handed every group.
+    const grid = sectionGridRows(GROUPS, "spending", []);
+    expect(grid.map((row) => row.id)).toEqual(["spending"]);
+  });
+
+  it("still draws a group that has nothing under it", () => {
+    // The whole point: a group you cannot see is one you cannot add to or delete, and a
+    // group becomes deletable exactly when it empties.
+    const grid = sectionGridRows(GROUPS, "spending", []);
+    expect(grid).toEqual([
+      {
+        kind: "group",
+        id: "spending",
+        label: "Spending",
+        count: 0,
+        depth: 0,
+        collapsed: false,
+      },
+    ]);
   });
 
   it("keeps the headers when a section spans more than one group", () => {
     const groups: BudgetGroupRow[] = [
       ...GROUPS,
       {
-        id: "savings",
+        id: "extras",
         parentGroupId: null,
-        name: "Savings",
+        name: "Extras",
+        kind: "spending",
         sortKey: "c",
         hidden: false,
       },
     ];
-    const categories = [...CATEGORIES, category("rainy", "savings", "a")];
+    const categories = [...CATEGORIES, category("rainy", "extras", "a")];
     const rows = budgetRows(groups, categories, august()).filter(
       (row) => !row.isIncome,
     );
-    const grid = sectionGridRows(groups, rows, { showHidden: true });
+    const grid = sectionGridRows(groups, "spending", rows, { showHidden: true });
 
     expect(grid.filter((row) => row.kind === "group").map((row) => row.label)).toEqual([
       "Spending",
-      "Savings",
+      "Extras",
     ]);
   });
 });

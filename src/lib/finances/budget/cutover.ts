@@ -18,16 +18,14 @@
  * across the individual bills that are about to exist, and guessing would be worse than asking.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeBudgetCategories,
-  financeCategoryGroups,
   financePayees,
   type EnvelopeStatus,
 } from "@/db/schema";
 import * as sortKeyLib from "@/lib/tree/sortKey";
-import { groupPageSection } from "./hierarchy";
 import type { Target } from "./targets/types";
 
 type OldBillRow = {
@@ -194,43 +192,21 @@ export type CutoverReceipt = {
   renamedCatchAll: { from: string; to: string } | null;
 };
 
-async function requireSpendingGroupId(userId: string): Promise<string> {
-  const [groups, categories] = await Promise.all([
-    db
-      .select({
-        id: financeCategoryGroups.id,
-        parentGroupId: financeCategoryGroups.parentGroupId,
-        sortKey: financeCategoryGroups.sortKey,
-      })
-      .from(financeCategoryGroups)
-      .where(eq(financeCategoryGroups.userId, userId))
-      .orderBy(financeCategoryGroups.sortKey),
-    db
-      .select({
-        id: financeBudgetCategories.id,
-        groupId: financeBudgetCategories.groupId,
-        kind: financeBudgetCategories.kind,
-      })
-      .from(financeBudgetCategories)
-      .where(eq(financeBudgetCategories.userId, userId)),
-  ]);
-  const spending = groups.find((group) => {
-    if (group.parentGroupId !== null) return false;
-    const section = groupPageSection(groups, categories, group.id);
-    return section !== "income";
-  });
-  if (!spending) throw new Error("No spending group exists — set the budget up first.");
-  return spending.id;
-}
-
-async function lastSortKey(userId: string, groupId: string): Promise<string | null> {
+/**
+ * Last sort key at the spending section root.
+ *
+ * The cutover used to land everything in the seeded "Spending" group. Groups now state their
+ * own section (`agent-os/specs/2026-08-28-1613-group-kind/`) and that chrome group is gone, so
+ * the envelopes this creates sit at the section root — where a fresh budget puts them too.
+ */
+async function lastSortKey(userId: string): Promise<string | null> {
   const rows = await db
     .select({ sortKey: financeBudgetCategories.sortKey })
     .from(financeBudgetCategories)
     .where(
       and(
         eq(financeBudgetCategories.userId, userId),
-        eq(financeBudgetCategories.groupId, groupId),
+        isNull(financeBudgetCategories.groupId),
       ),
     );
   return (
@@ -270,8 +246,7 @@ export async function applyCommitmentsCutover(
         loadOldClaims(userId),
       ]);
 
-      const spendingGroupId = await requireSpendingGroupId(userId);
-      let cursor = await lastSortKey(userId, spendingGroupId);
+      let cursor = await lastSortKey(userId);
       const nextSortKey = () => {
         cursor = cursor === null ? sortKeyLib.first() : sortKeyLib.after(cursor);
         return cursor;
@@ -287,7 +262,7 @@ export async function applyCommitmentsCutover(
           .where(
             and(
               eq(financeBudgetCategories.userId, userId),
-              eq(financeBudgetCategories.groupId, spendingGroupId),
+              isNull(financeBudgetCategories.groupId),
               eq(financeBudgetCategories.name, bill.name),
               eq(financeBudgetCategories.kind, "bill"),
             ),
@@ -302,7 +277,7 @@ export async function applyCommitmentsCutover(
           .insert(financeBudgetCategories)
           .values({
             userId,
-            groupId: spendingGroupId,
+            groupId: null,
             name: bill.name,
             sortKey: nextSortKey(),
             kind: "bill",
@@ -341,7 +316,7 @@ export async function applyCommitmentsCutover(
           .where(
             and(
               eq(financeBudgetCategories.userId, userId),
-              eq(financeBudgetCategories.groupId, spendingGroupId),
+              isNull(financeBudgetCategories.groupId),
               eq(financeBudgetCategories.name, entry.name),
               eq(financeBudgetCategories.kind, "spending"),
             ),
@@ -388,7 +363,7 @@ export async function applyCommitmentsCutover(
             .insert(financeBudgetCategories)
             .values({
               userId,
-              groupId: spendingGroupId,
+              groupId: null,
               name: entry.name,
               sortKey: nextSortKey(),
               kind: "spending",
@@ -437,7 +412,7 @@ export async function applyCommitmentsCutover(
         .where(
           and(
             eq(financeBudgetCategories.userId, userId),
-            eq(financeBudgetCategories.groupId, spendingGroupId),
+            isNull(financeBudgetCategories.groupId),
             eq(financeBudgetCategories.name, "Bills"),
             eq(financeBudgetCategories.kind, "spending"),
           ),

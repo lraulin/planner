@@ -2568,6 +2568,20 @@ export const financeCategoryGroups = pgTable(
     ),
     /** The user's word for it. Nothing joins on it, so renaming is free. */
     name: text("name").notNull(),
+    /**
+     * Which budget table this group lives in.
+     *
+     * **Stored, not derived.** This used to be recomputed from the kinds of the envelopes
+     * inside the group (`groupPageSection`), which left an empty group with no answer and so
+     * with nowhere to render — a group you could create but not see, add to, or delete
+     * (`agent-os/specs/2026-08-28-1613-group-kind/`).
+     *
+     * The full four values rather than the three page sections: the page renders four tables
+     * and Bills is one of them, so a bill group and a regular-spending group are different
+     * things. An envelope's `kind` must equal its group's, and a child group's must equal its
+     * parent's; neither is a CHECK because both cross rows, so both are mutation guards.
+     */
+    kind: text("kind").$type<EnvelopeKind>().notNull(),
     /** Lexicographic sibling order, as everywhere else in this schema (`src/lib/tree/sortKey.ts`). */
     sortKey: text("sort_key").notNull(),
     /**

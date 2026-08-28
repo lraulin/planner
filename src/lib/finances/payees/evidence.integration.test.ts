@@ -60,7 +60,12 @@ async function makeAccount(userId: string): Promise<string> {
 async function makeEnvelope(userId: string, name: string): Promise<string> {
   const [group] = await db
     .insert(financeCategoryGroups)
-    .values({ userId, name: `${name} group ${crypto.randomUUID()}`, sortKey: "a0" })
+    .values({
+      userId,
+      name: `${name} group ${crypto.randomUUID()}`,
+      kind: "spending",
+      sortKey: "a0",
+    })
     .returning({ id: financeCategoryGroups.id });
   const [row] = await db
     .insert(financeBudgetCategories)

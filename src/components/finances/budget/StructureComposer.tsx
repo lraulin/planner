@@ -12,7 +12,7 @@ import type { EnvelopeKind } from "@/db/schema";
 export type ComposerTarget = {
   /** `group` creates a category group; anything else creates an envelope of that `kind`. */
   what: "envelope" | "group";
-  /** The section the new row lands in. Ignored when `what` is `group`. */
+  /** The section this lands in — an envelope's kind, or the new group's own. */
   kind: EnvelopeKind;
   /** The group it goes inside, or the section root. */
   groupId: string | null;
@@ -74,7 +74,7 @@ export function StructureComposer({
     startTransition(async () => {
       const result =
         target.what === "group"
-          ? await createCategoryGroupAction(trimmed, target.groupId)
+          ? await createCategoryGroupAction(trimmed, target.kind, target.groupId)
           : await createBudgetCategoryAction(target.groupId, trimmed, target.kind);
       if (!result.ok) {
         setError(result.error ?? "Could not create it.");

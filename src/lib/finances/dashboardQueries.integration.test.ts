@@ -231,7 +231,7 @@ describeDb("loadDashboard", () => {
       (payee) => payee.name === "SimpliSafe",
     );
     if (!alarmPayee) throw new Error("SimpliSafe payee was not seeded");
-    await createCategoryGroup(userId, { name: "Household" });
+    await createCategoryGroup(userId, { name: "Household", kind: "spending" });
     await upsertBillEnvelope(userId, {
       name: "SimpliSafe",
       payeeIds: [alarmPayee.id],
@@ -271,7 +271,7 @@ describeDb("loadDashboard", () => {
     const intruderId = await makeUser();
     await seed(ownerId);
     await reclassifyTransactions(ownerId);
-    await createCategoryGroup(ownerId, { name: "Household" });
+    await createCategoryGroup(ownerId, { name: "Household", kind: "spending" });
     await upsertBillEnvelope(ownerId, {
       name: "SimpliSafe",
       cadence: { unit: "month", n: 1 },

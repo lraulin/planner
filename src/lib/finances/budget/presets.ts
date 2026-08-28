@@ -15,14 +15,23 @@ import type { EnvelopeKind } from "@/db/schema";
 export const BUDGET_PRESETS = ["minimal", "detailed"] as const;
 export type BudgetPreset = (typeof BUDGET_PRESETS)[number];
 
-export type PresetCategory = {
-  name: string;
-  /** Section this envelope belongs to. Omitted means ordinary spending. */
-  kind?: EnvelopeKind;
-};
+export type PresetCategory = { name: string };
 
+/**
+ * A run of preset envelopes, and where they land.
+ *
+ * `name: null` puts them at their **section root** rather than in a group. A group that
+ * merely names the section it is in — "Income", "Spending", "Savings" — repeats the section
+ * heading and says nothing, which is why `sectionGridRows` used to hide it. Groups that
+ * organise *within* a section, like Home and Everyday, are kept
+ * (`agent-os/specs/2026-08-28-1613-group-kind/` D5).
+ *
+ * One `kind` for the group and everything in it: an envelope's kind must equal its group's,
+ * so the group is the only place it needs stating.
+ */
 export type PresetGroup = {
-  name: string;
+  name: string | null;
+  kind: EnvelopeKind;
   categories: readonly PresetCategory[];
 };
 
@@ -36,19 +45,17 @@ export type PresetGroup = {
  * someone digging out. Savings is fifth because it has to be assigned to exist at all.
  */
 const MINIMAL: readonly PresetGroup[] = [
+  { name: null, kind: "income", categories: [{ name: "Income" }] },
   {
-    name: "Income",
-    categories: [{ name: "Income", kind: "income" }],
-  },
-  {
-    name: "Spending",
+    name: null,
+    kind: "spending",
     categories: [
       { name: "Bills" },
       { name: "Recurring spend" },
       { name: "Discretionary" },
-      { name: "Savings", kind: "savings" },
     ],
   },
+  { name: null, kind: "savings", categories: [{ name: "Savings" }] },
 ];
 
 /**
@@ -58,12 +65,10 @@ const MINIMAL: readonly PresetGroup[] = [
  * because it is a good idea for this situation.
  */
 const DETAILED: readonly PresetGroup[] = [
-  {
-    name: "Income",
-    categories: [{ name: "Income", kind: "income" }],
-  },
+  { name: null, kind: "income", categories: [{ name: "Income" }] },
   {
     name: "Home",
+    kind: "spending",
     categories: [
       "Rent & Housing",
       "Utilities",
@@ -74,6 +79,7 @@ const DETAILED: readonly PresetGroup[] = [
   },
   {
     name: "Everyday",
+    kind: "spending",
     categories: [
       "Groceries",
       "Dining",
@@ -85,6 +91,7 @@ const DETAILED: readonly PresetGroup[] = [
   },
   {
     name: "Enjoyment",
+    kind: "spending",
     categories: [
       "Streaming & Media",
       "Entertainment",
@@ -98,14 +105,12 @@ const DETAILED: readonly PresetGroup[] = [
   },
   {
     name: "Obligations",
+    kind: "spending",
     categories: ["Taxes", "Fees & Interest", "Professional Services"].map((name) => ({
       name,
     })),
   },
-  {
-    name: "Savings",
-    categories: [{ name: "Savings", kind: "savings" }],
-  },
+  { name: null, kind: "savings", categories: [{ name: "Savings" }] },
 ];
 
 export const PRESET_GROUPS: Record<BudgetPreset, readonly PresetGroup[]> = {

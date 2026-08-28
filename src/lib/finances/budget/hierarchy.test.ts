@@ -16,11 +16,13 @@ function group(
   id: string,
   parentGroupId: string | null,
   sortKey: string,
+  kind: BudgetGroupRow["kind"] = "spending",
 ): BudgetGroupRow {
   return {
     id,
     parentGroupId,
     name: id,
+    kind,
     sortKey,
     hidden: false,
   };
@@ -157,17 +159,19 @@ describe("budget hierarchy", () => {
     });
   });
 
-  it("renders an envelope with no group at the section root", () => {
+  it("renders an envelope with no group at the section root, above the empty groups", () => {
     const ungrouped = category("rent", null, "A", "bill");
     expect(budgetChildren(groups, [ungrouped], null).map((item) => item.id)).toEqual([
       "rent",
       "spending",
     ]);
+    // The empty headers used to be dropped. They are kept now, because a group nobody can
+    // see is one nobody can add to or delete — see `2026-08-28-1613-group-kind/`.
     expect(
       nestedBudgetGridRows(groups, [ungrouped], [row("rent", null)]).map(
         (entry) => `${entry.kind}:${entry.id}`,
       ),
-    ).toEqual(["node:rent"]);
+    ).toEqual(["node:rent", "group:spending", "group:bills", "group:utilities"]);
   });
 
   it("allows dropping an envelope out of a group onto the root", () => {
@@ -183,7 +187,7 @@ describe("budget hierarchy", () => {
   });
 
   it("refuses moves across the income and spending boundary", () => {
-    const withIncome = [...groups, group("income", null, "Z")];
+    const withIncome = [...groups, group("income", null, "Z", "income")];
     const withIncomeCategories = [
       ...categories,
       category("pay", "income", "A", "income"),
@@ -201,13 +205,14 @@ describe("budget hierarchy", () => {
 });
 
 describe("moveDestinations", () => {
-  // Two sections that must never mix, and a nest deep enough to move a group into itself.
+  // A group states its own kind, so an empty one is not "unknown" — it is a savings group,
+  // and a bill may not move into it.
   const groups = [
-    group("income-grp", null, "A"),
+    group("income-grp", null, "A", "income"),
     group("spending-grp", null, "B"),
-    group("bills", "spending-grp", "A"),
-    group("utilities", "bills", "A"),
-    group("empty", null, "C"),
+    group("bills", null, "C", "bill"),
+    group("utilities", "bills", "A", "bill"),
+    group("empty-savings", null, "D", "savings"),
   ];
   const categories = [
     category("paycheck", "income-grp", "A", "income"),
@@ -224,40 +229,38 @@ describe("moveDestinations", () => {
     expect(ids).not.toContain("utilities");
   });
 
-  it("never offers a group across a section boundary", () => {
+  it("never offers a group of another kind", () => {
     const ids = moveDestinations(groups, categories, {
       kind: "category",
       id: "paycheck",
     }).map((entry) => entry.id);
-    expect(ids).not.toContain("spending-grp");
-    expect(ids).not.toContain("bills");
-    expect(ids).not.toContain("utilities");
+    expect(ids).toEqual([]);
   });
 
-  it("offers a group with no envelopes yet, whose section is not yet stated", () => {
+  it("does not offer an empty group of the wrong kind", () => {
+    // The old rule treated a group with no envelopes as "section unknown" and allowed it,
+    // because it had nothing to infer from. A stored kind has an answer.
     const ids = moveDestinations(groups, categories, {
       kind: "category",
-      id: "paycheck",
+      id: "groceries",
     }).map((entry) => entry.id);
-    expect(ids).toContain("empty");
+    expect(ids).not.toContain("empty-savings");
   });
 
-  it("treats a bill as spending, so it may move within the spending branch", () => {
+  it("offers only bill groups to a bill", () => {
     const ids = moveDestinations(groups, categories, {
       kind: "category",
       id: "electric",
     }).map((entry) => entry.id);
-    expect(ids).toContain("bills");
-    expect(ids).toContain("spending-grp");
-    expect(ids).not.toContain("income-grp");
+    expect(ids).toEqual(["bills"]);
   });
 
   it("omits the group the item already sits in", () => {
     const ids = moveDestinations(groups, categories, {
       kind: "category",
-      id: "groceries",
+      id: "electric",
     }).map((entry) => entry.id);
-    expect(ids).not.toContain("spending-grp");
+    expect(ids).not.toContain("utilities");
   });
 
   it("returns nothing for an item that is not in the structure", () => {

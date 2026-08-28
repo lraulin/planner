@@ -59,6 +59,8 @@ export type BudgetGroupRow = {
   id: string;
   parentGroupId: string | null;
   name: string;
+  /** Which budget table this group is in. Stored, not derived from its envelopes (D1). */
+  kind: EnvelopeKind;
   sortKey: string;
   hidden: boolean;
 };
@@ -181,6 +183,7 @@ function groupsOf(userId: string, executor: FinanceExecutor = db) {
       id: financeCategoryGroups.id,
       parentGroupId: financeCategoryGroups.parentGroupId,
       name: financeCategoryGroups.name,
+      kind: financeCategoryGroups.kind,
       sortKey: financeCategoryGroups.sortKey,
       hidden: financeCategoryGroups.hidden,
     })

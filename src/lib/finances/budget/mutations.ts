@@ -24,12 +24,11 @@ import { applyPayeeAutoCategories, applyPayeeClaims } from "../payees/claims";
 import { learnFromCategoryEdit } from "../payees/learn";
 import {
   budgetChildren,
-  groupPageSection,
   resolveBudgetDrop,
   type BudgetDropZone,
   type BudgetStructureRef,
 } from "./hierarchy";
-import { budgetRows, pageSectionOf } from "./rows";
+import { budgetRows } from "./rows";
 import {
   categoryMonth,
   findMonth,
@@ -106,6 +105,8 @@ async function requireGroup(userId: string, groupId: string) {
     .select({
       id: financeCategoryGroups.id,
       parentGroupId: financeCategoryGroups.parentGroupId,
+      name: financeCategoryGroups.name,
+      kind: financeCategoryGroups.kind,
     })
     .from(financeCategoryGroups)
     .where(
@@ -177,10 +178,13 @@ export async function seedBudget(
   userId: string,
   options: { preset: BudgetPreset; startMonth?: MonthKey; todayKey: string },
 ): Promise<SeedResult> {
+  // Envelopes, not groups: a preset may seed no groups at all now that a section-naming
+  // group is chrome (`agent-os/specs/2026-08-28-1613-group-kind/` D5), and `minimal` seeds
+  // none. Checking groups here would let `minimal` be seeded over and over.
   const existing = await db
-    .select({ id: financeCategoryGroups.id })
-    .from(financeCategoryGroups)
-    .where(eq(financeCategoryGroups.userId, userId))
+    .select({ id: financeBudgetCategories.id })
+    .from(financeBudgetCategories)
+    .where(eq(financeBudgetCategories.userId, userId))
     .limit(1);
   if (existing.length > 0) {
     throw new Error("This budget has already been set up.");
@@ -189,33 +193,48 @@ export async function seedBudget(
   const startMonth = options.startMonth ?? monthKeyOf(options.todayKey);
   const openingCents = await openingPositionFor(userId, startMonth);
   const groups = PRESET_GROUPS[options.preset];
-  const groupKeys = sortKey.sequence(groups.length);
+  // One sibling sequence across every root-level item, because a preset entry may now be a
+  // group *or* a run of envelopes sitting at the section root — per-entry sequences would
+  // hand two root envelopes the same key.
+  const rootSlots = groups.reduce(
+    (total, group) => total + (group.name === null ? group.categories.length : 1),
+    0,
+  );
+  const rootKeys = sortKey.sequence(rootSlots);
+  let rootSlot = 0;
 
   let categoryCount = 0;
 
   await db.transaction(async (tx) => {
-    for (const [index, group] of groups.entries()) {
-      const [inserted] = await tx
-        .insert(financeCategoryGroups)
-        .values({
-          userId,
-          name: group.name,
-          sortKey: groupKeys[index] ?? sortKey.first(),
-        })
-        .returning({ id: financeCategoryGroups.id });
-      if (!inserted) throw new Error("Could not create the budget groups.");
+    for (const group of groups) {
+      let groupId: string | null = null;
+      if (group.name !== null) {
+        const [inserted] = await tx
+          .insert(financeCategoryGroups)
+          .values({
+            userId,
+            name: group.name,
+            kind: group.kind,
+            sortKey: rootKeys[rootSlot++] ?? sortKey.first(),
+          })
+          .returning({ id: financeCategoryGroups.id });
+        if (!inserted) throw new Error("Could not create the budget groups.");
+        groupId = inserted.id;
+      }
 
-      const categoryKeys = sortKey.sequence(group.categories.length);
+      const nestedKeys = sortKey.sequence(group.categories.length);
       await tx.insert(financeBudgetCategories).values(
         group.categories.map((category, position) => ({
           userId,
-          groupId: inserted.id,
+          groupId,
           name: category.name,
-          // Groups and envelopes now share one sibling sequence. The old flat grid used a
+          // Groups and envelopes share one sibling sequence. The old flat grid used a
           // `group:category` composite key here; `:` is deliberately outside the fractional
           // key alphabet and made the first nested insertion impossible.
-          sortKey: categoryKeys[position] ?? sortKey.first(),
-          kind: category.kind ?? "spending",
+          sortKey:
+            (groupId === null ? rootKeys[rootSlot++] : nestedKeys[position]) ??
+            sortKey.first(),
+          kind: group.kind,
         })),
       );
       categoryCount += group.categories.length;
@@ -513,14 +532,27 @@ export async function setCarryover(
 
 // ─────────────────────────── Envelopes ───────────────────────────
 
+/**
+ * Create a group in one section.
+ *
+ * A group states its section rather than having it inferred from what is inside it
+ * (`agent-os/specs/2026-08-28-1613-group-kind/` D1), which is what lets a brand-new empty
+ * group render at all. A child group must match its parent: a Bills group inside a Savings
+ * group would be a group in two tables at once.
+ */
 export async function createCategoryGroup(
   userId: string,
-  params: { name: string; parentGroupId?: string | null },
+  params: { name: string; kind: EnvelopeKind; parentGroupId?: string | null },
 ): Promise<string> {
   const name = params.name.trim();
   if (name === "") throw new Error("A group needs a name.");
   const parentGroupId = params.parentGroupId ?? null;
-  if (parentGroupId) await requireGroup(userId, parentGroupId);
+  if (parentGroupId) {
+    const parent = await requireGroup(userId, parentGroupId);
+    if (parent.kind !== params.kind) {
+      throw new Error(`A group inside ${parent.name} has to be ${parent.kind}.`);
+    }
+  }
   const last = await lastBudgetChildSortKey(userId, parentGroupId);
 
   const [row] = await db
@@ -529,6 +561,7 @@ export async function createCategoryGroup(
       userId,
       parentGroupId,
       name,
+      kind: params.kind,
       sortKey: last === null ? sortKey.first() : sortKey.after(last),
     })
     .returning({ id: financeCategoryGroups.id });
@@ -562,7 +595,12 @@ export async function createBudgetCategory(
   if (name === "") throw new Error("An envelope needs a name.");
   const kind = params.kind ?? "spending";
   const groupId = params.groupId ?? null;
-  if (groupId !== null) await requireGroup(userId, groupId);
+  if (groupId !== null) {
+    const group = await requireGroup(userId, groupId);
+    if (group.kind !== kind) {
+      throw new Error(`${group.name} holds ${group.kind} envelopes, not ${kind}.`);
+    }
+  }
   const last = await lastBudgetChildSortKey(userId, groupId);
 
   const [row] = await db
@@ -594,28 +632,38 @@ export async function updateBudgetCategory(
   edit: BudgetCategoryEdit,
 ): Promise<void> {
   const category = await requireCategory(userId, categoryId);
+  const nextKind = edit.kind ?? category.kind;
+  let groupId = edit.groupId;
+
+  /*
+   * An envelope's kind must equal its group's, so a section change and a group both have to
+   * be checked against the same rule.
+   *
+   * Changing the section of an envelope that sits in a group **moves it to that section's
+   * root** rather than refusing. The user asked for the section change; the group cannot
+   * follow it into another table, and refusing would leave Change section dead-ending with
+   * nothing the user can do about it from that menu
+   * (`agent-os/specs/2026-08-28-1613-group-kind/` D2).
+   */
+  if (
+    groupId === undefined &&
+    nextKind !== category.kind &&
+    category.groupId !== null
+  ) {
+    groupId = null;
+  }
+
   let movedSortKey: string | undefined;
-  if (edit.groupId !== undefined && edit.groupId !== category.groupId) {
-    if (edit.groupId !== null) {
-      await requireGroup(userId, edit.groupId);
-      const structure = await budgetStructure(userId);
-      const nextKind = edit.kind ?? category.kind;
-      const destSection = groupPageSection(
-        structure.groups,
-        structure.categories,
-        edit.groupId,
-      );
-      if (
-        destSection !== null &&
-        destSection !== "mixed" &&
-        pageSectionOf(nextKind) !== destSection
-      ) {
+  if (groupId !== undefined && groupId !== category.groupId) {
+    if (groupId !== null) {
+      const group = await requireGroup(userId, groupId);
+      if (group.kind !== nextKind) {
         throw new Error(
-          "Income, spending and savings envelopes cannot share a branch.",
+          `${group.name} holds ${group.kind} envelopes, not ${nextKind}.`,
         );
       }
     }
-    const last = await lastBudgetChildSortKey(userId, edit.groupId);
+    const last = await lastBudgetChildSortKey(userId, groupId);
     movedSortKey = last === null ? sortKey.first() : sortKey.after(last);
   }
 
@@ -631,7 +679,7 @@ export async function updateBudgetCategory(
       ...(name === undefined ? {} : { name }),
       ...(edit.hidden === undefined ? {} : { hidden: edit.hidden }),
       ...(edit.notes === undefined ? {} : { notes: edit.notes.trim() }),
-      ...(edit.groupId === undefined ? {} : { groupId: edit.groupId }),
+      ...(groupId === undefined ? {} : { groupId }),
       ...(movedSortKey === undefined ? {} : { sortKey: movedSortKey }),
       ...(edit.kind === undefined ? {} : { kind: edit.kind }),
       ...(edit.kind === "income" ? { target: null } : {}),
@@ -780,6 +828,7 @@ async function budgetStructure(userId: string) {
         id: financeCategoryGroups.id,
         parentGroupId: financeCategoryGroups.parentGroupId,
         name: financeCategoryGroups.name,
+        kind: financeCategoryGroups.kind,
         sortKey: financeCategoryGroups.sortKey,
         hidden: financeCategoryGroups.hidden,
       })

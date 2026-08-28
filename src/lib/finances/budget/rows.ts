@@ -113,20 +113,6 @@ export function budgetRows(
 }
 
 /**
- * Group headers interleaved with their envelopes, as the shared grid wants them.
- *
- * `showHidden` keeps a retired envelope on screen so it can be un-hidden or deleted; without
- * it the only way back would be a database.
- */
-export function budgetGridRows<T extends BudgetRow>(
-  groups: readonly BudgetGroupRow[],
-  rows: readonly T[],
-  options: { showHidden: boolean } = { showHidden: false },
-): GridRow<T>[] {
-  return sectionGridRows(groups, rows, options);
-}
-
-/**
  * A bill row, narrowed so the bill columns need no null branch.
  *
  * The Bills table only ever holds `kind: "bill"` rows, so `bill` is present by construction.
@@ -176,24 +162,26 @@ export function budgetSections(rows: readonly BudgetRow[]): {
 }
 
 /**
- * One section's grid rows, with a lone top-level group header dropped.
+ * One section's grid rows: only the groups that belong to this table, empty ones included.
  *
- * When every row in a section sits under the same root group, that header repeats what the
- * section is already called — two "Spending" headers on one page, one above the bills and one
- * above the envelopes. Deeper nesting still renders, because then the headers are the only
- * thing saying which envelope belongs to what.
+ * This used to drop a **lone top-level group header**, because the seeded presets created a
+ * group named for the section itself — "Spending" above the spending table said nothing the
+ * heading did not. Groups now state their own kind and the presets no longer seed those
+ * (`agent-os/specs/2026-08-28-1613-group-kind/` D5, D6), so there is nothing left to suppress
+ * and the rule would instead hide a real group the user made and needs to reach.
  */
 export function sectionGridRows<T extends BudgetRow>(
   groups: readonly BudgetGroupRow[],
+  kind: EnvelopeKind,
   rows: readonly T[],
   options: { showHidden: boolean } = { showHidden: false },
 ): GridRow<T>[] {
-  const result = nestedBudgetGridRows(groups, rows, rows, options);
-  const headers = result.filter((row) => row.kind === "group");
-  if (headers.length !== 1 || headers[0]?.depth !== 0) return result;
-  return result
-    .filter((row) => row.kind !== "group")
-    .map((row) => ({ ...row, depth: Math.max(0, row.depth - 1) }));
+  return nestedBudgetGridRows(
+    groups.filter((group) => group.kind === kind),
+    rows,
+    rows,
+    options,
+  );
 }
 
 /**

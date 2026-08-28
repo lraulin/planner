@@ -2,7 +2,7 @@ import type { GridRow } from "@/lib/tree/slice";
 import { compare as compareSortKeys } from "@/lib/tree/sortKey";
 
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
-import { pageSectionOf, type BudgetRow } from "./rows";
+import type { BudgetRow } from "./rows";
 
 export type BudgetStructureRef =
   { kind: "group"; id: string } | { kind: "category"; id: string };
@@ -29,7 +29,7 @@ function compareItems(left: StructureItem, right: StructureItem): number {
 }
 
 export function budgetChildren(
-  groups: readonly BudgetGroupRow[],
+  groups: readonly Pick<BudgetGroupRow, "id" | "parentGroupId" | "sortKey">[],
   categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "sortKey">[],
   parentGroupId: string | null,
 ): StructureItem[] {
@@ -137,6 +137,13 @@ export function budgetEnvelopeLabel(
 /**
  * Recursive Budget rows for DataGrid. A group count is every visible descendant envelope,
  * not merely its direct children, so the collapsed header describes the same rows it hides.
+ *
+ * **An empty group still emits its header.** It used to be dropped, which was invisible while
+ * `BudgetStructureDrawer` listed groups directly — once structure editing moved onto the
+ * tables, a dropped header meant a group you could create but never see, add to, or delete,
+ * and "only an empty group may be deleted" became unreachable
+ * (`agent-os/specs/2026-08-28-1613-group-kind/`). Pass this only the groups of one section,
+ * or a group will render in every table at once.
  */
 export function nestedBudgetGridRows<T extends BudgetRow>(
   groups: readonly BudgetGroupRow[],
@@ -195,11 +202,6 @@ export function nestedBudgetGridRows<T extends BudgetRow>(
       count += 1;
     }
 
-    if (count === 0) {
-      result.splice(headerIndex, 1);
-      emitted.delete(groupId);
-      return 0;
-    }
     const header = result[headerIndex];
     if (header?.kind === "group") header.count = count;
     return count;
@@ -215,23 +217,6 @@ export function nestedBudgetGridRows<T extends BudgetRow>(
     result.push({ kind: "node", id: row.id, node: row, depth: 0 });
   }
   return result;
-}
-
-/** Resolve a desktop drop without trusting the client to name a parent or sort key. */
-export function groupPageSection(
-  groups: readonly Pick<BudgetGroupRow, "id" | "parentGroupId">[],
-  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "kind">[],
-  groupId: string,
-): "income" | "spending" | "savings" | "mixed" | null {
-  const ids = descendantEnvelopeIds(groups, categories, groupId);
-  let section: "income" | "spending" | "savings" | null = null;
-  for (const category of categories) {
-    if (!ids.has(category.id)) continue;
-    const next = pageSectionOf(category.kind);
-    if (section === null) section = next;
-    else if (section !== next) return "mixed";
-  }
-  return section;
 }
 
 export function resolveBudgetDrop(
@@ -259,21 +244,14 @@ export function resolveBudgetDrop(
       ? targetGroup!.id
       : (targetGroup?.parentGroupId ?? targetCategory?.groupId ?? null);
 
-  const sourceSection = movingCategory
-    ? pageSectionOf(movingCategory.kind)
-    : groupPageSection(groups, categories, movingGroup!.id);
-  const destinationSection = parentGroupId
-    ? groupPageSection(groups, categories, parentGroupId)
+  // One column comparison, where this used to walk every descendant envelope to guess a
+  // section: a group states its own (`agent-os/specs/2026-08-28-1613-group-kind/` D7). The
+  // section root accepts anything of its own kind, which is what a null parent means here.
+  const movingKind = movingCategory ? movingCategory.kind : movingGroup!.kind;
+  const destinationKind = parentGroupId
+    ? (groupById.get(parentGroupId)?.kind ?? null)
     : null;
-  if (
-    sourceSection !== null &&
-    destinationSection !== null &&
-    sourceSection !== "mixed" &&
-    destinationSection !== "mixed" &&
-    sourceSection !== destinationSection
-  ) {
-    return null;
-  }
+  if (destinationKind !== null && destinationKind !== movingKind) return null;
 
   if (movingGroup && parentGroupId) {
     const descendants = descendantGroupIds(groups, movingGroup.id);
@@ -310,9 +288,9 @@ export function resolveBudgetDrop(
  * The groups a "Move to group…" menu may legally offer for one item.
  *
  * Two refusals, both of which the drag path (`resolveBudgetDrop`) already enforces: a group
- * may not move inside itself or any of its own descendants, and an item may not cross a
- * section boundary — income, spending and savings do not share a branch. A destination whose
- * section is unknown (empty) or `mixed` is allowed, because neither states a conflict.
+ * may not move inside itself or any of its own descendants, and an item may not cross into a
+ * group of another kind — a group is in exactly one budget table and holds only what belongs
+ * in that table.
  *
  * The item's current parent is excluded too: moving somewhere it already is, is not a move.
  */
@@ -340,22 +318,10 @@ export function moveDestinations(
     : new Set<string>();
   if (movingGroup) excluded.add(movingGroup.id);
 
-  const movingSection = movingCategory
-    ? pageSectionOf(movingCategory.kind)
-    : groupPageSection(groups, categories, movingGroup!.id);
+  const movingKind = movingCategory ? movingCategory.kind : movingGroup!.kind;
 
-  return groups.filter((entry) => {
-    if (excluded.has(entry.id)) return false;
-    if (entry.id === parentId) return false;
-    const destination = groupPageSection(groups, categories, entry.id);
-    if (
-      movingSection === null ||
-      destination === null ||
-      movingSection === "mixed" ||
-      destination === "mixed"
-    ) {
-      return true;
-    }
-    return movingSection === destination;
-  });
+  return groups.filter(
+    (entry) =>
+      entry.kind === movingKind && !excluded.has(entry.id) && entry.id !== parentId,
+  );
 }

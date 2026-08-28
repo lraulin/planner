@@ -92,7 +92,7 @@ async function seed(userId: string): Promise<void> {
   if (gift) {
     await updateTransaction(userId, gift.id, { flowOverride: "income" });
   }
-  await createCategoryGroup(userId, { name: "Household" });
+  await createCategoryGroup(userId, { name: "Household", kind: "spending" });
   await upsertBillEnvelope(userId, {
     name: "SimpliSafe",
     cadence: { unit: "month", n: 1 },
