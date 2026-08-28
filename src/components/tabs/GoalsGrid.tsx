@@ -25,6 +25,7 @@ import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { setGoalFieldAction } from "@/app/plan/outline/detail-actions";
 import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
+import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
 import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 import { LetterRankCell } from "@/components/grid/LetterRankCell";
@@ -95,6 +96,7 @@ function buildColumns(today: string | null): ColumnDef<GoalsCtx>[] {
         <NameCell
           node={row.node}
           depth={row.node.depth}
+          dragHandle
           editing={row.node.id === ctx.editingId}
           onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
           onOpenDetail={() => ctx.onOpenDetail(row.node)}
@@ -217,6 +219,17 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     defaultsFor: viewDefaults,
   });
   const gridState = views.grid;
+  // Goals nest under result areas and under each other exactly as projects do, so they
+  // get the same drag: structural move plus a sibling priority renumber.
+  const rowDrag = useTreeRowDrag({
+    nodes: tab.nodes,
+    byId: tab.byId,
+    apply: tab.apply,
+    patch: tab.patch,
+    selectOne: tab.selectOne,
+    headerSorts: gridState.sorts,
+    clearHeaderSort: gridState.clearSort,
+  });
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("goals");
 
   const preparedRows = useMemo(
@@ -311,6 +324,8 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         selectedIds={tab.selectedIds}
         selectAllState={tab.headerState}
         onToggleSelectAll={tab.toggleSelectAll}
+        gutter="handle"
+        rowDrag={rowDrag}
         onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Goals"

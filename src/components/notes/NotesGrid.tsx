@@ -901,6 +901,7 @@ export function NotesGrid({
         selectedIds={selectedIds}
         selectAllState={headerState}
         onToggleSelectAll={toggleSelectAll}
+        gutter="handle"
         onSelect={select}
         onOpenDetail={openDetail}
         ariaLabel="Notes"

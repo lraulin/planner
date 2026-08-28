@@ -128,7 +128,11 @@ type RowDragBinding = {
 
 const EMPTY_EXPORT_COMMANDS: Command[] = [];
 
-/** Left gutter: a 14px checkbox with a bit of padding, not a rank index. */
+/**
+ * Left gutter: wide enough for a 14px checkbox with padding, and — in `handle` mode — a
+ * grab bar big enough to actually catch a press. One width for both, so the drop-line
+ * offsets (`nameColumnLeft`) and the header/body templates do not have to care which.
+ */
 const HANDLE_WIDTH = "1.75rem";
 
 /** Dwell on a collapsed row before it opens under a drag. */
@@ -231,6 +235,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   rowExpansion,
   selectAllState,
   onToggleSelectAll,
+  gutter = "checkbox",
   exportCommands: registerExportCommands = true,
   commandScope,
   exportFocused = false,
@@ -277,6 +282,16 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   selectAllState?: SelectAllState;
   /** Header / compact select-all click. Hosts pass `useMultiSelect().toggleSelectAll`. */
   onToggleSelectAll?: () => void;
+  /**
+   * Desktop left-gutter chrome. `"checkbox"` is a selection box with a header select-all.
+   * `"handle"` is a plain grab bar: click selects (Shift range, ⌘/Ctrl toggle) and the
+   * whole width is the HTML5 drag source.
+   *
+   * **A grid that passes `rowDrag` must use `"handle"`.** A control in the gutter leaves
+   * no grabbable track — that is how the checkbox broke Outline and Chooser drag. Compact
+   * rows have no gutter and keep their checkbox either way.
+   */
+  gutter?: "checkbox" | "handle";
   /**
    * Register File ▸ Export / Copy for this grid. Default true so a lone grid keeps
    * the catalog complete. Two grids on one page pass `commandScope` so each export
@@ -450,6 +465,18 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   const filters = controlledFilters ?? ownFilters;
 
   const [dragIds, setDragIds] = useState<readonly string[] | null>(null);
+  /**
+   * The same ids, readable from a row that has not re-rendered. `DataRow` is memoised and
+   * `dragBindingEqual` deliberately compares only `dragging` / `hint`, so a target row keeps
+   * the binding it was built with — one whose captured `dragIds` is still `null`. Reading
+   * the closure there refused every hover, which is what took drag-and-drop away. Written
+   * synchronously beside the state, because `dragover` can arrive before an effect runs.
+   */
+  const dragIdsRef = useRef<readonly string[] | null>(null);
+  const startDrag = useCallback((ids: readonly string[]) => {
+    dragIdsRef.current = ids;
+    setDragIds(ids);
+  }, []);
   const [dropHint, setDropHint] = useState<DropHint | null>(null);
   const holdExpandId = useRef<string | null>(null);
   const holdExpandTimer = useRef<number | null>(null);
@@ -936,6 +963,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
 
   function endDrag() {
     clearHoldExpand();
+    dragIdsRef.current = null;
     setDragIds(null);
     setDropHint(null);
   }
@@ -946,8 +974,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * and the selection collapses to it so the user sees what will move.
    */
   function dragIdsFor(primaryId: string, nodeOrder: readonly string[]): string[] {
-    if (selectedIds && selectedIds.has(primaryId) && selectedIds.size > 1) {
-      return nodeOrder.filter((id) => selectedIds.has(id));
+    const selection = selectedIdsRef.current;
+    if (selection && selection.has(primaryId) && selection.size > 1) {
+      return nodeOrder.filter((id) => selection.has(id));
     }
     return [primaryId];
   }
@@ -966,9 +995,10 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     const forget = () =>
       setDropHint((current) => (current?.targetId === rowId ? null : current));
 
-    const activeDrag = dragIds;
+    // `dragIds` here is render state, for the visuals below; every callback reads
+    // `dragIdsRef` instead so it still works on a row the memo skipped.
     const isDragging =
-      activeDrag !== null && (activeDrag.includes(rowId) || activeDrag[0] === rowId);
+      dragIds !== null && (dragIds.includes(rowId) || dragIds[0] === rowId);
 
     return {
       dragging: isDragging,
@@ -979,16 +1009,18 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
       onHandleMouseDown: () => {
         // Selection for multi-drag is decided at mousedown on the handle, before dragstart,
         // so a plain click-to-select on an unselected handle still works as single-drag.
-        if (!selectedIds?.has(rowId)) onSelect(rowId);
+        if (!selectedIdsRef.current?.has(rowId)) onSelectRef.current(rowId);
       },
       onStart: () => {
         const ids = dragIdsFor(rowId, nodeOrder);
-        setDragIds(ids);
-        if (ids.length === 1 && (!selectedIds || !selectedIds.has(rowId))) {
-          onSelect(rowId);
+        startDrag(ids);
+        const selection = selectedIdsRef.current;
+        if (ids.length === 1 && (!selection || !selection.has(rowId))) {
+          onSelectRef.current(rowId);
         }
       },
       onOver: (zone) => {
+        const activeDrag = dragIdsRef.current;
         if (!activeDrag || activeDrag.length === 0) return false;
         // Expand even when the hover is not yet a legal drop — the children that appear
         // are what the pointer is looking for.
@@ -1018,7 +1050,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         forget();
       },
       onDrop: (zone) => {
-        const ids = activeDrag;
+        const ids = dragIdsRef.current;
         endDrag();
         if (ids && ids.length > 0) rowDrag.onDrop(ids, rowId, zone);
       },
@@ -1139,11 +1171,18 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
             controls={columnControls}
             enableFilters={enableFilters}
             leadingGutter={
-              <SelectionCheckbox
-                state={selectAllState ?? "none"}
-                onSelect={() => onToggleSelectAll?.()}
-                ariaLabel="Select all"
-              />
+              gutter === "checkbox" ? (
+                <SelectionCheckbox
+                  state={selectAllState ?? "none"}
+                  onSelect={() => onToggleSelectAll?.()}
+                  ariaLabel="Select all"
+                />
+              ) : (
+                // `false` still draws the empty track, which is what a grab-bar gutter
+                // wants — a header checkbox over a column of drag handles selects nothing
+                // the handles below it can act on.
+                false
+              )
             }
           />
         )}
@@ -1263,6 +1302,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                         columnCtx={columnCtx}
                         gridTemplate={gridTemplate}
                         handleWidth={handleWidth}
+                        gutter={gutter}
                         selected={isSelected}
                         focused={isFocus}
                         onSelect={selectRow}
@@ -1342,6 +1382,7 @@ type DataRowProps<TCtx, TRow> = {
   columnCtx: TCtx;
   gridTemplate: string;
   handleWidth: string;
+  gutter: "checkbox" | "handle";
   selected: boolean;
   /** Keyboard-focus row — the one that scrolls into view. Defaults to `selected`. */
   focused?: boolean;
@@ -1369,6 +1410,7 @@ const DataRow = memo(
     columnCtx,
     gridTemplate,
     handleWidth,
+    gutter,
     selected,
     focused = selected,
     onSelect,
@@ -1516,6 +1558,7 @@ const DataRow = memo(
         <RowSelectedContext.Provider value={selected}>
           <RowDragHandleContext.Provider value={handleApi}>
             <RowHandle
+              gutter={gutter}
               selected={selected}
               onSelect={(mods) => onSelect(row.id, mods)}
             />
@@ -1555,6 +1598,7 @@ const DataRow = memo(
       prev.columnCtx === next.columnCtx &&
       prev.gridTemplate === next.gridTemplate &&
       prev.handleWidth === next.handleWidth &&
+      prev.gutter === next.gutter &&
       prev.selected === next.selected &&
       prev.focused === next.focused &&
       prev.onSelect === next.onSelect &&
@@ -1568,27 +1612,45 @@ const DataRow = memo(
 ) as <TCtx, TRow>(props: DataRowProps<TCtx, TRow>) => React.ReactElement;
 
 /**
- * Left gutter shared by every desktop row: checkbox (with Shift-range / toggle) and
- * drag handle. When the row offers drag, this element is the HTML5 drag source (not
- * the row); the checkbox itself does not start a drag.
+ * Left gutter shared by every desktop row, in one of two modes.
+ *
+ * `checkbox` — a selection box with Shift-range / toggle, for the catalogs. The track
+ * beside the box selects too, so the whole gutter stays live.
+ *
+ * `handle` — a plain grab bar for grids that offer row drag. This element is then the
+ * HTML5 drag source (not the row), and it stays empty on purpose: a 14px control centred
+ * in a 28px track leaves ~6px of grabbable gutter on each side, which is what took
+ * drag-to-reorder away from the Outline and the Chooser.
  */
 function RowHandle({
+  gutter,
   selected,
   onSelect,
 }: {
+  gutter: "checkbox" | "handle";
   selected: boolean;
   onSelect: (mods?: GridSelectMods) => void;
 }) {
   const api = useContext(RowDragHandleContext);
   const canDrag = api !== null;
+  const showsCheckbox = gutter === "checkbox";
 
   return (
     <div
       data-row-handle
       role="gridcell"
       draggable={canDrag || undefined}
-      aria-label="Select row"
-      title={canDrag ? "Drag to reorder · click the box to select" : "Select row"}
+      aria-label={showsCheckbox ? "Select row" : "Row handle"}
+      title={canDrag ? "Drag to reorder · click to select" : "Click to select"}
+      onClick={(event) => {
+        // The row body ignores clicks landing here, so the gutter owns its own selection.
+        // In checkbox mode the box has already stopped its click; this is the track beside it.
+        event.stopPropagation();
+        onSelect({
+          extend: event.shiftKey,
+          toggle: event.metaKey || event.ctrlKey,
+        });
+      }}
       onContextMenu={(event) => {
         // Same Ctrl/⌘+click → multi-select rule as the row body (macOS synthesises a
         // contextmenu for Ctrl+click and skips the click event).
@@ -1603,7 +1665,6 @@ function RowHandle({
           ? (event) => {
               if (event.button !== 0) return;
               if (event.shiftKey || event.metaKey || event.ctrlKey) return;
-              if ((event.target as HTMLElement).closest("input")) return;
               api.onHandleMouseDown();
             }
           : undefined
@@ -1615,16 +1676,18 @@ function RowHandle({
         selected ? "bg-select-edge/10" : "hover:bg-surface-raised",
       ].join(" ")}
     >
-      <SelectionCheckbox
-        state={selected}
-        ariaLabel="Select row"
-        onSelect={(event) =>
-          onSelect({
-            extend: event.shiftKey,
-            toggle: !event.shiftKey,
-          })
-        }
-      />
+      {showsCheckbox ? (
+        <SelectionCheckbox
+          state={selected}
+          ariaLabel="Select row"
+          onSelect={(event) =>
+            onSelect({
+              extend: event.shiftKey,
+              toggle: !event.shiftKey,
+            })
+          }
+        />
+      ) : null}
     </div>
   );
 }

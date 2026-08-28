@@ -362,6 +362,7 @@ export function WishesGrid({
         selectedIds={selectedIds}
         selectAllState={headerState}
         onToggleSelectAll={toggleSelectAll}
+        gutter="handle"
         onSelect={select}
         onOpenDetail={(id) => {
           const wish = rows.find((row) => row.id === id);

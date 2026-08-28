@@ -404,6 +404,7 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         selectedIds={tab.selectedIds}
         selectAllState={tab.headerState}
         onToggleSelectAll={tab.toggleSelectAll}
+        gutter="handle"
         onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Projects"

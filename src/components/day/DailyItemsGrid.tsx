@@ -518,6 +518,7 @@ export function DailyItemsGrid({
           selectedIds={selectedIds}
           selectAllState={headerState}
           onToggleSelectAll={toggleSelectAll}
+          gutter="handle"
           onSelect={select}
           ariaLabel="Today's task list"
           rowDrag={rowDrag}

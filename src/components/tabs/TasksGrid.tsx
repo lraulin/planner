@@ -464,6 +464,7 @@ export function TasksGrid({
         selectedIds={tab.selectedIds}
         selectAllState={tab.headerState}
         onToggleSelectAll={tab.toggleSelectAll}
+        gutter="handle"
         onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Tasks"

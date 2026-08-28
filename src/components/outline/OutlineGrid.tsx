@@ -1043,6 +1043,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         selectedIds={selectedIds}
         selectAllState={headerState}
         onToggleSelectAll={toggleSelectAll}
+        gutter="handle"
         onSelect={select}
         onOpenDetail={(id) => {
           selectOne(id);

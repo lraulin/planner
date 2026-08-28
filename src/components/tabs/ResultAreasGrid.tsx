@@ -23,6 +23,7 @@ import { NameCell, TextCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { setResultAreaFieldsAction } from "@/app/plan/outline/detail-actions";
 import { useGridTab } from "./useGridTab";
+import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
 import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
@@ -86,6 +87,7 @@ function buildColumns(): ColumnDef<ResultAreasCtx>[] {
         <NameCell
           node={row.node}
           depth={0}
+          dragHandle
           editing={row.node.id === ctx.editingId}
           onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
           onOpenDetail={() => ctx.onOpenDetail(row.node)}
@@ -180,6 +182,17 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
     defaultsFor: viewDefaults,
   });
   const gridState = views.grid;
+  // Sub-areas are the one nesting this module expresses, and reordering the top level is
+  // how the areas get ranked — the same drag the other tree tabs have.
+  const rowDrag = useTreeRowDrag({
+    nodes: tab.nodes,
+    byId: tab.byId,
+    apply: tab.apply,
+    patch: tab.patch,
+    selectOne: tab.selectOne,
+    headerSorts: gridState.sorts,
+    clearHeaderSort: gridState.clearSort,
+  });
   const preparedRows = useMemo(
     () =>
       treeGridRows(tab.nodes, {
@@ -249,6 +262,8 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
         selectedIds={tab.selectedIds}
         selectAllState={tab.headerState}
         onToggleSelectAll={tab.toggleSelectAll}
+        gutter="handle"
+        rowDrag={rowDrag}
         onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Result Areas"

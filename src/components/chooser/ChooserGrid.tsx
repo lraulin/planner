@@ -413,6 +413,7 @@ export function ChooserGrid({
           selectedIds={tab.selectedIds}
           selectAllState={tab.headerState}
           onToggleSelectAll={tab.toggleSelectAll}
+          gutter="handle"
           onSelect={tab.select}
           onOpenDetail={tab.openDetail}
           ariaLabel="Task Chooser"

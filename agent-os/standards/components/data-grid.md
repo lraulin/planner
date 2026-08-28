@@ -73,6 +73,31 @@ rank among the destination parent's children (`useTreeRowDrag`, `lib/tree/outlin
   panel (AG Grid's pattern) is still out: it gives one gesture two meanings depending on
   where you let go, and grouping is a toolbar picker here for exactly that reason.
 
+### The left gutter
+
+Every desktop row opens with a 1.75rem gutter, in one of two modes (`DataGrid`'s `gutter`
+prop; compact rows have no gutter and always carry a checkbox).
+
+- **`handle`** — empty, and the whole track is the HTML5 drag source. Clicking it selects,
+  with Shift for a range and ⌘/Ctrl to toggle. The Plan module, the Task Chooser, Notes and
+  Day.
+- **`checkbox`** — a selection box with a tri-state header select-all, and the track beside
+  the box selects too. Everything else: Register, the Budget tables, and the catalogs.
+
+**A grid that offers row drag never puts a control in its gutter.** A 14px checkbox centred
+in a 28px track leaves ~6px of grabbable gutter on each side, and a form control does not
+hand its press to a `draggable` ancestor at all. This is not hypothetical: it is what took
+drag away from the Outline and the Chooser, and dropping the header checkbox costs nothing
+because `⌘A` is a registered Item command (`navigation.md`).
+
+**A drag binding must not be read out of the memoised row's closure.** `DataRow`'s memo
+compares only `dragging` and `hint`, so a row the pointer merely travels over never
+re-renders during a drag and keeps whatever the binding captured before `dragstart` — for
+the active ids, `null`, which refuses every hover. `DataGrid` keeps them in `dragIdsRef` and
+writes it synchronously beside the state, because `dragover` can arrive before an effect
+runs. The same applies to anything else a drag callback reads: take it from a ref, not the
+render that built the row.
+
 ## Grouping
 
 - **Up to three levels**, chosen from progressive `Group by` / `then by` selects that appear
