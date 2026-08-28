@@ -52,11 +52,12 @@ function envelope(name: string, activityCents: number): BudgetRow {
     activityCents,
     balanceCents: 0,
     carryover: false,
-    templates: [],
+    target: null,
     goalCents: null,
     kind: "income",
     bill: null,
     nextDueKey: null,
+    expectedKey: null,
   };
 }
 

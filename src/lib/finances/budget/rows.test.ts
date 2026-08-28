@@ -45,7 +45,7 @@ function category(
     sortKey,
     hidden,
     notes: "",
-    templates: [],
+    target: null,
     kind,
     isIncome: kind === "income",
     bill: null,

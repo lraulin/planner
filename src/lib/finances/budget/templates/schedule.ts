@@ -42,6 +42,11 @@ export type BillSnapshot = {
   expectedCents: number;
   /** The next charge at or after today — `billAnchor(...).nextDueKey` from `commitments.ts`. */
   nextDueKey: string;
+  /**
+   * The charge being waited for; may be in the past. Demand counting uses this, not
+   * `nextDueKey`, so a late unpaid bill keeps asking.
+   */
+  expectedKey?: string | null;
 };
 
 export type BillDemandResult = {

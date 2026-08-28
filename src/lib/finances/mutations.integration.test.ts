@@ -687,7 +687,7 @@ describeDb("next due keys for the bills grid", () => {
         notes: "",
         kind: "bill",
         isIncome: false,
-        templates: [],
+        target: null,
         bill: {
           status: "paused",
           cancelledOn: null,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { BillSnapshot } from "../templates/schedule";
-import type { Template } from "../templates/types";
+import type { BillSnapshot } from "../targets/derive";
+import type { Target } from "../targets/types";
 import {
   planAssign,
   neededAssigned,
@@ -13,38 +13,22 @@ import type { AssignEnvelope, AssignHistoryMonth } from "./types";
 const MONTH = "2026-08-01";
 const TODAY = "2026-08-24";
 
-const simple = (cents: number, id = "s1"): Template => ({
-  id,
-  directive: "template",
-  type: "simple",
-  priority: 0,
-  monthlyCents: cents,
-});
-
-const by = (cents: number, month: string, id = "b1"): Template => ({
-  id,
-  directive: "template",
-  type: "by",
-  priority: 0,
+const addMonthly = (cents: number): Target => ({
+  behavior: "add",
+  cadence: { unit: "month", day: 31 },
   amountCents: cents,
-  month,
 });
 
-const weekly = (cents: number, weekday: number, id = "w1"): Template => ({
-  id,
-  directive: "template",
-  type: "weekly",
-  priority: 0,
+const byDate = (cents: number, month: string): Target => ({
+  behavior: "balance",
+  cadence: { unit: "by", month },
   amountCents: cents,
-  weekday,
 });
 
-const remainder = (weight = 1, id = "r1"): Template => ({
-  id,
-  directive: "template",
-  type: "remainder",
-  priority: null,
-  weight,
+const weeklyUpTo = (cents: number, weekday: number): Target => ({
+  behavior: "upTo",
+  cadence: { unit: "week", weekday },
+  amountCents: cents,
 });
 
 function envelope(overrides: Partial<AssignEnvelope> = {}): AssignEnvelope {
@@ -54,7 +38,7 @@ function envelope(overrides: Partial<AssignEnvelope> = {}): AssignEnvelope {
     kind: "spending",
     hidden: false,
     status: "active",
-    templates: [simple(50_000)],
+    target: addMonthly(50_000),
     assignedCents: 0,
     activityCents: 0,
     balanceCents: 0,
@@ -69,7 +53,7 @@ function bill(overrides: Partial<AssignEnvelope> = {}): AssignEnvelope {
     id: "rent",
     name: "Rent",
     kind: "bill",
-    templates: [],
+    target: null,
     nextDueKey: "2026-08-01",
     ...overrides,
   });
@@ -146,7 +130,7 @@ describe("Underfunded", () => {
     const overspent = envelope({
       id: "fun",
       name: "Fun",
-      templates: [],
+      target: null,
       assignedCents: 0,
       activityCents: -10_000,
       balanceCents: -10_000,
@@ -167,10 +151,11 @@ describe("Underfunded", () => {
   it("counts a remaining underfunded ask without planning an assign", () => {
     const rent = bill({ nextDueKey: "2026-08-01" });
     const bills = new Map([["rent", snapshot("rent", 210_000, "2026-08-01")]]);
-    expect(underfundedGapCents(MONTH, [rent], bills)).toBe(210_000);
+    expect(underfundedGapCents(MONTH, TODAY, [rent], bills)).toBe(210_000);
     expect(
       underfundedGapCents(
         MONTH,
+        TODAY,
         [bill({ nextDueKey: "2026-09-01" })],
         new Map([["rent", snapshot("rent", 210_000, "2026-09-01")]]),
       ),
@@ -218,7 +203,7 @@ describe("Underfunded", () => {
     const result = run("underfunded", [
       bill({ id: "paused", name: "Paused", status: "paused" }),
       bill({ id: "gone", name: "Gone", status: "cancelled" }),
-      envelope({ id: "pay", name: "Pay", kind: "income", templates: [] }),
+      envelope({ id: "pay", name: "Pay", kind: "income", target: null }),
       envelope({ id: "old", name: "Old", hidden: true }),
       envelope(),
     ]);
@@ -245,7 +230,7 @@ describe("Underfunded", () => {
     const saveBy = envelope({
       id: "house",
       name: "House",
-      templates: [by(1_200_000, "2026-12")],
+      target: byDate(1_200_000, "2026-12"),
     });
     const groceries = envelope();
     const result = run("underfunded", [groceries, saveBy, laterBill, soonerBill], {
@@ -265,12 +250,12 @@ describe("Underfunded", () => {
     expect(result.lines.slice(1).every((line) => line.status === "skipped")).toBe(true);
   });
 
-  it("remainder only gets leftover Ready to Assign and never goes negative", () => {
+  it("leaves leftover Ready to Assign unassigned instead of spreading a remainder", () => {
     const save = envelope({
       id: "save",
       name: "Savings",
       kind: "savings",
-      templates: [remainder()],
+      target: null,
     });
     const result = run("underfunded", [envelope(), save], {
       readyToAssignCents: 80_000,
@@ -278,16 +263,8 @@ describe("Underfunded", () => {
     expect(result.lines.find((line) => line.categoryId === "food")?.deltaCents).toBe(
       50_000,
     );
-    expect(result.lines.find((line) => line.categoryId === "save")?.deltaCents).toBe(
-      30_000,
-    );
-    expect(result.remainingRtaCents).toBe(0);
-
-    const short = run("underfunded", [envelope(), save], {
-      readyToAssignCents: 40_000,
-    });
-    expect(short.lines.find((line) => line.categoryId === "save")).toBeUndefined();
-    expect(short.remainingRtaCents).toBe(0);
+    expect(result.lines.find((line) => line.categoryId === "save")).toBeUndefined();
+    expect(result.remainingRtaCents).toBe(30_000);
   });
 
   it("writes goalCents as the full unclamped ask on a partial Underfunded", () => {
@@ -315,44 +292,48 @@ describe("Underfunded", () => {
 });
 
 describe("neededAssigned", () => {
-  it("covers overspend even when the template ask is smaller", () => {
+  it("covers overspend even when the target ask is smaller", () => {
     const overspent = envelope({
-      templates: [simple(10_000)],
+      target: addMonthly(10_000),
       assignedCents: 0,
       activityCents: -40_000,
       balanceCents: -40_000,
     });
-    expect(neededAssigned(overspent, MONTH, new Map()).needed).toBe(40_000);
+    expect(neededAssigned(overspent, MONTH, TODAY, new Map()).needed).toBe(40_000);
   });
 });
 
-describe("weekly templates through Underfunded", () => {
+describe("weekly upTo through Underfunded", () => {
   /** Sunday groceries at $180: August 2026 has five Sundays, September four. */
   const groceries = (over: Partial<AssignEnvelope> = {}) =>
-    envelope({ templates: [weekly(18_000, 0)], ...over });
+    envelope({ target: weeklyUpTo(18_000, 0), ...over });
 
-  it("asks the calendar's occurrence count, not a fixed four", () => {
-    expect(neededAssigned(groceries(), "2026-08-01", new Map()).needed).toBe(90_000);
-    expect(neededAssigned(groceries(), "2026-09-01", new Map()).needed).toBe(72_000);
+  it("asks remaining occurrences, and a future month the whole set", () => {
+    expect(
+      neededAssigned(groceries(), "2026-08-01", "2026-08-01", new Map()).needed,
+    ).toBe(90_000);
+    expect(
+      neededAssigned(groceries(), "2026-09-01", "2026-08-01", new Map()).needed,
+    ).toBe(72_000);
   });
 
-  it("tops up mid-month to the whole month's total", () => {
-    const result = run("underfunded", [groceries({ assignedCents: 36_000 })]);
-    expect(result.lines[0]?.deltaCents).toBe(54_000);
-    expect(result.lines[0]?.toAssignedCents).toBe(90_000);
+  it("asks only the Sundays still left when today is late in the month", () => {
+    // 24 August 2026: the 23rd has passed, the 30th remains.
+    const result = run("underfunded", [groceries()]);
+    expect(result.lines[0]?.deltaCents).toBe(18_000);
   });
 
-  it("does not let carry-in reduce the ask (D3)", () => {
+  it("lets leftover available reduce the weekly ask", () => {
     const withCarry = groceries({ carryInCents: 50_000, balanceCents: 50_000 });
-    expect(neededAssigned(withCarry, "2026-08-01", new Map()).needed).toBe(90_000);
-    const result = run("underfunded", [withCarry]);
-    expect(result.lines[0]?.deltaCents).toBe(90_000);
+    expect(
+      neededAssigned(withCarry, "2026-08-01", "2026-08-01", new Map()).needed,
+    ).toBe(40_000);
   });
 
-  it("ranks alongside a simple line, ahead of an envelope with no ask", () => {
-    const spare = envelope({ id: "fun", name: "Fun", templates: [remainder()] });
+  it("ranks a weekly ask ahead of an envelope with no ask", () => {
+    const spare = envelope({ id: "fun", name: "Fun", target: null });
     const result = run("underfunded", [spare, groceries()], {
-      readyToAssignCents: 90_000,
+      readyToAssignCents: 18_000,
     });
     expect(result.lines[0]?.categoryId).toBe("food");
   });
@@ -421,12 +402,12 @@ describe("SET options", () => {
 
 describe("return-money options", () => {
   it("Reduce Overfunding returns only demand-envelope excess", () => {
-    const over = envelope({ assignedCents: 80_000, templates: [simple(50_000)] });
+    const over = envelope({ assignedCents: 80_000, target: addMonthly(50_000) });
     const pile = envelope({
       id: "save",
       name: "Savings",
       kind: "savings",
-      templates: [],
+      target: null,
       assignedCents: 500_000,
     });
     const result = run("reduce-overfunding", [over, pile]);
@@ -487,7 +468,7 @@ describe("needsAssignPreview", () => {
 
   it("keeps confirmation when the option returns money", () => {
     const result = run("reduce-overfunding", [
-      envelope({ assignedCents: 80_000, templates: [simple(50_000)] }),
+      envelope({ assignedCents: 80_000, target: addMonthly(50_000) }),
     ]);
     expect(result.lines[0]?.status).toBe("reduced");
     expect(needsAssignPreview(result)).toBe(true);

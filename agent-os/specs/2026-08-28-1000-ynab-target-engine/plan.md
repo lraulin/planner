@@ -266,9 +266,9 @@ longer implement, and leaving the name in place would keep pointing the next rea
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                              | Why                                                                                                                                                                                             |
+| --- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Bill occurrence counting anchors on `expectedKey`, not `nextDueKey` | `nextDueKey` rolls forward the day after the due date whether or not the charge posted. Counting from the charge being waited for is what keeps a late unpaid bill asking and a paid one quiet. |
 
 ## Task 1: Save spec documentation
 

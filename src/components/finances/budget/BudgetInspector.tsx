@@ -16,7 +16,7 @@ import {
   type BudgetBillRow,
   type BudgetRow,
 } from "@/lib/finances/budget/rows";
-import { summarize } from "@/lib/finances/budget/templates/types";
+import { summarize } from "@/lib/finances/budget/targets/types";
 import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
 import { formatUsd } from "@/lib/finances/money";
 import { FilesHereSection } from "./FilesHereSection";
@@ -98,10 +98,8 @@ export function BudgetInspector({
   );
   const bill = isBillRow(row) ? row : null;
   const billView = bill ? billInspectorView(bill.bill) : null;
-  const hasTemplates = row.templates.length > 0;
-  const templateSummary = hasTemplates
-    ? row.templates.map((template) => summarize(template)).join(" · ")
-    : null;
+  const targetSummary = row.target !== null ? summarize(row.target) : null;
+  const hasTarget = targetSummary !== null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-4 py-3">
@@ -142,8 +140,8 @@ export function BudgetInspector({
           <p className="text-[0.8125rem] text-ink-muted">
             {bill
               ? "This bill is funded for the current month."
-              : hasTemplates
-                ? templateSummary
+              : hasTarget
+                ? targetSummary
                 : "No target. Assign what you have; leftover stays here."}
           </p>
         )}
@@ -154,7 +152,7 @@ export function BudgetInspector({
             onClick={() => onEditTarget(row)}
             className="mt-2 min-h-tap rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
           >
-            {hasTemplates ? "Edit target…" : "Create target…"}
+            {hasTarget ? "Edit target…" : "Create target…"}
           </button>
         ) : null}
       </section>

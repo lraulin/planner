@@ -6,7 +6,7 @@
 
 import type { EnvelopeKind, EnvelopeStatus } from "@/db/schema";
 import type { MonthKey } from "../envelope";
-import type { Template } from "../templates/types";
+import type { Target } from "../targets/types";
 
 export const ASSIGN_OPTIONS = [
   "underfunded",
@@ -42,7 +42,7 @@ export type AssignEnvelope = {
   hidden: boolean;
   /** Bills carry a status; other envelopes are treated as active. */
   status: EnvelopeStatus;
-  templates: readonly Template[];
+  target: Target | null;
   assignedCents: number;
   activityCents: number;
   balanceCents: number;

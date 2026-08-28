@@ -22,7 +22,7 @@ import {
   moveBudgetStructureItemIntoGroup,
   performBudgetOperation,
   renameCategoryGroup,
-  saveEnvelopeTemplates,
+  saveEnvelopeTarget,
   seedBudget,
   setCarryover,
   setTransactionBudgetCategory,
@@ -798,15 +798,11 @@ describeDb("budget mutations", () => {
     const ids = await envelopes(userId);
     const bills = ids.get("Bills")!;
 
-    await saveEnvelopeTemplates(userId, bills, [
-      {
-        id: "t1",
-        directive: "template",
-        type: "simple",
-        priority: 0,
-        monthlyCents: 12_000,
-      },
-    ]);
+    await saveEnvelopeTarget(userId, bills, {
+      behavior: "add",
+      cadence: { unit: "month", day: 31 },
+      amountCents: 12_000,
+    });
 
     const result = await applyBudgetTemplates(userId, { month: MONTH, force: false });
     expect(result.applied).toBe(1);
@@ -817,25 +813,22 @@ describeDb("budget mutations", () => {
     expect(data.goals[`${MONTH}|${bills}`]).toBe(12_000);
   });
 
-  it("round-trips a weekly line and keeps it from a second user", async () => {
+  it("round-trips a weekly target and keeps it from a second user", async () => {
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
     const ids = await envelopes(userId);
     const groceries = ids.get("Recurring spend")!;
     const weekly = {
-      id: "w1",
-      directive: "template" as const,
-      type: "weekly" as const,
-      priority: 0,
+      behavior: "upTo" as const,
+      cadence: { unit: "week" as const, weekday: 0 },
       amountCents: 18_000,
-      weekday: 0,
     };
 
-    await saveEnvelopeTemplates(userId, groceries, [weekly]);
+    await saveEnvelopeTarget(userId, groceries, weekly);
 
     const stored = (await loadBudget(userId, MONTH)).categories.find(
       (row) => row.id === groceries,
     );
-    expect(stored?.templates).toEqual([weekly]);
+    expect(stored?.target).toEqual(weekly);
 
     // A second user must fail to read it, change it, or clear it.
     const intruderId = await makeUser();
@@ -845,18 +838,20 @@ describeDb("budget mutations", () => {
       ),
     ).toBeUndefined();
     await expect(
-      saveEnvelopeTemplates(intruderId, groceries, [
-        { ...weekly, amountCents: 100, weekday: 3 },
-      ]),
+      saveEnvelopeTarget(intruderId, groceries, {
+        ...weekly,
+        amountCents: 100,
+        cadence: { unit: "week", weekday: 3 },
+      }),
     ).rejects.toThrow(/does not exist/);
-    await expect(saveEnvelopeTemplates(intruderId, groceries, [])).rejects.toThrow(
+    await expect(saveEnvelopeTarget(intruderId, groceries, null)).rejects.toThrow(
       /does not exist/,
     );
 
     const after = (await loadBudget(userId, MONTH)).categories.find(
       (row) => row.id === groceries,
     );
-    expect(after?.templates).toEqual([weekly]);
+    expect(after?.target).toEqual(weekly);
   });
 
   it("Underfunded clamps to Ready to Assign and keeps the full ask as the goal", async () => {
@@ -874,24 +869,16 @@ describeDb("budget mutations", () => {
     const bills = ids.get("Bills")!;
     const fun = ids.get("Discretionary")!;
 
-    await saveEnvelopeTemplates(userId, bills, [
-      {
-        id: "t1",
-        directive: "template",
-        type: "simple",
-        priority: 0,
-        monthlyCents: 40_000,
-      },
-    ]);
-    await saveEnvelopeTemplates(userId, fun, [
-      {
-        id: "t2",
-        directive: "template",
-        type: "simple",
-        priority: 0,
-        monthlyCents: 40_000,
-      },
-    ]);
+    await saveEnvelopeTarget(userId, bills, {
+      behavior: "add",
+      cadence: { unit: "month", day: 31 },
+      amountCents: 40_000,
+    });
+    await saveEnvelopeTarget(userId, fun, {
+      behavior: "add",
+      cadence: { unit: "month", day: 31 },
+      amountCents: 40_000,
+    });
 
     const result = await assignBudget(userId, {
       month: MONTH,
@@ -1048,15 +1035,11 @@ describeDb("budget mutations — cross-user isolation", () => {
   it("shows the intruder nothing of the owner's budget", async () => {
     // Templates and applied goals ride on the same read, so the owner has both here: an
     // envelope whose templates leaked would leak the schedules they name along with them.
-    await saveEnvelopeTemplates(ownerId, owned.categoryId, [
-      {
-        id: "t1",
-        directive: "template",
-        type: "simple",
-        priority: 0,
-        monthlyCents: 900,
-      },
-    ]);
+    await saveEnvelopeTarget(ownerId, owned.categoryId, {
+      behavior: "add",
+      cadence: { unit: "month", day: 31 },
+      amountCents: 900,
+    });
     await applyBudgetTemplates(ownerId, { month: MONTH, force: true });
 
     const data = await loadBudget(intruderId, MONTH);
@@ -1132,15 +1115,11 @@ describeDb("budget mutations — cross-user isolation", () => {
       }),
     ).rejects.toThrow(/does not exist/);
     await expect(
-      saveEnvelopeTemplates(intruderId, owned.categoryId, [
-        {
-          id: "t1",
-          directive: "template",
-          type: "simple",
-          priority: 0,
-          monthlyCents: 100,
-        },
-      ]),
+      saveEnvelopeTarget(intruderId, owned.categoryId, {
+        behavior: "add",
+        cadence: { unit: "month", day: 31 },
+        amountCents: 100,
+      }),
     ).rejects.toThrow(/does not exist/);
     await expect(
       applyBudgetTemplates(intruderId, { month: MONTH, force: true }),

@@ -28,7 +28,12 @@ export type BudgetRow = {
   balanceCents: number;
   /** The flag stored on this month, which governs the hand-off to the next one. */
   carryover: boolean;
-  templates: BudgetCategoryRow["templates"];
+  target: BudgetCategoryRow["target"];
+  /**
+   * Charge being waited for, which may be in the past. Distinct from `nextDueKey`.
+   * Null for ordinary envelopes and bills with no anchor yet.
+   */
+  expectedKey: string | null;
   /** Template goal for this month; null when Apply has not written one. */
   goalCents: number | null;
   kind: EnvelopeKind;
@@ -73,6 +78,7 @@ export function budgetRows(
   month: BudgetMonth,
   goals: Readonly<Record<string, number>> = {},
   nextDueKeys: ReadonlyMap<string, string> = new Map(),
+  expectedKeys: ReadonlyMap<string, string> = new Map(),
 ): BudgetRow[] {
   const order = new Map(groups.map((group, index) => [group.id, index]));
 
@@ -92,7 +98,7 @@ export function budgetRows(
         isIncome: category.kind === "income",
         hidden: category.hidden,
         notes: category.notes,
-        templates: category.templates,
+        target: category.target,
         goalCents: goals[`${month.month}|${category.id}`] ?? null,
         assignedCents: cell.assignedCents,
         activityCents: cell.activityCents,
@@ -101,6 +107,7 @@ export function budgetRows(
         kind: category.kind,
         bill: category.bill,
         nextDueKey: nextDueKeys.get(category.id) ?? null,
+        expectedKey: expectedKeys.get(category.id) ?? null,
       };
     });
 }

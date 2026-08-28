@@ -31,9 +31,9 @@ import {
   type BudgetMonth,
   type MonthKey,
 } from "./envelope";
-import { parseTemplates, type Template } from "./templates/types";
+import { parseNullableTargetOrThrow, type Target } from "./targets/types";
 import { budgetEnvelopeLabel } from "./hierarchy";
-import type { BillSnapshot } from "./templates/schedule";
+import type { BillSnapshot } from "./targets/derive";
 import { ASSIGN_AVERAGE_MONTHS } from "./assign/types";
 import type { ActivityPoint } from "./assign/fromBudget";
 import { moneyRows } from "../splitRows";
@@ -87,7 +87,7 @@ export type BudgetCategoryRow = {
   /** Derived from `kind` — income has no allocation and no balance. */
   isIncome: boolean;
   bill: BillFacet | null;
-  templates: Template[];
+  target: Target | null;
 };
 
 export type BudgetEnvelopeOption = {
@@ -198,7 +198,7 @@ function categoriesOf(userId: string, executor: FinanceExecutor = db) {
       sortKey: financeBudgetCategories.sortKey,
       hidden: financeBudgetCategories.hidden,
       notes: financeBudgetCategories.notes,
-      templates: financeBudgetCategories.templates,
+      target: financeBudgetCategories.target,
       kind: financeBudgetCategories.kind,
       status: financeBudgetCategories.status,
       cancelledOn: financeBudgetCategories.cancelledOn,
@@ -225,7 +225,7 @@ function parsedCategories(
     sortKey: row.sortKey,
     hidden: row.hidden,
     notes: row.notes,
-    templates: parseTemplates(row.templates) ?? [],
+    target: parseNullableTargetOrThrow(row.target),
     kind: row.kind,
     isIncome: row.kind === "income",
     bill:
@@ -635,26 +635,35 @@ function storedBillOf(category: BudgetCategoryRow): StoredBill | null {
  * amount, and deriving the grid column from that list left paused bills (and bills with
  * no amount yet) showing "—" with nothing to edit.
  */
+export async function loadBillAnchors(
+  userId: string,
+  categories: readonly BudgetCategoryRow[],
+  todayKey: string,
+): Promise<{
+  nextDueKeys: Map<string, string>;
+  expectedKeys: Map<string, string>;
+}> {
+  const lastCharge = await lastChargeByEnvelope(userId);
+  const nextDueKeys = new Map<string, string>();
+  const expectedKeys = new Map<string, string>();
+
+  for (const category of categories) {
+    const bill = storedBillOf(category);
+    if (bill === null || !bill.scheduled) continue;
+    const anchor = billAnchor(bill, lastCharge.get(category.id) ?? null, todayKey);
+    if (anchor.nextDueKey !== null) nextDueKeys.set(category.id, anchor.nextDueKey);
+    if (anchor.expectedKey !== null) expectedKeys.set(category.id, anchor.expectedKey);
+  }
+
+  return { nextDueKeys, expectedKeys };
+}
+
 export async function loadNextDueKeys(
   userId: string,
   categories: readonly BudgetCategoryRow[],
   todayKey: string,
 ): Promise<Map<string, string>> {
-  const lastCharge = await lastChargeByEnvelope(userId);
-  const nextDueKeys = new Map<string, string>();
-
-  for (const category of categories) {
-    const bill = storedBillOf(category);
-    if (bill === null || !bill.scheduled) continue;
-    const nextDueKey = billAnchor(
-      bill,
-      lastCharge.get(category.id) ?? null,
-      todayKey,
-    ).nextDueKey;
-    if (nextDueKey !== null) nextDueKeys.set(category.id, nextDueKey);
-  }
-
-  return nextDueKeys;
+  return (await loadBillAnchors(userId, categories, todayKey)).nextDueKeys;
 }
 
 /**
@@ -662,7 +671,7 @@ export async function loadNextDueKeys(
  *
  * The budget page reads these alongside the budget so the template drawer can preview this
  * month's demand by running the same pure engine the server runs — not a second guess at it.
- * Paused and cancelled bills are excluded: `billFundingDemand` only ever runs for `active`.
+ * Paused and cancelled bills are excluded: a derived target only runs for `active`.
  */
 export async function loadBillSnapshots(
   userId: string,
@@ -686,6 +695,7 @@ export async function loadBillSnapshots(
       cadenceDays: bill.cadenceDays ?? null,
       expectedCents: bill.expectedCents,
       nextDueKey: anchor.nextDueKey,
+      expectedKey: anchor.expectedKey,
     });
   }
 

@@ -18,7 +18,6 @@
  * across the individual bills that are about to exist, and guessing would be worse than asking.
  */
 
-import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -29,7 +28,7 @@ import {
 } from "@/db/schema";
 import * as sortKeyLib from "@/lib/tree/sortKey";
 import { groupPageSection } from "./hierarchy";
-import { parseTemplates, type SimpleTemplate } from "./templates/types";
+import type { Target } from "./targets/types";
 
 type OldBillRow = {
   id: string;
@@ -336,7 +335,7 @@ export async function applyCommitmentsCutover(
         const [existing] = await tx
           .select({
             id: financeBudgetCategories.id,
-            templates: financeBudgetCategories.templates,
+            target: financeBudgetCategories.target,
           })
           .from(financeBudgetCategories)
           .where(
@@ -362,38 +361,29 @@ export async function applyCommitmentsCutover(
         let envelopeId: string;
         if (existing) {
           envelopeId = existing.id;
-          const already = (parseTemplates(existing.templates) ?? []).some(
-            (template) => template.type === "simple",
-          );
-          if (!already && monthlyCents > 0) {
-            const line: SimpleTemplate = {
-              id: randomUUID(),
-              directive: "template",
-              type: "simple",
-              priority: 0,
-              monthlyCents,
+          if (existing.target == null && monthlyCents > 0) {
+            const target: Target = {
+              behavior: "add",
+              cadence: { unit: "month", day: 31 },
+              amountCents: monthlyCents,
             };
             await tx
               .update(financeBudgetCategories)
               .set({
-                templates: [...(parseTemplates(existing.templates) ?? []), line],
+                target,
                 updatedAt: new Date(),
               })
               .where(eq(financeBudgetCategories.id, envelopeId));
           }
         } else {
-          const templates: SimpleTemplate[] =
+          const target: Target | null =
             monthlyCents > 0
-              ? [
-                  {
-                    id: randomUUID(),
-                    directive: "template",
-                    type: "simple",
-                    priority: 0,
-                    monthlyCents,
-                  },
-                ]
-              : [];
+              ? {
+                  behavior: "add",
+                  cadence: { unit: "month", day: 31 },
+                  amountCents: monthlyCents,
+                }
+              : null;
           const [created] = await tx
             .insert(financeBudgetCategories)
             .values({
@@ -403,7 +393,7 @@ export async function applyCommitmentsCutover(
               sortKey: nextSortKey(),
               kind: "spending",
               notes: entry.notes,
-              templates,
+              target,
             })
             .returning({ id: financeBudgetCategories.id });
           if (!created) {
@@ -441,7 +431,7 @@ export async function applyCommitmentsCutover(
       const [catchAll] = await tx
         .select({
           id: financeBudgetCategories.id,
-          templates: financeBudgetCategories.templates,
+          target: financeBudgetCategories.target,
         })
         .from(financeBudgetCategories)
         .where(
@@ -458,17 +448,15 @@ export async function applyCommitmentsCutover(
         // so it would reject the whole array and silently report zero schedule lines here —
         // exactly the case this check exists to catch. Inspect the raw JSON instead.
         const hadScheduleTemplates =
-          Array.isArray(catchAll.templates) &&
-          catchAll.templates.some(
-            (template) =>
-              typeof template === "object" &&
-              template !== null &&
-              (template as { type?: unknown }).type === "schedule",
-          );
+          catchAll.target !== null &&
+          typeof catchAll.target === "object" &&
+          !Array.isArray(catchAll.target) &&
+          (catchAll.target as { cadence?: { unit?: unknown } }).cadence?.unit ===
+            "schedule";
         if (hadScheduleTemplates) {
           await tx
             .update(financeBudgetCategories)
-            .set({ name: "Other bills", templates: [], updatedAt: new Date() })
+            .set({ name: "Other bills", target: null, updatedAt: new Date() })
             .where(eq(financeBudgetCategories.id, catchAll.id));
           renamedCatchAll = { from: "Bills", to: "Other bills" };
         }

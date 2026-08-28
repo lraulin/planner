@@ -16,7 +16,7 @@ import {
 } from "../envelope";
 import { budgetRows, type BudgetRow } from "../rows";
 import { underfundedGapCents } from "./plan";
-import type { BillSnapshot } from "../templates/schedule";
+import type { BillSnapshot } from "../targets/derive";
 import { templateCarryIn } from "../templates/apply";
 import {
   ASSIGN_AVERAGE_MONTHS,
@@ -41,7 +41,7 @@ export function assignEnvelopeFromRow(
     kind: row.kind,
     hidden: row.hidden,
     status: row.bill?.status ?? "active",
-    templates: row.templates,
+    target: row.target,
     assignedCents: row.assignedCents,
     activityCents: row.activityCents,
     balanceCents: row.balanceCents,
@@ -61,6 +61,7 @@ export function billSnapshotFromRow(row: BudgetRow): BillSnapshot | null {
     cadenceDays: row.bill.cadenceDays,
     expectedCents: row.bill.expectedCents,
     nextDueKey: row.nextDueKey,
+    expectedKey: row.expectedKey,
   };
 }
 
@@ -154,6 +155,7 @@ export function currentMonthUnderfundedGap(params: {
   );
   return underfundedGapCents(
     currentKey,
+    params.todayKey,
     rows.map((row) => assignEnvelopeFromRow(row, previous)),
     assignBillsFromRows(rows),
   );

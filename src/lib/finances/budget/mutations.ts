@@ -57,6 +57,7 @@ import { PRESET_GROUPS, type BudgetPreset } from "./presets";
 import { moneyRows } from "../splitRows";
 import {
   AVERAGE_LOOKBACK_MONTHS,
+  loadBillAnchors,
   loadBillSnapshots,
   loadBudget,
   openingPositionFor,
@@ -65,11 +66,7 @@ import { applyTemplates as runApply, templateCarryIn } from "./templates/apply";
 import { planAssign } from "./assign/plan";
 import { assignEnvelopeFromRow, assignHistoryWithLookback } from "./assign/fromBudget";
 import type { AssignOption } from "./assign/types";
-import {
-  parseTemplates,
-  parseTemplatesOrThrow,
-  type Template,
-} from "./templates/types";
+import { parseTargetOrThrow } from "./targets/types";
 
 /**
  * Writes for the envelope budget.
@@ -633,7 +630,7 @@ export async function updateBudgetCategory(
       ...(edit.groupId === undefined ? {} : { groupId: edit.groupId }),
       ...(movedSortKey === undefined ? {} : { sortKey: movedSortKey }),
       ...(edit.kind === undefined ? {} : { kind: edit.kind }),
-      ...(edit.kind === "income" ? { templates: [] } : {}),
+      ...(edit.kind === "income" ? { target: null } : {}),
       ...(leavingBill
         ? {
             status: "active" as const,
@@ -1116,14 +1113,14 @@ export async function setTransactionBudgetCategory(
   throw new Error("That transaction does not exist.");
 }
 
-async function requireSpendingCategory(
+async function requireTargetableCategory(
   userId: string,
   categoryId: string,
-): Promise<{ id: string; templates: Template[] }> {
+): Promise<{ id: string }> {
   const [row] = await db
     .select({
       id: financeBudgetCategories.id,
-      templates: financeBudgetCategories.templates,
+      target: financeBudgetCategories.target,
       kind: financeBudgetCategories.kind,
     })
     .from(financeBudgetCategories)
@@ -1135,26 +1132,24 @@ async function requireSpendingCategory(
     )
     .limit(1);
   if (!row) throw new Error("That envelope does not exist.");
-  if (row.kind === "bill") {
-    throw new Error("A bill envelope funds itself from its own cadence.");
-  }
   if (row.kind === "income") {
-    throw new Error("Income envelopes cannot hold templates.");
+    throw new Error("Income envelopes cannot hold a target.");
   }
 
-  return { id: row.id, templates: parseTemplates(row.templates) ?? [] };
+  return { id: row.id };
 }
 
-export async function saveEnvelopeTemplates(
+export async function saveEnvelopeTarget(
   userId: string,
   categoryId: string,
-  templates: unknown,
+  target: unknown,
 ): Promise<void> {
-  await requireSpendingCategory(userId, categoryId);
-  const parsed = parseTemplatesOrThrow(templates);
+  await requireTargetableCategory(userId, categoryId);
+  const parsed =
+    target === null || target === undefined ? null : parseTargetOrThrow(target);
   await db
     .update(financeBudgetCategories)
-    .set({ templates: parsed, updatedAt: new Date() })
+    .set({ target: parsed, updatedAt: new Date() })
     .where(
       and(
         eq(financeBudgetCategories.id, categoryId),
@@ -1185,9 +1180,10 @@ export async function applyBudgetTemplates(
       name: category.name,
       isIncome: category.kind === "income",
       kind: category.kind,
-      templates: category.templates,
+      target: category.target,
       assignedCents: cell.assignedCents,
       carryInCents: templateCarryIn(prior),
+      activityCents: cell.activityCents,
     };
   });
 
@@ -1239,8 +1235,15 @@ export async function assignBudget(
 
   const previous = findMonth(data.months, prevMonthKey(month.month));
   const snapshots = await loadBillSnapshots(userId, data.categories, data.todayKey);
-  const nextDueKeys = new Map(snapshots.map((bill) => [bill.id, bill.nextDueKey]));
-  const rows = budgetRows(data.groups, data.categories, month, data.goals, nextDueKeys);
+  const anchors = await loadBillAnchors(userId, data.categories, data.todayKey);
+  const rows = budgetRows(
+    data.groups,
+    data.categories,
+    month,
+    data.goals,
+    anchors.nextDueKeys,
+    anchors.expectedKeys,
+  );
   const envelopes = rows.map((row) => assignEnvelopeFromRow(row, previous));
   const result = planAssign({
     option: params.option,

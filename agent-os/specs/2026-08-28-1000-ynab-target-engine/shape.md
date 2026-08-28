@@ -37,7 +37,8 @@ Full statements in `plan.md` D1–D8. The ones worth carrying in your head:
   contribution and does not hold for coverage.
 - **A bill is an envelope with a target.** Cadence derives one rather than feeding a private
   engine. Propane stays a utility bill and gets a yearly top-up; it does not have to move to
-  Regular to be modelled honestly.
+  Regular to be modelled honestly. Counting uses `expectedKey` (the charge being waited for),
+  not `nextDueKey`, so a late unpaid bill keeps asking.
 - **Sentences, not a mode toggle.** YNAB's mechanics are right and its vocabulary is what made
   the choice feel like a puzzle. Copy the math, write our own sentences.
 

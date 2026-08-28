@@ -89,7 +89,7 @@ import {
   moveBudgetStructureItemIntoGroup,
   performBudgetOperation,
   renameCategoryGroup,
-  saveEnvelopeTemplates,
+  saveEnvelopeTarget,
   seedBudget,
   setCarryover,
   setTransactionBudgetCategory,
@@ -547,11 +547,11 @@ export async function setTransactionBudgetCategoriesAction(
   );
 }
 
-export async function saveEnvelopeTemplatesAction(
+export async function saveEnvelopeTargetAction(
   categoryId: string,
-  templates: unknown,
+  target: unknown,
 ): Promise<ActionResult> {
-  return run((userId) => saveEnvelopeTemplates(userId, categoryId, templates));
+  return run((userId) => saveEnvelopeTarget(userId, categoryId, target));
 }
 
 export async function applyBudgetTemplatesAction(

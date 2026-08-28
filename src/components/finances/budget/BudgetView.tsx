@@ -104,7 +104,7 @@ import { PayeeMergeDialog } from "@/components/finances/payees/PayeeMergeDialog"
 import { withScheme } from "./UrlCell";
 import { ForecastDetails } from "./ForwardPanel";
 import { MoveMoneyDialog } from "./MoveMoneyDialog";
-import { TemplateDrawer } from "./TemplateDrawer";
+import { TargetDrawer } from "./TargetDrawer";
 import { ReviewDrawer } from "./ReviewDrawer";
 
 /**
@@ -134,14 +134,17 @@ export function BudgetView({
   data,
   review,
   nextDueKeys,
+  expectedKeys,
   payees,
   forecast,
 }: {
   data: BudgetData;
   /** Detected recurring merchants no envelope has claimed yet. */
   review: readonly RecurringMerchant[];
-  /** Next charge per bill envelope id, from `loadNextDueKeys`. */
+  /** Next charge per bill envelope id, from `loadBillAnchors`. */
   nextDueKeys: ReadonlyMap<string, string>;
+  /** Charge being waited for, which may be in the past. */
+  expectedKeys: ReadonlyMap<string, string>;
   /** Every payee, with its current bill/envelope claim if any — for the payees dialog. */
   payees: readonly { id: string; name: string; budgetCategoryId: string | null }[];
   /** Next 12 months and Expected vs income — collapsed-by-default reference panels (D8). */
@@ -211,9 +214,16 @@ export function BudgetView({
   const rows = useMemo(
     () =>
       month
-        ? budgetRows(data.groups, data.categories, month, data.goals, nextDueKeys)
+        ? budgetRows(
+            data.groups,
+            data.categories,
+            month,
+            data.goals,
+            nextDueKeys,
+            expectedKeys,
+          )
         : [],
-    [data.groups, data.categories, month, data.goals, nextDueKeys],
+    [data.groups, data.categories, month, data.goals, nextDueKeys, expectedKeys],
   );
   const sections = useMemo(() => budgetSections(rows), [rows]);
   const billGridRows = useMemo(
@@ -349,9 +359,10 @@ export function BudgetView({
       name: row.name,
       isIncome: row.isIncome,
       kind: row.kind,
-      templates: row.templates,
+      target: row.target,
       assignedCents: row.assignedCents,
       carryInCents: templateCarryIn(previous ? categoryMonth(previous, row.id) : null),
+      activityCents: row.activityCents,
     };
   }
 
@@ -476,8 +487,14 @@ export function BudgetView({
     };
   }, [rows, previous, data.months, data.preStartActivity, data.settings.startMonth]);
   const indicators = useMemo(
-    () => indicatorsFromAssign(data.month, assignInputs.envelopes, assignInputs.bills),
-    [data.month, assignInputs.envelopes, assignInputs.bills],
+    () =>
+      indicatorsFromAssign(
+        data.month,
+        data.todayKey,
+        assignInputs.envelopes,
+        assignInputs.bills,
+      ),
+    [data.month, data.todayKey, assignInputs.envelopes, assignInputs.bills],
   );
 
   const assignPlans = useMemo(() => {
@@ -752,9 +769,9 @@ export function BudgetView({
       },
       "separator",
       {
-        label: "Edit templates…",
+        label: "Edit target…",
         title: row.isIncome
-          ? "Income feeds Ready to Assign, so it holds no templates"
+          ? "Income feeds Ready to Assign, so it holds no target"
           : `What ${row.name} should ask for each month`,
         disabled: row.isIncome,
         onSelect: () => setEditing(row.id),
@@ -1190,13 +1207,13 @@ export function BudgetView({
       ) : null}
 
       {editingRow ? (
-        <TemplateDrawer
+        <TargetDrawer
           key={editingRow.id}
           envelope={envelopeInput(editingRow)}
           month={data.month}
           todayKey={data.todayKey}
-          readyToAssignCents={month.readyToAssignCents}
           history={assignInputs.history}
+          bills={assignInputs.bills}
           onClose={() => setEditing(null)}
           onSaved={() => router.refresh()}
         />

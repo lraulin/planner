@@ -3,51 +3,34 @@ import { describe, expect, it } from "vitest";
 import { neededAssigned } from "./assign/plan";
 import type { AssignEnvelope } from "./assign/types";
 import { envelopeIndicator, indicatorsFromAssign } from "./indicator";
-import type { BillSnapshot } from "./templates/schedule";
-import type { Template } from "./templates/types";
+import type { BillSnapshot } from "./targets/derive";
+import type { Target } from "./targets/types";
 
 const MONTH = "2026-08-01";
+const TODAY = "2026-08-01";
 
-const simple = (cents: number): Template => ({
-  id: "s1",
-  directive: "template",
-  type: "simple",
-  priority: 0,
-  monthlyCents: cents,
-});
-
-const refill = (limitCents: number): Template => ({
-  id: "s1",
-  directive: "template",
-  type: "simple",
-  priority: 0,
-  limit: { amountCents: limitCents, hold: false },
-});
-
-const by = (cents: number, month: string): Template => ({
-  id: "b1",
-  directive: "template",
-  type: "by",
-  priority: 0,
+const addMonthly = (cents: number): Target => ({
+  behavior: "add",
+  cadence: { unit: "month", day: 31 },
   amountCents: cents,
-  month,
 });
 
-const weekly = (cents: number, weekday: number): Template => ({
-  id: "w1",
-  directive: "template",
-  type: "weekly",
-  priority: 0,
+const refill = (cents: number): Target => ({
+  behavior: "upTo",
+  cadence: { unit: "month", day: 31 },
   amountCents: cents,
-  weekday,
 });
 
-const remainder = (): Template => ({
-  id: "r1",
-  directive: "template",
-  type: "remainder",
-  priority: null,
-  weight: 1,
+const byDate = (cents: number, month: string): Target => ({
+  behavior: "balance",
+  cadence: { unit: "by", month },
+  amountCents: cents,
+});
+
+const weeklyUpTo = (cents: number, weekday: number): Target => ({
+  behavior: "upTo",
+  cadence: { unit: "week", weekday },
+  amountCents: cents,
 });
 
 function envelope(overrides: Partial<AssignEnvelope> = {}): AssignEnvelope {
@@ -57,7 +40,7 @@ function envelope(overrides: Partial<AssignEnvelope> = {}): AssignEnvelope {
     kind: "spending",
     hidden: false,
     status: "active",
-    templates: [simple(50_000)],
+    target: addMonthly(50_000),
     assignedCents: 0,
     activityCents: 0,
     balanceCents: 0,
@@ -72,7 +55,7 @@ function billRow(overrides: Partial<AssignEnvelope> = {}): AssignEnvelope {
     id: "rent",
     name: "Rent",
     kind: "bill",
-    templates: [],
+    target: null,
     nextDueKey: "2026-08-01",
     ...overrides,
   });
@@ -98,7 +81,7 @@ function indicate(
   row: AssignEnvelope,
   bills: ReadonlyMap<string, BillSnapshot> = new Map(),
 ) {
-  return envelopeIndicator(row, MONTH, bills);
+  return envelopeIndicator(row, MONTH, TODAY, bills);
 }
 
 describe("envelopeIndicator", () => {
@@ -107,14 +90,14 @@ describe("envelopeIndicator", () => {
     const bills = new Map<string, BillSnapshot>();
     const indicator = indicate(row, bills);
     expect(indicator.moreNeededCents).toBe(
-      Math.max(0, neededAssigned(row, MONTH, bills).needed - row.assignedCents),
+      Math.max(0, neededAssigned(row, MONTH, TODAY, bills).needed - row.assignedCents),
     );
     expect(indicator.moreNeededCents).toBe(40_000);
   });
 
   it("stays yellow when Available is positive but the ask is unmet", () => {
     const row = envelope({
-      templates: [refill(2_668)],
+      target: refill(2_668),
       carryInCents: 2_001,
       assignedCents: 0,
       balanceCents: 2_001,
@@ -131,7 +114,7 @@ describe("envelopeIndicator", () => {
 
   it("does not treat leftover as funding a simple monthly Assigned ask", () => {
     const row = envelope({
-      templates: [simple(50_000)],
+      target: addMonthly(50_000),
       carryInCents: 20_000,
       assignedCents: 0,
       balanceCents: 20_000,
@@ -145,7 +128,7 @@ describe("envelopeIndicator", () => {
   it("gives a weekly envelope the this-month horizon, not a sinking one", () => {
     // Five Sundays in August 2026 at $180.
     const row = envelope({
-      templates: [weekly(18_000, 0)],
+      target: weeklyUpTo(18_000, 0),
       assignedCents: 0,
       balanceCents: 0,
     });
@@ -218,7 +201,7 @@ describe("envelopeIndicator", () => {
   });
 
   it("idles a no-ask envelope at $0", () => {
-    const row = envelope({ templates: [], assignedCents: 0, balanceCents: 0 });
+    const row = envelope({ target: null, assignedCents: 0, balanceCents: 0 });
     const indicator = indicate(row);
     expect(indicator.state).toBe("idle");
     expect(indicator.pill).toBe("gray");
@@ -226,18 +209,22 @@ describe("envelopeIndicator", () => {
     expect(indicator.copy).toBeNull();
   });
 
-  it("treats remainder as not an ask", () => {
+  it("treats a deadline-free floor as eventually, not this month", () => {
     const row = envelope({
-      templates: [remainder()],
+      target: { behavior: "balance", cadence: { unit: "none" }, amountCents: 50_000 },
       assignedCents: 0,
       balanceCents: 0,
     });
-    expect(indicate(row).state).toBe("idle");
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("safe");
+    expect(indicator.moreNeededCents).toBe(0);
+    expect(indicator.copy).toBe("$500.00 needed eventually");
+    expect(indicator.pill).toBe("green");
   });
 
   it("greens leftover with no ask", () => {
     const row = envelope({
-      templates: [],
+      target: null,
       assignedCents: 0,
       carryInCents: 8_000,
       balanceCents: 8_000,
@@ -253,7 +240,7 @@ describe("envelopeIndicator", () => {
     // $1,200 by December; August is 4 months away (5 installments).
     const installment = Math.round(120_000 / 5);
     const row = envelope({
-      templates: [by(120_000, "2026-12")],
+      target: byDate(120_000, "2026-12"),
       assignedCents: installment,
       balanceCents: installment,
     });
@@ -268,7 +255,7 @@ describe("envelopeIndicator", () => {
 
   it("asks for the by-date remainder against the target month", () => {
     const row = envelope({
-      templates: [by(120_000, "2026-12")],
+      target: byDate(120_000, "2026-12"),
       assignedCents: 0,
       balanceCents: 0,
     });
@@ -279,7 +266,7 @@ describe("envelopeIndicator", () => {
 
   it("funds a by-date envelope that already holds the full target", () => {
     const row = envelope({
-      templates: [by(120_000, "2026-12")],
+      target: byDate(120_000, "2026-12"),
       carryInCents: 120_000,
       assignedCents: 0,
       balanceCents: 120_000,
@@ -293,7 +280,7 @@ describe("envelopeIndicator", () => {
     const row = billRow({ nextDueKey: "2026-09-01" });
     const bills = new Map([["rent", snapshot("rent", 210_000, "2026-09-01")]]);
     const indicator = indicate(row, bills);
-    expect(neededAssigned(row, MONTH, bills).needed).toBe(0);
+    expect(neededAssigned(row, MONTH, TODAY, bills).needed).toBe(0);
     expect(indicator.state).toBe("idle");
     expect(indicator.copy).toBeNull();
   });
@@ -317,7 +304,7 @@ describe("envelopeIndicator", () => {
       nextDueKey: "2027-06-01",
     });
     const bills = new Map([["geico", snapshot("geico", 600_000, "2027-06-01", 12)]]);
-    const needed = neededAssigned(row, MONTH, bills).needed;
+    const needed = neededAssigned(row, MONTH, TODAY, bills).needed;
     const funded = indicate(
       { ...row, assignedCents: needed, balanceCents: needed },
       bills,
@@ -360,10 +347,8 @@ describe("envelopeIndicator", () => {
   it("skips income envelopes when mapping a page", () => {
     const map = indicatorsFromAssign(
       MONTH,
-      [
-        envelope({ id: "pay", kind: "income", templates: [] }),
-        envelope({ id: "food" }),
-      ],
+      TODAY,
+      [envelope({ id: "pay", kind: "income", target: null }), envelope({ id: "food" })],
       new Map(),
     );
     expect(map.has("pay")).toBe(false);

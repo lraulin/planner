@@ -1,23 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { applyTemplates, templateCarryIn, type EnvelopeApplyInput } from "./apply";
-import type { BillSnapshot } from "./schedule";
-import type { Template } from "./types";
+import type { BillSnapshot } from "../targets/derive";
+import type { Target } from "../targets/types";
 
-const billsSimple: Template = {
-  id: "b1",
-  directive: "template",
-  type: "simple",
-  priority: 0,
-  monthlyCents: 50_000,
-};
-
-const remainder: Template = {
-  id: "r1",
-  directive: "template",
-  type: "remainder",
-  priority: null,
-  weight: 1,
+const addMonthly: Target = {
+  behavior: "add",
+  cadence: { unit: "month", day: 31 },
+  amountCents: 50_000,
 };
 
 function envelope(overrides: Partial<EnvelopeApplyInput> = {}): EnvelopeApplyInput {
@@ -26,9 +16,10 @@ function envelope(overrides: Partial<EnvelopeApplyInput> = {}): EnvelopeApplyInp
     name: "Bills",
     isIncome: false,
     kind: "spending",
-    templates: [billsSimple],
+    target: addMonthly,
     assignedCents: 0,
     carryInCents: 0,
+    activityCents: 0,
     ...overrides,
   };
 }
@@ -59,7 +50,7 @@ describe("applyTemplates", () => {
     ]);
   });
 
-  it("remainder takes leftover Ready to Assign and nothing more", () => {
+  it("does not spread leftover Ready to Assign onto an envelope with no target", () => {
     const result = applyTemplates({
       month: "2026-08-01",
       envelopes: [
@@ -67,7 +58,7 @@ describe("applyTemplates", () => {
         envelope({
           id: "savings",
           name: "Savings",
-          templates: [remainder],
+          target: null,
         }),
       ],
       bills: new Map(),
@@ -78,15 +69,20 @@ describe("applyTemplates", () => {
     const savings = result.allocations.find((row) => row.categoryId === "savings");
     const bills = result.allocations.find((row) => row.categoryId === "bills");
     expect(bills?.amountCents).toBe(50_000);
-    expect(savings?.amountCents).toBe(38_812);
+    expect(savings).toBeUndefined();
   });
 
-  it("may drive Ready to Assign negative; remainder then gets 0", () => {
+  it("may drive Ready to Assign negative", () => {
     const result = applyTemplates({
       month: "2026-08-01",
       envelopes: [
-        envelope({ templates: [{ ...billsSimple, monthlyCents: 200_000 }] }),
-        envelope({ id: "savings", name: "Savings", templates: [remainder] }),
+        envelope({
+          target: {
+            behavior: "add",
+            cadence: { unit: "month", day: 31 },
+            amountCents: 200_000,
+          },
+        }),
       ],
       bills: new Map(),
       readyToAssignCents: 50_000,
@@ -96,9 +92,6 @@ describe("applyTemplates", () => {
     expect(
       result.allocations.find((row) => row.categoryId === "bills")?.amountCents,
     ).toBe(200_000);
-    expect(
-      result.allocations.find((row) => row.categoryId === "savings")?.amountCents,
-    ).toBe(0);
   });
 
   it("skips income envelopes", () => {
@@ -122,7 +115,7 @@ describe("applyTemplates", () => {
       force: false,
       todayKey: "2026-08-22",
     });
-    expect(result.note).toContain("Applied templates: Bills $500.00 on August 22");
+    expect(result.note).toContain("Applied targets: Bills $500.00 on August 22");
   });
 });
 
@@ -147,7 +140,7 @@ describe("bill envelope apply", () => {
     };
     const result = applyTemplates({
       month: "2026-08-01",
-      envelopes: [envelope({ id: "rent", name: "Rent", kind: "bill", templates: [] })],
+      envelopes: [envelope({ id: "rent", name: "Rent", kind: "bill", target: null })],
       bills: new Map([["rent", snapshot]]),
       readyToAssignCents: 200_000,
       force: false,
@@ -159,7 +152,7 @@ describe("bill envelope apply", () => {
   it("assigns nothing and reports an error when there is no snapshot for it", () => {
     const result = applyTemplates({
       month: "2026-08-01",
-      envelopes: [envelope({ id: "rent", name: "Rent", kind: "bill", templates: [] })],
+      envelopes: [envelope({ id: "rent", name: "Rent", kind: "bill", target: null })],
       bills: new Map(),
       readyToAssignCents: 200_000,
       force: false,
@@ -192,7 +185,7 @@ describe("applyTemplates — bill envelopes", () => {
       id: "geico",
       name: "Geico",
       kind: "bill",
-      templates: [],
+      target: null,
       ...overrides,
     });
   }
@@ -258,7 +251,7 @@ describe("applyTemplates — bill envelopes", () => {
   it("never funds an ordinary envelope that has no templates", () => {
     // The `kind` check is what lets a bill through with an empty `templates` array; if it
     // were dropped, every envelope would become a participant asking for nothing.
-    const result = run([envelope({ id: "plain", templates: [] })], []);
+    const result = run([envelope({ id: "plain", target: null })], []);
     expect(result.allocations).toEqual([]);
   });
 });

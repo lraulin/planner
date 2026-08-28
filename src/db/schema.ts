@@ -2613,8 +2613,8 @@ export const financeCategoryGroups = pgTable(
  * Before `agent-os/specs/2026-08-23-2313-one-budget/`, one bill was three rows across three
  * tables — a commitment, an envelope pointing at it by `source_bill_id`, and a schedule
  * pointing at both — edited on three different pages with two vocabularies for "held". The
- * bill facet below (columns 12 onward) collapses that: the envelope *is* the bill, funds
- * itself from its own cadence (`src/lib/finances/budget/templates/schedule.ts`), and every
+ * bill facet below (columns 12 onward) collapses that: the envelope *is* the bill, and a
+ * bill with no stored target derives one from its own cadence (`targets/derive.ts`). Every
  * other column above still means the same thing it means for an ordinary envelope.
  */
 export const financeBudgetCategories = pgTable(
@@ -2640,17 +2640,14 @@ export const financeBudgetCategories = pgTable(
     /** Retired without losing its history. Still counts toward totals — see the group. */
     hidden: boolean("hidden").notNull().default(false),
     /**
-     * Goal templates for this envelope, Actual's `goal_def`.
+     * The one target this envelope asks against, or null if it asks for nothing.
      *
-     * JSON array of `{type, …}` lines (`simple` / `by` / `remainder`), amounts in integer
-     * cents. Validated in `src/lib/finances/budget/templates/types.ts` so bad JSONB never
-     * reaches the apply math. Free-text `notes` stay notes — Actual split the two and so do
-     * we. **A bill envelope (`kind = 'bill'`) never holds a template**: its funding demand is
-     * computed from its own cadence and `expectedCents`, not declared as a line here — see
-     * `agent-os/specs/2026-08-23-2313-one-budget/` D4, which retired the `schedule` template
-     * type this comment used to describe.
+     * JSON object `{ behavior, cadence, amountCents }` in integer cents, validated by
+     * `src/lib/finances/budget/targets/types.ts`. A bill envelope with no stored target
+     * derives one from its own cadence (`targets/derive.ts`) — an explicit target wins.
+     * Spec: `agent-os/specs/2026-08-28-1000-ynab-target-engine/` D1, D5.
      */
-    templates: jsonb("templates").$type<unknown>().notNull().default([]),
+    target: jsonb("target").$type<unknown>(),
     /** Free text on the envelope. Not the template store. */
     notes: text("notes").notNull().default(""),
     /** Which section this envelope belongs to — income, spending, bill, or savings. */
@@ -2717,7 +2714,7 @@ export const financeBudgetCategories = pgTable(
     /**
      * What a bill costs. Null means "use the median of the charges on file" — the better
      * answer once there is history and the only wrong one when there is none. Null and
-     * unused on an ordinary envelope, which instead states its demand as a `templates` line.
+     * unused on an ordinary envelope, which instead states its demand as a `target`.
      */
     expectedCents: integer("expected_cents"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2852,11 +2849,10 @@ export const financeBudgetAllocations = pgTable(
       .references(() => financeBudgetCategories.id, { onDelete: "cascade" }),
     amountCents: integer("amount_cents").notNull().default(0),
     /**
-     * What templates requested this month. Null means no goal.
+     * What Apply / Overwrite requested this month. Null means no goal.
      *
-     * Written only by Apply / Overwrite. The indicator compares Assigned to this stored
-     * figure rather than recomputing from templates, so a later manual edit of Assigned
-     * still shows whether the template was met.
+     * The indicator compares Assigned to this stored figure rather than recomputing from
+     * the target, so a later manual edit of Assigned still shows whether the target was met.
      */
     goalCents: integer("goal_cents"),
     /** Roll a negative balance forward into the envelope instead of onto Ready to Assign. */

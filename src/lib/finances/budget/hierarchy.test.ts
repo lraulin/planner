@@ -38,7 +38,7 @@ function category(
     sortKey,
     hidden: false,
     notes: "",
-    templates: [],
+    target: null,
     kind,
     isIncome: kind === "income",
     bill: null,
@@ -58,11 +58,12 @@ function row(id: string, groupId: string | null): BudgetRow {
     activityCents: 0,
     balanceCents: 0,
     carryover: true,
-    templates: [],
+    target: null,
     goalCents: null,
     kind: "spending",
     bill: null,
     nextDueKey: null,
+    expectedKey: null,
   };
 }
 

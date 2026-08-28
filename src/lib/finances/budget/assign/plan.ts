@@ -3,21 +3,21 @@
  *
  * **Assign never consumes more than Ready to Assign.** Reductions always apply first so
  * freed money can fund later increases. One envelope may be partial; later ones stay
- * unchanged. Remainder only consumes leftover RTA > 0.
+ * unchanged. Leftover Ready to Assign stays in Ready to Assign.
  *
- * Demand math is Actual's (`templates/demand.ts`). The clamp, ranking, and preview are
- * YNAB's — named divergence in `docs/actual-budget/README.md`.
+ * Demand math is the YNAB target engine (`targets/demand.ts`). The clamp, ranking, and
+ * preview stay YNAB's Assign behaviour — named in `docs/actual-budget/README.md`.
  *
- * Spec: `agent-os/specs/2026-08-24-1311-budget-assign-options/` D1–D5, D9.
+ * Spec: `agent-os/specs/2026-08-24-1311-budget-assign-options/` D1–D5, D9, as amended by
+ * `agent-os/specs/2026-08-28-1000-ynab-target-engine/` D3–D6.
  */
 
 import { formatUsd } from "@/lib/finances/money";
 import { monthName, prevMonthKey, type MonthKey } from "../envelope";
-import { monthsUntilBy } from "../templates/by";
-import { bys, demandOf, hasDemandAsk, remainderWeight } from "../templates/demand";
-import { distributeRemainder } from "../templates/remainder";
-import type { BillSnapshot } from "../templates/schedule";
-import { assertCents } from "../templates/types";
+import { monthsLeft } from "../targets/cadence";
+import { targetDemand } from "../targets/demand";
+import type { BillSnapshot } from "../targets/derive";
+import { assertCents, type Target } from "../targets/types";
 import {
   ASSIGN_AVERAGE_MONTHS,
   ASSIGN_OPTION_LABELS,
@@ -69,13 +69,21 @@ export function assignedToZeroBalance(envelope: AssignEnvelope): number {
   );
 }
 
+/** A this-month ask, not a deadline-free floor and not leftover Ready to Assign. */
+function hasUnderfundedAsk(envelope: AssignEnvelope): boolean {
+  if (envelope.kind === "bill") return true;
+  const target = envelope.target;
+  return target !== null && target.cadence.unit !== "none";
+}
+
 export function neededAssigned(
   envelope: AssignEnvelope,
   month: MonthKey,
+  todayKey: string,
   bills: ReadonlyMap<string, BillSnapshot>,
 ): { needed: number; errors: string[] } {
-  const demand = hasDemandAsk(envelope)
-    ? demandOf(envelope, month, bills)
+  const demand = hasUnderfundedAsk(envelope)
+    ? targetDemand(envelope, month, todayKey, bills)
     : { amount: 0, errors: [] as string[] };
   const needed = Math.max(demand.amount, assignedToZeroBalance(envelope));
   return { needed, errors: demand.errors };
@@ -88,18 +96,23 @@ function gapOf(envelope: AssignEnvelope, needed: number): number {
 /** Total remaining ask on the current month — the month-ahead note, not a gate. */
 export function underfundedGapCents(
   month: MonthKey,
+  todayKey: string,
   envelopes: readonly AssignEnvelope[],
   bills: ReadonlyMap<string, BillSnapshot>,
 ): number {
   let gap = 0;
   for (const envelope of envelopes) {
     if (!eligible(envelope, undefined)) continue;
-    gap += gapOf(envelope, neededAssigned(envelope, month, bills).needed);
+    gap += gapOf(envelope, neededAssigned(envelope, month, todayKey, bills).needed);
   }
   return gap;
 }
 
-/** D4: overspend, then bills by due date, then `by` target month, then simple, then rest. */
+function sinkingCadence(target: Target | null): boolean {
+  return target?.cadence.unit === "by" || target?.cadence.unit === "year";
+}
+
+/** D4: overspend, then bills by due date, then sinking targets by deadline, then rest. */
 export function compareUnderfunded(
   left: AssignEnvelope,
   right: AssignEnvelope,
@@ -109,8 +122,8 @@ export function compareUnderfunded(
   const bucket = (envelope: AssignEnvelope): number => {
     if (envelope.balanceCents < 0) return 0;
     if (envelope.kind === "bill") return 1;
-    if (bys(envelope.templates).length > 0) return 2;
-    if (hasDemandAsk(envelope)) return 3;
+    if (sinkingCadence(envelope.target)) return 2;
+    if (hasUnderfundedAsk(envelope)) return 3;
     return 4;
   };
   const byBucket = bucket(left) - bucket(right);
@@ -124,10 +137,9 @@ export function compareUnderfunded(
   }
   if (tie === 2) {
     const soonest = (envelope: AssignEnvelope): number => {
-      const remaining = bys(envelope.templates)
-        .map((template) => monthsUntilBy(template, month))
-        .filter((value): value is number => value !== null);
-      return remaining.length === 0 ? Number.POSITIVE_INFINITY : Math.min(...remaining);
+      if (!envelope.target) return Number.POSITIVE_INFINITY;
+      const remaining = monthsLeft(envelope.target.cadence, month);
+      return remaining === null ? Number.POSITIVE_INFINITY : remaining;
     };
     const byTarget = soonest(left) - soonest(right);
     if (byTarget !== 0) return byTarget;
@@ -267,6 +279,7 @@ function desiredAssigned(
   option: AssignOption,
   envelope: AssignEnvelope,
   month: MonthKey,
+  todayKey: string,
   history: readonly AssignHistoryMonth[],
   bills: ReadonlyMap<string, BillSnapshot>,
 ): { desired: number | null; errors: string[] } {
@@ -295,8 +308,8 @@ function desiredAssigned(
       return { desired: average, errors: [] };
     }
     case "reduce-overfunding": {
-      if (!hasDemandAsk(envelope)) return { desired: null, errors: [] };
-      const { needed, errors } = neededAssigned(envelope, month, bills);
+      if (!hasUnderfundedAsk(envelope)) return { desired: null, errors: [] };
+      const { needed, errors } = neededAssigned(envelope, month, todayKey, bills);
       if (envelope.assignedCents <= needed) return { desired: null, errors };
       return { desired: needed, errors };
     }
@@ -375,7 +388,12 @@ function planUnderfunded(
   const goals = new Map<string, number>();
 
   for (const envelope of participants) {
-    const { needed, errors: demandErrors } = neededAssigned(envelope, month, bills);
+    const { needed, errors: demandErrors } = neededAssigned(
+      envelope,
+      month,
+      todayKey,
+      bills,
+    );
     neededById.set(envelope.id, needed);
     for (const message of demandErrors) {
       errors.push({
@@ -384,7 +402,7 @@ function planUnderfunded(
         message,
       });
     }
-    if (hasDemandAsk(envelope) || envelope.balanceCents < 0) {
+    if (hasUnderfundedAsk(envelope) || envelope.balanceCents < 0) {
       goals.set(envelope.id, needed);
     }
   }
@@ -408,32 +426,6 @@ function planUnderfunded(
     const status: AssignLineStatus =
       given === want ? "full" : given > 0 ? "partial" : "skipped";
     lines.push(line(envelope, envelope.assignedCents + given, status));
-  }
-
-  const remainderEnvelopes = participants.filter(
-    (envelope) => remainderWeight(envelope.templates) > 0,
-  );
-  if (available > 0 && remainderEnvelopes.length > 0) {
-    const shares = distributeRemainder(
-      remainderEnvelopes.map((envelope) => ({
-        envelopeId: envelope.id,
-        weight: remainderWeight(envelope.templates),
-      })),
-      available,
-    );
-    for (const envelope of remainderEnvelopes) {
-      const extra = shares.get(envelope.id) ?? 0;
-      if (extra <= 0) continue;
-      available -= extra;
-      const current = lines.find((entry) => entry.categoryId === envelope.id);
-      if (current) {
-        current.toAssignedCents += extra;
-        current.deltaCents += extra;
-        if (current.status === "skipped") current.status = "partial";
-      } else {
-        lines.push(line(envelope, envelope.assignedCents + extra, "full"));
-      }
-    }
   }
 
   return finish(
@@ -484,6 +476,7 @@ export function planAssign(params: PlanAssignParams): AssignResult {
       params.option,
       envelope,
       params.month,
+      params.todayKey,
       params.history,
       params.bills,
     );
