@@ -174,6 +174,11 @@ export function remainingOccurrences(
   todayKey: string,
   bill?: ScheduleBill,
 ): number {
+  // A bill is counted against the charge it is **waiting for**, not against the calendar: an
+  // overdue charge is anchored before today and still counts, and a paid one has already
+  // moved `expectedKey` on. That is the whole difference between "late" and "settled".
+  if (cadence.unit === "schedule") return bill ? outstandingCharges(bill, month) : 0;
+
   const todayMonth = monthKeyOf(todayKey);
   if (month > todayMonth) return wholeOccurrences(cadence, month, bill);
   if (month < todayMonth) return 0;
@@ -183,17 +188,23 @@ export function remainingOccurrences(
       return countWeekdayFromDay(month, cadence.weekday, today);
     case "month":
       return monthAnchorDay(month, cadence.day) >= today ? 1 : 0;
-    case "schedule":
-      // An overdue charge is anchored *before* today and still counts — `expectedKey` is what
-      // separates "late and unpaid" from "paid", not the calendar.
-      return bill
-        ? occurrenceDatesInMonth(bill, month).filter(
-            (date) => date >= todayKey || date >= scheduleAnchor(bill),
-          ).length
-        : 0;
     default:
       return 0;
   }
+}
+
+/**
+ * Charges of `bill` inside `month` that are still outstanding.
+ *
+ * A **month cadence** is tied to the one charge being waited for, so a later month's charge is
+ * a later cycle and asks nothing here — that is `month-ahead-zero-based` D1's "full amount in
+ * the due month, $0 in every other", which this spec does not supersede. A **day cadence**
+ * (weekly, biweekly, 28-day) charges in every month, so it sums whatever the month still holds.
+ */
+function outstandingCharges(bill: ScheduleBill, month: MonthKey): number {
+  const anchor = scheduleAnchor(bill);
+  if (cadenceOf(bill).unit === "month") return monthKeyOf(anchor) === month ? 1 : 0;
+  return occurrenceDatesInMonth(bill, month).filter((date) => date >= anchor).length;
 }
 
 /**
