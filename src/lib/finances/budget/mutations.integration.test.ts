@@ -402,6 +402,85 @@ describeDb("budget mutations", () => {
     expect((await loadBudget(userId, MONTH)).uncategorizedCount).toBe(0);
   });
 
+  it("counts only the authoritative pending feed in activity and backlog", async () => {
+    const { cardId } = await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const discretionaryId = ids.get("Discretionary")!;
+
+    // The Register deliberately retains both feeds. The $166.70 SimpleFIN set is stale once
+    // the $276.63 Chase scrape lands, and must not become a second copy of the same spending.
+    await db.insert(financeTransactions).values([
+      {
+        userId,
+        accountId: cardId,
+        transactionDate: "2026-08-27",
+        pending: true,
+        description: "Amazon Marketplace",
+        amount: "-166.70",
+        externalSource: "api:simplefin",
+        externalId: `simplefin-categorized-${crypto.randomUUID()}`,
+        derivedFlow: "spend",
+        budgetCategoryId: discretionaryId,
+      },
+      {
+        userId,
+        accountId: cardId,
+        transactionDate: "2026-08-28",
+        pending: true,
+        description: "AMAZON MKTPLACE PMTS",
+        amount: "-276.63",
+        externalSource: "scrape:chase",
+        externalId: `scrape-categorized-${crypto.randomUUID()}`,
+        derivedFlow: "spend",
+        budgetCategoryId: discretionaryId,
+      },
+      {
+        userId,
+        accountId: cardId,
+        transactionDate: "2026-08-27",
+        pending: true,
+        description: "Uncategorized synced pending",
+        amount: "-50.00",
+        externalSource: "api:simplefin",
+        externalId: `simplefin-uncategorized-${crypto.randomUUID()}`,
+        derivedFlow: "spend",
+      },
+      {
+        userId,
+        accountId: cardId,
+        transactionDate: "2026-08-28",
+        pending: true,
+        description: "Uncategorized scraped pending",
+        amount: "-60.00",
+        externalSource: "scrape:chase",
+        externalId: `scrape-uncategorized-${crypto.randomUUID()}`,
+        derivedFlow: "spend",
+      },
+    ]);
+
+    const intruderId = await makeUser();
+    const { cardId: intruderCardId } = await seedAccounts(intruderId);
+    await db.insert(financeTransactions).values({
+      userId: intruderId,
+      accountId: intruderCardId,
+      transactionDate: "2026-08-28",
+      pending: true,
+      description: "Other user's scrape",
+      amount: "-999.99",
+      externalSource: "scrape:chase",
+      externalId: `intruder-scrape-${crypto.randomUUID()}`,
+      derivedFlow: "spend",
+    });
+
+    const data = await loadBudget(userId, MONTH);
+    const august = findMonth(data.months, MONTH)!;
+    expect(categoryMonth(august, discretionaryId).activityCents).toBe(-27_663);
+    expect(data.uncategorizedCount).toBe(1);
+    expect(data.uncategorizedCents).toBe(-6_000);
+    expect(august.uncategorizedActivityCents).toBe(-6_000);
+  });
+
   it("only assigns a Category to the on-budget side of a boundary transfer", async () => {
     const { checkingId, cardId, savingsId, investmentId } = await seedAccounts(userId);
     const [cardOut, cardIn, savingOut, savingIn, investOut, investIn, unpaired] =

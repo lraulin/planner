@@ -19,8 +19,34 @@ export async function loadSelectedWorkingPending(
   nowMs: number = Date.now(),
   executor: FinanceExecutor = db,
 ): Promise<PendingRow[]> {
+  return (await loadWorkingPendingSelection(userId, accounts, nowMs, executor)).rows;
+}
+
+export type WorkingPendingSelection = {
+  /** Pending money that belongs in current financial totals. */
+  rows: PendingRow[];
+  /** Stale feed rows kept in the Register for sync reconciliation, not Budget money. */
+  supersededTransactionIds: string[];
+};
+
+/**
+ * Load both halves of the pending decision once.
+ *
+ * The Register intentionally retains stale SimpleFIN pending while a bank scrape is
+ * authoritative. Money readers must exclude those retained rows or the same purchase lands in
+ * both envelope activity and the live account position. Returning the rejected transaction ids
+ * alongside the selected money lets aggregate SQL use exactly the same decision as the account
+ * pool instead of reimplementing the source preference.
+ */
+export async function loadWorkingPendingSelection(
+  userId: string,
+  accounts: readonly WorkingPendingAccount[],
+  nowMs: number = Date.now(),
+  executor: FinanceExecutor = db,
+): Promise<WorkingPendingSelection> {
   const pendingRows = await executor
     .select({
+      id: financeTransactions.id,
       accountId: financeTransactions.accountId,
       amount: financeTransactions.amount,
       source: financeTransactions.externalSource,
@@ -33,13 +59,22 @@ export async function loadSelectedWorkingPending(
       ),
     );
 
-  return selectWorkingPending(
-    pendingRows.map((row) => ({
+  const candidates = pendingRows.map((row) => ({
+    id: row.id,
+    accountId: row.accountId,
+    amountCents: numericStringToCents(row.amount) ?? 0,
+    source: row.source ?? "",
+  }));
+  const selected = selectWorkingPending(candidates, accounts, nowMs);
+  const selectedIds = new Set(selected.map((row) => row.id));
+
+  return {
+    rows: selected.map((row) => ({
       accountId: row.accountId,
-      amountCents: numericStringToCents(row.amount) ?? 0,
-      source: row.source ?? "",
+      amountCents: row.amountCents,
     })),
-    accounts,
-    nowMs,
-  ).map(({ accountId, amountCents }) => ({ accountId, amountCents }));
+    supersededTransactionIds: candidates
+      .filter((row) => !selectedIds.has(row.id))
+      .map((row) => row.id),
+  };
 }

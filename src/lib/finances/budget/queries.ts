@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -18,7 +18,7 @@ import type { FinanceExecutor } from "../dbExecutor";
 import { numericStringToCents } from "../money";
 import { listAccounts } from "../queries";
 import { accountBalanceView } from "../workingBalance";
-import { loadSelectedWorkingPending } from "../workingPendingQuery";
+import { loadWorkingPendingSelection } from "../workingPendingQuery";
 import { lastChargeByEnvelope } from "../billLastCharge";
 import { billAnchor } from "../commitments";
 import type { StoredBill } from "../recurringBills";
@@ -245,6 +245,11 @@ function parsedCategories(
   }));
 }
 
+/** Retained feed rows remain auditable in Register, but are not a second copy of the money. */
+function notSupersededPending(ids: readonly string[]) {
+  return ids.length > 0 ? notInArray(financeTransactions.id, [...ids]) : undefined;
+}
+
 /**
  * Signed sum per envelope per month, over on-budget accounts, from `since` forward.
  *
@@ -262,6 +267,7 @@ function parsedCategories(
 async function activitySince(
   userId: string,
   since: MonthKey,
+  supersededPendingIds: readonly string[],
   executor: FinanceExecutor = db,
 ) {
   const rows = await executor
@@ -281,6 +287,7 @@ async function activitySince(
         // none by design — but saying so explicitly is what stops a later edit to that test
         // silently double-counting every split.
         moneyRows,
+        notSupersededPending(supersededPendingIds),
         isNotNull(financeTransactions.budgetCategoryId),
         gte(financeTransactions.transactionDate, since),
         sql`not exists (
@@ -308,6 +315,7 @@ async function activitySince(
 async function backlogSince(
   userId: string,
   since: MonthKey,
+  supersededPendingIds: readonly string[],
   executor: FinanceExecutor = db,
 ) {
   const [row] = await executor
@@ -327,6 +335,7 @@ async function backlogSince(
         // this filter the budget would claim to be out of balance by exactly the value of
         // every split. The children carry the real answer and are counted instead.
         moneyRows,
+        notSupersededPending(supersededPendingIds),
         sql`${financeTransactions.budgetCategoryId} is null`,
         gte(financeTransactions.transactionDate, since),
         sql`(
@@ -362,6 +371,7 @@ async function uncategorizedActivityThrough(
   userId: string,
   since: MonthKey,
   through: MonthKey,
+  supersededPendingIds: readonly string[],
   executor: FinanceExecutor = db,
 ): Promise<number> {
   const [row] = await executor
@@ -378,6 +388,7 @@ async function uncategorizedActivityThrough(
         // Leaves, for the same reason as `backlogSince`: a split parent's null envelope is
         // not unassigned money, it is money assigned one level down.
         moneyRows,
+        notSupersededPending(supersededPendingIds),
         sql`${financeTransactions.budgetCategoryId} is null`,
         gte(financeTransactions.transactionDate, since),
         sql`${financeTransactions.transactionDate} <= ${monthEndKey(through)}`,
@@ -424,13 +435,13 @@ export async function loadBudget(
   const categories = parsedCategories(categoryRows);
 
   const settings = parseBudget(stored);
-  const pending = await loadSelectedWorkingPending(
+  const pending = await loadWorkingPendingSelection(
     userId,
     accounts,
     Date.now(),
     executor,
   );
-  const poolCents = accountPoolCents(accounts, pending);
+  const poolCents = accountPoolCents(accounts, pending.rows);
 
   const empty: BudgetData = {
     configured: false,
@@ -490,10 +501,17 @@ export async function loadBudget(
       activitySince(
         userId,
         shiftMonthKey(startMonth, -ASSIGN_AVERAGE_MONTHS),
+        pending.supersededTransactionIds,
         executor,
       ),
-      backlogSince(userId, startMonth, executor),
-      uncategorizedActivityThrough(userId, startMonth, currentMonth, executor),
+      backlogSince(userId, startMonth, pending.supersededTransactionIds, executor),
+      uncategorizedActivityThrough(
+        userId,
+        startMonth,
+        currentMonth,
+        pending.supersededTransactionIds,
+        executor,
+      ),
     ]);
   const foldActivity = activity.filter((row) => row.month >= startMonth);
   const preStartActivity = activity.filter((row) => row.month < startMonth);
@@ -574,7 +592,7 @@ export async function openingPositionFor(
   );
   if (accounts.length === 0) return 0;
 
-  const pending = await loadSelectedWorkingPending(
+  const pending = await loadWorkingPendingSelection(
     userId,
     allAccounts,
     Date.now(),
@@ -595,6 +613,7 @@ export async function openingPositionFor(
         eq(financeAccounts.userId, userId),
         // Money: leaves, so that splitting a row after `asOfKey` cannot move the balance.
         moneyRows,
+        notSupersededPending(pending.supersededTransactionIds),
         sql`${financeTransactions.transactionDate} > ${asOfKey}`,
       ),
     );
@@ -608,7 +627,7 @@ export async function openingPositionFor(
   );
 
   const working = accounts.reduce(
-    (total, account) => total + accountBalanceView(account, pending).workingCents,
+    (total, account) => total + accountBalanceView(account, pending.rows).workingCents,
     0,
   );
   return working - after;
