@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef, useState } from "react";
+
 import Link from "next/link";
 import { AmountCell } from "@/components/grid/cells";
 import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
@@ -38,7 +40,71 @@ export type BudgetColumnCtx = {
   indicators: ReadonlyMap<string, EnvelopeIndicator>;
   /** Budget month on screen, for Activity → Register links. */
   month: MonthKey;
+  /** The row whose name is currently an input, if any. */
+  renamingId: string | null;
+  /** Double-click, or the Rename command, puts this row's name into an input. */
+  onStartRename: (row: BudgetRow) => void;
+  /** Enter or blur. An unchanged or empty name is a cancel, not a write. */
+  onRename: (row: BudgetRow, name: string) => void;
+  /** Escape. */
+  onCancelRename: () => void;
 };
+
+/**
+ * The name cell while it is being renamed.
+ *
+ * Commit on Enter or blur, revert on Escape — the inline-edit contract `TextCell` follows
+ * (`src/components/grid/cells.tsx`) and `components/ux-principles.md` requires. The budget's
+ * name cell cannot simply *be* a `TextCell`: it also carries the "rolls over" chip, the
+ * indicator copy, the funding bar and the compact activity link, so it swaps to an input
+ * only while renaming.
+ */
+function RenameInput({
+  initial,
+  label,
+  disabled,
+  onCommit,
+  onCancel,
+}: {
+  initial: string;
+  label: string;
+  disabled: boolean;
+  onCommit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  // Escape reverts, so a blur that follows it must not then commit the reverted text.
+  const cancelled = useRef(false);
+  return (
+    <input
+      autoFocus
+      aria-label={label}
+      value={value}
+      disabled={disabled}
+      className="w-full min-w-0 rounded border border-select-edge bg-surface px-1 py-0.5 text-ink"
+      onClick={stopRowClick}
+      onPointerDown={stopRowClick}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={() => {
+        if (cancelled.current) return;
+        onCommit(value);
+      }}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onCommit(value);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          cancelled.current = true;
+          onCancel();
+        }
+      }}
+    />
+  );
+}
 
 const IDLE: EnvelopeIndicator = {
   state: "idle",
@@ -157,11 +223,25 @@ function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnC
       return (
         <div className="relative flex h-full w-full min-w-0 flex-col justify-center gap-0.5 md:block md:self-stretch">
           <div className="flex min-w-0 items-center gap-1.5 md:h-full">
-            <span
-              className={`min-w-0 truncate ${row.node.hidden ? "text-ink-faint italic" : ""}`}
-            >
-              {row.node.name}
-            </span>
+            {ctx.renamingId === row.node.id ? (
+              <RenameInput
+                initial={row.node.name}
+                label={`Name for ${row.node.name}`}
+                disabled={ctx.pending}
+                onCommit={(name) => ctx.onRename(row.node, name)}
+                onCancel={ctx.onCancelRename}
+              />
+            ) : (
+              <span
+                className={`min-w-0 truncate ${row.node.hidden ? "text-ink-faint italic" : ""}`}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  ctx.onStartRename(row.node);
+                }}
+              >
+                {row.node.name}
+              </span>
+            )}
             {row.node.carryover ? (
               <span
                 title="Overspending rolls into this envelope instead of onto Ready to Assign"

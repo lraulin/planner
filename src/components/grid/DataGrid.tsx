@@ -219,6 +219,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   onGroupIdsChange,
   groupTotals,
   groupNote,
+  groupChrome,
   footerTotals,
   onNavigableIdsChange,
   density = "comfortable",
@@ -393,6 +394,18 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     nodes: TRow[],
     group: Extract<GridRow<TRow>, { kind: "group" }>,
   ) => ReactNode;
+  /**
+   * Controls the host renders into the group header, after the count and note — Budget's
+   * `+` and `⋮`, and its rename input.
+   *
+   * One generic seam rather than a prop per gesture: what belongs on a group header is the
+   * host's business, and only the host knows what its groups can do.
+   *
+   * **The host must stop propagation on anything clickable it renders here.** The whole
+   * header row is the collapse toggle (`onClick={onToggle}` below), so a `+` that lets its
+   * click through collapses the group it was meant to add to.
+   */
+  groupChrome?: (group: Extract<GridRow<TRow>, { kind: "group" }>) => ReactNode;
   /**
    * A grand total pinned to the bottom of the scroll area, keyed by column id like
    * `groupTotals`. Receives the node payloads that survived filtering, so the column
@@ -1246,6 +1259,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                             ? groupNote(membersByGroup.get(row.id) ?? [], row)
                             : undefined
                         }
+                        chrome={groupChrome?.(row)}
                       />
                     ) : pending ? (
                       <div
@@ -1766,6 +1780,7 @@ const GroupHeader = memo(function GroupHeader({
   compact,
   totals,
   note,
+  chrome,
 }: {
   row: Extract<GridRow, { kind: "group" }>;
   gridTemplate: string;
@@ -1780,6 +1795,8 @@ const GroupHeader = memo(function GroupHeader({
   totals?: Record<string, ReactNode> | null;
   /** A fact about the group with no column of its own. */
   note?: ReactNode;
+  /** Host-rendered controls. Responsible for their own `stopPropagation`. */
+  chrome?: ReactNode;
 }) {
   const layout = totalsLayout(columns, totals);
   const totalColumns = columns.slice(layout.labelSpan - 1);
@@ -1857,6 +1874,7 @@ const GroupHeader = memo(function GroupHeader({
             {note}
           </span>
         )}
+        {chrome}
         {/*
           A phone row has no columns to align to, so the totals stay an inline run here —
           but built from the same record and labelled with each column’s own heading, since

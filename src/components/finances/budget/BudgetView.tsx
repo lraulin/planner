@@ -16,8 +16,13 @@ import {
   assignBudgetAction,
   budgetOperationAction,
   clearPayeeRoutingAction,
+  deleteBudgetCategoryAction,
+  deleteCategoryGroupAction,
   fileWaitingChargesAction,
+  moveBudgetStructureItemAction,
+  moveBudgetStructureItemIntoGroupAction,
   payeeEvidenceAction,
+  renameCategoryGroupAction,
   setCarryoverAction,
   setRecurringBillAction,
   updateBudgetCategoryAction,
@@ -57,6 +62,7 @@ import {
   totalsCaption,
   type BudgetExportDocument,
 } from "@/lib/finances/budget/export";
+import type { EnvelopeKind } from "@/db/schema";
 import type { BudgetData } from "@/lib/finances/budget/queries";
 import {
   budgetRows,
@@ -87,7 +93,13 @@ import {
   type AssignOption,
   type AssignResult,
 } from "@/lib/finances/budget/assign/types";
-import { descendantEnvelopeIds } from "@/lib/finances/budget/hierarchy";
+import {
+  budgetChildren,
+  budgetGroupDepths,
+  descendantEnvelopeIds,
+  moveDestinations,
+  type BudgetStructureRef,
+} from "@/lib/finances/budget/hierarchy";
 import { formatUsd } from "@/lib/finances/money";
 import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
 import type { RecurringMerchant } from "@/lib/finances/analytics";
@@ -97,7 +109,6 @@ import { AssignDialog, AssignPreviewDialog } from "./AssignDialog";
 import { billColumns, envelopeColumns, type BudgetColumnCtx } from "./budgetColumns";
 import { BudgetInspector } from "./BudgetInspector";
 import { BudgetSummary } from "./BudgetSummary";
-import { BudgetStructureDrawer } from "./BudgetStructureDrawer";
 import { CommitmentPayeeDialog } from "./CommitmentPayeeDialog";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { PayeeMergeDialog } from "@/components/finances/payees/PayeeMergeDialog";
@@ -106,12 +117,29 @@ import { ForecastDetails } from "./ForwardPanel";
 import { MoveMoneyDialog } from "./MoveMoneyDialog";
 import { TargetDrawer } from "./TargetDrawer";
 import { ReviewDrawer } from "./ReviewDrawer";
+import { StructureComposer, type ComposerTarget } from "./StructureComposer";
 
 /**
  * Which table last had the focus ring. Selection and the inspector read it; export no
  * longer does — the page exports one document, so there is nothing left to disambiguate.
  */
 type BudgetTable = "envelopes" | "bills" | "savings";
+
+/** The four sections, named the way the page names them. `kind` is the section (D1). */
+const KIND_LABELS: Record<EnvelopeKind, string> = {
+  income: "Income",
+  spending: "Envelope",
+  bill: "Bill",
+  savings: "Savings envelope",
+};
+
+/** "Change section ▸" — the page's own headings, in page order. */
+const SECTION_CHOICES: { kind: EnvelopeKind; label: string }[] = [
+  { kind: "income", label: "Income" },
+  { kind: "spending", label: "Regular spending" },
+  { kind: "bill", label: "Bills" },
+  { kind: "savings", label: "Savings" },
+];
 
 /**
  * The budget, one month at a time: **Income**, **Spending** (Regular above Bills), **Savings**.
@@ -187,8 +215,14 @@ export function BudgetView({
   const [assigning, setAssigning] = useState(false);
   const [preview, setPreview] = useState<AssignResult | null>(null);
   const [previewScope, setPreviewScope] = useState<readonly string[] | undefined>();
-  const [managingStructure, setManagingStructure] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  // Structure editing, all of it inline: which `+` strip is open, which name is an input,
+  // and which delete is waiting to be confirmed.
+  const [composer, setComposer] = useState<ComposerTarget | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<
+    (BudgetStructureRef & { name: string }) | null
+  >(null);
 
   // One saved layout per table. Keys stay distinct so a width tweak on Bills does not
   // rewrite Regular spending. Unknown persisted ids (the old cadence columns) are dropped
@@ -618,6 +652,35 @@ export function BudgetView({
   }, []);
   useRegisterCommands(exportCommands);
 
+  /**
+   * The structure handlers, read at run time.
+   *
+   * Same trick as `exportCommands` above and for the same reason: these close over
+   * `data.groups` / `data.categories`, so putting them in the command memo's deps would
+   * rebuild — and re-register — the whole catalog on every refresh. What the commands need
+   * *reactively* is only whether a row is selected, which stays a real dependency.
+   */
+  const structureRef = useRef({
+    openComposer,
+    moveRelative,
+    openMoveToGroupMenu,
+    newKindForFocus,
+    startRename: (id: string) => setRenaming(id),
+    startDelete: (row: BudgetRow) =>
+      setDeleting({ kind: "category", id: row.id, name: row.name }),
+  });
+  useEffect(() => {
+    structureRef.current = {
+      openComposer,
+      moveRelative,
+      openMoveToGroupMenu,
+      newKindForFocus,
+      startRename: (id: string) => setRenaming(id),
+      startDelete: (row: BudgetRow) =>
+        setDeleting({ kind: "category", id: row.id, name: row.name }),
+    };
+  });
+
   const commands = useMemo((): Command[] => {
     const assignCommands: Command[] = ASSIGN_OPTIONS.map((option) => {
       const planned = assignPlans.find((entry) => entry.option === option);
@@ -640,16 +703,126 @@ export function BudgetView({
       };
     });
 
-    return [
+    // Every gesture the page grew is a declared command: a command without a menu is not
+    // shipped (`navigation.md`). The row commands act on the focused table's selected row,
+    // which is the same row the inspector is showing.
+    const structureCommands: Command[] = [
       {
-        id: "budget.structure.manage",
-        label: "Manage groups and envelopes…",
-        group: "view",
+        id: "budget.envelope.new",
+        label: "New envelope",
+        group: "record",
         menu: "organize",
         section: "Budget",
-        keywords: "create rename delete hide group envelope category",
-        run: () => setManagingStructure(true),
+        icon: "new",
+        keywords: "create add category bucket",
+        run: () =>
+          structureRef.current.openComposer(
+            "envelope",
+            structureRef.current.newKindForFocus(),
+            null,
+          ),
       },
+      {
+        id: "budget.bill.new",
+        label: "New bill",
+        group: "record",
+        menu: "organize",
+        section: "Budget",
+        icon: "new",
+        keywords: "create add subscription recurring",
+        title:
+          "A bill starts monthly; set its real cadence and amount in the inspector",
+        run: () => structureRef.current.openComposer("envelope", "bill", null),
+      },
+      {
+        id: "budget.group.new",
+        label: "New group",
+        group: "record",
+        menu: "organize",
+        section: "Budget",
+        icon: "insert-child",
+        keywords: "create add folder section",
+        run: () =>
+          structureRef.current.openComposer(
+            "group",
+            structureRef.current.newKindForFocus(),
+            null,
+          ),
+      },
+      {
+        id: "budget.row.rename",
+        label: "Rename envelope",
+        group: "record",
+        menu: "organize",
+        section: "Budget",
+        icon: "rename",
+        keywords: "name edit title",
+        disabled: !selectedRow,
+        title: selectedRow ? undefined : "Select an envelope first",
+        run: () => selectedRow && structureRef.current.startRename(selectedRow.id),
+      },
+      {
+        id: "budget.row.move-up",
+        label: "Move envelope up",
+        group: "record",
+        menu: "organize",
+        section: "Budget",
+        icon: "move-up",
+        keywords: "reorder sort order",
+        disabled: !selectedRow,
+        title: selectedRow ? undefined : "Select an envelope first",
+        run: () =>
+          selectedRow &&
+          structureRef.current.moveRelative(
+            { kind: "category", id: selectedRow.id },
+            -1,
+          ),
+      },
+      {
+        id: "budget.row.move-down",
+        label: "Move envelope down",
+        group: "record",
+        menu: "organize",
+        section: "Budget",
+        icon: "move-down",
+        keywords: "reorder sort order",
+        disabled: !selectedRow,
+        title: selectedRow ? undefined : "Select an envelope first",
+        run: () =>
+          selectedRow &&
+          structureRef.current.moveRelative(
+            { kind: "category", id: selectedRow.id },
+            1,
+          ),
+      },
+      {
+        id: "budget.row.move-to-group",
+        label: "Move envelope to group…",
+        group: "record",
+        menu: "organize",
+        section: "Budget",
+        icon: "convert",
+        keywords: "reparent nest folder",
+        disabled: !selectedRow,
+        title: selectedRow ? undefined : "Select an envelope first",
+        run: () => selectedRow && structureRef.current.openMoveToGroupMenu(selectedRow),
+      },
+      {
+        id: "budget.row.delete",
+        label: "Delete envelope…",
+        group: "record",
+        menu: "organize",
+        section: "Budget",
+        icon: "delete",
+        keywords: "remove destroy",
+        disabled: !selectedRow,
+        title: selectedRow ? undefined : "Select an envelope first",
+        run: () => selectedRow && structureRef.current.startDelete(selectedRow),
+      },
+    ];
+
+    return [
+      ...structureCommands,
       {
         id: "budget.review",
         label: review.length > 0 ? `Review… (${review.length})` : "Review…",
@@ -663,7 +836,7 @@ export function BudgetView({
       },
       ...assignCommands,
     ];
-  }, [assignPlans, bannerScope, review.length, startAssign]);
+  }, [assignPlans, bannerScope, review.length, startAssign, selectedRow]);
 
   useRegisterCommands(commands);
 
@@ -682,7 +855,16 @@ export function BudgetView({
           amountCents: cents,
         }),
       ),
-    onBalanceMenu: (row, at) => setMenu({ ...at, items: balanceMenu(row) }),
+    onBalanceMenu: (row, at) => setMenu({ ...at, items: rowMenuItems(row) }),
+    renamingId: renaming,
+    onStartRename: (row) => setRenaming(row.id),
+    onCancelRename: () => setRenaming(null),
+    onRename: (row, name) => {
+      setRenaming(null);
+      const trimmed = name.trim();
+      if (trimmed === "" || trimmed === row.name) return;
+      run(() => updateBudgetCategoryAction(row.id, { name: trimmed }));
+    },
     onPatchBill: (row, patch) => {
       // Every patch carries the cadence because `upsertBillEnvelope` requires one; sending
       // the row's current cadence when the patch does not change it keeps a URL edit from
@@ -702,7 +884,298 @@ export function BudgetView({
     },
   };
 
-  function balanceMenu(row: BudgetRow): MenuItem[] {
+  /**
+   * The composer strip, if it is open and it belongs to this section.
+   *
+   * One strip on the page at a time: it is a cursor, and two of them would leave the user
+   * guessing which one Enter lands in.
+   */
+  function composerFor(kind: EnvelopeKind): ReactNode {
+    if (!composer || composer.kind !== kind) return null;
+    return (
+      <StructureComposer
+        key={`${composer.what}:${composer.kind}:${composer.groupId ?? "root"}`}
+        target={composer}
+        onCreated={() => router.refresh()}
+        onClose={() => setComposer(null)}
+      />
+    );
+  }
+
+  /** Which section a bare "New envelope"/"New group" lands in: the one you were last in. */
+  function newKindForFocus(): EnvelopeKind {
+    return focusedTable === "savings" ? "savings" : "spending";
+  }
+
+  /**
+   * The catalog's "Move envelope to group…", which has no cursor to open a fly-out under.
+   *
+   * It opens the same destination list the row menu shows, at the middle of the window —
+   * the list is the whole point of the command, and reproducing it as a dialog would be a
+   * second copy of the one rule (`moveDestinations`) that decides it.
+   */
+  function openMoveToGroupMenu(row: BudgetRow) {
+    const moving: BudgetStructureRef = { kind: "category", id: row.id };
+    const destinations = moveDestinations(data.groups, data.categories, moving);
+    setMenu({
+      x: Math.round(window.innerWidth / 2),
+      y: Math.round(window.innerHeight / 3),
+      items: [
+        { heading: `Move ${row.name} to` },
+        ...(structureParentId(moving) === null
+          ? []
+          : [
+              {
+                label: "No group",
+                onSelect: () =>
+                  run(() => moveBudgetStructureItemIntoGroupAction(moving, null)),
+              } satisfies MenuItem,
+            ]),
+        ...destinations.map((entry) => ({
+          label: entry.name,
+          onSelect: () =>
+            run(() => moveBudgetStructureItemIntoGroupAction(moving, entry.id)),
+        })),
+      ],
+    });
+  }
+
+  const groupDepths = budgetGroupDepths(data.groups);
+
+  /** The section a `+` on this grid creates into, and the noun the composer prints. */
+  function openComposer(
+    what: ComposerTarget["what"],
+    kind: EnvelopeKind,
+    groupId: string | null,
+  ) {
+    const group = groupId
+      ? (data.groups.find((entry) => entry.id === groupId) ?? null)
+      : null;
+    setComposer({
+      what,
+      kind,
+      groupId,
+      groupName: group?.name ?? null,
+      depth: groupId ? (groupDepths.get(groupId) ?? 0) + 1 : 0,
+    });
+  }
+
+  /**
+   * Swap one item with the sibling above or below it, inside its own parent.
+   *
+   * Reordering is commands rather than grid drag: `DataGrid` requires `gutter: "handle"` for
+   * `rowDrag`, and the Budget tables keep the checkbox gutter and its header select-all
+   * (`agent-os/specs/2026-08-27-2200-plan-gutter-drag-handle/`). Unlike the drawer's
+   * desktop-only drag these also work on a phone. See D6.
+   */
+  function moveRelative(moving: BudgetStructureRef, direction: -1 | 1) {
+    const siblings = structureSiblings(moving);
+    const index = siblings.findIndex(
+      (item) => item.kind === moving.kind && item.id === moving.id,
+    );
+    const target = siblings[index + direction];
+    if (!target) return;
+    run(() =>
+      moveBudgetStructureItemAction(
+        moving,
+        { kind: target.kind, id: target.id },
+        direction < 0 ? "before" : "after",
+      ),
+    );
+  }
+
+  function structureParentId(moving: BudgetStructureRef): string | null {
+    return moving.kind === "group"
+      ? (data.groups.find((entry) => entry.id === moving.id)?.parentGroupId ?? null)
+      : (data.categories.find((entry) => entry.id === moving.id)?.groupId ?? null);
+  }
+
+  function structureSiblings(moving: BudgetStructureRef) {
+    return budgetChildren(data.groups, data.categories, structureParentId(moving));
+  }
+
+  /**
+   * Rename / Move up / Move down / Move to group… / Delete — the same five on a row and on
+   * a group header, because they are the same five operations on the same structure.
+   *
+   * Every one of them is a declared command as well (`navigation.md`); this is the menu the
+   * commands and the right-click share.
+   */
+  function structureMenuItems(
+    moving: BudgetStructureRef,
+    name: string,
+    deleteBlockedReason?: string,
+  ): MenuItem[] {
+    const siblings = structureSiblings(moving);
+    const index = siblings.findIndex(
+      (item) => item.kind === moving.kind && item.id === moving.id,
+    );
+    const parentId = structureParentId(moving);
+    const destinations = moveDestinations(data.groups, data.categories, moving);
+    return [
+      {
+        label: "Rename",
+        icon: "rename",
+        onSelect: () => setRenaming(moving.id),
+      },
+      {
+        label: "Move up",
+        icon: "move-up",
+        disabled: index <= 0,
+        title: index <= 0 ? `${name} is already first here` : undefined,
+        onSelect: () => moveRelative(moving, -1),
+      },
+      {
+        label: "Move down",
+        icon: "move-down",
+        disabled: index < 0 || index >= siblings.length - 1,
+        title:
+          index >= siblings.length - 1 ? `${name} is already last here` : undefined,
+        onSelect: () => moveRelative(moving, 1),
+      },
+      {
+        label: "Move to group",
+        icon: "convert",
+        disabled: destinations.length === 0 && parentId === null,
+        title:
+          destinations.length === 0 && parentId === null
+            ? "There is no other group this can go in"
+            : undefined,
+        items: [
+          ...(parentId === null
+            ? []
+            : [
+                {
+                  label: moving.kind === "group" ? "Top level" : "No group",
+                  onSelect: () =>
+                    run(() => moveBudgetStructureItemIntoGroupAction(moving, null)),
+                },
+                "separator" as const,
+              ]),
+          ...destinations.map((entry) => ({
+            label: entry.name,
+            onSelect: () =>
+              run(() => moveBudgetStructureItemIntoGroupAction(moving, entry.id)),
+          })),
+        ],
+      },
+      "separator",
+      {
+        label: "Delete…",
+        icon: "delete",
+        destructive: true,
+        disabled: deleteBlockedReason !== undefined,
+        title: deleteBlockedReason,
+        onSelect: () => setDeleting({ ...moving, name }),
+      },
+    ];
+  }
+
+  /** Empty-only delete, and the reason when it is not. Groups hold no money; rows do. */
+  function groupDeleteBlockedReason(groupId: string): string | undefined {
+    const hasChildren =
+      data.groups.some((entry) => entry.parentGroupId === groupId) ||
+      data.categories.some((entry) => entry.groupId === groupId);
+    return hasChildren
+      ? "Move every subgroup and envelope out before deleting"
+      : undefined;
+  }
+
+  function groupMenuItems(groupId: string, kind: EnvelopeKind): MenuItem[] {
+    const group = data.groups.find((entry) => entry.id === groupId);
+    const name = group?.name ?? "this group";
+    return [
+      {
+        label: `New ${KIND_LABELS[kind].toLowerCase()} here`,
+        icon: "new",
+        onSelect: () => openComposer("envelope", kind, groupId),
+      },
+      ...(kind === "spending"
+        ? ([
+            {
+              label: "New bill here",
+              icon: "new",
+              onSelect: () => openComposer("envelope", "bill", groupId),
+            },
+          ] satisfies MenuItem[])
+        : []),
+      {
+        label: "New subgroup here",
+        icon: "insert-child",
+        onSelect: () => openComposer("group", kind, groupId),
+      },
+      "separator",
+      ...structureMenuItems(
+        { kind: "group", id: groupId },
+        name,
+        groupDeleteBlockedReason(groupId),
+      ),
+    ];
+  }
+
+  /**
+   * The `+` and `⋮` a group header carries, rendered by the host through `groupChrome`.
+   *
+   * Every click here stops propagation: the whole header row is the collapse toggle, so a
+   * `+` that let its click through would collapse the group it was meant to add to.
+   */
+  function groupChromeFor(groupId: string, kind: EnvelopeKind): ReactNode {
+    const group = data.groups.find((entry) => entry.id === groupId);
+    if (renaming === groupId) {
+      return (
+        <span
+          className="ml-2 flex min-w-0 flex-1 items-center"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <GroupRenameInput
+            initial={group?.name ?? ""}
+            disabled={pending}
+            onCommit={(name) => {
+              setRenaming(null);
+              const trimmed = name.trim();
+              if (trimmed === "" || trimmed === group?.name) return;
+              run(() => renameCategoryGroupAction(groupId, trimmed));
+            }}
+            onCancel={() => setRenaming(null)}
+          />
+        </span>
+      );
+    }
+    return (
+      <span className="ml-auto flex shrink-0 items-center gap-0.5 pl-2">
+        <button
+          type="button"
+          aria-label={`Add to ${data.groups.find((entry) => entry.id === groupId)?.name ?? "group"}`}
+          title="Add an envelope in this group"
+          className="rounded px-1.5 py-0.5 text-[0.875rem] leading-none font-normal text-ink-muted hover:bg-surface hover:text-ink"
+          onClick={(event) => {
+            event.stopPropagation();
+            openComposer("envelope", kind, groupId);
+          }}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          aria-label={`Actions for ${data.groups.find((entry) => entry.id === groupId)?.name ?? "group"}`}
+          className="rounded px-1.5 py-0.5 text-[0.875rem] leading-none font-normal text-ink-muted hover:bg-surface hover:text-ink"
+          onClick={(event) => {
+            event.stopPropagation();
+            const bounds = event.currentTarget.getBoundingClientRect();
+            setMenu({
+              x: bounds.left,
+              y: bounds.bottom,
+              items: groupMenuItems(groupId, kind),
+            });
+          }}
+        >
+          ⋮
+        </button>
+      </span>
+    );
+  }
+
+  function rowMenuItems(row: BudgetRow): MenuItem[] {
     const sources = coverSources(rows, row.id);
     const ref = { id: row.id, name: row.name };
     const overspent = row.balanceCents < 0;
@@ -819,11 +1292,26 @@ export function BudgetView({
         : []),
       "separator",
       {
+        label: "Change section",
+        icon: "convert",
+        title: `Which table ${row.name} lives in`,
+        items: SECTION_CHOICES.map((choice) => ({
+          label: choice.label,
+          icon: choice.kind === row.kind ? ("complete" as const) : undefined,
+          disabled: choice.kind === row.kind,
+          title: choice.kind === row.kind ? `${row.name} is already here` : undefined,
+          onSelect: () =>
+            run(() => updateBudgetCategoryAction(row.id, { kind: choice.kind })),
+        })),
+      },
+      {
         label: row.hidden ? "Show envelope" : "Hide envelope",
         title: "A hidden envelope keeps its history and still counts toward the totals",
         onSelect: () =>
           run(() => updateBudgetCategoryAction(row.id, { hidden: !row.hidden })),
       },
+      "separator",
+      ...structureMenuItems({ kind: "category", id: row.id }, row.name),
     ];
   }
 
@@ -969,6 +1457,8 @@ export function BudgetView({
             rows={sections.income}
             receivedCents={receivedThisMonthCents}
             expectedCents={forecast.comparison.income.monthlyCents}
+            onNew={() => openComposer("envelope", "income", null)}
+            composer={composerFor("income")}
           />
 
           {data.movementNotes ? (
@@ -1050,6 +1540,17 @@ export function BudgetView({
               totals={envelopeTotals}
               focused={focusedTable === "envelopes"}
               onFocus={() => setFocusedTable("envelopes")}
+              newItems={[
+                {
+                  label: "Envelope",
+                  onSelect: () => openComposer("envelope", "spending", null),
+                },
+                {
+                  label: "Group",
+                  onSelect: () => openComposer("group", "spending", null),
+                },
+              ]}
+              composer={composerFor("spending")}
             >
               <DataGrid<BudgetColumnCtx, BudgetRow>
                 rows={envelopeGridRows}
@@ -1074,7 +1575,7 @@ export function BudgetView({
                  */
                 rowMenu={(rowId) => {
                   const row = rows.find((candidate) => candidate.id === rowId);
-                  return row ? balanceMenu(row) : [];
+                  return row ? rowMenuItems(row) : [];
                 }}
                 ariaLabel={`Envelopes for ${monthLabel(data.month)}`}
                 empty="No envelopes yet."
@@ -1090,6 +1591,7 @@ export function BudgetView({
                 groupTotals={(_nodes, header) =>
                   groupTotals(sections.envelopes, header.id)
                 }
+                groupChrome={(header) => groupChromeFor(header.id, "spending")}
               />
             </BudgetSection>
 
@@ -1099,6 +1601,14 @@ export function BudgetView({
               totals={billTotals}
               focused={focusedTable === "bills"}
               onFocus={() => setFocusedTable("bills")}
+              newItems={[
+                {
+                  label: "Bill",
+                  onSelect: () => openComposer("envelope", "bill", null),
+                },
+                { label: "Group", onSelect: () => openComposer("group", "bill", null) },
+              ]}
+              composer={composerFor("bill")}
             >
               <DataGrid<BudgetColumnCtx, BudgetBillRow>
                 rows={billGridRows}
@@ -1117,7 +1627,7 @@ export function BudgetView({
                 exportCommands={false}
                 rowMenu={(rowId) => {
                   const row = rows.find((candidate) => candidate.id === rowId);
-                  return row ? balanceMenu(row) : [];
+                  return row ? rowMenuItems(row) : [];
                 }}
                 ariaLabel={`Bills for ${monthLabel(data.month)}`}
                 empty="No bills yet — Review proposes them from what actually charges you."
@@ -1131,6 +1641,7 @@ export function BudgetView({
                 autoHeight
                 rowLabel={(row) => `Bill: ${row.node.name}`}
                 groupTotals={(_nodes, header) => groupTotals(sections.bills, header.id)}
+                groupChrome={(header) => groupChromeFor(header.id, "bill")}
               />
             </BudgetSection>
           </section>
@@ -1142,6 +1653,17 @@ export function BudgetView({
             level="h2"
             focused={focusedTable === "savings"}
             onFocus={() => setFocusedTable("savings")}
+            newItems={[
+              {
+                label: "Envelope",
+                onSelect: () => openComposer("envelope", "savings", null),
+              },
+              {
+                label: "Group",
+                onSelect: () => openComposer("group", "savings", null),
+              },
+            ]}
+            composer={composerFor("savings")}
           >
             <DataGrid<BudgetColumnCtx, BudgetRow>
               rows={savingsGridRows}
@@ -1160,10 +1682,10 @@ export function BudgetView({
               exportCommands={false}
               rowMenu={(rowId) => {
                 const row = rows.find((candidate) => candidate.id === rowId);
-                return row ? balanceMenu(row) : [];
+                return row ? rowMenuItems(row) : [];
               }}
               ariaLabel={`Savings for ${monthLabel(data.month)}`}
-              empty="No savings envelopes yet — add one from Manage groups and envelopes."
+              empty="No savings envelopes yet — add one with + Envelope above."
               widths={savingsGrid.widths}
               onResizeColumn={savingsGrid.setWidth}
               onResetColumnWidth={savingsGrid.clearWidth}
@@ -1174,6 +1696,7 @@ export function BudgetView({
               autoHeight
               rowLabel={(row) => `Savings: ${row.node.name}`}
               groupTotals={(_nodes, header) => groupTotals(sections.savings, header.id)}
+              groupChrome={(header) => groupChromeFor(header.id, "savings")}
             />
           </BudgetSection>
 
@@ -1293,14 +1816,32 @@ export function BudgetView({
           onConfirm={() => commitAssign(preview.option, previewScope)}
         />
       ) : null}
-      {managingStructure ? (
-        <BudgetStructureDrawer
-          groups={data.groups}
-          categories={data.categories}
-          onClose={() => setManagingStructure(false)}
-          onChanged={() => router.refresh()}
-        />
-      ) : null}
+      <ConfirmDialog
+        open={deleting !== null}
+        title={
+          deleting?.kind === "group"
+            ? "Delete this empty group?"
+            : "Delete this envelope?"
+        }
+        message={
+          deleting?.kind === "group"
+            ? `Delete ${deleting.name}? Only empty groups can be deleted.`
+            : `Delete ${deleting?.name ?? "this envelope"}? Its transactions remain and return to the backlog.`
+        }
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => {
+          const target = deleting;
+          setDeleting(null);
+          if (!target) return;
+          run(() =>
+            target.kind === "group"
+              ? deleteCategoryGroupAction(target.id)
+              : deleteBudgetCategoryAction(target.id),
+          );
+        }}
+      />
       {reviewing ? (
         <ReviewDrawer
           review={review}
@@ -1436,6 +1977,56 @@ function MonthBar({
  * envelopes. Categorizing one moves it from that term into its envelope without breaking
  * the pool identity.
  */
+/**
+ * A group header's name, while it is being renamed.
+ *
+ * Same contract as the row cells (`budgetColumns.tsx`): Enter or blur commits, Escape
+ * reverts. It renders beside the header's own label rather than replacing it, because the
+ * label belongs to `GroupHeader` and `groupChrome` is a slot after it — the old name staying
+ * visible reads as "renaming this", which is what is happening.
+ */
+function GroupRenameInput({
+  initial,
+  disabled,
+  onCommit,
+  onCancel,
+}: {
+  initial: string;
+  disabled: boolean;
+  onCommit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const cancelled = useRef(false);
+  return (
+    <input
+      autoFocus
+      aria-label={`Name for ${initial}`}
+      value={value}
+      disabled={disabled}
+      className="w-full min-w-0 rounded border border-select-edge bg-surface px-1 py-0.5 font-normal text-ink"
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={() => {
+        if (cancelled.current) return;
+        onCommit(value);
+      }}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onCommit(value);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          cancelled.current = true;
+          onCancel();
+        }
+      }}
+    />
+  );
+}
+
 function Backlog({ data }: { data: BudgetData }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem]">
@@ -1500,6 +2091,8 @@ function BudgetSection({
   level = "h3",
   focused,
   onFocus,
+  newItems,
+  composer,
   children,
 }: {
   title: string;
@@ -1509,6 +2102,10 @@ function BudgetSection({
   level?: "h2" | "h3";
   focused: boolean;
   onFocus: () => void;
+  /** `+ Envelope` / `+ Bill` / `+ Group` — the create gestures for this section's root. */
+  newItems?: readonly { label: string; onSelect: () => void }[];
+  /** The open composer strip, rendered under the grid rather than inside it (D4). */
+  composer?: ReactNode;
   children: ReactNode;
 }) {
   const Heading = level;
@@ -1536,13 +2133,32 @@ function BudgetSection({
           </Heading>
           <p className="text-[0.75rem] text-ink-muted">{caption}</p>
         </div>
-        <span className="tabular flex flex-wrap gap-x-4 text-[0.75rem] text-ink-muted">
-          <span>{formatUsd(totals.assignedCents)} assigned</span>
-          <span>{formatUsd(totals.activityCents)} spent</span>
-          <span>{formatUsd(totals.balanceCents)} left</span>
-        </span>
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <span className="tabular flex flex-wrap gap-x-4 text-[0.75rem] text-ink-muted">
+            <span>{formatUsd(totals.assignedCents)} assigned</span>
+            <span>{formatUsd(totals.activityCents)} spent</span>
+            <span>{formatUsd(totals.balanceCents)} left</span>
+          </span>
+          {/* Real buttons, not a hover affordance: every gesture needs a tappable path
+              below `md` (`components/responsive.md`). */}
+          {newItems && newItems.length > 0 ? (
+            <span className="flex flex-wrap gap-1">
+              {newItems.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.onSelect}
+                  className="rounded border border-rule px-2 py-0.5 text-[0.75rem] text-ink hover:bg-surface-raised"
+                >
+                  + {item.label}
+                </button>
+              ))}
+            </span>
+          ) : null}
+        </div>
       </header>
       {children}
+      {composer}
     </section>
   );
 }
@@ -1559,10 +2175,15 @@ function IncomeSection({
   rows,
   receivedCents,
   expectedCents,
+  onNew,
+  composer,
 }: {
   rows: readonly BudgetRow[];
   receivedCents: number;
   expectedCents: number;
+  /** Income is a list, not a grid, but it creates envelopes the same way the tables do. */
+  onNew: () => void;
+  composer?: ReactNode;
 }) {
   return (
     <section className="rounded border border-rule bg-surface px-3 py-2">
@@ -1578,6 +2199,13 @@ function IncomeSection({
           >
             Expected <span className="text-ink">{formatUsd(expectedCents)}</span>/mo
           </span>
+          <button
+            type="button"
+            onClick={onNew}
+            className="rounded border border-rule px-2 py-0.5 text-[0.75rem] text-ink hover:bg-surface-raised"
+          >
+            + Envelope
+          </button>
         </span>
       </header>
       {rows.length > 0 ? (
@@ -1594,6 +2222,7 @@ function IncomeSection({
         Ready to Assign is unassigned money from every on-budget account, including
         income already received. Moving money to a savings account does not assign it.
       </p>
+      {composer}
     </section>
   );
 }
