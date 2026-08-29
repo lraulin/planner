@@ -24,7 +24,9 @@ import type { EnvelopeKind } from "@/db/schema";
  * the previous value, and blur commits the highlight only when it is an envelope —
  * wandering off the field must not open a create dialog.
  *
- * Spec: `agent-os/specs/2026-08-26-1151-category-picker-typeahead/`.
+ * Specs: `agent-os/specs/2026-08-26-1151-category-picker-typeahead/` and
+ * `agent-os/specs/2026-08-29-1605-hidden-categories-in-picker/` (hidden envelopes stay
+ * in the open list, marked).
  */
 export function CategorySelect({
   catalog,
@@ -293,6 +295,9 @@ export function CategorySelect({
                         }`}
                       >
                         {row.label}
+                        {row.hidden ? (
+                          <span className="font-normal text-ink-faint"> (hidden)</span>
+                        ) : null}
                       </div>
                     );
                   }
@@ -325,6 +330,9 @@ export function CategorySelect({
                       } ${isActive ? "bg-surface-raised" : "hover:bg-surface-raised/60"}`}
                     >
                       <span className="min-w-0 truncate">{row.label}</span>
+                      {row.kind === "envelope" && row.hidden ? (
+                        <span className="shrink-0 text-ink-faint"> (hidden)</span>
+                      ) : null}
                     </button>
                   );
                 }),
