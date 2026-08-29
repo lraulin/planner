@@ -239,8 +239,9 @@ export function TargetDrawer({
   const count = periodCadence
     ? wholeOccurrences(periodCadence, month, undefined, since)
     : null;
-  const trimmed =
-    periodCadence && count !== null && count < wholeOccurrences(periodCadence, month);
+  // `since` only silences a month the target did not exist for; the month it started in asks
+  // its whole cap, so the note has one job — explaining a zero.
+  const beforeStart = count === 0 && Boolean(since);
 
   return (
     <Drawer open onClose={requestClose} labelledBy={titleId}>
@@ -377,8 +378,8 @@ export function TargetDrawer({
                   ? `${count} ${weekdayLongLabel(periodCadence.weekday)}${count === 1 ? "" : "s"} × ${formatUsd(parsed.amountCents)} = `
                   : ""}
                 {formatUsd(parsed.amountCents * count)}.
-                {trimmed && since
-                  ? ` Counted from ${formatDate(since)}, when this target started.`
+                {beforeStart && since
+                  ? ` Nothing — this target started ${formatDate(since)}.`
                   : ""}
               </p>
             ) : null}

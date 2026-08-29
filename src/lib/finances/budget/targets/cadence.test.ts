@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { monthEndKey } from "../envelope";
 import {
   countWeekdayInMonth,
-  monthAnchorDay,
   monthsLeft,
   occurrenceDatesInMonth,
   outstandingCharges,
@@ -71,15 +70,6 @@ describe("countWeekdayInMonth", () => {
   });
 });
 
-describe("monthAnchorDay", () => {
-  it("clamps day 31 into February", () => {
-    expect(monthAnchorDay("2027-02-01", 31)).toBe(28);
-    expect(monthAnchorDay("2028-02-01", 31)).toBe(29);
-    expect(monthAnchorDay("2026-08-01", 31)).toBe(31);
-    expect(monthAnchorDay("2026-09-01", 31)).toBe(30);
-  });
-});
-
 describe("wholeOccurrences", () => {
   it("counts the whole month, however many anchors have already passed", () => {
     // Sundays: 2, 9, 16, 23, 30. The 28th does not make August cheaper.
@@ -88,33 +78,28 @@ describe("wholeOccurrences", () => {
     expect(wholeOccurrences({ unit: "month", day: 1 }, "2026-08-01")).toBe(1);
   });
 
-  it("skips the weeks that predate the target", () => {
-    // Started on the 28th: only the 30th is left in August.
-    expect(wholeOccurrences(sunday, "2026-08-01", undefined, "2026-08-28")).toBe(1);
-  });
-
-  it("counts an anchor the target started on", () => {
-    // 2026-08-30 is itself a Sunday, and a target created that day asks for it.
-    expect(wholeOccurrences(sunday, "2026-08-01", undefined, "2026-08-30")).toBe(1);
+  it("counts the whole month a target started in, not the anchors after its start day", () => {
+    // The reported bug: `since` was the day the budget was created (the 24th), which cut
+    // August from five Sundays to one and called a half-funded envelope Funded.
+    expect(wholeOccurrences(sunday, "2026-08-01", undefined, "2026-08-24")).toBe(5);
+    expect(wholeOccurrences(sunday, "2026-08-01", undefined, "2026-08-30")).toBe(5);
+    expect(
+      wholeOccurrences(
+        { unit: "month", day: 1 },
+        "2026-08-01",
+        undefined,
+        "2026-08-24",
+      ),
+    ).toBe(1);
   });
 
   it("asks nothing for a month entirely before the target, and all of one after", () => {
-    expect(wholeOccurrences(sunday, "2026-07-01", undefined, "2026-08-28")).toBe(0);
-    expect(wholeOccurrences(sunday, "2026-09-01", undefined, "2026-08-28")).toBe(4);
+    expect(wholeOccurrences(sunday, "2026-07-01", undefined, "2026-08-24")).toBe(0);
+    expect(wholeOccurrences(sunday, "2026-09-01", undefined, "2026-08-24")).toBe(4);
   });
 
-  it("counts a monthly anchor only when it falls on or after the start day", () => {
-    const fifteenth: Cadence = { unit: "month", day: 15 };
-    expect(wholeOccurrences(fifteenth, "2026-08-01", undefined, "2026-08-15")).toBe(1);
-    expect(wholeOccurrences(fifteenth, "2026-08-01", undefined, "2026-08-16")).toBe(0);
-  });
-
-  it("clamps a 31st anchor into February before comparing it to the start day", () => {
-    const last: Cadence = { unit: "month", day: 31 };
-    // February 2027 ends on the 28th, so its anchor is the 28th: a target started on the
-    // 20th still gets it, and one started in March does not.
-    expect(wholeOccurrences(last, "2027-02-01", undefined, "2027-02-20")).toBe(1);
-    expect(wholeOccurrences(last, "2027-02-01", undefined, "2027-03-01")).toBe(0);
+  it("counts a target that started on the 1st exactly like one with no start day", () => {
+    expect(wholeOccurrences(sunday, "2026-08-01", undefined, "2026-08-01")).toBe(5);
   });
 });
 

@@ -80,10 +80,17 @@ describe("a period refill is an assignment question", () => {
     expect(targetDemand(july, "2026-07-01", NO_BILLS).amount).toBe(0);
   });
 
-  it("asks only the Sundays the target has existed for", () => {
-    const started = envelope({ ...sundayRefill, since: "2026-08-28" });
-    expect(targetDemand(started, "2026-08-01", NO_BILLS).amount).toBe(21_096);
-    expect(targetDemand(started, "2026-09-01", NO_BILLS).amount).toBe(21_096 * 4);
+  it("asks the start month's whole cap, not the Sundays after the start day", () => {
+    // The envelope this shipped wrong on: `since` was the day the budget was created, so
+    // August asked for one Sunday ($210.96) and $943.59 assigned read as Funded — with
+    // $158.06 available against a $210.96 shop still to come. August costs five Sundays.
+    const groceries = envelope(
+      { ...sundayRefill, since: "2026-08-24" },
+      { activityCents: -78_553 },
+    );
+    const { amount } = targetDemand(groceries, "2026-08-01", NO_BILLS);
+    expect(amount).toBe(105_480);
+    expect(amount - 94_359).toBe(11_121);
   });
 });
 

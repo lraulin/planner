@@ -122,36 +122,22 @@ export function countWeekdayInMonth(month: MonthKey, weekday: number): number {
   return Math.floor((days - 1 - offset) / 7) + 1;
 }
 
-/** The same count, restricted to dates on or after day `fromDay` of the month. Closed form. */
-function countWeekdayFromDay(
-  month: MonthKey,
-  weekday: number,
-  fromDay: number,
-): number {
-  const total = countWeekdayInMonth(month, weekday);
-  if (total === 0) return 0;
-  const firstWeekday = weekdayOfDateKey(month);
-  const offset = (weekday - firstWeekday + 7) % 7;
-  const skipped = Math.max(0, Math.ceil((fromDay - 1 - offset) / 7));
-  return Math.max(0, total - skipped);
-}
-
-/** A `month` cadence's anchor date, clamped into a month too short to hold it. */
-export function monthAnchorDay(month: MonthKey, day: number): number {
-  return Math.min(day, daysInMonthOf(month));
-}
-
 /**
- * Anchor dates inside `month`, ignoring today but not ignoring `since`.
+ * Anchor dates inside `month` — the month's whole cap, ignoring today.
  *
- * The month's cap does not shrink as Fridays pass: a week that has already happened was still a
- * week the target asked for, and money assigned for it is what pays for it
- * (`target-refill-basis` D2). What a target genuinely does not ask for is a week that predates
- * it — `since` is the day it started, and anchors before that day are not counted.
+ * The cap answers **what this envelope's month costs**, not what it costs from today, and not
+ * what it costs from the day the target was written down. It does not shrink as Fridays pass:
+ * a week that has already happened was still a week the target asked for, and the money
+ * assigned for it is what paid for it.
  *
- * `add` counted the whole month for its own reason (a contribution is not coverage of trips,
- * `weekly-envelope-targets` D2); `upTo` now counts it too, because the ask is measured against
- * Assigned rather than against what is left after spending.
+ * `since` is therefore a **month guard, not a day filter**. A month entirely before the target
+ * asks nothing; the month the target started in asks its whole cap, past anchors included
+ * (`target-refill-basis` D2, as corrected by `target-since-month-granularity` D1). Trimming
+ * inside the start month was what called Groceries funded on 2026-08-28 with $158.06 available
+ * against a $210.96 shop still to come: the backfilled `since` was the day the budget was
+ * created, so August asked for one Sunday while a whole month of assignment and spending sat
+ * against it. Nothing is over-asked by counting whole — Assigned counts toward the cap, so a
+ * target adopted mid-month asks only for what its month is still short of.
  */
 export function wholeOccurrences(
   cadence: Cadence,
@@ -160,15 +146,11 @@ export function wholeOccurrences(
   since?: string,
 ): number {
   if (since && monthKeyOf(since) > month) return 0;
-  const fromDay =
-    since && monthKeyOf(since) === month ? Number(since.slice(8, 10)) : null;
   switch (cadence.unit) {
     case "week":
-      return fromDay === null
-        ? countWeekdayInMonth(month, cadence.weekday)
-        : countWeekdayFromDay(month, cadence.weekday, fromDay);
+      return countWeekdayInMonth(month, cadence.weekday);
     case "month":
-      return fromDay === null || monthAnchorDay(month, cadence.day) >= fromDay ? 1 : 0;
+      return 1;
     case "schedule":
       return bill ? occurrenceDatesInMonth(bill, month).length : 0;
     default:
