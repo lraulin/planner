@@ -2,7 +2,9 @@
  * Category picker tree — Budget page order (type, then nested groups and envelopes
  * alphabetically) plus a New {type}… sentinel in each section.
  *
- * Spec: `agent-os/specs/2026-08-26-1151-category-picker-typeahead/`.
+ * Specs: `agent-os/specs/2026-08-26-1151-category-picker-typeahead/` and
+ * `agent-os/specs/2026-08-29-1605-hidden-categories-in-picker/` (hidden envelopes stay,
+ * marked).
  */
 
 import type { EnvelopeKind } from "@/db/schema";
@@ -71,6 +73,10 @@ export type CategoryPickerHeading = {
    * Income type. Without this the picker drew the two identically.
    */
   scope: "type" | "group";
+  /**
+   * Hidden from Budget by this group or an ancestor. Type headings are never marked.
+   */
+  hidden: boolean;
 };
 
 export type CategoryPickerEnvelope = {
@@ -78,6 +84,8 @@ export type CategoryPickerEnvelope = {
   id: string;
   label: string;
   depth: number;
+  /** Hidden from Budget by this envelope or an ancestor group. */
+  hidden: boolean;
 };
 
 export type CategoryPickerCreate = {
@@ -138,9 +146,10 @@ export function commitCategoryPicker(
 
 /**
  * Nested picker rows in Budget name order. Hidden envelopes and hidden-group
- * subtrees are omitted. Empty types stay so New {type}… is reachable. Filter is a
+ * subtrees stay, marked `hidden` when this row or an ancestor is hidden from
+ * Budget. Empty types stay so New {type}… is reachable. Filter is a
  * case-insensitive substring on envelope name, ancestor group names, and the type
- * label, and does not re-rank.
+ * label — not the `(hidden)` marker — and does not re-rank.
  */
 export function categoryPickerSections(
   groups: readonly EnvelopePickerGroup[],
@@ -148,20 +157,11 @@ export function categoryPickerSections(
   query = "",
 ): CategoryPickerSection[] {
   const needle = query.trim().toLowerCase();
-  const visibleGroups = groups.filter((group) => !group.hidden);
-  const visibleGroupIds = new Set(visibleGroups.map((group) => group.id));
-  const visibleEnvelopes = envelopes.filter(
-    (envelope) =>
-      !envelope.hidden &&
-      (envelope.groupId === null || visibleGroupIds.has(envelope.groupId)),
-  );
-  const groupById = new Map(visibleGroups.map((group) => [group.id, group]));
+  const groupById = new Map(groups.map((group) => [group.id, group]));
 
   const sections: CategoryPickerSection[] = [];
   for (const section of CATEGORY_SECTIONS) {
-    const ofKind = visibleEnvelopes.filter(
-      (envelope) => envelope.kind === section.kind,
-    );
+    const ofKind = envelopes.filter((envelope) => envelope.kind === section.kind);
     const typeMatches = matchesNeedle(section.label, needle);
     const matching = ofKind.filter(
       (envelope) =>
@@ -172,7 +172,7 @@ export function categoryPickerSections(
         ),
     );
     const showCreate = needle === "" || matchesNeedle(section.createLabel, needle);
-    const tree = walkType(section.kind, visibleGroups, matching, groupById);
+    const tree = walkType(section.kind, groups, matching, groupById);
     if (tree.length === 0 && !showCreate) continue;
 
     const rows: CategoryPickerRow[] = [
@@ -182,6 +182,7 @@ export function categoryPickerSections(
         label: section.label,
         depth: 0,
         scope: "type",
+        hidden: false,
       },
       ...tree,
     ];
@@ -229,12 +230,13 @@ function walkType(
   const emitted = new Set<string>();
   const envelopeById = new Map(envelopes.map((envelope) => [envelope.id, envelope]));
 
-  function emitGroup(groupId: string, depth: number): number {
+  function emitGroup(groupId: string, depth: number, ancestorHidden: boolean): number {
     if (emitted.has(groupId)) throw new Error("Budget groups contain a cycle.");
     const group = groupById.get(groupId);
     if (!group) return 0;
     emitted.add(groupId);
 
+    const hidden = group.hidden || ancestorHidden;
     const headerIndex = rows.length;
     rows.push({
       kind: "heading",
@@ -242,12 +244,13 @@ function walkType(
       label: group.name,
       depth,
       scope: "group",
+      hidden,
     });
 
     let count = 0;
     for (const child of budgetChildren(groups, envelopes, group.id)) {
       if (child.kind === "group") {
-        count += emitGroup(child.id, depth + 1);
+        count += emitGroup(child.id, depth + 1, hidden);
         continue;
       }
       const envelope = envelopeById.get(child.id);
@@ -257,6 +260,7 @@ function walkType(
         id: envelope.id,
         label: envelope.name,
         depth: depth + 1,
+        hidden: envelope.hidden || hidden,
       });
       count += 1;
     }
@@ -271,7 +275,7 @@ function walkType(
 
   for (const root of budgetChildren(groups, envelopes, null)) {
     if (root.kind === "group") {
-      emitGroup(root.id, 0);
+      emitGroup(root.id, 0, false);
       continue;
     }
     const envelope = envelopeById.get(root.id);
@@ -281,6 +285,7 @@ function walkType(
       id: envelope.id,
       label: envelope.name,
       depth: 0,
+      hidden: envelope.hidden,
     });
   }
   return rows;

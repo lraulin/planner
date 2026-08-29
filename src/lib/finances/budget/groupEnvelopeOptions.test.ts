@@ -39,13 +39,13 @@ function envelope(
 function outline(sections: ReturnType<typeof categoryPickerSections>) {
   return sections.map((entry) => ({
     type: entry.section.label,
-    rows: entry.rows.map((row) =>
-      row.kind === "heading"
-        ? `h${row.depth}:${row.label}`
-        : row.kind === "create"
-          ? row.label
-          : `e${row.depth}:${row.label}`,
-    ),
+    rows: entry.rows.map((row) => {
+      if (row.kind === "create") return row.label;
+      const mark = row.hidden ? " hidden" : "";
+      return row.kind === "heading"
+        ? `h${row.depth}:${row.label}${mark}`
+        : `e${row.depth}:${row.label}${mark}`;
+    }),
   }));
 }
 
@@ -108,18 +108,12 @@ describe("categoryPickerSections", () => {
     expect(spending?.rows).toEqual(["h0:Regular spending", "New envelope…"]);
   });
 
-  it("omits hidden envelopes and anything under a hidden group", () => {
+  it("keeps a hidden envelope under a visible group and marks it", () => {
     const sections = categoryPickerSections(
-      [
-        group("visible", null, "A"),
-        group("hidden", null, "B", true),
-        group("nested", "hidden", "A"),
-      ],
+      [group("visible", null, "A")],
       [
         envelope("shown", "spending", "visible", "A"),
         envelope("secret", "spending", "visible", "B", true),
-        envelope("buried", "spending", "nested", "A"),
-        envelope("direct", "spending", "hidden", "A"),
       ],
     );
     const spending = outline(sections).find(
@@ -128,9 +122,59 @@ describe("categoryPickerSections", () => {
     expect(spending?.rows).toEqual([
       "h0:Regular spending",
       "h0:visible",
+      "e1:secret hidden",
       "e1:shown",
       "New envelope…",
     ]);
+  });
+
+  it("keeps a hidden group and marks the heading and its envelopes", () => {
+    const sections = categoryPickerSections(
+      [group("hidden", null, "A", true)],
+      [envelope("direct", "spending", "hidden", "A")],
+    );
+    const spending = outline(sections).find(
+      (entry) => entry.type === "Regular spending",
+    );
+    expect(spending?.rows).toEqual([
+      "h0:Regular spending",
+      "h0:hidden hidden",
+      "e1:direct hidden",
+      "New envelope…",
+    ]);
+  });
+
+  it("marks a nested group under a hidden ancestor even when the nested group is not itself hidden", () => {
+    const sections = categoryPickerSections(
+      [group("hidden", null, "A", true), group("nested", "hidden", "A")],
+      [envelope("buried", "spending", "nested", "A")],
+    );
+    const spending = outline(sections).find(
+      (entry) => entry.type === "Regular spending",
+    );
+    expect(spending?.rows).toEqual([
+      "h0:Regular spending",
+      "h0:hidden hidden",
+      "h1:nested hidden",
+      "e2:buried hidden",
+      "New envelope…",
+    ]);
+  });
+
+  it("filters a hidden envelope by name, not by the hidden marker", () => {
+    const groups = [group("visible", null, "A")];
+    const envelopes = [
+      envelope("shown", "spending", "visible", "A"),
+      envelope("secret", "spending", "visible", "B", true),
+    ];
+
+    expect(outline(categoryPickerSections(groups, envelopes, "secret"))).toEqual([
+      {
+        type: "Regular spending",
+        rows: ["h0:Regular spending", "h0:visible", "e1:secret hidden"],
+      },
+    ]);
+    expect(categoryPickerSections(groups, envelopes, "(hidden)")).toEqual([]);
   });
 
   it("renders a mixed group under each type that has a descendant envelope there", () => {
@@ -256,7 +300,7 @@ describe("commitCategoryPicker", () => {
     expect(
       commitCategoryPicker(
         "rent",
-        { kind: "envelope", id: "rent", label: "rent", depth: 0 },
+        { kind: "envelope", id: "rent", label: "rent", depth: 0, hidden: false },
         false,
       ),
     ).toEqual({ action: "envelope", id: "rent" });
