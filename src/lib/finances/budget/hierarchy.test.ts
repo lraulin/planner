@@ -84,6 +84,24 @@ describe("budget hierarchy", () => {
     category("electric", "utilities", "A"),
   ];
 
+  it("orders siblings by name, ignoring stored sort keys", () => {
+    const groups = [group("zoo", null, "A"), group("apple", null, "Z")];
+    const categories = [
+      category("milk", null, "A"),
+      category("bread", null, "Z"),
+      category("apple-juice", "apple", "A"),
+    ];
+    expect(budgetChildren(groups, categories, null).map((item) => item.id)).toEqual([
+      "apple",
+      "bread",
+      "milk",
+      "zoo",
+    ]);
+    expect(budgetChildren(groups, categories, "apple").map((item) => item.id)).toEqual([
+      "apple-juice",
+    ]);
+  });
+
   it("orders groups and envelopes together and emits recursive counts", () => {
     expect(
       budgetChildren(groups, categories, "spending").map((item) => item.id),
@@ -286,7 +304,7 @@ describe("budgetSiblings", () => {
   it("returns only the moving item's own section at the root", () => {
     expect(
       budgetSiblings(groups, categories, null, "bill").map((item) => item.id),
-    ).toEqual(["rent", "bills"]);
+    ).toEqual(["bills", "rent"]);
     expect(
       budgetSiblings(groups, categories, null, "savings").map((item) => item.id),
     ).toEqual(["emergency"]);
@@ -295,17 +313,19 @@ describe("budgetSiblings", () => {
   it("makes a root envelope's neighbour one it can actually move past", () => {
     // The bug this exists to stop: with every root child in one list, Rent's neighbour was
     // Groceries — a spending envelope — and `resolveBudgetDrop` refused the move, so "Move
-    // down" did nothing at all.
+    // down" did nothing at all. Name order puts the Bills group next to Rent, not Groceries.
     const siblings = budgetSiblings(groups, categories, null, "bill");
     const index = siblings.findIndex((item) => item.id === "rent");
-    const next = siblings[index + 1];
+    const neighbor = siblings[index + 1] ?? siblings[index - 1];
+    if (!neighbor) throw new Error("rent should have a bill sibling");
+    expect(neighbor.id).not.toBe("groceries");
     expect(
       resolveBudgetDrop(
         groups,
         categories,
         { kind: "category", id: "rent" },
-        { kind: next.kind, id: next.id },
-        "after",
+        { kind: neighbor.kind, id: neighbor.id },
+        siblings[index + 1] ? "after" : "before",
       ),
     ).not.toBeNull();
   });

@@ -100,7 +100,7 @@ function august(): BudgetMonth {
 }
 
 describe("budgetRows", () => {
-  it("orders by group then sort key, and attaches the month's numbers", () => {
+  it("orders by group name then envelope name, and attaches the month's numbers", () => {
     const rows = budgetRows(GROUPS, CATEGORIES, august());
     expect(rows.map((row) => row.id)).toEqual(["pay", "food", "fun", "old"]);
     expect(rows[1]).toMatchObject({
@@ -304,8 +304,8 @@ describe("sectionGridRows", () => {
     const grid = sectionGridRows(groups, "spending", rows, { showHidden: true });
 
     expect(grid.filter((row) => row.kind === "group").map((row) => row.label)).toEqual([
-      "Spending",
       "Extras",
+      "Spending",
     ]);
   });
 });

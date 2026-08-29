@@ -1,6 +1,6 @@
 /**
- * Category picker tree — Budget page order (type, then nested groups, then envelopes)
- * plus a New {type}… sentinel in each section.
+ * Category picker tree — Budget page order (type, then nested groups and envelopes
+ * alphabetically) plus a New {type}… sentinel in each section.
  *
  * Spec: `agent-os/specs/2026-08-26-1151-category-picker-typeahead/`.
  */
@@ -137,7 +137,7 @@ export function commitCategoryPicker(
 }
 
 /**
- * Nested picker rows in Budget sibling order. Hidden envelopes and hidden-group
+ * Nested picker rows in Budget name order. Hidden envelopes and hidden-group
  * subtrees are omitted. Empty types stay so New {type}… is reachable. Filter is a
  * case-insensitive substring on envelope name, ancestor group names, and the type
  * label, and does not re-rank.

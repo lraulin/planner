@@ -42,7 +42,7 @@ import {
 import { applyPayeeAutoCategories } from "../payees/claims";
 import { loadBudget } from "./queries";
 import { categoryMonth, findMonth, monthKeyOf, nextMonthKey } from "./envelope";
-import { budgetChildren, budgetSiblings } from "./hierarchy";
+import * as sortKey from "@/lib/tree/sortKey";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -242,10 +242,11 @@ describeDb("budget mutations", () => {
     );
 
     const data = await loadBudget(userId, MONTH);
-    const bills = budgetSiblings(data.groups, data.categories, null, "bill").map(
-      (item) => item.id,
-    );
-    expect(bills.indexOf(second)).toBe(bills.indexOf(first) - 1);
+    const hulu = data.categories.find((row) => row.id === second)!;
+    const netflix = data.categories.find((row) => row.id === first)!;
+    expect(hulu.kind).toBe("bill");
+    expect(netflix.kind).toBe("bill");
+    expect(sortKey.compare(hulu.sortKey, netflix.sortKey)).toBeLessThan(0);
   });
 
   it("keeps a group and its envelopes in one section", async () => {
@@ -1411,16 +1412,13 @@ describeDb("budget mutations", () => {
       "before",
     );
     const reordered = await loadBudget(userId, MONTH);
-    // Both are at the section root: the move above put Bills beside Discretionary, which
-    // the presets leave ungrouped.
-    const spendingOrder = budgetChildren(
-      reordered.groups,
-      reordered.categories,
-      null,
-    ).map((child) => child.id);
-    expect(spendingOrder.indexOf(billsEnvelope.id)).toBe(
-      spendingOrder.indexOf(discretionary.id) - 1,
-    );
+    // The drop still writes a key before Discretionary. The grid itself sorts by name, so
+    // this is the mutation's effect, not what the page shows.
+    const billsRow = reordered.categories.find(
+      (category) => category.id === billsEnvelope.id,
+    )!;
+    expect(billsRow.groupId).toBeNull();
+    expect(sortKey.compare(billsRow.sortKey, discretionary.sortKey)).toBeLessThan(0);
   });
 });
 

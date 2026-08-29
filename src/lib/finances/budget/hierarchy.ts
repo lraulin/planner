@@ -1,5 +1,4 @@
 import type { GridRow } from "@/lib/tree/slice";
-import { compare as compareSortKeys } from "@/lib/tree/sortKey";
 
 import type { EnvelopeKind } from "@/db/schema";
 
@@ -20,19 +19,31 @@ export type BudgetPlacement = {
 
 type StructureItem = BudgetStructureRef & {
   parentGroupId: string | null;
+  name: string;
   sortKey: string;
 };
 
+/**
+ * Case-insensitive, numeric-aware English name order.
+ *
+ * Groups and envelopes share one sibling sequence, so this is what the Budget tables and
+ * the category picker both walk. `sortKey` is still written on create/move; display ignores
+ * it so a newly named envelope cannot land at the bottom of an otherwise alphabetical list.
+ */
+export function compareBudgetNames(left: string, right: string): number {
+  return left.localeCompare(right, "en", { sensitivity: "base", numeric: true });
+}
+
 function compareItems(left: StructureItem, right: StructureItem): number {
-  const byKey = compareSortKeys(left.sortKey, right.sortKey);
-  if (byKey !== 0) return byKey;
+  const byName = compareBudgetNames(left.name, right.name);
+  if (byName !== 0) return byName;
   const byKind = left.kind.localeCompare(right.kind);
   return byKind !== 0 ? byKind : left.id.localeCompare(right.id);
 }
 
 export function budgetChildren(
-  groups: readonly Pick<BudgetGroupRow, "id" | "parentGroupId" | "sortKey">[],
-  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "sortKey">[],
+  groups: readonly Pick<BudgetGroupRow, "id" | "parentGroupId" | "name" | "sortKey">[],
+  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "name" | "sortKey">[],
   parentGroupId: string | null,
 ): StructureItem[] {
   return [
@@ -42,6 +53,7 @@ export function budgetChildren(
         kind: "group" as const,
         id: group.id,
         parentGroupId: group.parentGroupId,
+        name: group.name,
         sortKey: group.sortKey,
       })),
     ...categories
@@ -50,6 +62,7 @@ export function budgetChildren(
         kind: "category" as const,
         id: category.id,
         parentGroupId: category.groupId,
+        name: category.name,
         sortKey: category.sortKey,
       })),
   ].sort(compareItems);
@@ -69,7 +82,10 @@ export function budgetChildren(
  */
 export function budgetSiblings(
   groups: readonly BudgetGroupRow[],
-  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "sortKey" | "kind">[],
+  categories: readonly Pick<
+    BudgetCategoryRow,
+    "id" | "groupId" | "name" | "sortKey" | "kind"
+  >[],
   parentGroupId: string | null,
   kind: EnvelopeKind,
 ): StructureItem[] {
@@ -176,7 +192,7 @@ export function nestedBudgetGridRows<T extends BudgetRow>(
   groups: readonly BudgetGroupRow[],
   categories: readonly Pick<
     BudgetCategoryRow,
-    "id" | "groupId" | "sortKey" | "hidden"
+    "id" | "groupId" | "name" | "sortKey" | "hidden"
   >[],
   rows: readonly T[],
   options: { showHidden: boolean } = { showHidden: false },
@@ -248,7 +264,10 @@ export function nestedBudgetGridRows<T extends BudgetRow>(
 
 export function resolveBudgetDrop(
   groups: readonly BudgetGroupRow[],
-  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "sortKey" | "kind">[],
+  categories: readonly Pick<
+    BudgetCategoryRow,
+    "id" | "groupId" | "name" | "sortKey" | "kind"
+  >[],
   moving: BudgetStructureRef,
   target: BudgetStructureRef,
   zone: BudgetDropZone,

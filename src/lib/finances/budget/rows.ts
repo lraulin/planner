@@ -8,11 +8,10 @@
  */
 
 import type { GridRow } from "@/lib/tree/slice";
-import { compare as compareSortKeys } from "@/lib/tree/sortKey";
 
 import { categoryMonth, type BudgetMonth } from "./envelope";
 import type { BillFacet, BudgetCategoryRow, BudgetGroupRow } from "./queries";
-import { nestedBudgetGridRows } from "./hierarchy";
+import { compareBudgetNames, nestedBudgetGridRows } from "./hierarchy";
 import type { EnvelopeKind } from "@/db/schema";
 
 export type BudgetRow = {
@@ -67,7 +66,8 @@ export function budgetTotals(rows: readonly BudgetRow[]): BudgetTotals {
 }
 
 /**
- * One row per envelope, in group order, with the month's numbers attached.
+ * One row per envelope, grouped alphabetically then by envelope name, with the month's
+ * numbers attached.
  *
  * Hidden envelopes are dropped from the grid but **not** from the totals the caller builds
  * from `budgetTotals` over the unfiltered list — hiding is a way to tidy the screen, and a
@@ -82,13 +82,15 @@ export function budgetRows(
   nextDueKeys: ReadonlyMap<string, string> = new Map(),
   expectedKeys: ReadonlyMap<string, string> = new Map(),
 ): BudgetRow[] {
-  const order = new Map(groups.map((group, index) => [group.id, index]));
+  const groupName = new Map(groups.map((group) => [group.id, group.name]));
 
   return [...categories]
     .sort((left, right) => {
-      const byGroup =
-        (order.get(left.groupId ?? "") ?? -1) - (order.get(right.groupId ?? "") ?? -1);
-      return byGroup !== 0 ? byGroup : compareSortKeys(left.sortKey, right.sortKey);
+      const byGroup = compareBudgetNames(
+        groupName.get(left.groupId ?? "") ?? "",
+        groupName.get(right.groupId ?? "") ?? "",
+      );
+      return byGroup !== 0 ? byGroup : compareBudgetNames(left.name, right.name);
     })
     .map((category) => {
       const cell = categoryMonth(month, category.id);

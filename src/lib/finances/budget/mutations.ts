@@ -1101,6 +1101,7 @@ async function budgetStructure(userId: string) {
       .select({
         id: financeBudgetCategories.id,
         groupId: financeBudgetCategories.groupId,
+        name: financeBudgetCategories.name,
         sortKey: financeBudgetCategories.sortKey,
         kind: financeBudgetCategories.kind,
       })

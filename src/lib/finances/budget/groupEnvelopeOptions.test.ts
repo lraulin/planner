@@ -66,7 +66,7 @@ describe("categoryPickerSections", () => {
     ]);
   });
 
-  it("nests groups in budgetChildren order and sits ungrouped envelopes on the type", () => {
+  it("nests groups in name order and sits ungrouped envelopes on the type", () => {
     const sections = categoryPickerSections(
       [
         group("food", null, "B"),
@@ -87,12 +87,12 @@ describe("categoryPickerSections", () => {
     expect(spending?.rows).toEqual([
       "h0:Regular spending",
       "e0:coffee",
-      "h0:food",
-      "h1:produce",
-      "e2:apples",
-      "e1:bread",
       "h0:dining",
       "e1:takeout",
+      "h0:food",
+      "e1:bread",
+      "h1:produce",
+      "e2:apples",
       "New envelope…",
     ]);
   });

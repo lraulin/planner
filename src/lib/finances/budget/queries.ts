@@ -190,7 +190,7 @@ function groupsOf(userId: string, executor: FinanceExecutor = db) {
     })
     .from(financeCategoryGroups)
     .where(eq(financeCategoryGroups.userId, userId))
-    .orderBy(asc(financeCategoryGroups.sortKey));
+    .orderBy(asc(financeCategoryGroups.name));
 }
 
 function categoriesOf(userId: string, executor: FinanceExecutor = db) {
@@ -216,7 +216,7 @@ function categoriesOf(userId: string, executor: FinanceExecutor = db) {
     })
     .from(financeBudgetCategories)
     .where(eq(financeBudgetCategories.userId, userId))
-    .orderBy(asc(financeBudgetCategories.sortKey));
+    .orderBy(asc(financeBudgetCategories.name));
 }
 
 function parsedCategories(
