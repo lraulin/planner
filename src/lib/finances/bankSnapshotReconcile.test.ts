@@ -48,6 +48,31 @@ function existing(
 }
 
 describe("planBankSnapshotReconciliation", () => {
+  it("recognises a posted row another source already wrote under its full descriptor", () => {
+    // The 2026-08-29 Capital One snapshot. The page says `Pizza Hut` and dates the charge
+    // by the purchase day; the stored row carries the bank descriptor and the posted day.
+    // Neither the description nor the transaction date lines up, and the row duplicated.
+    const plan = planBankSnapshotReconciliation(
+      [
+        existing("stored", "PIZZA HUT 036874", -3252, {
+          pending: false,
+          transactionDate: "2026-08-24",
+          postedDate: "2026-08-24",
+          externalSource: "api:simplefin",
+        }),
+      ],
+      [
+        {
+          ...incoming("Pizza Hut", -3252, "2026-08-22"),
+          postedDate: "2026-08-24",
+        },
+      ],
+      [],
+    );
+    expect(plan.postedDuplicates.map((row) => row.existingId)).toEqual(["stored"]);
+    expect(plan.postedInserts).toEqual([]);
+  });
+
   it("matches duplicate equal posted charges one-to-one", () => {
     const plan = planBankSnapshotReconciliation(
       [

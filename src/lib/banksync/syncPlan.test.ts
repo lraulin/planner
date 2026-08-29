@@ -28,6 +28,7 @@ function account(
 function existing(over: Partial<ExistingRow> = {}): ExistingRow {
   return {
     transactionDate: "2026-08-12",
+    postedDate: null,
     amountCents: -433,
     description: "STARBUCKS",
     externalId: null,
@@ -291,6 +292,26 @@ describe("planSync — cross-source dedup", () => {
         accounts: [account(EXT_CHECKING, [txn({ id: "t1" })])],
         existingByAccount: new Map([
           [ACCT_CHECKING, [existing({ description: "Starbucks" })]],
+        ]),
+      }),
+    );
+    expect(plan.inserts).toHaveLength(0);
+    expect(plan.skippedDuplicate).toBe(1);
+  });
+
+  it("skips a row whose descriptor expands a bank page's display name", () => {
+    // The scrape wrote `Pizza Hut` off the Capital One transaction page; SimpleFIN reports
+    // the same charge as `PIZZA HUT 036874`. Under description matching alone the sync
+    // inserted a second copy beside it.
+    const plan = planSync(
+      input({
+        accounts: [
+          account(EXT_CHECKING, [
+            txn({ id: "t1", description: "PIZZA HUT 036874", amount: "-32.52" }),
+          ]),
+        ],
+        existingByAccount: new Map([
+          [ACCT_CHECKING, [existing({ description: "Pizza Hut", amountCents: -3252 })]],
         ]),
       }),
     );

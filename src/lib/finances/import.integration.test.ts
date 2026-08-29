@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { financeBudgetCategories, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
-import { updateAccount, updateTransaction } from "./mutations";
+import { deleteTransaction, updateAccount, updateTransaction } from "./mutations";
 import { listAccounts, listStatements, listTransactions } from "./queries";
 import { seedBudget } from "./budget/mutations";
 import { createPayee, setPayeeAutoCategory } from "./payees/mutations";
@@ -1107,5 +1107,83 @@ describeDb("importing a statement after a live sync", () => {
     expect(rows.some((row) => row.description.includes("Payment Thank You"))).toBe(
       true,
     );
+  });
+
+  /**
+   * The 2026-08-29 Capital One failure. The transaction page publishes `Pizza Hut` and
+   * dates the charge on the purchase day; the CSV download carries the bank descriptor and
+   * the posting day. Both halves have to hold: the descriptions only meet through the brand
+   * stem, and the row is four days off on `transaction_date`, so it is loaded and matched
+   * only via `posted_date`.
+   */
+  const caponePizzaFile: ImportFile = {
+    name: "2026-08-29_transaction_download.csv",
+    text: [
+      CAPONE_CARD_HEADER,
+      "2026-08-26,2026-08-26,3448,PIZZA HUT 036874,Dining,32.52,",
+      "",
+    ].join("\n"),
+  };
+
+  async function seedScrapedPizzaHut(userId: string, accountId: string) {
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId,
+      transactionDate: "2026-08-22",
+      postedDate: "2026-08-26",
+      description: "Pizza Hut",
+      amount: "-32.52",
+      externalSource: "scrape:capitalone",
+      externalId: "browser-pizza-1",
+    });
+  }
+
+  it("does not re-import a charge a bank page wrote under its display name", async () => {
+    const userId = await makeUser();
+    await importFinanceCsvFiles({ userId, files: [caponePizzaFile] });
+    const [account] = await listAccounts(userId);
+    await db.delete(financeTransactions).where(eq(financeTransactions.userId, userId));
+    await seedScrapedPizzaHut(userId, account.id);
+
+    const result = await importFinanceCsvFiles({ userId, files: [caponePizzaFile] });
+
+    const rows = await listTransactions(userId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].description).toBe("Pizza Hut");
+    expect(result.skipped).toBe(1);
+  });
+
+  it("never matches a page row belonging to another user", async () => {
+    // `existingOnAccount` now loads on either date axis; the widened predicate must not
+    // widen past the owner.
+    const ownerId = await makeUser();
+    const intruderId = await makeUser();
+    await importFinanceCsvFiles({ userId: ownerId, files: [caponePizzaFile] });
+    const [ownerAccount] = await listAccounts(ownerId);
+    await db.delete(financeTransactions).where(eq(financeTransactions.userId, ownerId));
+    await seedScrapedPizzaHut(ownerId, ownerAccount.id);
+
+    // The intruder imports the same file. The owner's row must neither suppress their
+    // insert nor be visible to them afterwards.
+    const result = await importFinanceCsvFiles({
+      userId: intruderId,
+      files: [caponePizzaFile],
+    });
+    expect(result.skipped).toBe(0);
+    expect(await listTransactions(intruderId)).toHaveLength(1);
+    expect(await listTransactions(ownerId)).toHaveLength(1);
+    expect((await listTransactions(intruderId))[0].description).toBe(
+      "PIZZA HUT 036874",
+    );
+
+    // And the intruder can neither change nor delete the owner's row.
+    const [ownerRow] = await listTransactions(ownerId);
+    await expect(
+      updateTransaction(intruderId, ownerRow.id, { notes: "stolen" }),
+    ).rejects.toThrow();
+    await expect(deleteTransaction(intruderId, ownerRow.id)).rejects.toThrow();
+    const [stillOwned] = await listTransactions(ownerId);
+    expect(stillOwned.description).toBe("Pizza Hut");
+    expect(stillOwned.notes ?? "").not.toBe("stolen");
   });
 });

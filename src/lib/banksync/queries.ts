@@ -8,7 +8,7 @@
  * receives.
  */
 
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bankAccountLinks,
@@ -177,6 +177,7 @@ export async function existingRowsInWindow(
     .select({
       accountId: financeTransactions.accountId,
       transactionDate: financeTransactions.transactionDate,
+      postedDate: financeTransactions.postedDate,
       amount: financeTransactions.amount,
       description: financeTransactions.description,
       externalId: financeTransactions.externalId,
@@ -199,8 +200,19 @@ export async function existingRowsInWindow(
         // has no external identity of its own to match on.
         bankRows,
         inArray(financeTransactions.accountId, [...accountIds]),
-        gte(financeTransactions.transactionDate, startDate),
-        lte(financeTransactions.transactionDate, endDate),
+        // Either axis may fall in the window: a row a bank page wrote is dated by its
+        // purchase day and can post days later, so bounding only the transaction date
+        // hides exactly the rows the posted-date comparison exists to catch.
+        or(
+          and(
+            gte(financeTransactions.transactionDate, startDate),
+            lte(financeTransactions.transactionDate, endDate),
+          ),
+          and(
+            gte(financeTransactions.postedDate, startDate),
+            lte(financeTransactions.postedDate, endDate),
+          ),
+        ),
       ),
     );
 
@@ -208,6 +220,7 @@ export async function existingRowsInWindow(
     const bucket = out.get(row.accountId) ?? [];
     bucket.push({
       transactionDate: row.transactionDate,
+      postedDate: row.postedDate,
       amountCents: numericStringToCents(row.amount) ?? 0,
       description: row.description,
       // Only this feed's ids count as "ours"; a statement row's id means nothing here and

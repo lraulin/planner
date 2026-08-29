@@ -41,10 +41,35 @@ describe("descriptionsOverlap", () => {
     expect(descriptionsOverlap("rent:raulin  rent", "RENT:RAULIN RENT")).toBe(true);
   });
 
+  it("recognises a bank page's display name in the descriptor", () => {
+    // The six rows the 2026-08-29 Capital One snapshot duplicated. The page publishes a
+    // cleaned brand name; SimpleFIN and the CSV download carry the full descriptor, and
+    // every one of these falls under the eleven-character containment floor.
+    expect(descriptionsOverlap("Pizza Hut", "PIZZA HUT 036874")).toBe(true);
+    expect(descriptionsOverlap("Walmart", "WAL-MART #1981")).toBe(true);
+    expect(descriptionsOverlap("Apple", "PP*APPLE.COM/BILL")).toBe(true);
+    expect(descriptionsOverlap("CVS", "CVS/PHARMACY #01522")).toBe(true);
+    expect(descriptionsOverlap("Go Daddy", "GODADDY.COM")).toBe(true);
+    expect(descriptionsOverlap("GitHub", "GITHUB.COM")).toBe(true);
+  });
+
   it("refuses a short fragment, which would match half the register", () => {
     // Without a length floor a bare processor stamp matches every row it appears in.
     expect(descriptionsOverlap("PAYPAL", "PAYPAL *PADDLE.NET")).toBe(false);
     expect(descriptionsOverlap("SQ *", "SQ *COFFEE SHOP")).toBe(false);
+  });
+
+  it("anchors a brand stem at the start, so it cannot match mid-word", () => {
+    // `CVS` reaches `CVS/PHARMACY` only because the stem starts the descriptor. Were the
+    // rule containment, three characters would match anything mentioning them.
+    expect(descriptionsOverlap("CVS", "MYCVSSTORE")).toBe(false);
+  });
+
+  it("refuses a stem the descriptor follows with a processor star", () => {
+    // A `*` after the stem means the text before it is the processor and the text after is
+    // a different counterparty. Two charges through one processor are not one charge.
+    expect(descriptionsOverlap("TST*", "TST*BAKERY")).toBe(false);
+    expect(descriptionsOverlap("AMAZON MKTPL*0W88", "AMAZON MKTPL*HJ06")).toBe(false);
   });
 
   it("refuses unrelated text", () => {
@@ -179,6 +204,51 @@ describe("selectUnmatched", () => {
     expect(both.matchedCount).toBe(2);
   });
 
+  it("matches across the posted-date axis when the transaction dates are far apart", () => {
+    // A bank page dates a charge by its purchase day; SimpleFIN dates it by the day it
+    // posted. Four days apart on transaction date, same day on posted date — one event.
+    const stored = [
+      {
+        transactionDate: "2026-08-26",
+        postedDate: "2026-08-26",
+        amountCents: -3252,
+        description: "PIZZA HUT 036874",
+      },
+    ];
+    const { keep, matchedCount } = selectUnmatched(stored, [
+      {
+        transactionDate: "2026-08-22",
+        postedDate: "2026-08-26",
+        amountCents: -3252,
+        description: "Pizza Hut",
+      },
+    ]);
+    expect(keep).toHaveLength(0);
+    expect(matchedCount).toBe(1);
+  });
+
+  it("does not match across four days when neither side records a posted date", () => {
+    // The same pair without the posted dates: it is the second axis carrying the match,
+    // not a widened tolerance.
+    const { keep } = selectUnmatched(
+      [
+        {
+          transactionDate: "2026-08-26",
+          amountCents: -3252,
+          description: "PIZZA HUT 036874",
+        },
+      ],
+      [
+        {
+          transactionDate: "2026-08-22",
+          amountCents: -3252,
+          description: "Pizza Hut",
+        },
+      ],
+    );
+    expect(keep).toHaveLength(1);
+  });
+
   it("returns everything when there is nothing to compare against", () => {
     const { keep } = selectUnmatched(
       [],
@@ -290,6 +360,29 @@ describe("selectNewAgainstMixed — a statement imported after a sync", () => {
     ]);
     // A genuinely separate purchase of the same thing the next day still imports.
     expect(nextDay.keep).toHaveLength(1);
+  });
+
+  it("keeps CSV-to-CSV matching strict even when both sides carry posted dates", () => {
+    // The new date axis is for live feeds only. Two file exports agree on the bank's own
+    // transaction date, and loosening that is what would silently drop real rows.
+    const fromCsv = [
+      {
+        transactionDate: "2026-08-10",
+        postedDate: "2026-08-12",
+        amountCents: -1059,
+        description: "WL *Steam Purchase",
+        fromLiveFeed: false,
+      },
+    ];
+    const { keep } = selectNewAgainstMixed(fromCsv, [
+      {
+        transactionDate: "2026-08-11",
+        postedDate: "2026-08-12",
+        amountCents: -1059,
+        description: "WL *Steam Purchase",
+      },
+    ]);
+    expect(keep).toHaveLength(1);
   });
 
   it("does not let one synced row absorb two statement rows", () => {

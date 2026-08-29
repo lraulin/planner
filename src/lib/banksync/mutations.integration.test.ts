@@ -438,6 +438,7 @@ describeDb("queries for the sync window", () => {
     expect(window.get(accountId)).toEqual([
       {
         transactionDate: "2026-08-12",
+        postedDate: null,
         amountCents: -100,
         description: "CSV ROW",
         externalId: null,

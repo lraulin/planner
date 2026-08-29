@@ -1,4 +1,8 @@
-import { DATE_TOLERANCE_DAYS, descriptionsOverlap } from "./liveFeedMatch";
+import {
+  DATE_TOLERANCE_DAYS,
+  dateDistance,
+  descriptionsOverlap,
+} from "./liveFeedMatch";
 import { isScrapeFeed, type ParsedBankSnapshotRow } from "./bankSnapshot";
 
 export type ExistingBankSnapshotRow = {
@@ -42,20 +46,20 @@ export type BankSnapshotReconciliationPlan = {
   warnings: string[];
 };
 
-function daysApart(left: string, right: string): number {
-  return (
-    Math.abs(Date.parse(`${left}T12:00:00Z`) - Date.parse(`${right}T12:00:00Z`)) /
-    86_400_000
-  );
-}
-
 function sameDateAndDescription(
-  existing: Pick<ExistingBankSnapshotRow, "transactionDate" | "description">,
-  incoming: Pick<ParsedBankSnapshotRow, "transactionDate" | "description">,
+  existing: Pick<
+    ExistingBankSnapshotRow,
+    "transactionDate" | "postedDate" | "description"
+  >,
+  incoming: Pick<
+    ParsedBankSnapshotRow,
+    "transactionDate" | "postedDate" | "description"
+  >,
 ): boolean {
+  // The bank page dates a row by its purchase day while a feed dates it by its posting
+  // day, so the comparison has to consider both axes on both sides.
   return (
-    daysApart(existing.transactionDate, incoming.transactionDate) <=
-      DATE_TOLERANCE_DAYS &&
+    dateDistance(existing, incoming) <= DATE_TOLERANCE_DAYS &&
     descriptionsOverlap(existing.description, incoming.description)
   );
 }
@@ -80,8 +84,7 @@ function closestMatch(
     .filter((row) => !used.has(row.id) && predicate(row, incoming))
     .sort(
       (left, right) =>
-        daysApart(left.transactionDate, incoming.transactionDate) -
-          daysApart(right.transactionDate, incoming.transactionDate) ||
+        dateDistance(left, incoming) - dateDistance(right, incoming) ||
         left.id.localeCompare(right.id),
     );
   return candidates[0]

@@ -53,6 +53,8 @@ export type BankUpdate = {
 /** An existing register row, for cross-source comparison. */
 export type ExistingRow = {
   transactionDate: string;
+  /** The bank's posting day, when the source that wrote this row distinguishes one. */
+  postedDate: string | null;
   amountCents: number;
   description: string;
   /** Non-null only for rows this feed wrote. */

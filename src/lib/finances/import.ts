@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -322,6 +322,7 @@ async function existingOnAccount(
   const rows = await tx
     .select({
       transactionDate: financeTransactions.transactionDate,
+      postedDate: financeTransactions.postedDate,
       amount: financeTransactions.amount,
       description: financeTransactions.description,
       externalSource: financeTransactions.externalSource,
@@ -335,12 +336,24 @@ async function existingOnAccount(
         // identity to half a charge.
         bankRows,
         eq(financeTransactions.accountId, accountId),
-        gte(financeTransactions.transactionDate, from),
-        lte(financeTransactions.transactionDate, to),
+        // Either axis may fall in the window. A live feed dates a row by the day it
+        // posted, so a row whose purchase day sits outside the file's range is still the
+        // same event — and loading it is the only way the matcher can see it.
+        or(
+          and(
+            gte(financeTransactions.transactionDate, from),
+            lte(financeTransactions.transactionDate, to),
+          ),
+          and(
+            gte(financeTransactions.postedDate, from),
+            lte(financeTransactions.postedDate, to),
+          ),
+        ),
       ),
     );
   return rows.map((row) => ({
     transactionDate: row.transactionDate,
+    postedDate: row.postedDate,
     amountCents: numericStringToCents(row.amount) ?? 0,
     description: row.description,
     // Only a live feed's rows get the looser comparison. Everything else keeps the exact
