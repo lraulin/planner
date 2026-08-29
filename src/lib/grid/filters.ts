@@ -4,6 +4,7 @@ import {
   isCustomFilter,
   matchesCustom,
   optionsFilter,
+  parseFilterNumber,
   NONE_OPTION_ID,
   type ColumnFilter,
   type FilterKind,
@@ -74,6 +75,17 @@ export const BLANK_PRESETS: FilterOption[] = [
 ];
 
 /**
+ * Named bands on the number line. A checklist of formatted amounts (`$12.34`, `$1,200.00`)
+ * is a list of the rows; what you actually pick is a side of zero — or Custom for a
+ * threshold. Register Amount is the load-bearing case (deposits vs spend).
+ */
+export const NUMBER_PRESETS: FilterOption[] = [
+  { id: "positive", label: "(Positive)" },
+  { id: "negative", label: "(Negative)" },
+  { id: "zero", label: "(Zero)" },
+];
+
+/**
  * Priority presets from screenshot 10.55.58, plus the "up to letter + unprioritized"
  * bands that keep blanks visible so you can still assign them. Values are the strings
  * `formatPriority` produces (`A1`, `B2`, …) or `""` / null for unset.
@@ -141,6 +153,7 @@ export function presetOptions(kind: FilterKind | undefined): FilterOption[] {
   if (kind === "enum") return [];
   if (kind === "priority") return PRIORITY_PRESETS;
   if (kind === "date") return DATE_PRESETS;
+  if (kind === "number") return [...NUMBER_PRESETS, ...BLANK_PRESETS];
   return BLANK_PRESETS;
 }
 
@@ -194,7 +207,13 @@ export function filterOptions(
   distinctValues: string[],
 ): FilterOption[] {
   const presets =
-    kind === "priority" ? PRIORITY_PRESETS : kind === "date" ? DATE_PRESETS : [];
+    kind === "priority"
+      ? PRIORITY_PRESETS
+      : kind === "date"
+        ? DATE_PRESETS
+        : kind === "number"
+          ? NUMBER_PRESETS
+          : [];
 
   const values = distinctValues
     .filter((value) => value !== "")
@@ -256,8 +275,30 @@ function matchesOption(
       : values.some((entry) => matchesDeadline(entry, id, today));
   }
 
+  if (kind === "number") {
+    const values = scalarFilterValues(value);
+    return values.length === 0
+      ? matchesNumberBand(null, id)
+      : values.some((entry) => matchesNumberBand(entry, id));
+  }
+
   // Enum / text with no matching preset id: treat unknown ids as open (do not hide rows).
   return true;
+}
+
+function matchesNumberBand(value: string | null, id: string): boolean {
+  const magnitude = value === null || value === "" ? null : parseFilterNumber(value);
+
+  switch (id) {
+    case "positive":
+      return magnitude !== null && magnitude > 0;
+    case "negative":
+      return magnitude !== null && magnitude < 0;
+    case "zero":
+      return magnitude !== null && magnitude === 0;
+    default:
+      return true;
+  }
 }
 
 function matchesPriority(value: string | null, id: string): boolean {

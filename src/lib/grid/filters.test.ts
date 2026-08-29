@@ -161,6 +161,29 @@ describe("matchesFilter — deadline presets", () => {
   });
 });
 
+describe("matchesFilter — number presets", () => {
+  const positive = optionsFilter(["positive"]);
+  const negative = optionsFilter(["negative"]);
+  const zero = optionsFilter(["zero"]);
+
+  it("splits formatted money on the sign, not the string", () => {
+    // Amount cells are `$1,200.00` / `($12.34)` / `-$50.00`. Matching the display
+    // string would put every spend next to every deposit because both contain "0".
+    expect(matchesFilter("$10.00", positive, "number", TODAY)).toBe(true);
+    expect(matchesFilter("-$5.00", positive, "number", TODAY)).toBe(false);
+    expect(matchesFilter("($12.34)", negative, "number", TODAY)).toBe(true);
+    expect(matchesFilter("$1,200.00", negative, "number", TODAY)).toBe(false);
+    expect(matchesFilter("$0.00", zero, "number", TODAY)).toBe(true);
+    expect(matchesFilter("$0.00", positive, "number", TODAY)).toBe(false);
+  });
+
+  it("treats a blank cell as none of the sign bands", () => {
+    expect(matchesFilter(null, positive, "number", TODAY)).toBe(false);
+    expect(matchesFilter("", negative, "number", TODAY)).toBe(false);
+    expect(matchesFilter(null, zero, "number", TODAY)).toBe(false);
+  });
+});
+
 describe("multi-select selections", () => {
   it("passes a row matching any selected option", () => {
     // The point of multi-select: "A1 or B1", which one choice per column cannot express.
@@ -213,6 +236,18 @@ describe("filterOptions", () => {
     expect(ids).toContain("value:B");
     expect(ids).not.toContain("value:");
   });
+
+  it("names number sign bands so a chip can say (Positive), not the raw id", () => {
+    // filterOptions is how the chip bar resolves a stored option id. Missing the
+    // number bands here is how Amount: positive leaked onto the bar.
+    const ids = filterOptions("number", []).map((o) => o.id);
+    expect(ids).toContain("positive");
+    expect(ids).toContain("negative");
+    expect(ids).toContain("zero");
+    expect(filterOptions("number", []).find((o) => o.id === "positive")?.label).toBe(
+      "(Positive)",
+    );
+  });
 });
 
 describe("usesSetFilter", () => {
@@ -237,7 +272,13 @@ describe("presetOptions", () => {
 
     // Free text has no bands of its own, but "has a value at all" is still worth one click.
     expect(presetOptions("text").map((o) => o.id)).toEqual(["blanks", "nonblanks"]);
-    expect(presetOptions("number").map((o) => o.id)).toEqual(["blanks", "nonblanks"]);
+    expect(presetOptions("number").map((o) => o.id)).toEqual([
+      "positive",
+      "negative",
+      "zero",
+      "blanks",
+      "nonblanks",
+    ]);
     expect(presetOptions(undefined).map((o) => o.id)).toEqual(["blanks", "nonblanks"]);
   });
 

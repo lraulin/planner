@@ -155,6 +155,26 @@ describe("prepareRegister", () => {
     ).toEqual(["in"]);
   });
 
+  it("filters Amount (Positive) as a number band, not a text checklist", () => {
+    // The funnel on a number column offers sign bands. If Amount stayed text, (Positive)
+    // would be an unknown option id and pass every row.
+    const ledger = [
+      tx({ id: "out", transactionDate: "2026-08-01", amountCents: -500 }),
+      tx({ id: "in", transactionDate: "2026-08-02", amountCents: 1200 }),
+      tx({ id: "zero", transactionDate: "2026-08-03", amountCents: 0 }),
+    ];
+    expect(
+      prepareRegister(
+        ledger,
+        query({
+          groupBy: [],
+          filters: { amount: optionsFilter(["positive"]) },
+        }),
+        EMPTY_CTX,
+      ).index.nodeIds,
+    ).toEqual(["in"]);
+  });
+
   it("filters on the hidden Payee column", () => {
     const ledger = [
       tx({

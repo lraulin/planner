@@ -320,7 +320,7 @@ function compare(
  * leading `+`, and accounting negatives `(12.34)`. Returns null for blank or unparseable
  * input so a comparison against "abc" fails closed rather than ranking a NaN.
  */
-function parseFilterNumber(raw: string): number | null {
+export function parseFilterNumber(raw: string): number | null {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
 
