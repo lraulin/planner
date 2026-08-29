@@ -115,9 +115,20 @@ power snooze would add there is quieting a charge that is about to hit.
 
 Disabled with the reason, per `navigation.md`.
 
-**D7 — Credit-card payment categories: requirement not applicable.** No such concept exists here,
-deliberately and twice in writing (`budget-assign-options/plan.md:54`,
+**D7 — Credit-card payment categories: requirement not applicable, and deliberately so.** No such
+concept exists here, twice in writing already (`budget-assign-options/plan.md:54`,
 `ynab-target-engine/shape.md:25`). `EnvelopeKind` is exactly `income | spending | bill | savings`.
+
+Worth stating the reason, because this is one of the few places the app keeps **Actual's** model
+over YNAB's on purpose. The target engine, the Assign gesture, the funding indicators and now
+Snooze are all YNAB-shaped; credit cards are not. Actual's handling — a card balance is just
+negative money in the one pool, which `accountPoolCents` subtracts naturally with no `abs` and no
+kind-specific sign inversion (`single-pool-budget` D2) — is simpler and more direct than YNAB's
+payment categories and cash-vs-credit split. It needs no envelope kind, no reconciliation between
+an envelope and a card balance, and no extra state for Snooze to have an opinion about.
+
+So the requested spec's "Credit Card Payment categories cannot be snoozed" exclusion has nothing
+to exclude, and that is the intended end state rather than a gap to be closed later.
 
 **D8 — The "scheduled transaction override" requirement does not apply.** There are no scheduled
 transactions in this codebase; `finance_schedules` was collapsed into the bill facet by

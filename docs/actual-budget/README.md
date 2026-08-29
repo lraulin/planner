@@ -57,6 +57,15 @@ narrowed by later deltas:
   the user pick any account's membership; this app does not, because the product has a
   declared one-pool invariant. Investment, loan and other stay optional. See
   `agent-os/specs/2026-08-24-2206-single-pool-budget/` D1.
+
+  **Credit cards are the one place we keep Actual's model over YNAB's, on preference rather
+  than inertia.** A card balance is simply negative money in the one pool, which
+  `accountPoolCents` subtracts naturally — no `abs`, no kind-specific sign inversion. YNAB's
+  payment categories and cash-vs-credit split buy nothing here and would cost an envelope kind
+  plus a reconciliation between an envelope and a card balance. So there is no credit-card
+  payment category, deliberately and permanently — not a gap awaiting a later spec. See
+  `agent-os/specs/2026-08-28-2223-target-snooze/` D7.
+
 - Current Ready to Assign reconciles to today's working account pool (same pending
   selection as the Dashboard). Uncategorized activity and residual account reconciliation
   are named terms, not income. Historical months stay historical. See that spec's D3.
