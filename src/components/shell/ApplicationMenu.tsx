@@ -80,7 +80,7 @@ function ApplicationMenuBar() {
   }, [fileCommands, registered, paletteCommand, panelCommand]);
 
   return (
-    <div className="hidden min-w-0 max-w-full items-center gap-2 border-b border-rule px-3 py-1.5 md:flex">
+    <div className="relative z-50 hidden min-w-0 max-w-full items-center gap-2 border-b border-rule bg-surface px-3 py-1.5 md:flex">
       <CommandMenuBar commands={menuCommands} />
       <div className="ml-auto flex flex-none items-center">
         <CommandsPanelToggle

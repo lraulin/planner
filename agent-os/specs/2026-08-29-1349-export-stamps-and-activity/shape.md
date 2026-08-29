@@ -1,6 +1,6 @@
 # Export timestamps and Activity evidence export — Shaping notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-29)
 
 ## Scope
 

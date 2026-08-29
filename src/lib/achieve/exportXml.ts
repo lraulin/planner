@@ -1,4 +1,5 @@
 import type { NodeState, NodeType, ProgressReview } from "@/db/schema";
+import { formatExportStamp } from "@/lib/grid/exportCsv";
 import {
   encodeEffortFromMinutes,
   encodePercentComplete,
@@ -442,6 +443,19 @@ export function buildAchieveXml(
 
   parts.push(`</AchieveDB>`);
   return { xml: parts.join("\n") + "\n", counts, warnings };
+}
+
+/**
+ * `<!-- Exported {iso} -->` after the XML declaration and before `<AchieveDB>`.
+ * `parseAchXml` only walks the AchieveDB body, so a stamped file still round-trips.
+ */
+export function stampAchieveXml(xml: string, at: Date): string {
+  const comment = `<!-- Exported ${formatExportStamp(at).iso} -->`;
+  const declaration = '<?xml version="1.0" standalone="yes"?>';
+  if (xml.startsWith(declaration)) {
+    return `${declaration}\n${comment}${xml.slice(declaration.length)}`;
+  }
+  return `${comment}\n${xml}`;
 }
 
 function nearestExportAncestor(

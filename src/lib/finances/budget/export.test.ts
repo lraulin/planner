@@ -252,14 +252,18 @@ describe("budgetExportDocument", () => {
   });
 });
 
+/** 13:41:36 Eastern daylight. Same pin the grid stamp tests use. */
+const PINNED = new Date("2026-08-29T17:41:36.000Z");
+
 describe("serializeBudgetExport", () => {
-  it("stacks CSV sections under a title and a headline row", () => {
-    const csv = serializeBudgetExport("csv", budgetExportDocument(input()));
+  it("stacks CSV sections under a title, an export stamp, and a headline row", () => {
+    const csv = serializeBudgetExport("csv", budgetExportDocument(input()), PINNED);
     const rows = parseCsvRows(csv);
     expect(rows[0]).toEqual(["Budget — September 2026"]);
-    expect(rows[1]).toEqual(["Ready to Assign", "$0.00", "every dollar has a job"]);
-    expect(rows[2]).toEqual(["Summary"]);
-    expect(rows[3]).toEqual(["Term", "Amount"]);
+    expect(rows[1]).toEqual(["Exported 2026-08-29T13:41:36-04:00"]);
+    expect(rows[2]).toEqual(["Ready to Assign", "$0.00", "every dollar has a job"]);
+    expect(rows[3]).toEqual(["Summary"]);
+    expect(rows[4]).toEqual(["Term", "Amount"]);
     // A blank line between sections is what makes Excel read this as stacked blocks.
     expect(csv).toContain("\n\nIncome\n");
     expect(csv.endsWith("\n")).toBe(true);
@@ -268,22 +272,23 @@ describe("serializeBudgetExport", () => {
   it("quotes a section caption that contains a comma", () => {
     // The forecast captions are prose. Unquoted, one would split into columns and shift
     // every row of that section left.
-    const csv = serializeBudgetExport("csv", budgetExportDocument(input()));
+    const csv = serializeBudgetExport("csv", budgetExportDocument(input()), PINNED);
     const rows = parseCsvRows(csv);
     const caption = rows.find((row) => row[0]?.startsWith("What active bills cost"));
     expect(caption).toHaveLength(1);
   });
 
   it("flattens the forecast tree in CSV — every row keeps all five columns", () => {
-    const csv = serializeBudgetExport("csv", budgetExportDocument(input()));
+    const csv = serializeBudgetExport("csv", budgetExportDocument(input()), PINNED);
     expect(csv).toContain(
       "on 2026-09-01,,$912.00,,yes\n,Rent,$900.00,on 2026-09-01,\n,Streaming,$12.00,,\n",
     );
   });
 
   it("writes Markdown as headings, a bold headline, and pipe tables", () => {
-    const md = serializeBudgetExport("markdown", budgetExportDocument(input()));
+    const md = serializeBudgetExport("markdown", budgetExportDocument(input()), PINNED);
     expect(md).toContain("# Budget — September 2026\n");
+    expect(md).toContain("Exported 2026-08-29T13:41:36-04:00");
     expect(md).toContain("**Ready to Assign $0.00** — every dollar has a job");
     expect(md).toContain("## Regular spending\n");
     // Money columns are right-aligned; the label column is not.
@@ -294,9 +299,15 @@ describe("serializeBudgetExport", () => {
 
   it("is one keyed object in JSON, not the array a single grid exports", () => {
     const doc = budgetExportDocument(input());
-    const parsed = JSON.parse(serializeBudgetExport("json", doc));
+    const parsed = JSON.parse(serializeBudgetExport("json", doc, PINNED));
     expect(Array.isArray(parsed)).toBe(false);
-    expect(Object.keys(parsed)).toEqual(["title", "headline", "sections"]);
+    expect(Object.keys(parsed)).toEqual([
+      "exportedAt",
+      "title",
+      "headline",
+      "sections",
+    ]);
+    expect(parsed.exportedAt).toBe("2026-08-29T13:41:36-04:00");
     expect(parsed.sections[2]).toEqual({
       title: "Regular spending",
       caption: "Assigned $460.00 · Spent -$120.00 · Left $340.00",
@@ -309,7 +320,7 @@ describe("serializeBudgetExport", () => {
 
   it("nests a month's bills under it in JSON", () => {
     const parsed = JSON.parse(
-      serializeBudgetExport("json", budgetExportDocument(input())),
+      serializeBudgetExport("json", budgetExportDocument(input()), PINNED),
     );
     const forward = parsed.sections[4];
     expect(forward.rows).toHaveLength(2);
@@ -327,8 +338,12 @@ describe("serializeBudgetExport", () => {
   });
 
   it("writes the same document as YAML, with the same nesting", () => {
-    const yaml = serializeBudgetExport("yaml", budgetExportDocument(input()));
-    expect(yaml.startsWith("title: Budget — September 2026\nheadline:\n")).toBe(true);
+    const yaml = serializeBudgetExport("yaml", budgetExportDocument(input()), PINNED);
+    expect(
+      yaml.startsWith(
+        'exportedAt: "2026-08-29T13:41:36-04:00"\ntitle: Budget — September 2026\nheadline:\n',
+      ),
+    ).toBe(true);
     expect(yaml).toContain("  label: Ready to Assign\n");
     expect(yaml).toContain("sections:\n  - title: Summary\n");
     // The forecast items sit under their month's `children`, as they do in JSON.

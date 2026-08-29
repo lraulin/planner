@@ -8,10 +8,12 @@ import {
   exportableColumns,
   exportCellText,
   exportFilename,
+  formatExportStamp,
   gridCopyCommands,
   gridExportCommands,
   gridExportFormatOf,
   serializeGridExport,
+  stampExportBody,
   tableToCsv,
   tableToJson,
   tableToMarkdown,
@@ -19,6 +21,9 @@ import {
   tableToYaml,
   yamlScalar,
 } from "./exportCsv";
+
+/** 13:41:36 Eastern daylight (UTC−4). The suite pins TZ to America/New_York. */
+const PINNED = new Date("2026-08-29T17:41:36.000Z");
 
 describe("exportCellText", () => {
   it("prefers compact text over the filter value", () => {
@@ -256,26 +261,136 @@ describe("tableToYaml", () => {
 });
 
 describe("serializeGridExport", () => {
-  it("dispatches on the format without changing the cells", () => {
+  it("stamps the document without changing the table cells", () => {
     const rows = [{ name: "Goal", note: null, depth: 0 }];
-    expect(serializeGridExport("csv", columns, rows)).toBe(tableToCsv(columns, rows));
-    expect(serializeGridExport("json", columns, rows)).toBe(tableToJson(columns, rows));
-    expect(serializeGridExport("yaml", columns, rows)).toBe(tableToYaml(columns, rows));
-    expect(serializeGridExport("markdown", columns, rows)).toBe(
-      tableToMarkdown(columns, rows),
+    const meta = { title: "Outline", exportedAt: PINNED };
+    expect(serializeGridExport("csv", columns, rows, meta)).toBe(
+      stampExportBody("csv", {
+        title: "Outline",
+        exportedAt: PINNED,
+        payload: tableToCsv(columns, rows),
+      }),
+    );
+    expect(serializeGridExport("json", columns, rows, meta)).toBe(
+      stampExportBody("json", {
+        title: "Outline",
+        exportedAt: PINNED,
+        payload: tableToJson(columns, rows),
+      }),
+    );
+    expect(serializeGridExport("yaml", columns, rows, meta)).toBe(
+      stampExportBody("yaml", {
+        title: "Outline",
+        exportedAt: PINNED,
+        payload: tableToYaml(columns, rows),
+      }),
+    );
+    expect(serializeGridExport("markdown", columns, rows, meta)).toBe(
+      stampExportBody("markdown", {
+        title: "Outline",
+        exportedAt: PINNED,
+        payload: tableToMarkdown(columns, rows),
+      }),
     );
   });
 });
 
+describe("formatExportStamp", () => {
+  it("writes a local instant with no colons in the filename and an offset in both spellings", () => {
+    // Not a UTC calendar date: 17:41Z is still the 29th in New York, but a 22:00 Eastern
+    // export would be the next UTC day — the trap `toISOString().slice(0, 10)` falls into.
+    expect(formatExportStamp(PINNED)).toEqual({
+      filename: "2026-08-29T134136-0400",
+      iso: "2026-08-29T13:41:36-04:00",
+    });
+    expect(formatExportStamp(PINNED).filename).not.toContain(":");
+  });
+});
+
 describe("exportFilename", () => {
-  it("turns the grid label into a safe name with the format suffix", () => {
-    expect(csvFilename("Today's task list")).toBe("Today_s_task_list.csv");
-    expect(exportFilename("Today's task list", "json")).toBe("Today_s_task_list.json");
-    expect(exportFilename("  Agenda  ", "yaml")).toBe("Agenda.yaml");
-    expect(exportFilename("   ", "csv")).toBe("grid.csv");
-    // `.markdown` is a valid extension nothing actually uses.
-    expect(exportFilename("Budget — September 2026", "markdown")).toBe(
-      "Budget_September_2026.md",
+  it("turns the grid label into a safe name with the stamp and the format suffix", () => {
+    expect(exportFilename("Outline", "json", PINNED)).toBe(
+      "Outline_2026-08-29T134136-0400.json",
+    );
+    expect(csvFilename("Today's task list", PINNED)).toBe(
+      "Today_s_task_list_2026-08-29T134136-0400.csv",
+    );
+    expect(exportFilename("  Agenda  ", "yaml", PINNED)).toBe(
+      "Agenda_2026-08-29T134136-0400.yaml",
+    );
+    expect(exportFilename("   ", "csv", PINNED)).toBe(
+      "grid_2026-08-29T134136-0400.csv",
+    );
+    expect(exportFilename("Budget — September 2026", "md", PINNED)).toBe(
+      "Budget_September_2026_2026-08-29T134136-0400.md",
+    );
+  });
+});
+
+describe("stampExportBody", () => {
+  const rows = [{ name: "Goal", note: null, depth: 0 }];
+
+  it("preambles CSV and Markdown and leaves the table itself unstamped", () => {
+    const csv = tableToCsv(columns, rows);
+    const markdown = tableToMarkdown(columns, rows);
+    expect(
+      stampExportBody("csv", { title: "Outline", exportedAt: PINNED, payload: csv }),
+    ).toBe(`Outline\nExported 2026-08-29T13:41:36-04:00\n\n${csv}`);
+    expect(
+      stampExportBody("markdown", {
+        title: "Outline",
+        exportedAt: PINNED,
+        payload: markdown,
+      }),
+    ).toBe(`# Outline\nExported 2026-08-29T13:41:36-04:00\n\n${markdown}`);
+    expect(csv.startsWith("Name,Note\n")).toBe(true);
+    expect(markdown.startsWith("| Name | Note |")).toBe(true);
+  });
+
+  it("wraps JSON and YAML in an envelope; an empty grid is not a top-level array", () => {
+    const json = JSON.parse(
+      stampExportBody("json", {
+        title: "Outline",
+        exportedAt: PINNED,
+        payload: tableToJson(columns, []),
+      }),
+    ) as { exportedAt: string; title: string; rows: unknown };
+    expect(Array.isArray(json)).toBe(false);
+    expect(json).toEqual({
+      exportedAt: "2026-08-29T13:41:36-04:00",
+      title: "Outline",
+      rows: [],
+    });
+    expect(tableToJson(columns, [])).toBe("[]\n");
+
+    const yaml = stampExportBody("yaml", {
+      title: "Outline",
+      exportedAt: PINNED,
+      payload: tableToYaml(columns, []),
+    });
+    expect(yaml).toBe(
+      'exportedAt: "2026-08-29T13:41:36-04:00"\ntitle: Outline\nrows: []\n',
+    );
+    expect(tableToYaml(columns, [])).toBe("[]\n");
+  });
+
+  it("nests a YAML row list under rows rather than concatenating two documents", () => {
+    const payload = tableToYaml(columns, rows);
+    expect(
+      stampExportBody("yaml", {
+        title: "Outline",
+        exportedAt: PINNED,
+        payload,
+      }),
+    ).toBe(
+      [
+        'exportedAt: "2026-08-29T13:41:36-04:00"',
+        "title: Outline",
+        "rows:",
+        "  - Name: Goal",
+        '    Note: ""',
+        "",
+      ].join("\n"),
     );
   });
 });

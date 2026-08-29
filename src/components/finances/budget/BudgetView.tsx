@@ -36,6 +36,7 @@ import { downloadTextFile } from "@/components/grid/downloadCsv";
 import {
   exportFilename,
   exportMimeType,
+  FORMAT_EXTENSION,
   gridCopyCommands,
   gridExportCommands,
   gridExportFormatOf,
@@ -622,12 +623,17 @@ export function BudgetView({
     const write = (format: ReturnType<typeof gridExportFormatOf>, toFile: boolean) => {
       const doc = exportRef.current;
       if (!doc || !format) return;
-      const text = serializeBudgetExport(format, doc);
+      const exportedAt = new Date();
+      const text = serializeBudgetExport(format, doc, exportedAt);
       if (!toFile) {
         void writeClipboardText(text);
         return;
       }
-      downloadTextFile(exportFilename(doc.title, format), text, exportMimeType(format));
+      downloadTextFile(
+        exportFilename(doc.title, FORMAT_EXTENSION[format], exportedAt),
+        text,
+        exportMimeType(format),
+      );
     };
     const downloads = gridExportCommands(() => {}).map((command) => {
       const format = gridExportFormatOf(command.id);

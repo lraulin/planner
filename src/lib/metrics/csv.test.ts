@@ -184,6 +184,32 @@ describe("parseEntriesCsv", () => {
     expect(errors[0]?.message).toMatch(/Date/);
   });
 
+  it("skips a stamp preamble and still imports a file that has none", () => {
+    const table = entriesToCsv([
+      {
+        id: "a",
+        entryDate: "2025-01-05",
+        entryType: "new_total",
+        target: null,
+        value: 95,
+      },
+    ]);
+    const stamped = [
+      "Weight tracking",
+      "Exported 2026-08-29T13:41:36-04:00",
+      "",
+      table,
+    ].join("\n");
+    const withPreamble = parseEntriesCsv(stamped);
+    const without = parseEntriesCsv(table);
+    expect(withPreamble.errors).toEqual([]);
+    expect(without.errors).toEqual([]);
+    expect(withPreamble.entries).toEqual(without.entries);
+    expect(withPreamble.entries).toEqual([
+      { entryDate: "2025-01-05", entryType: "new_total", target: null, value: 95 },
+    ]);
+  });
+
   it("accepts a quoted multi-line cell without inventing a broken next row", () => {
     // Tracking columns today never hold newlines, but escapeCsvField will write them and
     // a hand-edited sheet can too — split-on-newline used to turn one row into two errors.

@@ -54,6 +54,8 @@ import {
 } from "@/lib/metrics/trackingColumns";
 import type { MetricDetail, MetricEntryView, MetricType } from "@/lib/metrics/types";
 import { METRIC_TYPE_LABELS, METRIC_TYPES } from "@/lib/metrics/types";
+import { downloadTextFile } from "@/components/grid/downloadCsv";
+import { exportFilename, stampExportBody } from "@/lib/grid/exportCsv";
 import { writeClipboardText } from "@/lib/tree/copyAsText";
 import type { OutlineNode } from "@/lib/tree/types";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
@@ -412,14 +414,14 @@ function MetricForm({
   };
 
   const exportCsv = () => {
-    const csv = entriesToCsv(detail.entries);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${(detail.title || "metric").replace(/[^\w.-]+/g, "_")}-tracking.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const exportedAt = new Date();
+    const title = `${detail.title || "metric"} tracking`;
+    const csv = stampExportBody("csv", {
+      title,
+      exportedAt,
+      payload: entriesToCsv(detail.entries),
+    });
+    downloadTextFile(exportFilename(title, "csv", exportedAt), csv);
   };
 
   const importCsv = (event: ReactChangeEvent<HTMLInputElement>) => {

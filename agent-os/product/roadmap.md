@@ -530,7 +530,9 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
 - **Import/export.** Achieve data import, full export (own-your-data mandate in
   `mission.md`). Outline core + appointments / time charts / wishes / notes / **metrics**
   ship; RedNotebook journals and Tomboy note archives also import from Settings. Remaining
-  Tier A–C tables still grow with product surfaces.
+  Tier A–C tables still grow with product surfaces. Downloads and clipboard copies are
+  stamped with a local instant (filename + body) as of
+  `specs/2026-08-29-1349-export-stamps-and-activity`.
 
 ### Google integration
 
@@ -835,6 +837,8 @@ dollar is in is working against the point.
   `/finances/activity` is the canonical append-only explanation trail for bank
   snapshots, sync/import, register, account, and Budget money changes. It also replaces
   the capped per-month Budget movement notes after migrating their legacy text.
+  File ▸ Export Event dumps one open entry's drawer evidence (checkpoints, changes, source)
+  as of `specs/2026-08-29-1349-export-stamps-and-activity`.
   ✅ Feed ownership by watermark shipped 2026-08-29 —
   `agent-os/specs/2026-08-29-1228-feed-ownership-watermark/`. The two card feeds no longer
   overlap: SimpleFIN and the file downloads own everything up to the latest day they have
@@ -1233,7 +1237,7 @@ Phase 1 remaining ──► weekly planning workflow (+ calendar polish)
 Phase 2 ──► Pomodoro on task/project (writes Actual Effort)
         │         └──► session log ──► full time reports
         │
-        ├──► auth ✅, in-app inbox + quick entry ✅, Alfred capture ✅, export
+        ├──► auth ✅, in-app inbox + quick entry ✅, Alfred capture ✅, export ✅ (stamped)
         │         └──► external intake complete: Reminders drain ✅ (provenance columns)
         ├──► attachments: URL links → Drive/Dropbox pickers (no S3)
         ├──► AI tools/API ✅ (agent HTTP + planner-agent repo; Bedrock later)

@@ -38,7 +38,9 @@ function normalizeHeader(h: string): string {
 /**
  * Parse a tracking CSV produced by {@link entriesToCsv} (or a compatible sheet).
  * Header must include Date and Value; Type and Target are optional.
- * Blank value cells are skipped (not errors). Invalid dates/numbers are errors.
+ * Leading non-header rows (the export stamp preamble) are skipped; a file with no
+ * preamble still imports. Blank value cells are skipped (not errors). Invalid
+ * dates/numbers are errors.
  *
  * Uses the whole-document CSV walker so a quoted cell with a newline (what
  * {@link escapeCsvField} writes) does not split into two broken rows.
@@ -50,13 +52,11 @@ export function parseEntriesCsv(text: string): ParseCsvEntriesResult {
     return { entries: [], errors: [{ row: 1, message: "File is empty." }] };
   }
 
-  const headerCells = rows[0].map(normalizeHeader);
-  const dateIdx = headerCells.findIndex((h) => h === "date");
-  const valueIdx = headerCells.findIndex((h) => h === "value");
-  const typeIdx = headerCells.findIndex((h) => h === "type");
-  const targetIdx = headerCells.findIndex((h) => h === "target");
-
-  if (dateIdx < 0 || valueIdx < 0) {
+  const headerIndex = rows.findIndex((cells) => {
+    const headerCells = cells.map(normalizeHeader);
+    return headerCells.includes("date") && headerCells.includes("value");
+  });
+  if (headerIndex < 0) {
     return {
       entries: [],
       errors: [
@@ -68,10 +68,16 @@ export function parseEntriesCsv(text: string): ParseCsvEntriesResult {
     };
   }
 
+  const headerCells = rows[headerIndex].map(normalizeHeader);
+  const dateIdx = headerCells.findIndex((h) => h === "date");
+  const valueIdx = headerCells.findIndex((h) => h === "value");
+  const typeIdx = headerCells.findIndex((h) => h === "type");
+  const targetIdx = headerCells.findIndex((h) => h === "target");
+
   const entries: ParsedMetricEntry[] = [];
   const errors: { row: number; message: string }[] = [];
 
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = headerIndex + 1; i < rows.length; i++) {
     // 1-based data row numbers count the header as row 1 (same as a spreadsheet).
     const rowNum = i + 1;
     const cells = rows[i];

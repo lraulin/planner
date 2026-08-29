@@ -1,17 +1,36 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   listFinanceActivityAction,
   loadFinanceActivityEventAction,
 } from "@/app/finances/actions";
 import { DataGrid } from "@/components/grid/DataGrid";
+import { downloadTextFile } from "@/components/grid/downloadCsv";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useGridState } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import type { Command } from "@/lib/commands/registry";
+import {
+  activityCopyCommands,
+  activityEvidenceDocument,
+  activityExportCommands,
+  activityExportFormatOf,
+  serializeActivityExport,
+} from "@/lib/finances/audit/export";
+import { exportFilename, exportMimeType, FORMAT_EXTENSION } from "@/lib/grid/exportCsv";
 import { collectDistinctValues } from "@/lib/grid/distinct";
+import { writeClipboardText } from "@/lib/tree/copyAsText";
 import type { GridRow } from "@/lib/tree/slice";
 import type {
   FinanceAuditEvent,
@@ -84,8 +103,9 @@ export function ActivityView({
   );
 
   const close = useCallback(() => {
+    // Keep the last loaded event so File ▸ Export Event still works after the drawer
+    // closes — opening File clicks the drawer scrim, and below `md` the sheet covers `⋯`.
     setOpenId(null);
-    setEvent(null);
     setError(null);
     router.replace("/finances/activity");
   }, [router]);
@@ -97,6 +117,51 @@ export function ActivityView({
       else setError(result.error);
     });
   }, []);
+
+  const eventRef = useRef(event);
+  useEffect(() => {
+    eventRef.current = event;
+  });
+  const loaded = event !== null;
+  const exportCommands = useMemo((): Command[] => {
+    const write = (
+      format: ReturnType<typeof activityExportFormatOf>,
+      toFile: boolean,
+    ) => {
+      const current = eventRef.current;
+      if (!current || !format) return;
+      const exportedAt = new Date();
+      const doc = activityEvidenceDocument(current);
+      const text = serializeActivityExport(format, doc, exportedAt);
+      if (!toFile) {
+        void writeClipboardText(text);
+        return;
+      }
+      downloadTextFile(
+        exportFilename(doc.title, FORMAT_EXTENSION[format], exportedAt),
+        text,
+        exportMimeType(format),
+      );
+    };
+    const downloads = activityExportCommands(() => {}, loaded).map((command) => {
+      const format = activityExportFormatOf(command.id);
+      return {
+        ...command,
+        run: () => write(format, true),
+        alternate: {
+          label: command.alternate?.label ?? "",
+          title: command.alternate?.title,
+          run: () => write(format, false),
+        },
+      };
+    });
+    const copies = activityCopyCommands(() => {}, loaded).map((command) => ({
+      ...command,
+      run: () => write(activityExportFormatOf(command.id), false),
+    }));
+    return [...downloads, ...copies];
+  }, [loaded]);
+  useRegisterCommands(exportCommands);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -155,7 +220,7 @@ export function ActivityView({
         }
       />
       <ActivityDrawer
-        event={event}
+        event={openId ? event : null}
         loading={loading && openId !== null}
         error={openId ? error : null}
         onClose={close}

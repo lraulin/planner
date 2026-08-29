@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
+import { stampAchieveXml } from "@/lib/achieve/exportXml";
 import { exportAchieveXmlForUser } from "@/lib/achieve/exportLoad";
+import { exportFilename } from "@/lib/grid/exportCsv";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
 /**
@@ -13,9 +15,11 @@ export async function GET() {
   try {
     const userId = await getCurrentUserId();
     const result = await exportAchieveXmlForUser(userId);
-    const filename = `planner-export-${new Date().toISOString().slice(0, 10)}.achxml`;
+    const exportedAt = new Date();
+    const xml = stampAchieveXml(result.xml, exportedAt);
+    const filename = exportFilename("planner-export", "achxml", exportedAt);
 
-    return new NextResponse(result.xml, {
+    return new NextResponse(xml, {
       status: 200,
       headers: {
         "Content-Type": "application/xml; charset=utf-8",

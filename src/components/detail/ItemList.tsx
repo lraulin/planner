@@ -11,7 +11,9 @@ import { listContactOptionsAction } from "@/app/library/contacts/actions";
 import { ContactSelect } from "@/components/contacts/ContactSelect";
 import type { NodeItem, NodeItemKind } from "@/db/schema";
 import type { ContactOption } from "@/lib/contacts/types";
+import { downloadTextFile } from "@/components/grid/downloadCsv";
 import { itemsToCsv, parseItemsCsv, resolveContactCsvRows } from "@/lib/detail/itemCsv";
+import { exportFilename, stampExportBody } from "@/lib/grid/exportCsv";
 import {
   cycleItemSort,
   defaultItemSort,
@@ -125,14 +127,13 @@ export function ItemList({
   const canReorder = sort === null;
 
   const exportCsv = () => {
-    const csv = itemsToCsv(config.fields, displayItems, contactNames);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${config.title.replace(/[^\w.-]+/g, "_").toLowerCase()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const exportedAt = new Date();
+    const csv = stampExportBody("csv", {
+      title: config.title,
+      exportedAt,
+      payload: itemsToCsv(config.fields, displayItems, contactNames),
+    });
+    downloadTextFile(exportFilename(config.title, "csv", exportedAt), csv);
   };
 
   const importCsv = (event: ReactChangeEvent<HTMLInputElement>) => {

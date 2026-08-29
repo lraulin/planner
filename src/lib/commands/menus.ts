@@ -33,7 +33,16 @@ export const TOOLBAR_SEGMENT = 10;
  * first declared — so a page can invent a `Tools` section without editing this file.
  */
 export const MENU_SECTIONS: Record<CommandMenu, readonly string[]> = {
-  file: ["Inbox", "Plan", "Import", "Export", "Copy to Clipboard", "Account"],
+  file: [
+    "Inbox",
+    "Plan",
+    "Import",
+    "Export",
+    "Copy to Clipboard",
+    "Export Event",
+    "Copy Event to Clipboard",
+    "Account",
+  ],
   new: ["New", "Insert row"],
   item: ["Item", "Convert to", "Danger"],
   // `Rank` and `State` are the Day grid's; `Move` is shared with the Outline's tree moves. They are
@@ -73,6 +82,9 @@ export const NESTED_SECTIONS: ReadonlySet<string> = new Set([
   "Export",
   // File ▸ Copy to Clipboard ▸ — the always-visible twin of Export's Option-swap.
   "Copy to Clipboard",
+  // File ▸ Export Event ▸ — one open Activity row's drawer evidence, not the list.
+  "Export Event",
+  "Copy Event to Clipboard",
   "Assign",
 ]);
 

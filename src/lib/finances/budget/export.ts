@@ -20,10 +20,13 @@ import type { SpendingVsIncome } from "@/lib/finances/expectedSpending";
 import { escapeCsvField } from "@/lib/csv/text";
 import {
   exportableColumns,
+  formatExportStamp,
   tableToCsv,
   tableToMarkdown,
   tableToRecords,
+  yamlMapping,
   yamlScalar,
+  yamlSequenceItem,
   type DepthExportRow,
   type ExportColumn,
   type ExportColumnSource,
@@ -284,11 +287,14 @@ function sectionColumns(section: BudgetExportSection): ExportColumn<BudgetExport
 export function serializeBudgetExport(
   format: GridExportFormat,
   doc: BudgetExportDocument,
+  exportedAt: Date,
 ): string {
-  if (format === "csv") return budgetToCsv(doc);
-  if (format === "markdown") return budgetToMarkdown(doc);
-  if (format === "json") return `${JSON.stringify(budgetToObject(doc), null, 2)}\n`;
-  return budgetToYaml(doc);
+  if (format === "csv") return budgetToCsv(doc, exportedAt);
+  if (format === "markdown") return budgetToMarkdown(doc, exportedAt);
+  if (format === "json") {
+    return `${JSON.stringify(budgetToObject(doc, exportedAt), null, 2)}\n`;
+  }
+  return budgetToYaml(doc, exportedAt);
 }
 
 /**
@@ -297,9 +303,10 @@ export function serializeBudgetExport(
  * `Available`, where they mean nothing. Stacked, it reads as a report in Excel — which is
  * what Achieve's `File ▸ Export to Excel…` was for.
  */
-function budgetToCsv(doc: BudgetExportDocument): string {
+function budgetToCsv(doc: BudgetExportDocument, exportedAt: Date): string {
   const lines: string[] = [
     escapeCsvField(doc.title),
+    escapeCsvField(`Exported ${formatExportStamp(exportedAt).iso}`),
     [doc.headline.label, doc.headline.value, doc.headline.note ?? ""]
       .map(escapeCsvField)
       .join(","),
@@ -317,9 +324,10 @@ function budgetToCsv(doc: BudgetExportDocument): string {
   return lines.join("\n");
 }
 
-function budgetToMarkdown(doc: BudgetExportDocument): string {
+function budgetToMarkdown(doc: BudgetExportDocument, exportedAt: Date): string {
   const blocks: string[] = [
     `# ${doc.title}`,
+    `Exported ${formatExportStamp(exportedAt).iso}`,
     `**${doc.headline.label} ${doc.headline.value}**${
       doc.headline.note ? ` — ${doc.headline.note}` : ""
     }`,
@@ -339,6 +347,7 @@ function budgetToMarkdown(doc: BudgetExportDocument): string {
 }
 
 type BudgetExportObject = {
+  exportedAt: string;
   title: string;
   headline: BudgetExportDocument["headline"];
   sections: { title: string; caption?: string; rows: ExportRecord[] }[];
@@ -346,10 +355,15 @@ type BudgetExportObject = {
 
 /**
  * One keyed object, not the row array a single grid exports: a whole-page document has a
- * headline that is not a row of any table, so the top level cannot be a list.
+ * headline that is not a row of any table, so the top level cannot be a list. `exportedAt`
+ * is added to this object — wrapping it would be a second envelope.
  */
-function budgetToObject(doc: BudgetExportDocument): BudgetExportObject {
+function budgetToObject(
+  doc: BudgetExportDocument,
+  exportedAt: Date,
+): BudgetExportObject {
   return {
+    exportedAt: formatExportStamp(exportedAt).iso,
     title: doc.title,
     headline: doc.headline,
     sections: doc.sections.map((section) => ({
@@ -360,52 +374,13 @@ function budgetToObject(doc: BudgetExportDocument): BudgetExportObject {
   };
 }
 
-function budgetToYaml(doc: BudgetExportDocument): string {
-  const object = budgetToObject(doc);
-  let out = `title: ${yamlScalar(object.title)}\nheadline:\n`;
+function budgetToYaml(doc: BudgetExportDocument, exportedAt: Date): string {
+  const object = budgetToObject(doc, exportedAt);
+  let out = `exportedAt: ${yamlScalar(object.exportedAt)}\ntitle: ${yamlScalar(object.title)}\nheadline:\n`;
   out += yamlMapping(object.headline, 2);
   out += "sections:\n";
   for (const section of object.sections) {
     out += yamlSequenceItem(section, 2);
   }
   return out;
-}
-
-type YamlValue = string | YamlValue[] | { [key: string]: YamlValue };
-
-/**
- * YAML for this document shape only — strings, string maps, and lists of maps. A library
- * would be a dependency for a document whose every leaf is already a string, and the grid
- * exporter made the same call for the same reason.
- */
-function yamlMapping(map: Record<string, YamlValue>, indent: number): string {
-  const pad = " ".repeat(indent);
-  let out = "";
-  for (const [key, value] of Object.entries(map)) {
-    if (value === undefined) continue;
-    if (typeof value === "string") {
-      out += `${pad}${yamlScalar(key)}: ${yamlScalar(value)}\n`;
-      continue;
-    }
-    if (Array.isArray(value)) {
-      if (value.length === 0) continue;
-      out += `${pad}${yamlScalar(key)}:\n`;
-      for (const item of value) {
-        out +=
-          typeof item === "string"
-            ? `${pad}  - ${yamlScalar(item)}\n`
-            : yamlSequenceItem(item as Record<string, YamlValue>, indent + 2);
-      }
-      continue;
-    }
-    out += `${pad}${yamlScalar(key)}:\n${yamlMapping(value, indent + 2)}`;
-  }
-  return out;
-}
-
-/** A mapping as a list item: the first key rides the dash, the rest line up under it. */
-function yamlSequenceItem(map: Record<string, YamlValue>, indent: number): string {
-  const body = yamlMapping(map, indent + 2);
-  if (body === "") return `${" ".repeat(indent)}- {}\n`;
-  return `${" ".repeat(indent)}- ${body.slice(indent + 2)}`;
 }

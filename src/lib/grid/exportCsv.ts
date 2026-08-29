@@ -197,6 +197,80 @@ export function tableToYaml<TRow extends DepthExportRow>(
 }
 
 /**
+ * The same instant, two spellings: filenames cannot have colons, document bodies can.
+ *
+ * Local wall clock plus the zone offset — not a UTC calendar date. Export time is an
+ * instant (`dates.md`); `toISOString().slice(0, 10)` is the trap that puts a US evening
+ * on tomorrow's date.
+ */
+export type ExportStamp = {
+  filename: string;
+  iso: string;
+};
+
+function twoDigits(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+export function formatExportStamp(at: Date): ExportStamp {
+  const year = at.getFullYear();
+  const month = twoDigits(at.getMonth() + 1);
+  const day = twoDigits(at.getDate());
+  const hour = twoDigits(at.getHours());
+  const minute = twoDigits(at.getMinutes());
+  const second = twoDigits(at.getSeconds());
+  // `getTimezoneOffset` is minutes *west* of UTC. Flip the sign so Eastern daylight
+  // (UTC−4, offset 240) writes `-0400`, not `+0400`.
+  const offsetMinutes = -at.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absolute = Math.abs(offsetMinutes);
+  const offsetHour = twoDigits(Math.floor(absolute / 60));
+  const offsetMinute = twoDigits(absolute % 60);
+  return {
+    filename: `${year}-${month}-${day}T${hour}${minute}${second}${sign}${offsetHour}${offsetMinute}`,
+    iso: `${year}-${month}-${day}T${hour}:${minute}:${second}${sign}${offsetHour}:${offsetMinute}`,
+  };
+}
+
+/**
+ * Title line, `Exported {iso}` line, blank line — then the unstamped table. JSON/YAML wrap
+ * the payload as `{ exportedAt, title, rows }` so an empty grid is an envelope, not `[]`.
+ *
+ * `payload` is whatever `tableTo*` (or a document serializer) already wrote. This layer
+ * does not re-quote cells.
+ */
+export function stampExportBody(
+  format: GridExportFormat,
+  options: { title: string; exportedAt: Date; payload: string },
+): string {
+  const { iso } = formatExportStamp(options.exportedAt);
+  if (format === "csv") {
+    const exported = escapeCsvField(`Exported ${iso}`);
+    return `${escapeCsvField(options.title)}\n${exported}\n\n${options.payload}`;
+  }
+  if (format === "markdown") {
+    return `# ${options.title}\nExported ${iso}\n\n${options.payload}`;
+  }
+  if (format === "json") {
+    const rows = JSON.parse(options.payload) as unknown;
+    return `${JSON.stringify(
+      { exportedAt: iso, title: options.title, rows },
+      null,
+      2,
+    )}\n`;
+  }
+  const trimmed = options.payload.replace(/\n+$/, "");
+  const rowsBlock =
+    trimmed === "" || trimmed === "[]"
+      ? "rows: []\n"
+      : `rows:\n${trimmed
+          .split("\n")
+          .map((line) => (line === "" ? "" : `  ${line}`))
+          .join("\n")}\n`;
+  return `exportedAt: ${yamlScalar(iso)}\ntitle: ${yamlScalar(options.title)}\n${rowsBlock}`;
+}
+
+/**
  * Quote when a bare scalar would be a different YAML value (bool, null, number) or
  * would break the document (colon, hash, leading space, newline).
  */
@@ -213,6 +287,48 @@ export function yamlScalar(value: string): string {
     return JSON.stringify(value);
   }
   return value;
+}
+
+export type YamlValue = string | YamlValue[] | { [key: string]: YamlValue };
+
+/**
+ * YAML for string maps, string lists, and nested maps — the document shape Budget and
+ * Activity evidence share. `tableToYaml` stays the grid-record writer; this is the other
+ * half of "no second YAML implementation".
+ */
+export function yamlMapping(map: Record<string, YamlValue>, indent: number): string {
+  const pad = " ".repeat(indent);
+  let out = "";
+  for (const [key, value] of Object.entries(map)) {
+    if (value === undefined) continue;
+    if (typeof value === "string") {
+      out += `${pad}${yamlScalar(key)}: ${yamlScalar(value)}\n`;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      if (value.length === 0) continue;
+      out += `${pad}${yamlScalar(key)}:\n`;
+      for (const item of value) {
+        out +=
+          typeof item === "string"
+            ? `${pad}  - ${yamlScalar(item)}\n`
+            : yamlSequenceItem(item as Record<string, YamlValue>, indent + 2);
+      }
+      continue;
+    }
+    out += `${pad}${yamlScalar(key)}:\n${yamlMapping(value, indent + 2)}`;
+  }
+  return out;
+}
+
+/** A mapping as a list item: the first key rides the dash, the rest line up under it. */
+export function yamlSequenceItem(
+  map: Record<string, YamlValue>,
+  indent: number,
+): string {
+  const body = yamlMapping(map, indent + 2);
+  if (body === "") return `${" ".repeat(indent)}- {}\n`;
+  return `${" ".repeat(indent)}- ${body.slice(indent + 2)}`;
 }
 
 function yamlRecord(record: ExportRecord, indent: number): string {
@@ -235,25 +351,25 @@ function yamlRecord(record: ExportRecord, indent: number): string {
 }
 
 /** Extensions, where the format name is not one. Markdown files are `.md`, not `.markdown`. */
-const FORMAT_EXTENSION: Record<GridExportFormat, string> = {
+export const FORMAT_EXTENSION: Record<GridExportFormat, string> = {
   csv: "csv",
   json: "json",
   yaml: "yaml",
   markdown: "md",
 };
 
-export function exportFilename(label: string, format: GridExportFormat): string {
+export function exportFilename(label: string, extension: string, at: Date): string {
   const slug = label
     .trim()
     .replace(/[^\w.-]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 80);
-  return `${slug || "grid"}.${FORMAT_EXTENSION[format]}`;
+  return `${slug || "grid"}_${formatExportStamp(at).filename}.${extension}`;
 }
 
 /** @deprecated Use {@link exportFilename} — kept so existing CSV call sites stay obvious. */
-export function csvFilename(label: string): string {
-  return exportFilename(label, "csv");
+export function csvFilename(label: string, at: Date): string {
+  return exportFilename(label, "csv", at);
 }
 
 export function exportMimeType(format: GridExportFormat): string {
@@ -264,11 +380,21 @@ export function serializeGridExport<TRow extends DepthExportRow>(
   format: GridExportFormat,
   columns: readonly ExportColumn<TRow>[],
   rows: readonly TRow[],
+  meta: { title: string; exportedAt: Date },
 ): string {
-  if (format === "csv") return tableToCsv(columns, rows);
-  if (format === "json") return tableToJson(columns, rows);
-  if (format === "markdown") return tableToMarkdown(columns, rows);
-  return tableToYaml(columns, rows);
+  const payload =
+    format === "csv"
+      ? tableToCsv(columns, rows)
+      : format === "json"
+        ? tableToJson(columns, rows)
+        : format === "markdown"
+          ? tableToMarkdown(columns, rows)
+          : tableToYaml(columns, rows);
+  return stampExportBody(format, {
+    title: meta.title,
+    exportedAt: meta.exportedAt,
+    payload,
+  });
 }
 
 /**

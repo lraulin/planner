@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildAchieveXml, type ExportOutlineRow } from "./exportXml";
+import { exportFilename } from "@/lib/grid/exportCsv";
+import { buildAchieveXml, stampAchieveXml, type ExportOutlineRow } from "./exportXml";
 import { mapOutline } from "./mapOutline";
 import { parseAchXml } from "./parseXml";
 
@@ -73,6 +74,9 @@ describe("buildAchieveXml", () => {
     expect(xml).toContain("<Name>Write tests</Name>");
     expect(xml).toContain("<Priority>1</Priority>");
     expect(xml).toContain("<ExpectedEffortBest>30</ExpectedEffortBest>");
+    expect(xml.startsWith('<?xml version="1.0" standalone="yes"?>\n<AchieveDB>')).toBe(
+      true,
+    );
     expect(counts).toEqual({
       result_area: 1,
       goal: 0,
@@ -82,6 +86,30 @@ describe("buildAchieveXml", () => {
       metric_entry: 0,
       omitted: 0,
     });
+  });
+
+  it("stamps an export comment before AchieveDB without breaking re-import", () => {
+    const at = new Date("2026-08-29T17:41:36.000Z");
+    const { xml } = buildAchieveXml([
+      row({
+        id: "ra1",
+        type: "result_area",
+        name: "Career",
+        category: "Work",
+        sortKey: "a0",
+      }),
+    ]);
+    const stamped = stampAchieveXml(xml, at);
+    expect(stamped).toContain("<!-- Exported 2026-08-29T13:41:36-04:00 -->");
+    expect(stamped.indexOf("<!-- Exported")).toBeGreaterThan(stamped.indexOf("<?xml"));
+    expect(stamped.indexOf("<!-- Exported")).toBeLessThan(
+      stamped.indexOf("<AchieveDB>"),
+    );
+    expect(exportFilename("planner-export", "achxml", at)).toBe(
+      "planner-export_2026-08-29T134136-0400.achxml",
+    );
+    const parsed = parseAchXml(stamped);
+    expect(mapOutline(parsed).nodes.some((node) => node.name === "Career")).toBe(true);
   });
 
   it("exports goals and links child projects via ProjectId", () => {

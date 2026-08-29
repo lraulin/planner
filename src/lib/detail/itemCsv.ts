@@ -144,7 +144,9 @@ function parseNumber(raw: string): { ok: true; value: number | null } | { ok: fa
 /**
  * Parse a CSV produced by {@link itemsToCsv} (or a compatible sheet).
  * Header must match at least one known field for the kind (by label or key).
- * Completely blank data rows are skipped; invalid cells are row errors.
+ * Leading non-header rows (the export stamp preamble) are skipped; a file with no
+ * preamble still imports. Completely blank data rows are skipped; invalid cells
+ * are row errors.
  */
 export function parseItemsCsv(
   fields: readonly ItemCsvField[],
@@ -155,11 +157,10 @@ export function parseItemsCsv(
     return { rows: [], errors: [{ row: 1, message: "File is empty." }] };
   }
 
-  const header = table[0];
-  const mapping: (ItemCsvField | null)[] = header.map(
-    (h) => matchField(fields, h) ?? null,
+  const headerIndex = table.findIndex((header) =>
+    header.some((h) => matchField(fields, h)),
   );
-  if (!mapping.some(Boolean)) {
+  if (headerIndex < 0) {
     const labels = fields.map((f) => f.label).join(", ");
     return {
       rows: [],
@@ -172,10 +173,15 @@ export function parseItemsCsv(
     };
   }
 
+  const header = table[headerIndex];
+  const mapping: (ItemCsvField | null)[] = header.map(
+    (h) => matchField(fields, h) ?? null,
+  );
+
   const rows: ItemCsvValues[] = [];
   const errors: { row: number; message: string }[] = [];
 
-  for (let i = 1; i < table.length; i++) {
+  for (let i = headerIndex + 1; i < table.length; i++) {
     const rowNum = i + 1;
     const cells = table[i];
     if (cells.every((c) => c.trim() === "")) continue;

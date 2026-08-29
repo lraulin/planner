@@ -1,11 +1,11 @@
 "use client";
 
 import type { ColumnDef } from "@/components/grid/columns";
-import type {
-  FinanceAuditEventSummary,
-  FinanceAuditKind,
-} from "@/lib/finances/audit/types";
+import type { FinanceAuditEventSummary } from "@/lib/finances/audit/types";
+import { financeAuditActionLabel } from "@/lib/finances/audit/labels";
 import { formatUsd } from "@/lib/finances/money";
+
+export { financeAuditActionLabel };
 
 export type ActivityColumnCtx = Record<string, never>;
 
@@ -17,29 +17,6 @@ export const ACTIVITY_COLUMN_IDS = [
   "budgetMonth",
   "impact",
 ] as const;
-
-const ACTION_LABELS: Record<FinanceAuditKind, string> = {
-  bank_snapshot: "Bank snapshot",
-  simplefin_sync: "SimpleFIN sync",
-  finance_import: "File import",
-  transaction_change: "Transaction changed",
-  transaction_delete: "Transaction deleted",
-  transaction_split: "Transaction split",
-  transaction_classification: "Transactions classified",
-  account_membership: "Budget membership",
-  account_delete: "Account deleted",
-  statement_change: "Statement changed",
-  budget_assignment: "Budget assignment",
-  budget_transfer: "Budget transfer",
-  budget_carryover: "Carryover changed",
-  budget_bulk_funding: "Bulk funding",
-  budget_delete: "Budget deletion",
-  legacy_budget_movement: "Legacy movement log",
-};
-
-export function financeAuditActionLabel(kind: FinanceAuditKind): string {
-  return ACTION_LABELS[kind];
-}
 
 function accountLabel(row: FinanceAuditEventSummary): string {
   return row.scope.accountNames?.join(", ") ?? "";

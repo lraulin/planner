@@ -2,6 +2,8 @@
 
 import { useId, useRef, useState, useTransition } from "react";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { downloadTextFile } from "@/components/grid/downloadCsv";
+import { exportFilename } from "@/lib/grid/exportCsv";
 import { readJsonResponse } from "@/lib/http/readJson";
 
 type ImportOk = {
@@ -64,18 +66,12 @@ export function AchieveTransferPanel({
           setError(message);
           return;
         }
-        const blob = await res.blob();
+        const xml = await res.text();
         const disposition = res.headers.get("Content-Disposition") ?? "";
         const match = /filename="([^"]+)"/.exec(disposition);
         const filename =
-          match?.[1] ??
-          `planner-export-${new Date().toISOString().slice(0, 10)}.achxml`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
+          match?.[1] ?? exportFilename("planner-export", "achxml", new Date());
+        downloadTextFile(filename, xml, "application/xml;charset=utf-8");
 
         const counts = {
           result_area: 0,

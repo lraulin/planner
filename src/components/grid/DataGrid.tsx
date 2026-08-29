@@ -47,6 +47,7 @@ import {
   exportableColumns,
   exportFilename,
   exportMimeType,
+  FORMAT_EXTENSION,
   gridCopyCommands,
   gridExportCommands,
   gridExportFormatOf,
@@ -786,9 +787,13 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
             const nodeRows = loadRows
               ? await loadRows()
               : shown.filter((row): row is Row => row.kind === "node");
+            const exportedAt = new Date();
             downloadTextFile(
-              exportFilename(label, format),
-              serializeGridExport(format, exportableColumns(visible), nodeRows),
+              exportFilename(label, FORMAT_EXTENSION[format], exportedAt),
+              serializeGridExport(format, exportableColumns(visible), nodeRows, {
+                title: label,
+                exportedAt,
+              }),
               exportMimeType(format),
             );
           })();
@@ -801,13 +806,17 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
               const {
                 columns: visible,
                 displayRows: shown,
+                ariaLabel: label,
                 loadExportRows: loadRows,
               } = exportSnapshot.current;
               const nodeRows = loadRows
                 ? await loadRows()
                 : shown.filter((row): row is Row => row.kind === "node");
               void writeClipboardText(
-                serializeGridExport(format, exportableColumns(visible), nodeRows),
+                serializeGridExport(format, exportableColumns(visible), nodeRows, {
+                  title: label,
+                  exportedAt: new Date(),
+                }),
               );
             })();
           },
@@ -824,13 +833,17 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
             const {
               columns: visible,
               displayRows: shown,
+              ariaLabel: label,
               loadExportRows: loadRows,
             } = exportSnapshot.current;
             const nodeRows = loadRows
               ? await loadRows()
               : shown.filter((row): row is Row => row.kind === "node");
             void writeClipboardText(
-              serializeGridExport(format, exportableColumns(visible), nodeRows),
+              serializeGridExport(format, exportableColumns(visible), nodeRows, {
+                title: label,
+                exportedAt: new Date(),
+              }),
             );
           })();
         },

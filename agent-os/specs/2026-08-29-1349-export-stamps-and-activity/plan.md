@@ -1,6 +1,6 @@
 # Export timestamps and Activity evidence export
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-29)  
 Spec folder: `agent-os/specs/2026-08-29-1349-export-stamps-and-activity/`
 
 ## Spec relationships
@@ -99,23 +99,24 @@ Stamp formatting, filename composition, and the CSV/Markdown preamble live next 
 
 ## Acceptance criteria
 
-- [ ] `exportFilename("Outline", "json", pinnedDate)` is `Outline_2026-08-29T134136-0400.json` (or the pinned instant's local equivalent): no colons, offset present, not a UTC calendar date.
-- [ ] `File ▸ Export ▸` on Outline, Register, Budget, and Activity writes that stamp into the filename _and_ the file body in all four encodings. Clipboard copies of the same format contain the body stamp and match the download aside from being a string instead of a file.
-- [ ] Grid JSON/YAML parse as `{ exportedAt, title, rows }`. Budget JSON gains `exportedAt` on the existing object. Empty grid JSON is not `[]`.
-- [ ] `/finances/activity` still exports the six on-screen columns from `File ▸ Export ▸`. With a row open, `File ▸ Export Event ▸` / `Copy Event to Clipboard ▸` dump that event's checkpoints, changes, and source evidence. With no row open those commands are present and disabled: "Open an Activity entry first."
-- [ ] Achieve XML filename is `planner-export_{stamp}.achxml` and the file contains `<!-- Exported {iso} -->` before `<AchieveDB>`. Re-import still loads.
-- [ ] Metrics tracking and ItemList: export uses `downloadTextFile` + stamped filename + CSV preamble; export-then-import still loads the rows. A preamble-less file still imports.
-- [ ] Unit tests cover stamp spelling, envelope/preamble, Activity document contents, parser skip, and Achieve comment placement. No React component tests.
-- [ ] After any `src/app/**` touch (Achieve route), `npm run smoke` against a running dev server. Browser: Outline export, Budget export, Activity list export, Activity event export and copy, Metrics export-then-import, at 1280 and 390.
+- [x] `exportFilename("Outline", "json", pinnedDate)` is `Outline_2026-08-29T134136-0400.json` (or the pinned instant's local equivalent): no colons, offset present, not a UTC calendar date.
+- [x] `File ▸ Export ▸` on Outline, Register, Budget, and Activity writes that stamp into the filename _and_ the file body in all four encodings. Clipboard copies of the same format contain the body stamp and match the download aside from being a string instead of a file.
+- [x] Grid JSON/YAML parse as `{ exportedAt, title, rows }`. Budget JSON gains `exportedAt` on the existing object. Empty grid JSON is not `[]`.
+- [x] `/finances/activity` still exports the six on-screen columns from `File ▸ Export ▸`. With a row open, `File ▸ Export Event ▸` / `Copy Event to Clipboard ▸` dump that event's checkpoints, changes, and source evidence. With no row open those commands are present and disabled: "Open an Activity entry first."
+- [x] Achieve XML filename is `planner-export_{stamp}.achxml` and the file contains `<!-- Exported {iso} -->` before `<AchieveDB>`. Re-import still loads.
+- [x] Metrics tracking and ItemList: export uses `downloadTextFile` + stamped filename + CSV preamble; export-then-import still loads the rows. A preamble-less file still imports.
+- [x] Unit tests cover stamp spelling, envelope/preamble, Activity document contents, parser skip, and Achieve comment placement. No React component tests.
+- [x] After any `src/app/**` touch (Achieve route), `npm run smoke` against a running dev server. Browser: Outline export, Budget export, Activity list export, Activity event export and copy, Metrics export-then-import, at 1280 and 390.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                          | Why                                                                                                                                                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Budget's YAML map writer (`yamlMapping` / `yamlSequenceItem`) lives in `exportCsv.ts` and Activity reuses it.                   | D7 forbids a second YAML implementation; Activity is the same sectioned-document shape.                                                                                                                                                         |
+| 2   | Closing the Activity drawer keeps the last loaded event; the application menu and page bar sit above the drawer scrim (`z-50`). | File is the catalog, but the shared drawer is `fixed inset-0` and a File click used to hit the scrim, unload the event, and disable Export Event. Below `md` the sheet covers `⋯`. Chrome stays clickable the same way the sidebar already was. |
 
 ## Task 1: Save Spec Documentation
 

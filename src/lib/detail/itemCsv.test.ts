@@ -235,4 +235,24 @@ describe("itemsToCsv / parseItemsCsv", () => {
     expect(parsed.rows).toEqual([]);
     expect(parsed.errors[0]?.message).toMatch(/Header must include/);
   });
+
+  it("skips a stamp preamble and still imports a file that has none", () => {
+    const table = itemsToCsv(BENEFIT_FIELDS, [
+      item({
+        id: "1",
+        title: "Sleep",
+        description: "eight hours",
+        received: false,
+      }),
+    ]);
+    const stamped = ["Benefits", "Exported 2026-08-29T13:41:36-04:00", "", table].join(
+      "\n",
+    );
+    const withPreamble = parseItemsCsv(BENEFIT_FIELDS, stamped);
+    const without = parseItemsCsv(BENEFIT_FIELDS, table);
+    expect(withPreamble.errors).toEqual([]);
+    expect(without.errors).toEqual([]);
+    expect(withPreamble.rows.map((row) => row.title)).toEqual(["Sleep"]);
+    expect(without.rows.map((row) => row.title)).toEqual(["Sleep"]);
+  });
 });

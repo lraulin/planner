@@ -8,6 +8,7 @@ import type {
   FinanceAuditEvent,
   FinanceMoneyCheckpoint,
 } from "@/lib/finances/audit/types";
+import { exactBankSnapshots } from "@/lib/finances/audit/export";
 import { formatUsd } from "@/lib/finances/money";
 import { financeAuditActionLabel } from "./activityColumns";
 
@@ -185,20 +186,6 @@ function Changes({ changes }: { changes: FinanceAuditChange[] }) {
       ))}
     </ol>
   );
-}
-
-function exactBankSnapshots(value: unknown): string[] {
-  if (Array.isArray(value)) return value.flatMap(exactBankSnapshots);
-  if (!value || typeof value !== "object") return [];
-  const record = value as Record<string, unknown>;
-  const own =
-    record.format === "planner-bank-snapshot-v1" && typeof record.rawText === "string"
-      ? [record.rawText]
-      : [];
-  return [
-    ...own,
-    ...Object.values(record).flatMap((child) => exactBankSnapshots(child)),
-  ];
 }
 
 function SourceEvidence({ event }: { event: FinanceAuditEvent }) {
