@@ -1,6 +1,6 @@
 # Hidden categories stay in the Category picker
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-29)  
 Spec folder: `agent-os/specs/2026-08-29-1605-hidden-categories-in-picker/`
 
 ## Spec relationships
@@ -28,21 +28,21 @@ Actual Budget’s `CategoryAutocomplete` also omits hidden categories unless `bu
 
 ## Acceptance criteria
 
-- [ ] Opening Category on the Register (cell, drawer, splits, Set category) lists hidden envelopes in Budget tree order, with a subdued `(hidden)` on the row (and on a hidden group heading).
-- [ ] Typeahead still finds a hidden envelope by name or group path.
-- [ ] Budget with Show Hidden off still omits those envelopes and hidden groups; Show Hidden on still reveals them.
-- [ ] Closed Category cell still shows the envelope name, including when the assigned envelope is hidden.
-- [ ] `categoryPickerSections` unit tests pin “hidden envelopes stay, marked” rather than “omitted”. No React component tests.
-- [ ] lint, typecheck, `test:unit`. Browser: Register picker with a hidden envelope; Budget Show Hidden off.
+- [x] Opening Category on the Register (cell, drawer, splits, Set category) lists hidden envelopes in Budget tree order, with a subdued `(hidden)` on the row (and on a hidden group heading).
+- [x] Typeahead still finds a hidden envelope by name or group path.
+- [x] Budget with Show Hidden off still omits those envelopes and hidden groups; Show Hidden on still reveals them.
+- [x] Closed Category cell still shows the envelope name, including when the assigned envelope is hidden.
+- [x] `categoryPickerSections` unit tests pin “hidden envelopes stay, marked” rather than “omitted”. No React component tests.
+- [x] lint, typecheck, `test:unit`. Browser: Register picker with a hidden envelope; Budget Show Hidden off.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change | Why        |
+| --- | ------ | ---------- |
+|     | none   | As shaped. |
 
 ## Task 1: Save Spec Documentation
 
@@ -76,9 +76,15 @@ Browser: hide an envelope on Budget, confirm it leaves the table with Show Hidde
 
 Then lint / typecheck / `test:unit`. Update plan/shape for any material drift; fill **Changes from original plan**; mark **frozen / complete**. This is not a roadmap item.
 
+**As built.** `categoryPickerSections` no longer filters `hidden`; heading and envelope rows carry `hidden` when the row or an ancestor is hidden from Budget. `CategorySelect` appends a subdued `(hidden)` on those open-list rows only. Budget Show Hidden is unchanged.
+
+Verified 2026-08-29: hid Pizza on Budget (row left the table); Register cell typeahead on an uncategorized Amazon row filtered to `Pizza (hidden)`, click filed it (closed field `Pizza`, then cleared); drawer Category on Pizza Hut listed `Pizza (hidden)` and closed as `Pizza`. Show Hidden revealed Pizza; unhid so the live budget is restored.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+None. Further picker or Hide changes open a new delta-spec.
+
 ---
 
-While this spec is **active**, when we make a material change to requirements, design,
-or scope (including from feedback on what was implemented), update the relevant sections
-and append to **Changes from original plan**. Skip pure implementation details. Freeze
-when verified.
+This spec is **frozen**. Do not treat it as a living control plane. A later change opens a
+new delta-spec.
