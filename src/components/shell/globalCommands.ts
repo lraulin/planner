@@ -8,6 +8,7 @@ import { OPEN_FIND, QUICK_CAPTURE } from "@/lib/commands/chords";
 import { FILE_COMMAND_PLACEMENTS, FILE_MENU } from "@/lib/commands/fileCommands";
 import type { Command } from "@/lib/commands/registry";
 import { BUILT_MODULES, modulePages } from "./modules";
+import { useShellSettings } from "./useShellSettings";
 
 /**
  * The commands that mean the same thing on every screen.
@@ -28,10 +29,11 @@ import { BUILT_MODULES, modulePages } from "./modules";
  */
 export function useGlobalCommands(): readonly Command[] {
   const router = useRouter();
+  const pageOrder = useShellSettings().value.pageOrder;
 
   return useMemo(() => {
     const go: Command[] = BUILT_MODULES.flatMap((entry) => {
-      const pages = modulePages(entry.id);
+      const pages = modulePages(entry.id, pageOrder[entry.id]);
 
       const goToModule: Command = {
         id: `go.${entry.id}`,
@@ -94,7 +96,7 @@ export function useGlobalCommands(): readonly Command[] {
      */
 
     return [...go, ...app];
-  }, [router]);
+  }, [router, pageOrder]);
 }
 
 /** The five File-menu verbs, identity-stable with `useGlobalCommands`. */

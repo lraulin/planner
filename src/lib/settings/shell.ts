@@ -1,4 +1,4 @@
-import { asBoolean, asMap, asRecord } from "./parse";
+import { asBoolean, asMap, asRecord, asStringArray } from "./parse";
 import { SETTINGS_VERSION } from "./scopes";
 
 /**
@@ -35,6 +35,13 @@ export type ShellSettings = {
    * section name this build has never heard of.
    */
   lastPage: Record<string, string>;
+  /**
+   * Where the page-bar labels sit in each module, keyed by module id. Absent means the
+   * registry order in `pages.ts`. Stored unvalidated the same way `lastPage` is — a page
+   * that has been renamed or is no longer built drops at use time (`applyPageOrder`), not
+   * at parse, so an older blob cannot break the shell.
+   */
+  pageOrder: Record<string, string[]>;
 };
 
 /**
@@ -48,6 +55,7 @@ export const DEFAULT_SHELL_SETTINGS: ShellSettings = {
   commandsPanelOpen: false,
   commandsPanelCollapsed: {},
   lastPage: {},
+  pageOrder: {},
 };
 
 export function parseShellSettings(value: unknown): ShellSettings {
@@ -69,6 +77,10 @@ export function parseShellSettings(value: unknown): ShellSettings {
     lastPage: asMap(record.lastPage, (entry) =>
       typeof entry === "string" && entry !== "" ? entry : null,
     ),
+    pageOrder: asMap(record.pageOrder, (entry) => {
+      if (!Array.isArray(entry)) return null;
+      return asStringArray(entry, []).filter((id) => id !== "");
+    }),
   };
 }
 

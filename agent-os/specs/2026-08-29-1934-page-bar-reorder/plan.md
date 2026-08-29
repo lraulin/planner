@@ -1,6 +1,6 @@
 # Page-bar drag reorder
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-29)  
 Spec folder: `agent-os/specs/2026-08-29-1934-page-bar-reorder/`
 
 ## Spec relationships
@@ -70,25 +70,25 @@ pages.
 
 ## Acceptance criteria
 
-- [ ] Dragging a page-bar tab on desktop moves it to the drop slot; neighbors shift; an
+- [x] Dragging a page-bar tab on desktop moves it to the drop slot; neighbors shift; an
       insertion line marks the slot.
-- [ ] A click without a drag still navigates. Modifier-click / open-in-new-tab still
+- [x] A click without a drag still navigates. Modifier-click / open-in-new-tab still
       works (it is a real link).
-- [ ] The new order is the same after reload and after visiting another module and coming
+- [x] The new order is the same after reload and after visiting another module and coming
       back.
-- [ ] Go-to palette entries for that module list in the same order as the bar.
-- [ ] Below `md`, tabs are not draggable; the stored order still displays.
-- [ ] A module with no saved `pageOrder` still shows registry order (Plan Achieve order,
+- [x] Go-to palette entries for that module list in the same order as the bar.
+- [x] Below `md`, tabs are not draggable; the stored order still displays.
+- [x] A module with no saved `pageOrder` still shows registry order (Plan Achieve order,
       Finances frequency order, etc.).
-- [ ] A newly shipped page appears for users who already have a saved order, in its
+- [x] A newly shipped page appears for users who already have a saved order, in its
       registry neighbourhood, not hidden and not always-last unless it is last in the
       registry.
-- [ ] A saved id for a page that is no longer built is ignored; the bar never shows a hole
+- [x] A saved id for a page that is no longer built is ignored; the bar never shows a hole
       or a 404 tab.
-- [ ] Resetting App shell restores registry order.
-- [ ] `pages.test.ts` default-order assertions still pass. New unit tests cover merge,
+- [x] Resetting App shell restores registry order.
+- [x] `pages.test.ts` default-order assertions still pass. New unit tests cover merge,
       drop, empty, and place-at-index.
-- [ ] Smoke: Plan, Finances, Schedule, Notes, Fitness, Library bars — drag, reload,
+- [x] Smoke: Plan, Finances, Schedule, Notes, Fitness, Library bars — drag, reload,
       palette, phone width.
 
 ## Changes from original plan
@@ -96,13 +96,21 @@ pages.
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change | Why |
+| --- | ------ | --- |
+|     | None.  |     |
+
+## As built
+
+- `src/lib/navigation/pageOrder.ts` — `applyPageOrder`, `placePage`.
+- `pageOrder` on `ShellSettings`; unknown ids drop at use time.
+- `modulePages(id, pageOrder?)` is the one accessor; omit the second arg for registry order.
+- `PageBar` HTML5-drags on desktop; compact sets `draggable={false}` (anchors default true).
+- `useGlobalCommands` reads the same stored list so Go-to matches the bar.
 
 ## Task 1: Save spec documentation
 
-This folder: `plan.md`, `shape.md`, `standards.md`, `references.md`. No visuals.
+This folder: `plan.md`, `shape.md`, `standards.md`, `references.md`. No visuals. **Done.**
 
 ## Task 2: Pure order helpers + shell setting
 
@@ -111,7 +119,7 @@ This folder: `plan.md`, `shape.md`, `standards.md`, `references.md`. No visuals.
   - `placePage(ids, id, toIndex)` — same slot arithmetic as `placeField` (do not import
     `lib/grid`).
 - `pageOrder` on `ShellSettings`; parse like `lastPage` (string-array values, drop junk,
-  never throw). Tests in `shell.test.ts`.
+  never throw). Tests in `shell.test.ts`. **Done.**
 
 ## Task 3: One accessor consumes stored order
 
@@ -119,7 +127,7 @@ This folder: `plan.md`, `shape.md`, `standards.md`, `references.md`. No visuals.
   second arg → registry order (redirects, tests).
 - `PageBar` and `useGlobalCommands` pass `value.pageOrder[moduleId]` from
   `useShellSettings`.
-- Dropping a drag writes `patch` of that module’s id list only.
+- Dropping a drag writes `patch` of that module’s id list only. **Done.**
 
 ## Task 4: PageBar drag
 
@@ -129,7 +137,7 @@ This folder: `plan.md`, `shape.md`, `standards.md`, `references.md`. No visuals.
   must not navigate.
 - Below `md`: unchanged scrollable underline row, no `draggable`.
 - `aria` stays tab-as-navigation (`aria-current="page"`). Do not turn the bar into a
-  `role="tablist"` of form tabs.
+  `role="tablist"` of form tabs. **Done.**
 
 ## Task 5: Verify, freeze spec, update roadmap
 
@@ -139,11 +147,9 @@ This folder: `plan.md`, `shape.md`, `standards.md`, `references.md`. No visuals.
 - Browser: drag on Plan (7) and Finances (11); reload; palette order; 390px no-drag;
   new-page merge via a unit case if no live new page.
 - Update this spec for as-built drift; **Changes from original plan**; status
-  **frozen / complete**; short roadmap note under Module pages.
+  **frozen / complete**; short roadmap note under Module pages. **Done.**
 
----
+## Follow-ups (new work — not amendments to this frozen spec)
 
-While this spec is **active**, when we make a material change to requirements, design, or
-scope (including from feedback on what was implemented), update the relevant sections and
-append to **Changes from original plan**. Skip pure implementation details. Freeze when
-verified.
+- Explicit Move left/right (or equivalent) on the phone, if daily use needs a reorder path
+  without a desktop. Recorded deviation from `responsive.md`.

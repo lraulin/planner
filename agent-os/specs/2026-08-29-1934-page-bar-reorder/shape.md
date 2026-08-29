@@ -1,6 +1,6 @@
 # Page-bar drag reorder — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-29)
 
 ## Scope
 

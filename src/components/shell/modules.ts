@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { applyPageOrder } from "@/lib/navigation/pageOrder";
 import {
   builtPageById,
   builtPagesForModule,
@@ -217,14 +218,19 @@ export function moduleById(id: ModuleId): (typeof MODULES)[number] | undefined {
  * This is the single accessor `navigation.md` requires — the page bar, the palette's go-to
  * entries and the bare-path redirect all come through here, so none of them can hold a
  * different opinion about what a module contains.
+ *
+ * `pageOrder` is the stored permutation for this module. Omit it (redirects, tests) to get
+ * the registry. The merge — unknown ids drop, new pages land in their registry neighbourhood
+ * — lives in `applyPageOrder`, not in each surface.
  */
 export function modulePages(
   id: ModuleId,
+  pageOrder?: readonly string[],
 ): { page: PageEntry; href: string; moduleLabel: string }[] {
   const entry = moduleById(id);
   if (!entry) return [];
 
-  return builtPagesForModule(id).map((page) => ({
+  return applyPageOrder(builtPagesForModule(id), pageOrder).map((page) => ({
     page,
     href: pageHref(entry.href, page),
     moduleLabel: entry.label,

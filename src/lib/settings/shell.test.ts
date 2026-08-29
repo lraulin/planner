@@ -13,6 +13,7 @@ describe("parseShellSettings", () => {
       commandsPanelOpen: true,
       commandsPanelCollapsed: { Zoom: true, Move: false },
       lastPage: { schedule: "agenda", notes: "journal" },
+      pageOrder: { plan: ["tasks", "overview", "outline"] },
     };
     expect(parseShellSettings(serializeShellSettings(settings))).toEqual(settings);
   });
@@ -78,6 +79,31 @@ describe("parseShellSettings", () => {
 
   it("survives a last-page map that is not a map", () => {
     expect(parseShellSettings({ lastPage: "agenda" }).lastPage).toEqual({});
+  });
+
+  /**
+   * `pageOrder` is keyed by module id and valued with page ids. Both may be unknown to this
+   * build; the parser only extracts string arrays. Merge / drop of unbuilt pages is
+   * `applyPageOrder`'s job, at the point of use.
+   */
+  it("keeps page-order entries as string arrays and drops the rest", () => {
+    expect(
+      parseShellSettings({
+        pageOrder: {
+          plan: ["tasks", "overview", 3, "", "outline"],
+          notes: "journal",
+          fitness: null,
+          schedule: ["day", "day", "agenda"],
+        },
+      }).pageOrder,
+    ).toEqual({
+      plan: ["tasks", "overview", "outline"],
+      schedule: ["day", "agenda"],
+    });
+  });
+
+  it("survives a page-order map that is not a map", () => {
+    expect(parseShellSettings({ pageOrder: ["tasks"] }).pageOrder).toEqual({});
   });
 });
 

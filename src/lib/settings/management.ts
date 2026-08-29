@@ -173,7 +173,7 @@ function moduleEntry(
       entry: {
         scope,
         label: "Navigation",
-        detail: "Sidebar sections and commands panel",
+        detail: "Sidebar, last page, page-bar order, and commands panel",
         savedView: false,
         showScopeId: false,
       },

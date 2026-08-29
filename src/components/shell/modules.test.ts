@@ -1,5 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { destinationLabel, documentTitle } from "./modules";
+import { builtPagesForModule } from "@/lib/navigation/pages";
+import { destinationLabel, documentTitle, modulePages } from "./modules";
+
+describe("modulePages", () => {
+  it("returns registry order when no permutation is stored", () => {
+    expect(modulePages("plan").map(({ page }) => page.id)).toEqual(
+      builtPagesForModule("plan").map((page) => page.id),
+    );
+  });
+
+  it("applies a stored permutation and still fills in missing pages", () => {
+    expect(
+      modulePages("plan", ["tasks", "overview"]).map(({ page }) => page.id),
+    ).toEqual([
+      "tasks",
+      "overview",
+      "outline",
+      "projects",
+      "goals",
+      "wishes",
+      "result-areas",
+    ]);
+  });
+});
 
 describe("destinationLabel", () => {
   it("names the page, not the module, when the module has a page bar", () => {

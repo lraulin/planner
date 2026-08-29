@@ -398,6 +398,9 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   toolbars and spends 232px of chrome before its first row on a phone; three week-shaped
   surfaces (Calendar at seven days, Week Plan, the planning wizard) now sit within one bar of
   each other; Finances Insights flips its reserved page to built and makes that bar appear.
+  **Page-bar order is now a stored permutation** (`specs/2026-08-29-1934-page-bar-reorder`):
+  drag a tab on desktop, same order in the Go-to palette; absent key is still the registry
+  (Plan Achieve order, Finances by frequency). Phone shows the saved order but does not drag.
 - **✅ Module consolidation.** `specs/2026-08-13-0845-module-consolidation`. Having built the
   Page tier, the obvious next question was which destinations should have been modules at all.
   Nine of fifteen should not: **Overview, Outline, Projects, Tasks, Goals, Wish List and Result
