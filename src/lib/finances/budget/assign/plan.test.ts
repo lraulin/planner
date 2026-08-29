@@ -43,6 +43,7 @@ function envelope(overrides: Partial<AssignEnvelope> = {}): AssignEnvelope {
     activityCents: 0,
     balanceCents: 0,
     carryInCents: 0,
+    snoozed: false,
     nextDueKey: null,
     ...overrides,
   };
@@ -483,5 +484,92 @@ describe("needsAssignPreview", () => {
     const result = run("underfunded", [envelope({ assignedCents: 50_000 })]);
     expect(result.allocations).toEqual([]);
     expect(needsAssignPreview(result)).toBe(true);
+  });
+});
+
+describe("snoozed", () => {
+  const pizza = (overrides: Partial<AssignEnvelope> = {}) =>
+    envelope({
+      id: "pizza",
+      name: "Pizza",
+      target: addMonthly(10_000),
+      assignedCents: 7_500,
+      activityCents: -7_500,
+      balanceCents: 0,
+      ...overrides,
+    });
+
+  it("zeroes the target ask, leaving only the overspend floor", () => {
+    // Awake, the ask is the $100 monthly cap. Asleep it falls to $75 — not $0 — because the
+    // floor is what it takes to bring Available to $0 against $75 already spent, and that is
+    // money gone rather than an ask. Assigned is already $75, so the *gap* is nil.
+    expect(neededAssigned(pizza(), MONTH, new Map()).needed).toBe(10_000);
+    expect(neededAssigned(pizza({ snoozed: true }), MONTH, new Map()).needed).toBe(
+      7_500,
+    );
+  });
+
+  it("keeps the overspend floor, so an overspent snooze is still asked for", () => {
+    const overspent = pizza({
+      snoozed: true,
+      assignedCents: 0,
+      activityCents: -40_000,
+      balanceCents: -40_000,
+    });
+    expect(neededAssigned(overspent, MONTH, new Map()).needed).toBe(40_000);
+  });
+
+  it("contributes nothing to the month's underfunded gap", () => {
+    expect(underfundedGapCents(MONTH, [pizza()], new Map())).toBe(2_500);
+    expect(underfundedGapCents(MONTH, [pizza({ snoozed: true })], new Map())).toBe(0);
+  });
+
+  it("is skipped by Underfunded", () => {
+    const result = run("underfunded", [pizza({ snoozed: true })]);
+    expect(result.lines).toEqual([]);
+  });
+
+  it("is still funded by Underfunded when it is overspent", () => {
+    const result = run("underfunded", [
+      pizza({
+        snoozed: true,
+        assignedCents: 0,
+        activityCents: -4_000,
+        balanceCents: -4_000,
+      }),
+    ]);
+    expect(result.lines[0]?.toAssignedCents).toBe(4_000);
+  });
+
+  it("has its surplus harvested by Reduce Overfunding — the point of the switch", () => {
+    const result = run("reduce-overfunding", [
+      pizza({
+        snoozed: true,
+        assignedCents: 10_000,
+        activityCents: -7_500,
+        balanceCents: 2_500,
+      }),
+    ]);
+    expect(result.lines[0]?.toAssignedCents).toBe(7_500);
+    expect(result.remainingRtaCents).toBe(1_000_000 + 2_500);
+  });
+
+  it("leaves the five history-and-reset options untouched", () => {
+    // None of them read `neededAssigned`, so snoozing must not move a single figure.
+    const history = [
+      { month: "2026-07-01", assigned: { pizza: 6_000 }, activity: { pizza: -5_000 } },
+    ];
+    for (const option of [
+      "assigned-last-month",
+      "spent-last-month",
+      "average-assigned",
+      "average-spent",
+      "reset-available",
+      "reset-assigned",
+    ] as const) {
+      const awake = run(option, [pizza()], { history });
+      const asleep = run(option, [pizza({ snoozed: true })], { history });
+      expect(asleep.lines).toEqual(awake.lines);
+    }
   });
 });

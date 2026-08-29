@@ -71,10 +71,35 @@ function PieIcon() {
   );
 }
 
+/** Zz — the target's ask is asleep for this month. */
+function SnoozeIcon() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
+      <path
+        d="M2.25 2.25h4L2.25 6.75h4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.25 6.25h3l-3 3.25h3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function FundingIcon({ icon }: { icon: EnvelopeIndicator["icon"] }) {
   if (icon === "clock") return <ClockIcon />;
   if (icon === "check") return <CheckIcon />;
   if (icon === "pie") return <PieIcon />;
+  if (icon === "snooze") return <SnoozeIcon />;
   return null;
 }
 

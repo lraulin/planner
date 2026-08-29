@@ -2867,6 +2867,17 @@ export const financeBudgetAllocations = pgTable(
     goalCents: integer("goal_cents"),
     /** Roll a negative balance forward into the envelope instead of onto Ready to Assign. */
     carryover: boolean("carryover").notNull().default(false),
+    /**
+     * Silence this envelope's target ask for this month only — "done with pizza for August".
+     *
+     * Keyed by (category, month) like everything else in this table, which is what makes expiry
+     * free: next month is a different row, so the snooze lapses with no cron and no cleanup.
+     * The sparse-absence rule above applies — a missing row means **not** snoozed.
+     *
+     * It zeroes the *target* term of the ask and nothing else; the overspend floor survives, so
+     * a snoozed envelope that is overspent stays red and is still funded by Underfunded.
+     */
+    snoozed: boolean("snoozed").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

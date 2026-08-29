@@ -88,6 +88,15 @@ export function neededAssigned(
   month: MonthKey,
   bills: ReadonlyMap<string, BillSnapshot>,
 ): { needed: number; errors: string[] } {
+  // Snooze zeroes the *target* term and nothing else, so the overspend floor below survives:
+  // a snoozed envelope that is overspent is still asked for the money already gone
+  // (`target-snooze` D2). The check lives here rather than in `targets/` because snooze is an
+  // envelope-*month* fact, and `target-refill-basis` D4 deliberately took the clock out of the
+  // target. This is the single seam — `underfunded`, `underfundedGapCents`, the inspector's
+  // Assign and the indicator all read it, so none of them can grow a second opinion.
+  if (envelope.snoozed) {
+    return { needed: assignedToZeroBalance(envelope), errors: [] };
+  }
   const demand = hasUnderfundedAsk(envelope)
     ? targetDemand(envelope, month, bills)
     : { amount: 0, errors: [] as string[] };

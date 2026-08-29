@@ -47,6 +47,11 @@ export type AssignEnvelope = {
   activityCents: number;
   balanceCents: number;
   carryInCents: number;
+  /**
+   * This month's target ask is silenced (`finance_budget_allocations.snoozed`). Resolved
+   * per-month data, not a clock reading — `neededAssigned` is the one place it is consulted.
+   */
+  snoozed: boolean;
   nextDueKey: string | null;
 };
 

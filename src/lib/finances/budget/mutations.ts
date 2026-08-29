@@ -30,6 +30,7 @@ import {
   type BudgetStructureRef,
 } from "./hierarchy";
 import { budgetRows } from "./rows";
+import { snoozeUnavailableReason } from "./snooze";
 import {
   categoryMonth,
   findMonth,
@@ -529,6 +530,64 @@ export async function setCarryover(
         ),
       );
   });
+}
+
+/**
+ * Silence this envelope's target ask for one month — "done with pizza for August".
+ *
+ * Deliberately **not** `setCarryover`'s propagate-forward: carryover records a standing intent
+ * ("this envelope owns its own debt"), while a snooze is a fact about one month and must lapse
+ * on its own when the month turns. That expiry is the whole reason the flag lives on the
+ * allocation row (`target-snooze` D1) — next month is a different row, so there is nothing to
+ * clean up.
+ *
+ * Eligibility is re-checked here against the server's own clock, never the client's.
+ */
+export async function setTargetSnooze(
+  userId: string,
+  params: { month: MonthKey; categoryId: string; snoozed: boolean },
+): Promise<void> {
+  await requireCategory(userId, params.categoryId);
+
+  const [category] = await db
+    .select({
+      kind: financeBudgetCategories.kind,
+      target: financeBudgetCategories.target,
+    })
+    .from(financeBudgetCategories)
+    .where(
+      and(
+        eq(financeBudgetCategories.id, params.categoryId),
+        eq(financeBudgetCategories.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!category) throw new Error("That envelope does not exist.");
+
+  const reason = snoozeUnavailableReason(
+    { kind: category.kind, target: parseTarget(category.target) },
+    params.month,
+    monthKeyOf(localDateKey(new Date())),
+  );
+  if (reason) throw new Error(reason);
+
+  await db
+    .insert(financeBudgetAllocations)
+    .values({
+      userId,
+      month: params.month,
+      categoryId: params.categoryId,
+      amountCents: 0,
+      snoozed: params.snoozed,
+    })
+    .onConflictDoUpdate({
+      target: [
+        financeBudgetAllocations.userId,
+        financeBudgetAllocations.month,
+        financeBudgetAllocations.categoryId,
+      ],
+      set: { snoozed: params.snoozed, updatedAt: new Date() },
+    });
 }
 
 // ─────────────────────────── Envelopes ───────────────────────────

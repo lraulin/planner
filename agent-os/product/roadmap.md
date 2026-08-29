@@ -1068,6 +1068,18 @@ period)` so money already spent stops being held twice and only going over bites
   saying "needed eventually", ranked after everything with a date on it. The month's cap no
   longer shrinks as anchors pass; what trims it is `since`, the day the target started,
   stamped on the envelope's first target and preserved through every later edit.
+  ✅ **Target snooze shipped 2026-08-28.**
+  `agent-os/specs/2026-08-28-2223-target-snooze/`. A per-(envelope, month) switch that says
+  **done for the month**: "I already bought my last pizza and had extra — if I move the extra
+  somewhere else, pizza shows as underfunded, which it should if I still needed more, but I
+  don't." It zeroes the target term of the ask and nothing else, so an overspent envelope
+  stays red and is still funded by Underfunded, and Reduce Overfunding will now hand the
+  surplus back to Ready to Assign — which is the point. The flag lives on the allocation row,
+  so it expires by itself when the month turns: next month is a different row, no cron and no
+  stale state. The pill goes green with a Zz (gray at $0) and reads _Snoozed for August_.
+  Bills are deliberately excluded — a variable bill whose charge has posted already stops
+  asking, a sinking bill's yellow is a wanted reminder, and a bill can already be paused,
+  cancelled, or re-dated.
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
   budget states a shortfall per bill envelope rather than as one collapsed number, and
   Assign → Underfunded names which envelopes will not be funded. The scan layer makes those

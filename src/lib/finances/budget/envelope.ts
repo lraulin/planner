@@ -167,6 +167,7 @@ export type AllocationInput = {
   categoryId: string;
   amountCents: number;
   carryover: boolean;
+  snoozed: boolean;
 };
 
 /** Signed sum of on-budget transactions for one envelope in one month. Negative is spending. */
@@ -202,7 +203,10 @@ export type CurrentPoolInput = {
 
 export type BudgetInput = {
   categories: readonly BudgetCategoryInput[];
-  /** Sparse. A missing month/category pair is `{ amountCents: 0, carryover: false }`. */
+  /**
+   * Sparse. A missing month/category pair is
+   * `{ amountCents: 0, carryover: false, snoozed: false }`.
+   */
   allocations: readonly AllocationInput[];
   /** Sparse, and only for months in range. Activity outside `[startMonth, endMonth]` is ignored. */
   activity: readonly ActivityInput[];
@@ -230,6 +234,11 @@ export type CategoryMonth = {
   balanceCents: number;
   /** The flag stored on *this* month, which is what next month's carry-in consults. */
   carryover: boolean;
+  /**
+   * This month's target ask is silenced. Pure transport — it is carried through so the assign
+   * layer can read it, and enters no term of the balance recurrence.
+   */
+  snoozed: boolean;
 };
 
 export type BudgetTerm = {
@@ -283,6 +292,7 @@ const ZERO_CATEGORY_MONTH = {
   activityCents: 0,
   balanceCents: 0,
   carryover: false,
+  snoozed: false,
 } as const;
 
 function key(month: MonthKey, categoryId: string): string {
@@ -377,6 +387,7 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
         activityCents,
         balanceCents,
         carryover: allocation?.carryover ?? false,
+        snoozed: allocation?.snoozed ?? false,
       };
 
       totalAssignedCents += assignedCents;

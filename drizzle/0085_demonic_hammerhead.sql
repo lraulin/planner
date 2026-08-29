@@ -1,0 +1,1 @@
+ALTER TABLE "finance_budget_allocations" ADD COLUMN "snoozed" boolean DEFAULT false NOT NULL;

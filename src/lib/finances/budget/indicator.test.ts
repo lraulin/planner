@@ -50,6 +50,7 @@ function envelope(overrides: Partial<AssignEnvelope> = {}): AssignEnvelope {
     activityCents: 0,
     balanceCents: 0,
     carryInCents: 0,
+    snoozed: false,
     nextDueKey: null,
     ...overrides,
   };
@@ -412,5 +413,79 @@ describe("envelopeIndicator", () => {
     );
     expect(map.has("pay")).toBe(false);
     expect(map.get("food")?.state).toBe("underfunded");
+  });
+});
+
+describe("snoozed", () => {
+  // $25/week `add` on Pizza: the month's cap is $100, $75 was assigned and spent, and the
+  // leftover $25 was moved elsewhere. Without snooze this is yellow for money deliberately gone.
+  const pizza = (overrides: Partial<AssignEnvelope> = {}): AssignEnvelope =>
+    envelope({
+      id: "pizza",
+      name: "Pizza",
+      target: {
+        behavior: "add",
+        cadence: { unit: "week", weekday: 1 },
+        amountCents: 2_500,
+      },
+      assignedCents: 7_500,
+      activityCents: -7_500,
+      balanceCents: 0,
+      ...overrides,
+    });
+
+  it("is underfunded when it is not snoozed", () => {
+    expect(indicate(pizza()).state).toBe("underfunded");
+  });
+
+  it("goes gray with the Zz at $0 available", () => {
+    const scan = indicate(pizza({ snoozed: true }));
+    expect(scan.state).toBe("snoozed");
+    expect(scan.pill).toBe("gray");
+    expect(scan.icon).toBe("snooze");
+    expect(scan.copy).toBe("Snoozed for August");
+  });
+
+  it("goes green with the Zz when money is still in it", () => {
+    const scan = indicate(pizza({ snoozed: true, balanceCents: 2_500 }));
+    expect(scan.state).toBe("snoozed");
+    expect(scan.pill).toBe("green");
+    expect(scan.icon).toBe("snooze");
+    expect(scan.copy).toBe("Snoozed for August");
+  });
+
+  // The seam sits above both target families, and nothing else here proves it.
+  it("silences a pile-family floor too", () => {
+    const goal = envelope({
+      id: "camera",
+      name: "Camera fund",
+      target: { behavior: "balance", cadence: { unit: "none" }, amountCents: 60_000 },
+      assignedCents: 0,
+      activityCents: 0,
+      balanceCents: 10_000,
+      carryInCents: 10_000,
+    });
+    expect(indicate(goal).state).toBe("underfunded");
+    expect(indicate({ ...goal, snoozed: true }).state).toBe("snoozed");
+  });
+
+  it("stays red when a snoozed envelope is overspent", () => {
+    const scan = indicate(pizza({ snoozed: true, balanceCents: -1_000 }));
+    expect(scan.state).toBe("overspent");
+    expect(scan.pill).toBe("red");
+  });
+
+  it("still reports the overspend floor as the remaining ask", () => {
+    // Snooze zeroes the target term, never money already gone: $40 was spent against $0
+    // assigned, so the ask is still $40 even though the target is asleep.
+    const scan = indicate(
+      pizza({
+        snoozed: true,
+        assignedCents: 0,
+        activityCents: -4_000,
+        balanceCents: 0,
+      }),
+    );
+    expect(scan.moreNeededCents).toBe(4_000);
   });
 });

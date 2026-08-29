@@ -49,6 +49,7 @@ function ledger(options: {
       categoryId: row.categoryId,
       amountCents: row.amountCents,
       carryover: row.carryover ?? false,
+      snoozed: false,
     })),
     activity: options.activity ?? [],
     buffered: options.buffered ?? [],

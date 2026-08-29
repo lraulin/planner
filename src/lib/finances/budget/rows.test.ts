@@ -74,8 +74,15 @@ function august(): BudgetMonth {
         categoryId: "food",
         amountCents: 20_000,
         carryover: false,
+        snoozed: false,
       },
-      { month: "2026-08-01", categoryId: "fun", amountCents: 30_000, carryover: true },
+      {
+        month: "2026-08-01",
+        categoryId: "fun",
+        amountCents: 30_000,
+        carryover: true,
+        snoozed: false,
+      },
     ],
     activity: [
       { month: "2026-08-01", categoryId: "pay", amountCents: 200_000 },
@@ -102,6 +109,7 @@ describe("budgetRows", () => {
       activityCents: -35_000,
       balanceCents: -15_000,
       carryover: false,
+      snoozed: false,
     });
     expect(rows[2]?.carryover).toBe(true);
   });

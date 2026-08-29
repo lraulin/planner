@@ -48,6 +48,7 @@ function envelope(name: string, activityCents: number): BudgetRow {
     isIncome: true,
     hidden: false,
     notes: "",
+    snoozed: false,
     assignedCents: 0,
     activityCents,
     balanceCents: 0,

@@ -92,6 +92,7 @@ import {
   saveEnvelopeTarget,
   seedBudget,
   setCarryover,
+  setTargetSnooze,
   setTransactionBudgetCategory,
   setTransactionBudgetCategories,
   setTaxonomyCategoryEnvelope,
@@ -475,6 +476,14 @@ export async function setCarryoverAction(
   carryover: boolean,
 ): Promise<ActionResult> {
   return run((userId) => setCarryover(userId, { month, categoryId, carryover }));
+}
+
+export async function setTargetSnoozeAction(
+  month: string,
+  categoryId: string,
+  snoozed: boolean,
+): Promise<ActionResult> {
+  return run((userId) => setTargetSnooze(userId, { month, categoryId, snoozed }));
 }
 
 export async function createCategoryGroupAction(

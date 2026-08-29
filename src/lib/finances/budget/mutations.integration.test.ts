@@ -26,6 +26,7 @@ import {
   saveEnvelopeTarget,
   seedBudget,
   setCarryover,
+  setTargetSnooze,
   setTransactionBudgetCategory,
   setTransactionBudgetCategories,
   updateBudgetCategory,
@@ -38,7 +39,7 @@ import {
 } from "../payees/mutations";
 import { applyPayeeAutoCategories } from "../payees/claims";
 import { loadBudget } from "./queries";
-import { categoryMonth, findMonth } from "./envelope";
+import { categoryMonth, findMonth, monthKeyOf, nextMonthKey } from "./envelope";
 import { budgetChildren, budgetSiblings } from "./hierarchy";
 
 const dbReachable = await databaseReachable();
@@ -953,6 +954,148 @@ describeDb("budget mutations", () => {
     expect(byMonth.get(MONTH)).toBe(true);
   });
 
+  // The mutation reads the server's own clock, so the fixture has to as well — a hardcoded
+  // month would pass in August and start failing on the 1st of September.
+  const CURRENT_MONTH = monthKeyOf(localDateKey(new Date()));
+
+  async function snoozeableEnvelope(id: string) {
+    await saveEnvelopeTarget(userId, id, {
+      behavior: "add",
+      cadence: { unit: "month", day: 31 },
+      amountCents: 10_000,
+    });
+    return id;
+  }
+
+  async function snoozedMonths(categoryId: string) {
+    const rows = await db
+      .select({
+        month: financeBudgetAllocations.month,
+        snoozed: financeBudgetAllocations.snoozed,
+      })
+      .from(financeBudgetAllocations)
+      .where(eq(financeBudgetAllocations.categoryId, categoryId));
+    return new Map(rows.map((row) => [row.month, row.snoozed]));
+  }
+
+  it("sets, clears, and re-sets the snooze on one month only", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, {
+      preset: "minimal",
+      startMonth: "2026-06-01",
+      todayKey: TODAY,
+    });
+    const ids = await envelopes(userId);
+    const food = await snoozeableEnvelope(ids.get("Recurring spend")!);
+
+    await setTargetSnooze(userId, {
+      month: CURRENT_MONTH,
+      categoryId: food,
+      snoozed: true,
+    });
+    expect((await snoozedMonths(food)).get(CURRENT_MONTH)).toBe(true);
+
+    await setTargetSnooze(userId, {
+      month: CURRENT_MONTH,
+      categoryId: food,
+      snoozed: false,
+    });
+    expect((await snoozedMonths(food)).get(CURRENT_MONTH)).toBe(false);
+
+    await setTargetSnooze(userId, {
+      month: CURRENT_MONTH,
+      categoryId: food,
+      snoozed: true,
+    });
+    expect((await snoozedMonths(food)).get(CURRENT_MONTH)).toBe(true);
+  });
+
+  it("does not propagate forward the way carryover does", async () => {
+    // The whole point of storing this on the allocation row: next month is a different row,
+    // so the snooze lapses on its own with nothing to clean up.
+    await seedAccounts(userId);
+    await seedBudget(userId, {
+      preset: "minimal",
+      startMonth: "2026-06-01",
+      todayKey: TODAY,
+    });
+    const ids = await envelopes(userId);
+    const food = await snoozeableEnvelope(ids.get("Recurring spend")!);
+    const next = nextMonthKey(CURRENT_MONTH);
+
+    await performBudgetOperation(userId, {
+      kind: "assign",
+      month: next,
+      category: { id: food, name: "Recurring spend" },
+      amountCents: 10_000,
+    });
+    await setTargetSnooze(userId, {
+      month: CURRENT_MONTH,
+      categoryId: food,
+      snoozed: true,
+    });
+
+    const byMonth = await snoozedMonths(food);
+    expect(byMonth.get(CURRENT_MONTH)).toBe(true);
+    // The next month's row already existed and was left alone.
+    expect(byMonth.get(next)).toBe(false);
+  });
+
+  it("refuses a month that is not the current one", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, {
+      preset: "minimal",
+      startMonth: "2026-06-01",
+      todayKey: TODAY,
+    });
+    const ids = await envelopes(userId);
+    const food = await snoozeableEnvelope(ids.get("Recurring spend")!);
+
+    await expect(
+      setTargetSnooze(userId, {
+        month: nextMonthKey(CURRENT_MONTH),
+        categoryId: food,
+        snoozed: true,
+      }),
+    ).rejects.toThrow(/current month/);
+    expect((await snoozedMonths(food)).size).toBe(0);
+  });
+
+  it("refuses an envelope with no target", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, {
+      preset: "minimal",
+      startMonth: "2026-06-01",
+      todayKey: TODAY,
+    });
+    const ids = await envelopes(userId);
+
+    await expect(
+      setTargetSnooze(userId, {
+        month: CURRENT_MONTH,
+        categoryId: ids.get("Recurring spend")!,
+        snoozed: true,
+      }),
+    ).rejects.toThrow(/no target/);
+  });
+
+  it("refuses a bill", async () => {
+    await upsertBillEnvelope(userId, {
+      name: "Hulu",
+      cadence: { unit: "month", n: 1 },
+      expectedCents: 9_900,
+    });
+    const ids = await envelopes(userId);
+
+    await expect(
+      setTargetSnooze(userId, {
+        month: CURRENT_MONTH,
+        categoryId: ids.get("Hulu")!,
+        snoozed: true,
+      }),
+    ).rejects.toThrow(/Bills cannot be snoozed/);
+  });
+
   it("keeps a transaction when its envelope is deleted", async () => {
     const { checkingId } = await seedAccounts(userId);
     const [txId] = await addTransactions(userId, [
@@ -1348,6 +1491,13 @@ describeDb("budget mutations — cross-user isolation", () => {
         month: MONTH,
         categoryId: owned.categoryId,
         carryover: true,
+      }),
+    ).rejects.toThrow(/does not exist/);
+    await expect(
+      setTargetSnooze(intruderId, {
+        month: monthKeyOf(localDateKey(new Date())),
+        categoryId: owned.categoryId,
+        snoozed: true,
       }),
     ).rejects.toThrow(/does not exist/);
     await expect(

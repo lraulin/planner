@@ -12,7 +12,7 @@
  */
 
 import { formatUsd } from "@/lib/finances/money";
-import type { MonthKey } from "./envelope";
+import { monthName, type MonthKey } from "./envelope";
 import { neededAssigned } from "./assign/plan";
 import type { AssignEnvelope } from "./assign/types";
 import { monthsLeft } from "./targets/cadence";
@@ -20,10 +20,17 @@ import { isPeriodFamily, periodCapCents } from "./targets/demand";
 import { resolveTarget, type BillSnapshot } from "./targets/derive";
 
 export type IndicatorState =
-  "overspent" | "underfunded" | "fully-spent" | "on-track" | "funded" | "safe" | "idle";
+  | "overspent"
+  | "snoozed"
+  | "underfunded"
+  | "fully-spent"
+  | "on-track"
+  | "funded"
+  | "safe"
+  | "idle";
 
 export type IndicatorPill = "red" | "yellow" | "green" | "gray";
-export type IndicatorIcon = "clock" | "check" | "pie";
+export type IndicatorIcon = "clock" | "check" | "pie" | "snooze";
 
 export type EnvelopeBar = {
   fill01: number;
@@ -138,6 +145,20 @@ export function envelopeIndicator(
       pill: "red",
       icon: null,
       bar: { fill01: 1, spent01: 0, striped: false },
+    };
+  }
+
+  // After `overspent`, so overspending still wins: snooze silences an *ask*, never money that
+  // is already gone (`target-snooze` D4). A state of its own rather than a badge on `funded`,
+  // because a $0 snoozed envelope reporting "Funded" is a lie the grid tells.
+  if (envelope.snoozed) {
+    return {
+      state: "snoozed",
+      moreNeededCents,
+      copy: `Snoozed for ${monthName(month)}`,
+      pill: available > 0 ? "green" : "gray",
+      icon: "snooze",
+      bar: askBar,
     };
   }
 

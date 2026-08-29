@@ -58,6 +58,7 @@ function row(id: string, groupId: string | null): BudgetRow {
     isIncome: false,
     hidden: false,
     notes: "",
+    snoozed: false,
     assignedCents: 0,
     activityCents: 0,
     balanceCents: 0,

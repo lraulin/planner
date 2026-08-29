@@ -28,6 +28,8 @@ export type BudgetRow = {
   balanceCents: number;
   /** The flag stored on this month, which governs the hand-off to the next one. */
   carryover: boolean;
+  /** This month's target ask is silenced. See `finance_budget_allocations.snoozed`. */
+  snoozed: boolean;
   target: BudgetCategoryRow["target"];
   /**
    * Charge being waited for, which may be in the past. Distinct from `nextDueKey`.
@@ -104,6 +106,7 @@ export function budgetRows(
         activityCents: cell.activityCents,
         balanceCents: cell.balanceCents,
         carryover: cell.carryover,
+        snoozed: cell.snoozed,
         kind: category.kind,
         bill: category.bill,
         nextDueKey: nextDueKeys.get(category.id) ?? null,

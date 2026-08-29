@@ -18,7 +18,8 @@ import {
 } from "@/lib/finances/budget/rows";
 import { summarize } from "@/lib/finances/budget/targets/types";
 import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
-import type { MonthKey } from "@/lib/finances/budget/envelope";
+import { monthName, type MonthKey } from "@/lib/finances/budget/envelope";
+import { snoozeUnavailableReason } from "@/lib/finances/budget/snooze";
 import { formatUsd } from "@/lib/finances/money";
 import { FilesHereSection } from "./FilesHereSection";
 import { UrlCell, withScheme } from "./UrlCell";
@@ -56,12 +57,14 @@ export function BudgetInspector({
   onNotes,
   onAssignUnderfunded,
   onEditTarget,
+  onSnooze,
   onEditPayees,
   onTogglePayee,
   onMergePayees,
   onRemovePayeeRouting,
   onFileWaiting,
   month,
+  currentMonth,
 }: {
   row: BudgetRow | null;
   carryInCents: number;
@@ -74,12 +77,15 @@ export function BudgetInspector({
   onNotes: (row: BudgetRow, notes: string) => void;
   onAssignUnderfunded: (row: BudgetRow) => void;
   onEditTarget: (row: BudgetRow) => void;
+  onSnooze: (row: BudgetRow) => void;
   onEditPayees: (row: BudgetRow) => void;
   onTogglePayee: (payeeId: string) => void;
   onMergePayees: () => void;
   onRemovePayeeRouting: (evidenceRow: PayeeEvidenceRow) => void;
   onFileWaiting: (evidenceRow: PayeeEvidenceRow) => void;
   month: MonthKey;
+  /** Today's month, so the current-month-only rule reads the same clock the server does. */
+  currentMonth: MonthKey;
 }) {
   const titleId = useId();
   const [notesDraft, setNotesDraft] = useState(row?.notes ?? "");
@@ -103,6 +109,7 @@ export function BudgetInspector({
   const billView = bill ? billInspectorView(bill.bill) : null;
   const targetSummary = row.target !== null ? summarize(row.target) : null;
   const hasTarget = targetSummary !== null;
+  const snoozeReason = snoozeUnavailableReason(row, month, currentMonth);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-4 py-3">
@@ -159,14 +166,32 @@ export function BudgetInspector({
           </p>
         )}
         {!row.isIncome ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => onEditTarget(row)}
-            className="mt-2 min-h-tap rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
-          >
-            {bill || hasTarget ? "Edit target…" : "Create target…"}
-          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onEditTarget(row)}
+              className="min-h-tap rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
+            >
+              {bill || hasTarget ? "Edit target…" : "Create target…"}
+            </button>
+            <button
+              type="button"
+              disabled={pending || snoozeReason !== null}
+              // The same reason the mutation rejects with, so a disabled control and a
+              // permissive endpoint cannot disagree (`navigation.md`).
+              title={
+                snoozeReason ??
+                (row.snoozed
+                  ? `${row.name} will ask for its target again.`
+                  : `${row.name} stops asking for the rest of ${monthName(month)}. It lapses on its own next month.`)
+              }
+              onClick={() => onSnooze(row)}
+              className="min-h-tap rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-ink-faint md:min-h-0"
+            >
+              {row.snoozed ? "Stop snoozing" : "Snooze target for this month"}
+            </button>
+          </div>
         ) : null}
       </section>
 

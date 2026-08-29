@@ -489,6 +489,7 @@ export async function loadBudget(
           categoryId: financeBudgetAllocations.categoryId,
           amountCents: financeBudgetAllocations.amountCents,
           carryover: financeBudgetAllocations.carryover,
+          snoozed: financeBudgetAllocations.snoozed,
           goalCents: financeBudgetAllocations.goalCents,
         })
         .from(financeBudgetAllocations)
@@ -530,6 +531,7 @@ export async function loadBudget(
       categoryId: row.categoryId,
       amountCents: row.amountCents,
       carryover: row.carryover,
+      snoozed: row.snoozed,
     })),
     activity: foldActivity,
     buffered: bufferedRows,

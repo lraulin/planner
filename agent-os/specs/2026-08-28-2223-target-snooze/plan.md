@@ -1,6 +1,6 @@
 # Target Snooze
 
-**Status: active**
+**Status: frozen / complete — 2026-08-28**
 Spec folder: `agent-os/specs/2026-08-28-2223-target-snooze/`
 
 ## Spec relationships
@@ -149,31 +149,33 @@ the two target families or to envelope arithmetic.
 
 ## Acceptance criteria
 
-- [ ] Pizza with a `$25/week add` target, $75 assigned, $75 spent, $0 available, snoozed → gray
+- [x] Pizza with a `$25/week add` target, $75 assigned, $75 spent, $0 available, snoozed → gray
       pill, Zz icon, _"Snoozed for August"_; not yellow
-- [ ] Same envelope with $25 still in it → green pill, Zz icon, same copy
-- [ ] A **pile-family** target (a `balance`/`none` savings goal) snoozes through the same seam —
+- [x] Same envelope with $25 still in it → green pill, Zz icon, same copy
+- [x] A **pile-family** target (a `balance`/`none` savings goal) snoozes through the same seam —
       set aside this month, asking normally again next month
-- [ ] Snoozed **and overspent** → still red `overspent`, and still funded by Underfunded
-- [ ] A snoozed envelope contributes $0 to `underfundedGapCents` and is skipped by
+- [x] Snoozed **and overspent** → still red `overspent`, and still funded by Underfunded
+- [x] A snoozed envelope contributes $0 to `underfundedGapCents` and is skipped by
       Auto-Assign → Underfunded
-- [ ] Reduce Overfunding offers a snoozed envelope's surplus back to Ready to Assign
-- [ ] Assigned Last Month / Spent Last Month / both averages / both resets behave identically
+- [x] Reduce Overfunding offers a snoozed envelope's surplus back to Ready to Assign
+- [x] Assigned Last Month / Spent Last Month / both averages / both resets behave identically
       whether or not the envelope is snoozed
-- [ ] The control is disabled with a stated reason on: a bill, an envelope with no target, and any
+- [x] The control is disabled with a stated reason on: a bill, an envelope with no target, and any
       month that is not the current one
-- [ ] Paging to next month shows the envelope evaluating normally, with no write of any kind
-- [ ] A second user cannot snooze, clear, or read the first user's snooze
-- [ ] `npm test` green (unit **and** integration — check for the Postgres skip warning);
+- [x] Paging to next month shows the envelope evaluating normally, with no write of any kind
+- [x] A second user cannot snooze, clear, or read the first user's snooze
+- [x] `npm test` green (unit **and** integration — check for the Postgres skip warning);
       `npm run smoke` passes after the action is added
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                                                                                                        | Why                                                                                                                                                                                                                                                                                                                                                                                    |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Eligibility (D5/D6/D9) was extracted into `src/lib/finances/budget/snooze.ts` as `snoozeUnavailableReason`, with its own unit test, instead of being written once in the mutation and again in each control.                                                                                                                  | The plan had the rules enforced server-side _and_ stated as a `title` on two controls — three copies of the same list, and the way a disabled button and a permissive endpoint drift apart. One function, read by the mutation and both controls, so the reason a control shows is literally the reason the server rejects with. It also carries an income case the plan did not name. |
+| 2   | The snoozed ask falls to the **overspend floor**, not to `$0` — the plan's wording ("zeroes the target ask") is exact about the _target term_ but reads as if `neededAssigned` returns 0. Where money has been spent against no assignment, the floor is non-zero and Underfunded still funds it.                             | This is D2 working as written, not a change of behaviour; it is recorded because the first test asserted `0` and had to be corrected. It is the difference between silencing an ask and hiding money already gone.                                                                                                                                                                     |
+| 3   | The plan's Task 8 asks for a note that the roadmap's refill-basis paragraph still states the superseded day-level `since` rule. **Still true and still uncorrected** — the roadmap has no `target-since-month-granularity` entry at all, so that spec is unrecorded as well as contradicted. Separate work, as the plan says. | Flagged rather than fixed, per the plan.                                                                                                                                                                                                                                                                                                                                               |
 
 ## Task 1: Save spec documentation
 

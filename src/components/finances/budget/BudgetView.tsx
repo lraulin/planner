@@ -24,6 +24,7 @@ import {
   payeeEvidenceAction,
   renameCategoryGroupAction,
   setCarryoverAction,
+  setTargetSnoozeAction,
   setRecurringBillAction,
   updateBudgetCategoryAction,
 } from "@/app/finances/actions";
@@ -42,6 +43,7 @@ import {
 import { writeClipboardText } from "@/lib/tree/copyAsText";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { ContextMenu, type MenuItem } from "@/components/grid/ContextMenu";
+import { snoozeUnavailableReason } from "@/lib/finances/budget/snooze";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useGridState } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
@@ -50,6 +52,7 @@ import {
   findMonth,
   monthKeyOf,
   monthLabel,
+  monthName,
   monthParamOf,
   nextMonthKey,
   prevMonthKey,
@@ -1176,6 +1179,11 @@ export function BudgetView({
     const sources = coverSources(rows, row.id);
     const ref = { id: row.id, name: row.name };
     const overspent = row.balanceCents < 0;
+    const snoozeReason = snoozeUnavailableReason(
+      row,
+      data.month,
+      monthKeyOf(data.todayKey),
+    );
 
     return [
       {
@@ -1237,6 +1245,21 @@ export function BudgetView({
         }`,
         onSelect: () =>
           run(() => setCarryoverAction(data.month, row.id, !row.carryover)),
+      },
+      {
+        label: row.snoozed
+          ? "Stop snoozing"
+          : `Snooze target for ${monthName(data.month)}`,
+        // Unavailable is disabled with the reason, and it is the *same* reason the mutation
+        // rejects with (`snoozeUnavailableReason`), so the two cannot drift apart.
+        disabled: snoozeReason !== null,
+        title:
+          snoozeReason ??
+          (row.snoozed
+            ? `${row.name} will ask for its target again.`
+            : `${row.name} stops asking for the rest of ${monthName(data.month)}. It lapses on its own next month.`),
+        onSelect: () =>
+          run(() => setTargetSnoozeAction(data.month, row.id, !row.snoozed)),
       },
       "separator",
       {
@@ -1364,6 +1387,10 @@ export function BudgetView({
         startAssign(result, [row.id]);
       }}
       onEditTarget={(row) => setEditing(row.id)}
+      currentMonth={monthKeyOf(data.todayKey)}
+      onSnooze={(row) =>
+        run(() => setTargetSnoozeAction(data.month, row.id, !row.snoozed))
+      }
       onEditPayees={(row) => setEditingPayeesFor(row)}
       evidence={evidence}
       selectedPayeeIds={evidenceSelection}
