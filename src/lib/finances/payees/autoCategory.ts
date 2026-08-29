@@ -43,9 +43,18 @@ export type PayeeAutoCategory = {
  * Existing/manual Category is the caller's job — they must not call this when a Category
  * is already set. Claim beats learned/fixed default. `off` and a missing default both
  * leave the row uncategorised.
+ *
+ * `claimApplies: false` is how a **bill** envelope refuses a charge that is not its own
+ * (`billClaimMatch.ts`): the claim stops applying and the row falls through to the payee's
+ * learned or fixed default, or stays uncategorised so the backlog count can raise it.
  */
-export function categoryForNewTransaction(payee: PayeeAutoCategory): string | null {
-  if (payee.claimedBudgetCategoryId) return payee.claimedBudgetCategoryId;
+export function categoryForNewTransaction(
+  payee: PayeeAutoCategory,
+  options: { claimApplies?: boolean } = {},
+): string | null {
+  if (payee.claimedBudgetCategoryId && options.claimApplies !== false) {
+    return payee.claimedBudgetCategoryId;
+  }
   if (payee.autoCategoryMode === "off") return null;
   return payee.defaultBudgetCategoryId;
 }

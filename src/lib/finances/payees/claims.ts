@@ -12,6 +12,8 @@ import { financeAccounts, financePayees, financeTransactions } from "@/db/schema
 import type { MonthKey } from "../budget/envelope";
 import { categoryForNewTransaction } from "./autoCategory";
 import type { AutoCategoryMode } from "./autoCategory";
+import { refusedBillClaims } from "./billClaimGate";
+import { numericStringToCents } from "../money";
 import type { FinanceExecutor } from "../dbExecutor";
 import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
 import { writeFinanceAuditEvent } from "../audit/writes";
@@ -23,6 +25,9 @@ import { monthKeyOf } from "../budget/envelope";
  * Omitting `uncategorizedOnly` rewrites matching history — what Track as bill means by
  * "this payee." `uncategorizedOnly` is the ingest path: new rows only, never a later
  * manual correction. Off-budget accounts and internal transfers are never filed.
+ *
+ * A claim on a **bill** envelope files only that bill's own charge — the amount and cadence
+ * it declares (`billClaimMatch.ts`). A claim on any other envelope still means every charge.
  */
 export async function applyPayeeClaims(
   userId: string,
@@ -42,6 +47,8 @@ export async function applyPayeeClaims(
     .select({
       id: financeTransactions.id,
       categoryId: financePayees.claimedBudgetCategoryId,
+      transactionDate: financeTransactions.transactionDate,
+      amount: financeTransactions.amount,
     })
     .from(financeTransactions)
     .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
@@ -71,9 +78,26 @@ export async function applyPayeeClaims(
     );
   if (rows.length === 0) return { moved: 0 };
 
+  const refused = await refusedBillClaims(
+    executor,
+    userId,
+    rows.flatMap((row) =>
+      row.categoryId
+        ? [
+            {
+              id: row.id,
+              transactionDate: row.transactionDate,
+              amountCents: numericStringToCents(row.amount) ?? 0,
+              claimedBudgetCategoryId: row.categoryId,
+            },
+          ]
+        : [],
+    ),
+  );
+
   const byCategory = new Map<string, string[]>();
   for (const row of rows) {
-    if (!row.categoryId) continue;
+    if (!row.categoryId || refused.has(row.id)) continue;
     const bucket = byCategory.get(row.categoryId) ?? [];
     bucket.push(row.id);
     byCategory.set(row.categoryId, bucket);
@@ -269,11 +293,17 @@ export async function applyPayeeAutoCategories(
 
     const byCategory = new Map<string, string[]>();
     for (const row of rows) {
-      const categoryId = categoryForNewTransaction({
-        claimedBudgetCategoryId: row.claimedBudgetCategoryId,
-        defaultBudgetCategoryId: row.defaultBudgetCategoryId,
-        autoCategoryMode: row.autoCategoryMode as AutoCategoryMode,
-      });
+      // Anything still uncategorised here has already been offered to its claim by the call
+      // above, so a claim that survives to this point is one a bill refused: the row falls
+      // through to the payee's own default rather than being filed by the claim again.
+      const categoryId = categoryForNewTransaction(
+        {
+          claimedBudgetCategoryId: row.claimedBudgetCategoryId,
+          defaultBudgetCategoryId: row.defaultBudgetCategoryId,
+          autoCategoryMode: row.autoCategoryMode as AutoCategoryMode,
+        },
+        { claimApplies: false },
+      );
       if (!categoryId) continue;
       const bucket = byCategory.get(categoryId) ?? [];
       bucket.push(row.id);
