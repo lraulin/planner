@@ -175,6 +175,44 @@ describe("prepareRegister", () => {
     ).toEqual(["in"]);
   });
 
+  it("filters Balance as a number and treats a missing running balance as blank, not zero", () => {
+    // Card rows have no running balance. Collapsing that null into $0.00 would hide
+    // them from (Blanks) and dump them into (Zero).
+    const ledger = [
+      tx({
+        id: "card",
+        transactionDate: "2026-08-01",
+        balanceAfterCents: null,
+      }),
+      tx({
+        id: "over",
+        transactionDate: "2026-08-02",
+        balanceAfterCents: -2500,
+      }),
+      tx({
+        id: "ok",
+        transactionDate: "2026-08-03",
+        balanceAfterCents: 5000,
+      }),
+      tx({
+        id: "flat",
+        transactionDate: "2026-08-04",
+        balanceAfterCents: 0,
+      }),
+    ];
+    const run = (band: string) =>
+      prepareRegister(
+        ledger,
+        query({ groupBy: [], filters: { balance: optionsFilter([band]) } }),
+        EMPTY_CTX,
+      ).index.nodeIds;
+
+    expect(run("positive")).toEqual(["ok"]);
+    expect(run("negative")).toEqual(["over"]);
+    expect(run("zero")).toEqual(["flat"]);
+    expect(run("blanks")).toEqual(["card"]);
+  });
+
   it("filters on the hidden Payee column", () => {
     const ledger = [
       tx({
