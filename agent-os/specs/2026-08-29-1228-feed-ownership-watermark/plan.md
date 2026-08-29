@@ -129,27 +129,31 @@ selection is incomplete data and must be refused rather than applied.
 
 ## Acceptance criteria
 
-- [ ] A Capital One snapshot pasted while SimpleFIN already covers the cycle inserts only rows
+- [x] A Capital One snapshot pasted while SimpleFIN already covers the cycle inserts only rows
       past the watermark, and inserts zero duplicates of the seven known cases.
-- [ ] A SimpleFIN sync that advances the watermark deletes the scrape rows it now covers, and
+- [x] A SimpleFIN sync that advances the watermark deletes the scrape rows it now covers, and
       the envelope, notes and split on each survive onto the replacing row.
-- [ ] A handover covering the same transactions leaves working balance and Ready to Assign
+- [x] A handover covering the same transactions leaves working balance and Ready to Assign
       unchanged — the register's row count drops, the money does not move.
-- [ ] A second identical paste is still a no-op, with its audit event.
-- [ ] `CVS $22.84` against a claimed bill payee lands uncategorized; a $5.00 CVS ExtraCare
+- [x] A second identical paste is still a no-op, with its audit event.
+- [x] `CVS $22.84` against a claimed bill payee lands uncategorized; a $5.00 CVS ExtraCare
       charge still files automatically; Rent and Rent Reporting are unaffected.
-- [ ] The register's Source column shows SimpleFIN / Capital One browser / Chase browser / the
+- [x] The register's Source column shows SimpleFIN / Capital One browser / Chase browser / the
       CSV feeds, and filters and groups by them.
-- [ ] Chase snapshot rows store an empty `sourceCategory`, and a capture taken with the Chase
+- [x] Chase snapshot rows store an empty `sourceCategory`, and a capture taken with the Chase
       period selector on anything but "Activity since last statement" is refused.
-- [ ] Cross-user isolation holds for every new mutation; unit, integration, lint, typecheck,
+- [x] Cross-user isolation holds for every new mutation; unit, integration, lint, typecheck,
       build and `npm run smoke` all pass.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                  | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **`liveFeedMatch.ts`'s `descriptionsOverlap` and its brand stem are kept, not deleted.** Task 2 said to remove the brand-stem matching "if nothing else still needs it". Something does.                | The posted-vs-**posted-history** comparison D2 supersedes is gone. What remains in `bankSnapshotReconcile.ts` is the pending path: an incoming posted row absorbing an existing _hold_, browser or SimpleFIN, inside the current cycle. That is the within-cycle matching the 36-hour browser-authority window was built on and this spec carries forward; it is also the only place a SimpleFIN hold and a page row can be told apart at all. Deleting the stem there would have re-created duplicate holds while fixing duplicate posted rows. |
+| 2   | **A repeat paste is recognised by `externalId`, not by dropping posted matching entirely.** Past the watermark, incoming posted rows are matched against posted history on exact `externalId` equality. | D2 says the description path is deleted, and it is — but "a second identical paste is still a no-op" is an acceptance criterion, and past the watermark the only posted row that can already exist is a previous paste of the same page. The userscripts derive `externalId` from the page row itself (source, card, dates, folded description, amount, occurrence ordinal), so this is an identity within one feed rather than a comparison across two.                                                                                         |
+| 3   | **The handover is reported in the sync and import receipts**, not only in the audit event: `SyncCounts.retiredScrapeRows` and a clause in the import summary.                                           | D3 makes the handover explicit rather than silent; a deletion the user is told about after the fact only in the audit log is still surprising when the register's row count drops.                                                                                                                                                                                                                                                                                                                                                               |
+| 4   | **The Source column reaches existing users automatically** through `withNewColumns`, landing between Balance and Notes.                                                                                 | No migration or preference reset needed — the grid already distinguishes "hidden" from "did not exist yet".                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 5   | **`categoryForNewTransaction` takes a `claimApplies` flag** rather than growing a bill facet argument.                                                                                                  | The bill decision needs the envelope's amount, cadence and charge history — a database read, not a payee field. Keeping the pure function pure and passing the answer in preserves its unit tests and lets both filing paths (`applyPayeeClaims` and the snapshot's own auto-filing) share one gate, `payees/billClaimGate.ts`.                                                                                                                                                                                                                  |
 
 ## Task 1: Save spec documentation
 
