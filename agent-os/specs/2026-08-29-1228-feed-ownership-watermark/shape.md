@@ -1,6 +1,6 @@
 # Feed ownership: SimpleFIN owns history, the browser snapshot owns the tail — shaping notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-29)
 
 ## Scope
 

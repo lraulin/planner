@@ -1,7 +1,11 @@
 # Feed ownership: SimpleFIN owns history, the browser snapshot owns the tail
 
-**Status: active**
+**Status: frozen / complete** (2026-08-29)
 Spec folder: `agent-os/specs/2026-08-29-1228-feed-ownership-watermark/`
+
+This document is the durable record of **what was built and why**. Further change to feed
+ownership, the handover, or the bill-claim rule opens a **new delta-spec** rather than
+editing this file.
 
 ## Spec relationships
 
@@ -127,7 +131,7 @@ unless it says so, the same way Capital One's capture depends on the
 "Posted Transactions Since Your Last Statement" table heading. A capture taken under any other
 selection is incomplete data and must be refused rather than applied.
 
-## Acceptance criteria
+## Acceptance criteria (met)
 
 - [x] A Capital One snapshot pasted while SimpleFIN already covers the cycle inserts only rows
       past the watermark, and inserts zero duplicates of the seven known cases.
@@ -155,51 +159,114 @@ selection is incomplete data and must be refused rather than applied.
 | 4   | **The Source column reaches existing users automatically** through `withNewColumns`, landing between Balance and Notes.                                                                                 | No migration or preference reset needed — the grid already distinguishes "hidden" from "did not exist yet".                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | 5   | **`categoryForNewTransaction` takes a `claimApplies` flag** rather than growing a bill facet argument.                                                                                                  | The bill decision needs the envelope's amount, cadence and charge history — a database read, not a payee field. Keeping the pure function pure and passing the answer in preserves its unit tests and lets both filing paths (`applyPayeeClaims` and the snapshot's own auto-filing) share one gate, `payees/billClaimGate.ts`.                                                                                                                                                                                                                  |
 
-## Task 1: Save spec documentation
+## Implementation tasks (historical)
+
+Original task text is retained as history; the **Decisions** above and the **Code map**
+below are authoritative.
+
+## Task 1: Save spec documentation — done
 
 Create this folder with `plan.md`, `shape.md`, `standards.md`, `references.md`.
 
-## Task 2: Watermark and ownership
+## Task 2: Watermark and ownership — done (`feedWatermark.ts`; the brand stem survives on the pending path, change 1)
 
 Add the per-account feed-watermark query beside `src/lib/finances/bankSnapshot*.ts`. Make
 `planBankSnapshotReconciliation` take it and drop covered posted rows. Remove the cross-source
 description path it replaces — the `descriptionsOverlap` use in `bankSnapshotReconcile.ts`, and
 the brand-stem matching added in `1d6d0ce` if nothing else still needs it.
 
-## Task 3: Retirement on sync and import
+## Task 3: Retirement on sync and import — done (`feedHandover.ts`, `feedHandoverWrite.ts`)
 
 Extend `src/lib/banksync/sync.ts` and `src/lib/finances/import.ts` to retire covered `scrape:*`
 rows in the same transaction as the write that advances the watermark, carrying user-owned
 state across per D4 and auditing both sides of the handover.
 
-## Task 4: Claim matching
+## Task 4: Claim matching — done (`payees/billClaimMatch.ts`, `payees/billClaimGate.ts`)
 
 Narrow `applyPayeeClaims` and `categoryForNewTransaction`
 (`src/lib/finances/payees/claims.ts`, `src/lib/finances/payees/autoCategory.ts`) to D5, using
 the bill facet on `financeBudgetCategories` (`expectedCents`, `cadenceMonths`/`cadenceDays`).
 
-## Task 5: Register Source column
+## Task 5: Register Source column — done
 
 Add it to `src/components/finances/financeColumns.tsx`, labelled through `FEED_LABELS` in
 `src/lib/finances/types.ts`.
 
-## Task 6: Chase script — category and period selector
+## Task 6: Chase script, category and period selector — done (userscript v2.2)
 
 `scripts/chase-pending.user.js`: stop writing the doubled description into `category`, and read
 the period dropdown, failing closed unless it is "Activity since last statement".
 
-## Task 7: Tests
+## Task 7: Tests — done (4 new test files, 43 tests)
 
 Pure tests for the watermark split and the bill-claim rule; integration tests for
 sync-retirement with state carry-over, each with a second user proving isolation.
 
-## Task 8: Verify, freeze spec, update roadmap
+## Task 8: Verify, freeze spec, update roadmap — done (live handover verified 2026-08-29)
 
 Real paste on both cards, Budget unchanged, `npm run smoke`, then freeze and update
 `agent-os/product/roadmap.md` if this closes a listed item.
 
 ---
 
-**Standing rule while this spec is active:** on a material change to requirements, design or
-scope — including feedback on what was actually built — update the relevant sections and append
-a row to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+## Code map (as built)
+
+| Concern                                                  | File                                                                               |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Watermark: whose day is it, and the per-account query    | `src/lib/finances/feedWatermark.ts`                                                |
+| Snapshot reconciliation, now watermark-first             | `src/lib/finances/bankSnapshotReconcile.ts`                                        |
+| Handover planning — matching, carry-over, split transfer | `src/lib/finances/feedHandover.ts`                                                 |
+| Handover writes, called inside the caller's transaction  | `src/lib/finances/feedHandoverWrite.ts`                                            |
+| Retirement on sync                                       | `src/lib/banksync/mutations.ts` (`applySync`)                                      |
+| Retirement on file import                                | `src/lib/finances/import.ts`                                                       |
+| Bill-claim rule (pure)                                   | `src/lib/finances/payees/billClaimMatch.ts`                                        |
+| Bill-claim gate shared by both filing paths              | `src/lib/finances/payees/billClaimGate.ts`                                         |
+| Claim filing and fall-through to the payee default       | `src/lib/finances/payees/claims.ts`, `payees/autoCategory.ts`                      |
+| Register Source column                                   | `src/components/finances/financeColumns.tsx`, `src/lib/finances/registerFields.ts` |
+| Chase capture                                            | `scripts/chase-pending.user.js` (v2.2)                                             |
+
+## Status (closed)
+
+**Shipped** 2026-08-29, commits `d728ac7`…`d19c7ad`.
+
+Verified live on the real wallet the same day: a SimpleFIN refresh replaced the rows the
+userscripts had written, with **no duplicates**, and re-running both userscripts afterwards
+changed nothing — the watermark now covers what they capture. That is D1, D2 and D3 observed
+on real data rather than only in tests.
+
+The remaining decisions are covered by the suite rather than by that session: D4's carry-over
+and split transfer, D5's bill-claim rule, D6's Source column, and D7/D8 in the Chase script.
+D5 in particular has not yet met a live `CVS $22.84` — the next one it sees should land
+uncategorized rather than in CVS ExtraCare.
+
+| Task             | Outcome                                                           |
+| ---------------- | ----------------------------------------------------------------- |
+| 1 Spec docs      | This folder                                                       |
+| 2 Watermark      | `feedWatermark.ts`; posted-vs-posted description matching removed |
+| 3 Handover       | Retirement inside the sync's and the import's own transaction     |
+| 4 Claim matching | Bill claims file only the bill's own charge; others unchanged     |
+| 5 Source column  | Register column, reaching existing layouts via `withNewColumns`   |
+| 6 Chase script   | Empty `sourceCategory`; fails closed on the period selector       |
+| 7 Tests          | 43 tests across 4 files, including cross-user isolation           |
+| 8 Verify         | Live handover confirmed; spec frozen                              |
+
+### Follow-ups (new work — not amendments to this frozen spec)
+
+- **Checking-account browser capture.** Still out of scope; the watermark model would apply
+  to it unchanged, which is a point in the model's favour rather than a plan.
+- **A dashboard reading of the watermark itself** — "SimpleFIN covers this card through
+  Aug 24" — would make the handover legible before it happens rather than after.
+- **`liveFeedMatch.ts` now has one caller class fewer than its docstring describes.** Worth a
+  documentation pass so the next reader does not think the brand stem is still on the posted
+  path.
+- **The bill-claim gate reads every charge in a bill envelope** to compute its median and
+  cadence guard. Fine at this register's size; a bill with years of history would want the
+  query bounded.
+- **A refused bill claim is silent to the user** beyond the row staying uncategorized. If the
+  backlog count turns out not to be a loud enough signal, the Review page is where to say
+  "this charge did not match its bill."
+
+---
+
+**This spec is frozen.** Reference it for what feed ownership means and why; open a new
+delta-spec to change it.

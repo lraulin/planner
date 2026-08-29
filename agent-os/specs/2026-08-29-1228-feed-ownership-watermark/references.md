@@ -1,5 +1,7 @@
 # References for feed ownership: SimpleFIN owns history, the browser snapshot owns the tail
 
+**Status: frozen / complete** (2026-08-29)
+
 ## Governing specs
 
 ### `agent-os/specs/2026-08-29-0845-bank-snapshots-finance-audit/`

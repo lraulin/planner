@@ -835,6 +835,16 @@ dollar is in is working against the point.
   `/finances/activity` is the canonical append-only explanation trail for bank
   snapshots, sync/import, register, account, and Budget money changes. It also replaces
   the capped per-month Budget movement notes after migrating their legacy text.
+  ✅ Feed ownership by watermark shipped 2026-08-29 —
+  `agent-os/specs/2026-08-29-1228-feed-ownership-watermark/`. The two card feeds no longer
+  overlap: SimpleFIN and the file downloads own everything up to the latest day they have
+  posted, and the browser snapshot owns the tail past it. Reconciling the two by comparing
+  descriptions could never work — a card page publishes a cleaned merchant name and the feed
+  publishes the raw descriptor, and neither is derivable from the other — and it had put seven
+  Capital One charges in the register twice. A sync or import now retires the browser rows it
+  overtakes in the same commit, carrying the envelope, notes and splits forward. A bill
+  envelope's payee claim files only that bill's own charge, so a $22.84 CVS trip stops
+  spending a $5.00 membership envelope. The register gained a **Source** column.
   ✅ Commitments shipped 2026-08-16 —
   `agent-os/specs/2026-08-16-1938-commitments/`. **This closes the envelopes MVP
   item**, under a name chosen because "envelope" promises the every-dollar-gets-a-

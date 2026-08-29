@@ -1,5 +1,7 @@
 # Standards for feed ownership: SimpleFIN owns history, the browser snapshot owns the tail
 
+**Status: frozen / complete** (2026-08-29)
+
 Applied as of standards commit `2920aa766f203439f2136c831f01ccd182c0654d`. References, not
 copies — see AGENTS.md.
 
