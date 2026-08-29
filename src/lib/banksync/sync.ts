@@ -76,6 +76,8 @@ export type SyncCounts = {
   deleted: number;
   skippedDuplicate: number;
   skippedUnparseable: number;
+  /** Browser-capture rows this sync's advanced watermark now covers, and deleted. */
+  retiredScrapeRows: number;
   /** Provider accounts carrying data that nothing is linked to. */
   unlinkedAccounts: number;
   balancesUpdated: number;

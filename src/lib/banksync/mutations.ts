@@ -24,6 +24,7 @@ import { captureFinanceMoneyCheckpoint } from "@/lib/finances/audit/checkpoints"
 import type { FinanceAuditChange } from "@/lib/finances/audit/types";
 import { writeFinanceAuditEvent } from "@/lib/finances/audit/writes";
 import { monthKeyOf } from "@/lib/finances/budget/envelope";
+import { retireCoveredScrapeRowsForAccounts } from "@/lib/finances/feedHandoverWrite";
 import { shouldKeepScrapedBalance } from "./scrapeBalance";
 import type { BankInsert, BankUpdate } from "./syncPlan";
 
@@ -305,6 +306,8 @@ export type ApplySyncResult = {
   inserted: number;
   updated: number;
   deleted: number;
+  /** Browser-capture rows the advanced watermark now covers, deleted in this transaction. */
+  retiredScrapeRows: number;
   auditEventId: string;
   auditBatchId: string;
 };
@@ -545,6 +548,12 @@ export async function applySync(
       );
     }
 
+    // The handover, in the same commit as the rows that caused it: SimpleFIN has now
+    // delivered these days, so the browser's copy of them has to stop existing at the same
+    // instant it stops being the only record (spec D3).
+    const handover = await retireCoveredScrapeRowsForAccounts(tx, userId, accountIds);
+    changes.push(...handover.changes);
+
     const advanced = await tx
       .update(bankConnections)
       .set({
@@ -569,9 +578,14 @@ export async function applySync(
       kind: "simplefin_sync",
       origin: input.auditOrigin ?? "SimpleFIN",
       batchId: input.auditBatchId,
-      summary: `SimpleFIN rows: ${inserted} inserted, ${updated} updated, ${deleted} deleted.`,
+      summary:
+        `SimpleFIN rows: ${inserted} inserted, ${updated} updated, ${deleted} deleted` +
+        (handover.retired > 0
+          ? `; retired ${handover.retired} browser row${handover.retired === 1 ? "" : "s"} the feed now covers, carrying ${handover.carried} forward.`
+          : "."),
       scope,
       warnings: [
+        ...handover.warnings,
         ...(input.providerErrors ?? []),
         ...(input.unmatchedAccountCount > 0
           ? [
@@ -594,6 +608,7 @@ export async function applySync(
       inserted,
       updated,
       deleted,
+      retiredScrapeRows: handover.retired,
       auditEventId: audit.eventId,
       auditBatchId: audit.batchId,
     };

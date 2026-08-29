@@ -536,6 +536,9 @@ function describeSync(result: SyncResult): string {
       const parts = [`${counts.inserted} new`];
       if (counts.updated) parts.push(`${counts.updated} updated`);
       if (counts.deleted) parts.push(`${counts.deleted} cleared`);
+      if (counts.retiredScrapeRows) {
+        parts.push(`${counts.retiredScrapeRows} browser row(s) handed over`);
+      }
       if (counts.skippedDuplicate) {
         parts.push(`${counts.skippedDuplicate} already imported`);
       }

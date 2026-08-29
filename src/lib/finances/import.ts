@@ -57,6 +57,7 @@ import {
 import { defaultOffBudget } from "./accountKind";
 import { includeNewOnBudgetAccount } from "./budget/membership";
 import { bankRows } from "./splitRows";
+import { retireCoveredScrapeRows } from "./feedHandoverWrite";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import type { FinanceAuditChange } from "./audit/types";
 import { financeAuditBatchId, writeFinanceAuditEvent } from "./audit/writes";
@@ -610,6 +611,10 @@ export async function importFinanceCsvFiles({
           );
         }
 
+        // A file import advances the same watermark a sync does, so it hands the same days
+        // over from the browser capture — in this transaction, for the same reason (D3).
+        const handover = await retireCoveredScrapeRows(tx, userId, resolved.id);
+
         const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
         const changes: FinanceAuditChange[] = [
           ...(resolved.created
@@ -629,6 +634,7 @@ export async function importFinanceCsvFiles({
             : []),
           ...transactionChanges,
           ...snapshotCounts.changes,
+          ...handover.changes,
         ];
         const audit = await writeFinanceAuditEvent(tx, userId, {
           kind: "finance_import",
@@ -637,9 +643,12 @@ export async function importFinanceCsvFiles({
           summary:
             `${file.name}: imported ${inserted} transaction${inserted === 1 ? "" : "s"}, ` +
             `${snapshotCounts.created} statement${snapshotCounts.created === 1 ? "" : "s"}; ` +
-            `skipped ${skipCount + (values.length - inserted) + snapshotCounts.skipped}.`,
+            `skipped ${skipCount + (values.length - inserted) + snapshotCounts.skipped}` +
+            (handover.retired > 0
+              ? `; retired ${handover.retired} browser row${handover.retired === 1 ? "" : "s"} this file now covers.`
+              : "."),
           scope,
-          warnings: errors.map((error) => error.message),
+          warnings: [...errors.map((error) => error.message), ...handover.warnings],
           sourceEvidence: importEvidence(file, feed),
           beforeCheckpoint,
           afterCheckpoint,
@@ -654,6 +663,7 @@ export async function importFinanceCsvFiles({
           skipped: skipCount + (values.length - inserted),
           statementsCreated: snapshotCounts.created,
           statementsSkipped: snapshotCounts.skipped,
+          handoverWarnings: handover.warnings,
           auditBatchId: audit.batchId,
         };
       });
@@ -667,6 +677,7 @@ export async function importFinanceCsvFiles({
           });
         }
       }
+      warnings.push(...outcome.handoverWarnings);
       created += outcome.inserted;
       skipped += outcome.skipped;
       statementsCreated += outcome.statementsCreated;
