@@ -235,6 +235,8 @@ describeDb("applyBankBrowserSnapshot", () => {
     expect(event).not.toBeNull();
     expect(event?.sourceEvidence).toEqual({
       format: "planner-bank-snapshot-v1",
+      // Nothing but the browser has ever written to this card, so it owns every day.
+      feedWatermark: null,
       rawText: raw,
     });
     expect(

@@ -23,6 +23,7 @@ import {
   planBankSnapshotReconciliation,
   type ExistingBankSnapshotRow,
 } from "./bankSnapshotReconcile";
+import { feedWatermarkForAccount } from "./feedWatermark";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import type { FinanceExecutor } from "./dbExecutor";
 import { centsToNumericString, numericStringToCents } from "./money";
@@ -31,6 +32,7 @@ import {
   categoryForNewTransaction,
   type AutoCategoryMode,
 } from "./payees/autoCategory";
+import { refusedBillClaims } from "./payees/billClaimGate";
 import { payeeIndex } from "./payees/resolve";
 
 export type BankSnapshotApplyResult = {
@@ -44,6 +46,8 @@ export type BankSnapshotApplyResult = {
     transitioned: number;
     replaced: number;
     duplicates: number;
+    /** Rows at or before the feed watermark, which SimpleFIN or a download supplies. */
+    coveredByFeed: number;
   };
   pending: {
     received: number;
@@ -260,6 +264,8 @@ async function autoFileNewRows(
   const rows = await executor
     .select({
       id: financeTransactions.id,
+      transactionDate: financeTransactions.transactionDate,
+      amount: financeTransactions.amount,
       claimedBudgetCategoryId: financePayees.claimedBudgetCategoryId,
       defaultBudgetCategoryId: financePayees.defaultBudgetCategoryId,
       autoCategoryMode: financePayees.autoCategoryMode,
@@ -278,12 +284,31 @@ async function autoFileNewRows(
         inArray(financeTransactions.id, [...transactionIds]),
       ),
     );
+  const refused = await refusedBillClaims(
+    executor,
+    userId,
+    rows.flatMap((row) =>
+      row.claimedBudgetCategoryId
+        ? [
+            {
+              id: row.id,
+              transactionDate: row.transactionDate,
+              amountCents: numericStringToCents(row.amount) ?? 0,
+              claimedBudgetCategoryId: row.claimedBudgetCategoryId,
+            },
+          ]
+        : [],
+    ),
+  );
   for (const row of rows) {
-    const categoryId = categoryForNewTransaction({
-      claimedBudgetCategoryId: row.claimedBudgetCategoryId,
-      defaultBudgetCategoryId: row.defaultBudgetCategoryId,
-      autoCategoryMode: row.autoCategoryMode as AutoCategoryMode,
-    });
+    const categoryId = categoryForNewTransaction(
+      {
+        claimedBudgetCategoryId: row.claimedBudgetCategoryId,
+        defaultBudgetCategoryId: row.defaultBudgetCategoryId,
+        autoCategoryMode: row.autoCategoryMode as AutoCategoryMode,
+      },
+      { claimApplies: !refused.has(row.id) },
+    );
     if (!categoryId) continue;
     await executor
       .update(financeTransactions)
@@ -430,10 +455,12 @@ export async function applyBankBrowserSnapshot(
       ...row,
       amountCents: numericStringToCents(row.amount) ?? 0,
     }));
+    const watermark = await feedWatermarkForAccount(tx, userId, account.id);
     const plan = planBankSnapshotReconciliation(
       existing,
       snapshot.posted,
       snapshot.pending,
+      watermark,
     );
     const newIds: string[] = [];
 
@@ -536,7 +563,10 @@ export async function applyBankBrowserSnapshot(
     const summary =
       `Applied ${snapshot.source === "chase" ? "Chase" : "Capital One"} bank snapshot for ${account.name}: ` +
       `${plan.postedTransitions.length + plan.postedReplacements.length} posted transition${plan.postedTransitions.length + plan.postedReplacements.length === 1 ? "" : "s"}, ` +
-      `${plan.postedInserts.length} new posted, ${snapshot.pending.length} pending.`;
+      `${plan.postedInserts.length} new posted, ${snapshot.pending.length} pending` +
+      (plan.postedCoveredByFeed > 0
+        ? `; ${plan.postedCoveredByFeed} already covered by the bank feed through ${watermark}.`
+        : ".");
     const audit = await writeFinanceAuditEvent(tx, userId, {
       kind: "bank_snapshot",
       origin: snapshot.source === "chase" ? "Chase browser" : "Capital One browser",
@@ -546,6 +576,7 @@ export async function applyBankBrowserSnapshot(
       warnings: plan.warnings,
       sourceEvidence: {
         format: "planner-bank-snapshot-v1",
+        feedWatermark: watermark,
         rawText: snapshot.rawText,
       },
       beforeCheckpoint,
@@ -565,6 +596,7 @@ export async function applyBankBrowserSnapshot(
         transitioned: plan.postedTransitions.length,
         replaced: plan.postedReplacements.length,
         duplicates: plan.postedDuplicates.length,
+        coveredByFeed: plan.postedCoveredByFeed,
       },
       pending: {
         received: snapshot.pending.length,

@@ -4,6 +4,7 @@ import {
   descriptionsOverlap,
 } from "./liveFeedMatch";
 import { isScrapeFeed, type ParsedBankSnapshotRow } from "./bankSnapshot";
+import { splitByWatermark } from "./feedWatermark";
 
 export type ExistingBankSnapshotRow = {
   id: string;
@@ -43,8 +44,25 @@ export type BankSnapshotReconciliationPlan = {
   pendingInserts: ParsedBankSnapshotRow[];
   /** Browser-pending omitted by the complete page set, plus duplicate feed holds. */
   pendingDeletes: string[];
+  /** Incoming posted rows the history feed owns and will supply itself. */
+  postedCoveredByFeed: number;
   warnings: string[];
 };
+
+/**
+ * Two records of one charge from the **same** browser feed.
+ *
+ * The userscript derives `externalId` from the page's own row — source, card, date, folded
+ * description, amount, and an occurrence ordinal — so re-pasting the same page produces the
+ * same ids. That is an identity, not a comparison, which is what lets the posted side drop
+ * description matching entirely.
+ */
+function samePostedRow(
+  existing: ExistingBankSnapshotRow,
+  incoming: ParsedBankSnapshotRow,
+): boolean {
+  return existing.externalId !== null && existing.externalId === incoming.externalId;
+}
 
 function sameDateAndDescription(
   existing: Pick<
@@ -97,11 +115,20 @@ function closestMatch(
  *
  * Matching is occurrence-counted throughout: one stored row can absorb one incoming row.
  * Posted history is never deleted for being outside the bank page's current-cycle window.
+ *
+ * **Ownership is decided by date, not by description.** Incoming posted rows at or before
+ * the account's feed watermark belong to SimpleFIN and are dropped; past it, the only thing
+ * a posted row can already be is a previous paste of the same page, recognised by its own
+ * `externalId` (`feedWatermark.ts`). Description overlap survives only where both records
+ * describe a *hold* — a browser pending row this page is now posting — which is the
+ * within-cycle matching the browser-authority window was built on.
  */
 export function planBankSnapshotReconciliation(
   existing: readonly ExistingBankSnapshotRow[],
   posted: readonly ParsedBankSnapshotRow[],
   pending: readonly ParsedBankSnapshotRow[],
+  /** The latest posted day SimpleFIN or a file download holds for this account. */
+  watermark: string | null,
 ): BankSnapshotReconciliationPlan {
   const postedHistory = existing.filter((row) => !row.pending);
   const existingPending = existing.filter((row) => row.pending);
@@ -122,8 +149,9 @@ export function planBankSnapshotReconciliation(
   const warnings: string[] = [];
   const unresolvedPosted: ParsedBankSnapshotRow[] = [];
 
-  for (const incoming of posted) {
-    const match = closestMatch(postedHistory, usedPosted, incoming, sameEvent);
+  const { owned: ownedPosted, covered } = splitByWatermark(posted, watermark);
+  for (const incoming of ownedPosted) {
+    const match = closestMatch(postedHistory, usedPosted, incoming, samePostedRow);
     if (!match) unresolvedPosted.push(incoming);
     else {
       usedPosted.add(match.row.id);
@@ -257,6 +285,7 @@ export function planBankSnapshotReconciliation(
     pendingUpdates,
     pendingInserts,
     pendingDeletes: [...pendingDeletes],
+    postedCoveredByFeed: covered.length,
     warnings,
   };
 }

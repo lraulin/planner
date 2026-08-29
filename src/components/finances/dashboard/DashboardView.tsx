@@ -573,6 +573,9 @@ function describeBankSnapshotWrite(data: BankSnapshotApplyResult): string {
     `${data.accountName}: ${transitions} posted transition${transitions === 1 ? "" : "s"}, ` +
     `${data.posted.inserted} new posted, ${data.pending.received} pending` +
     (data.posted.duplicates > 0 ? ` · ${data.posted.duplicates} already present` : "") +
+    (data.posted.coveredByFeed > 0
+      ? ` · ${data.posted.coveredByFeed} already covered by the bank feed`
+      : "") +
     "."
   );
 }
