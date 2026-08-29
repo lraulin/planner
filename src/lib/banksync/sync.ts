@@ -11,7 +11,6 @@ import {
   finalizeTransactionIngestion,
   transactionIngestionWatermark,
 } from "@/lib/finances/ingestion";
-import { resolveScrapedPending } from "@/lib/finances/scrapePending";
 import {
   BankReauthRequiredError,
   BankSubscriptionLapsedError,
@@ -28,6 +27,7 @@ import {
 } from "./queries";
 import { planSync } from "./syncPlan";
 import { syncWindow } from "./crossSource";
+import { financeAuditBatchId } from "@/lib/finances/audit/writes";
 
 /** How stale a connection may be before a page load refreshes it on its own. */
 export const SYNC_MAX_AGE_MS = 5 * 60_000;
@@ -86,6 +86,7 @@ export type SyncCounts = {
 export type SyncResult = {
   connections: ConnectionSyncStatus[];
   reclassified: boolean;
+  auditBatchId: string | null;
 };
 
 const today = (): string => new Date().toISOString().slice(0, 10);
@@ -93,6 +94,7 @@ const today = (): string => new Date().toISOString().slice(0, 10);
 async function syncOne(
   userId: string,
   connection: BankConnectionForSync,
+  auditBatchId: string,
 ): Promise<ConnectionSyncStatus> {
   const label = connection.label || "Bank sync";
 
@@ -123,6 +125,9 @@ async function syncOne(
       startDate: window.fetchFrom,
       pending: true,
     });
+    const providerErrors = (set.errors ?? []).filter(
+      (message): message is string => typeof message === "string",
+    );
 
     const plan = planSync({
       accounts: set.accounts ?? [],
@@ -143,12 +148,10 @@ async function syncOne(
       deletes: plan.deletes,
       syncedThrough: today(),
       unmatchedAccountCount: plan.unlinkedAccountIds.length,
+      providerErrors,
+      auditBatchId,
+      auditOrigin: label,
     });
-
-    // Scraped Cap One pending is a different feed. applySync will not delete it. A posted
-    // row that just landed has to retire the matching scrape row here, or available-to-spend
-    // double-counts until the next paste.
-    await resolveScrapedPending(userId, accountIds);
 
     // Balances come from the same response — no second call, and nothing metered.
     let balancesUpdated = 0;
@@ -163,6 +166,8 @@ async function syncOne(
         availableCents: availableCentsOf(account),
         // The provider's own balance-date, not the time we asked — see D7b.
         asOf: balanceAsOf(account, requestedAt),
+        auditBatchId,
+        auditOrigin: label,
       });
       balancesUpdated++;
     }
@@ -182,9 +187,7 @@ async function syncOne(
         balancesUpdated,
         // Reported rather than thrown: one bank failing upstream must not discard the
         // others' data, which arrived in the same response.
-        providerErrors: (set.errors ?? []).filter(
-          (message): message is string => typeof message === "string",
-        ),
+        providerErrors,
       },
     };
   } catch (error) {
@@ -220,11 +223,14 @@ async function syncOne(
 export async function syncAll(userId: string): Promise<SyncResult> {
   const syncStartedAt = await transactionIngestionWatermark();
   const connections = await loadConnectionsForSync(userId);
-  if (connections.length === 0) return { connections: [], reclassified: false };
+  if (connections.length === 0) {
+    return { connections: [], reclassified: false, auditBatchId: null };
+  }
+  const auditBatchId = financeAuditBatchId();
 
   const statuses: ConnectionSyncStatus[] = [];
   for (const connection of connections)
-    statuses.push(await syncOne(userId, connection));
+    statuses.push(await syncOne(userId, connection, auditBatchId));
 
   // Synced rows land with `derivedFlow = null` like every imported row. Query-time
   // `effectiveFlow` fallbacks mean nothing breaks without this, but leaving a manual
@@ -236,8 +242,16 @@ export async function syncAll(userId: string): Promise<SyncResult> {
     await finalizeTransactionIngestion(userId, {
       forceReclassify: true,
       applyAutoCategorySince: syncStartedAt,
+      auditBatchId,
+      auditOrigin: "SimpleFIN classification",
     });
   }
 
-  return { connections: statuses, reclassified: inserted };
+  return {
+    connections: statuses,
+    reclassified: inserted,
+    auditBatchId: statuses.some((status) => status.state === "ok")
+      ? auditBatchId
+      : null,
+  };
 }

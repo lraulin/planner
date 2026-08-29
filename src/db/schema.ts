@@ -2793,10 +2793,9 @@ export const financeBudgetCategories = pgTable(
  * rows do not need a migration; new holds are not created. A leftover amount still reduces
  * this month's Ready to Assign and reappears in next month's "funds from last month".
  *
- * `notes` is an append-only audit line per money movement — *"Reassigned $12.34 from Groceries
- * → Dining on August 22"* — copied from Actual, which writes the same. It costs one column and
- * answers the question a budget grid otherwise cannot: why is this envelope not what I left it
- * at.
+ * Movement evidence belongs to `finance_audit_events`, not to this state row. Keeping it in
+ * one capped text value lost old evidence and made Budget the only finance workflow with any
+ * history at all.
  */
 export const financeBudgetMonths = pgTable(
   "finance_budget_months",
@@ -2815,14 +2814,85 @@ export const financeBudgetMonths = pgTable(
     month: date("month", { mode: "string" }).notNull(),
     /** Held back for next month. Non-negative; see the deferral note above. */
     bufferedCents: integer("buffered_cents").notNull().default(0),
-    /** Append-only movement log for this month. */
-    notes: text("notes").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("finance_budget_months_user_month_uq").on(table.userId, table.month),
     check("finance_budget_months_buffered_nonneg", sql`${table.bufferedCents} >= 0`),
+  ],
+);
+
+/**
+ * Immutable evidence for one finance mutation or one logical batch of mutations.
+ *
+ * This is not a second ledger: operational state remains in accounts, transactions,
+ * statements, and allocations. The audit records what those writes changed and the money
+ * checkpoints around them, so a future reader can explain a movement without reconstructing
+ * it from mutable rows. There is deliberately no `updated_at` and no application delete/edit
+ * path.
+ */
+export const financeAuditEvents = pgTable(
+  "finance_audit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Stable machine vocabulary such as `bank_snapshot` or `budget_assignment`. */
+    kind: text("kind").notNull(),
+    /** Human-visible provenance such as `Chase browser` or `SimpleFIN`. */
+    origin: text("origin").notNull(),
+    /** Events from one multi-file/multi-connection operation share this identity. */
+    batchId: uuid("batch_id").notNull().defaultRandom(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    summary: text("summary").notNull(),
+    /** Accounts, budget months, and envelopes the event is about. */
+    scope: jsonb("scope").$type<Record<string, unknown>>().notNull().default({}),
+    /** Fail-closed decisions and user-edit loss that the receipt must name. */
+    warnings: jsonb("warnings").$type<string[]>().notNull().default([]),
+    /** Exact bank clipboard or uploaded-file metadata; never credentials or file bytes. */
+    sourceEvidence: jsonb("source_evidence")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    beforeCheckpoint: jsonb("before_checkpoint").$type<Record<
+      string,
+      unknown
+    > | null>(),
+    afterCheckpoint: jsonb("after_checkpoint").$type<Record<string, unknown> | null>(),
+  },
+  (table) => [
+    index("finance_audit_events_user_time_idx").on(table.userId, table.occurredAt),
+    index("finance_audit_events_user_batch_idx").on(table.userId, table.batchId),
+  ],
+);
+
+/** Ordered normalized field changes belonging to one immutable finance audit event. */
+export const financeAuditChanges = pgTable(
+  "finance_audit_changes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => financeAuditEvents.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    /** `transaction`, `account`, `statement`, `allocation`, `budget_month`, ... */
+    entityType: text("entity_type").notNull(),
+    /** Evidence only: kept even when the operational entity has been deleted. */
+    entityIdentity: text("entity_identity").notNull(),
+    beforeFields: jsonb("before_fields").$type<Record<string, unknown> | null>(),
+    afterFields: jsonb("after_fields").$type<Record<string, unknown> | null>(),
+  },
+  (table) => [
+    uniqueIndex("finance_audit_changes_event_sequence_uq").on(
+      table.eventId,
+      table.sequence,
+    ),
+    index("finance_audit_changes_user_event_idx").on(table.userId, table.eventId),
   ],
 );
 

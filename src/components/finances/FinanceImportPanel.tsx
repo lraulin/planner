@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { financeUploadLimits } from "@/lib/finances/upload";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { packFileBatches } from "@/lib/import/batchFiles";
@@ -15,6 +16,7 @@ type ImportOk = {
   statementsSkipped: number;
   resolutionsCreated: number;
   resolutionsSkipped: number;
+  auditBatchId: string | null;
   warnings: string[];
 };
 
@@ -40,6 +42,7 @@ function emptyImportOk(): ImportOk {
     statementsSkipped: 0,
     resolutionsCreated: 0,
     resolutionsSkipped: 0,
+    auditBatchId: null,
     warnings: [],
   };
 }
@@ -56,6 +59,7 @@ function addImportOk(left: ImportOk, right: ImportOk): ImportOk {
       (left.resolutionsCreated ?? 0) + (right.resolutionsCreated ?? 0),
     resolutionsSkipped:
       (left.resolutionsSkipped ?? 0) + (right.resolutionsSkipped ?? 0),
+    auditBatchId: right.auditBatchId ?? left.auditBatchId,
     warnings: [...left.warnings, ...right.warnings],
   };
 }
@@ -82,6 +86,7 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
 
     const plan = packFileBatches(Array.from(fileList), financeUploadLimits());
     const totalQueued = plan.batches.reduce((count, batch) => count + batch.length, 0);
+    const auditBatchId = crypto.randomUUID();
 
     startTransition(async () => {
       try {
@@ -107,6 +112,7 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
           );
           const form = new FormData();
           for (const file of batch) form.append("files", file);
+          form.append("auditBatchId", auditBatchId);
           const res = await fetch("/api/finances/import", {
             method: "POST",
             body: form,
@@ -220,6 +226,16 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
               {(result.resolutionsCreated > 0 || result.resolutionsSkipped > 0) &&
                 ` ${result.resolutionsCreated} PayPal name${result.resolutionsCreated === 1 ? "" : "s"}, ${result.resolutionsSkipped} already stored.`}
             </p>
+            {result.auditBatchId && (
+              <p className="mt-1">
+                <Link
+                  href={`/finances/activity?batch=${result.auditBatchId}`}
+                  className="text-ink-muted underline decoration-rule underline-offset-2 hover:text-ink"
+                >
+                  View Activity receipt
+                </Link>
+              </p>
+            )}
             {result.warnings.length > 0 && (
               <details className="mt-2">
                 <summary className="cursor-pointer text-ink-muted">

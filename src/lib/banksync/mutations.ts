@@ -19,7 +19,11 @@ import {
   financeAccounts,
   financeTransactions,
 } from "@/db/schema";
-import { centsToNumericString } from "@/lib/finances/money";
+import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
+import { captureFinanceMoneyCheckpoint } from "@/lib/finances/audit/checkpoints";
+import type { FinanceAuditChange } from "@/lib/finances/audit/types";
+import { writeFinanceAuditEvent } from "@/lib/finances/audit/writes";
+import { monthKeyOf } from "@/lib/finances/budget/envelope";
 import { shouldKeepScrapedBalance } from "./scrapeBalance";
 import type { BankInsert, BankUpdate } from "./syncPlan";
 
@@ -197,40 +201,113 @@ export async function saveBalance(
     balanceCents: number | null;
     availableCents: number | null;
     asOf: Date;
+    auditBatchId?: string;
+    auditOrigin?: string;
   },
-): Promise<void> {
-  const [existing] = await db
-    .select({
-      id: bankAccountLinks.id,
-      balanceCents: bankAccountLinks.balanceCents,
-      scrapeBalanceAsOf: bankAccountLinks.scrapeBalanceAsOf,
-    })
-    .from(bankAccountLinks)
-    .where(
-      and(eq(bankAccountLinks.id, input.linkId), eq(bankAccountLinks.userId, userId)),
-    )
-    .limit(1);
-  if (!existing) throw new Error("Link not found.");
+): Promise<{ auditEventId: string; auditBatchId: string }> {
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({
+        id: bankAccountLinks.id,
+        accountId: bankAccountLinks.accountId,
+        balanceCents: bankAccountLinks.balanceCents,
+        availableCents: bankAccountLinks.availableCents,
+        balanceAsOf: bankAccountLinks.balanceAsOf,
+        scrapeBalanceAsOf: bankAccountLinks.scrapeBalanceAsOf,
+        accountName: financeAccounts.name,
+      })
+      .from(bankAccountLinks)
+      .innerJoin(
+        financeAccounts,
+        and(
+          eq(financeAccounts.id, bankAccountLinks.accountId),
+          eq(financeAccounts.userId, userId),
+        ),
+      )
+      .where(
+        and(eq(bankAccountLinks.id, input.linkId), eq(bankAccountLinks.userId, userId)),
+      )
+      .limit(1);
+    if (!existing) throw new Error("Link not found.");
 
-  if (shouldKeepScrapedBalance(existing, input, Date.now())) return;
-
-  const updated = await db
-    .update(bankAccountLinks)
-    .set({
-      balanceCents: input.balanceCents,
-      availableCents: input.availableCents,
-      balanceAsOf: input.asOf,
-      scrapeBalanceAsOf: null,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(eq(bankAccountLinks.id, input.linkId), eq(bankAccountLinks.userId, userId)),
-    )
-    .returning({ id: bankAccountLinks.id });
-  if (updated.length === 0) throw new Error("Link not found.");
+    const scope = {
+      accountIds: [existing.accountId],
+      accountNames: [existing.accountName],
+    };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    const keepBrowser = shouldKeepScrapedBalance(existing, input, Date.now());
+    if (!keepBrowser) {
+      const updated = await tx
+        .update(bankAccountLinks)
+        .set({
+          balanceCents: input.balanceCents,
+          availableCents: input.availableCents,
+          balanceAsOf: input.asOf,
+          scrapeBalanceAsOf: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(bankAccountLinks.id, input.linkId),
+            eq(bankAccountLinks.userId, userId),
+          ),
+        )
+        .returning({ id: bankAccountLinks.id });
+      if (updated.length === 0) throw new Error("Link not found.");
+    }
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    const changes: FinanceAuditChange[] = keepBrowser
+      ? []
+      : [
+          {
+            entityType: "bank_balance",
+            entityIdentity: existing.id,
+            before: {
+              balanceCents: existing.balanceCents,
+              availableCents: existing.availableCents,
+              balanceAsOf: existing.balanceAsOf?.toISOString() ?? null,
+              browserAuthority: existing.scrapeBalanceAsOf !== null,
+            },
+            after: {
+              balanceCents: input.balanceCents,
+              availableCents: input.availableCents,
+              balanceAsOf: input.asOf.toISOString(),
+              browserAuthority: false,
+            },
+          },
+        ];
+    const audit = await writeFinanceAuditEvent(tx, userId, {
+      kind: "simplefin_sync",
+      origin: input.auditOrigin ?? "SimpleFIN balance",
+      batchId: input.auditBatchId,
+      summary: keepBrowser
+        ? `Kept the fresher browser balance for ${existing.accountName}.`
+        : `Updated the SimpleFIN balance for ${existing.accountName}.`,
+      scope,
+      warnings: keepBrowser
+        ? [
+            "A bank-page snapshot is still authoritative, so this older balance was not applied.",
+          ]
+        : [],
+      sourceEvidence: {
+        linkId: existing.id,
+        providerBalanceAsOf: input.asOf.toISOString(),
+      },
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes,
+    });
+    return { auditEventId: audit.eventId, auditBatchId: audit.batchId };
+  });
 }
 
-export type ApplySyncResult = { inserted: number; updated: number; deleted: number };
+export type ApplySyncResult = {
+  inserted: number;
+  updated: number;
+  deleted: number;
+  auditEventId: string;
+  auditBatchId: string;
+};
 
 /**
  * Apply one connection's reconciliation and advance its window, in a single transaction.
@@ -249,14 +326,87 @@ export async function applySync(
     deletes: readonly string[];
     syncedThrough: string;
     unmatchedAccountCount: number;
+    providerErrors?: readonly string[];
+    auditBatchId?: string;
+    auditOrigin?: string;
   },
 ): Promise<ApplySyncResult> {
-  await requireConnection(userId, input.connectionId);
-
   return db.transaction(async (tx) => {
+    const [connection] = await tx
+      .select({ id: bankConnections.id })
+      .from(bankConnections)
+      .where(
+        and(
+          eq(bankConnections.id, input.connectionId),
+          eq(bankConnections.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (!connection) throw new Error("Bank connection not found.");
+    const externalIds = [
+      ...new Set([...input.deletes, ...input.updates.map((row) => row.externalId)]),
+    ];
+    const beforeRows =
+      externalIds.length === 0
+        ? []
+        : await tx
+            .select({
+              id: financeTransactions.id,
+              accountId: financeTransactions.accountId,
+              transactionDate: financeTransactions.transactionDate,
+              postedDate: financeTransactions.postedDate,
+              amount: financeTransactions.amount,
+              pending: financeTransactions.pending,
+              externalId: financeTransactions.externalId,
+            })
+            .from(financeTransactions)
+            .where(
+              and(
+                eq(financeTransactions.userId, userId),
+                eq(financeTransactions.externalSource, "api:simplefin"),
+                inArray(financeTransactions.externalId, externalIds),
+              ),
+            );
+    const beforeByExternal = new Map(
+      beforeRows.flatMap((row) =>
+        row.externalId ? [[row.externalId, row] as const] : [],
+      ),
+    );
+    const accountIds = [
+      ...new Set([
+        ...beforeRows.map((row) => row.accountId),
+        ...input.inserts.map((row) => row.accountId),
+      ]),
+    ];
+    const accountNames =
+      accountIds.length === 0
+        ? []
+        : await tx
+            .select({ id: financeAccounts.id, name: financeAccounts.name })
+            .from(financeAccounts)
+            .where(
+              and(
+                eq(financeAccounts.userId, userId),
+                inArray(financeAccounts.id, accountIds),
+              ),
+            );
+    const budgetMonths = [
+      ...new Set([
+        ...beforeRows.map((row) => monthKeyOf(row.transactionDate)),
+        ...input.inserts.map((row) => monthKeyOf(row.transaction.transactionDate)),
+        ...input.updates.map((row) => monthKeyOf(row.transactionDate)),
+      ]),
+    ].sort();
+    const scope = {
+      accountIds,
+      accountNames: accountNames.map((row) => row.name),
+      budgetMonths,
+    };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     let inserted = 0;
     let updated = 0;
     let deleted = 0;
+    const changes: FinanceAuditChange[] = [];
 
     if (input.deletes.length > 0) {
       const rows = await tx
@@ -269,8 +419,32 @@ export async function applySync(
             inArray(financeTransactions.externalId, [...input.deletes]),
           ),
         )
-        .returning({ id: financeTransactions.id });
+        .returning({
+          id: financeTransactions.id,
+          externalId: financeTransactions.externalId,
+        });
       deleted = rows.length;
+      for (const row of rows) {
+        const before = row.externalId
+          ? beforeByExternal.get(row.externalId)
+          : undefined;
+        changes.push({
+          entityType: "transaction",
+          entityIdentity: row.id,
+          before: before
+            ? {
+                accountId: before.accountId,
+                transactionDate: before.transactionDate,
+                postedDate: before.postedDate,
+                amountCents: numericStringToCents(before.amount) ?? 0,
+                pending: before.pending,
+                externalSource: "api:simplefin",
+                externalId: before.externalId,
+              }
+            : null,
+          after: null,
+        });
+      }
     }
 
     for (const update of input.updates) {
@@ -293,6 +467,33 @@ export async function applySync(
         )
         .returning({ id: financeTransactions.id });
       updated += rows.length;
+      const before = beforeByExternal.get(update.externalId);
+      for (const row of rows) {
+        changes.push({
+          entityType: "transaction",
+          entityIdentity: row.id,
+          before: before
+            ? {
+                accountId: before.accountId,
+                transactionDate: before.transactionDate,
+                postedDate: before.postedDate,
+                amountCents: numericStringToCents(before.amount) ?? 0,
+                pending: before.pending,
+                externalSource: "api:simplefin",
+                externalId: before.externalId,
+              }
+            : null,
+          after: {
+            accountId: before?.accountId ?? null,
+            transactionDate: update.transactionDate,
+            postedDate: update.postedDate,
+            amountCents: update.amountCents,
+            pending: update.pending,
+            externalSource: "api:simplefin",
+            externalId: update.externalId,
+          },
+        });
+      }
     }
 
     if (input.inserts.length > 0) {
@@ -316,11 +517,35 @@ export async function applySync(
         // The partial unique index on (user_id, external_source, external_id) is the
         // arbiter, the same way it is for CSV import.
         .onConflictDoNothing()
-        .returning({ id: financeTransactions.id });
+        .returning({
+          id: financeTransactions.id,
+          accountId: financeTransactions.accountId,
+          transactionDate: financeTransactions.transactionDate,
+          postedDate: financeTransactions.postedDate,
+          amount: financeTransactions.amount,
+          pending: financeTransactions.pending,
+          externalId: financeTransactions.externalId,
+        });
       inserted = rows.length;
+      changes.push(
+        ...rows.map((row) => ({
+          entityType: "transaction",
+          entityIdentity: row.id,
+          before: null,
+          after: {
+            accountId: row.accountId,
+            transactionDate: row.transactionDate,
+            postedDate: row.postedDate,
+            amountCents: numericStringToCents(row.amount) ?? 0,
+            pending: row.pending,
+            externalSource: "api:simplefin",
+            externalId: row.externalId,
+          },
+        })),
+      );
     }
 
-    await tx
+    const advanced = await tx
       .update(bankConnections)
       .set({
         syncedThrough: input.syncedThrough,
@@ -335,8 +560,42 @@ export async function applySync(
           eq(bankConnections.id, input.connectionId),
           eq(bankConnections.userId, userId),
         ),
-      );
+      )
+      .returning({ id: bankConnections.id });
+    if (advanced.length === 0) throw new Error("Bank connection not found.");
 
-    return { inserted, updated, deleted };
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    const audit = await writeFinanceAuditEvent(tx, userId, {
+      kind: "simplefin_sync",
+      origin: input.auditOrigin ?? "SimpleFIN",
+      batchId: input.auditBatchId,
+      summary: `SimpleFIN rows: ${inserted} inserted, ${updated} updated, ${deleted} deleted.`,
+      scope,
+      warnings: [
+        ...(input.providerErrors ?? []),
+        ...(input.unmatchedAccountCount > 0
+          ? [
+              `${input.unmatchedAccountCount} provider account${input.unmatchedAccountCount === 1 ? " is" : "s are"} not linked to a Planner account.`,
+            ]
+          : []),
+      ],
+      sourceEvidence: {
+        connectionId: input.connectionId,
+        syncedThrough: input.syncedThrough,
+        unmatchedAccountCount: input.unmatchedAccountCount,
+        providerErrors: [...(input.providerErrors ?? [])],
+      },
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes,
+    });
+
+    return {
+      inserted,
+      updated,
+      deleted,
+      auditEventId: audit.eventId,
+      auditBatchId: audit.batchId,
+    };
   });
 }

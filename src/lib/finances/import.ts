@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, eq, gte, isNull, lte } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -25,8 +26,12 @@ import {
 import { centsToNumericString, numericStringToCents } from "./money";
 import { looksLikeCoinbaseCsv, parseCoinbaseCsv } from "./coinbaseCsv";
 import { persistPaypalResolutions } from "./paypalResolutions";
-import { looksLikePlannerPending } from "./capitalOnePending";
-import { replaceScrapedPending } from "./scrapePending";
+import {
+  isScrapeFeed,
+  looksLikeBankBrowserSnapshot,
+  looksLikeLegacyPlannerPending,
+} from "./bankSnapshot";
+import { applyBankBrowserSnapshot } from "./bankSnapshotApply";
 import {
   looksLikePaypalStatement,
   parsePaypalStatement,
@@ -52,6 +57,10 @@ import {
 import { defaultOffBudget } from "./accountKind";
 import { includeNewOnBudgetAccount } from "./budget/membership";
 import { bankRows } from "./splitRows";
+import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
+import type { FinanceAuditChange } from "./audit/types";
+import { financeAuditBatchId, writeFinanceAuditEvent } from "./audit/writes";
+import { monthKeyOf } from "./budget/envelope";
 
 /**
  * Writing parsed CSV or statement rows into the register.
@@ -89,9 +98,14 @@ async function resolveAccount(
   userId: string,
   externalSource: string,
   account: ParsedAccount,
-): Promise<{ id: string; created: boolean; kind: (typeof account)["kind"] }> {
+): Promise<{
+  id: string;
+  name: string;
+  created: boolean;
+  kind: (typeof account)["kind"];
+}> {
   const [existing] = await tx
-    .select({ id: financeAccounts.id })
+    .select({ id: financeAccounts.id, name: financeAccounts.name })
     .from(financeAccounts)
     .where(
       and(
@@ -101,7 +115,9 @@ async function resolveAccount(
       ),
     )
     .limit(1);
-  if (existing) return { id: existing.id, created: false, kind: account.kind };
+  if (existing) {
+    return { id: existing.id, name: existing.name, created: false, kind: account.kind };
+  }
 
   const [row] = await tx
     .insert(financeAccounts)
@@ -118,10 +134,12 @@ async function resolveAccount(
     // Two uploads racing on a brand-new account: let the index win, then read the winner.
     .onConflictDoNothing()
     .returning({ id: financeAccounts.id });
-  if (row) return { id: row.id, created: true, kind: account.kind };
+  if (row) {
+    return { id: row.id, name: account.name, created: true, kind: account.kind };
+  }
 
   const [raced] = await tx
-    .select({ id: financeAccounts.id })
+    .select({ id: financeAccounts.id, name: financeAccounts.name })
     .from(financeAccounts)
     .where(
       and(
@@ -132,7 +150,7 @@ async function resolveAccount(
     )
     .limit(1);
   if (!raced) throw new Error("Could not create the account for this import.");
-  return { id: raced.id, created: false, kind: account.kind };
+  return { id: raced.id, name: raced.name, created: false, kind: account.kind };
 }
 
 /**
@@ -175,9 +193,10 @@ async function persistStatements(
   accountId: string,
   feed: string,
   snapshots: readonly ParsedStatement[],
-): Promise<{ created: number; skipped: number }> {
+): Promise<{ created: number; skipped: number; changes: FinanceAuditChange[] }> {
   let created = 0;
   let skipped = 0;
+  const changes: FinanceAuditChange[] = [];
   for (const snapshot of snapshots) {
     const [row] = await tx
       .insert(financeStatements)
@@ -214,6 +233,21 @@ async function persistStatements(
       continue;
     }
     created += 1;
+    changes.push({
+      entityType: "statement",
+      entityIdentity: row.id,
+      before: null,
+      after: {
+        accountId,
+        periodStart: snapshot.periodStart,
+        periodEnd: snapshot.periodEnd,
+        openingBalanceCents: snapshot.openingBalanceCents,
+        closingBalanceCents: snapshot.closingBalanceCents,
+        minimumPaymentCents: snapshot.minimumPaymentCents,
+        creditLimitCents: snapshot.creditLimitCents,
+        availableCreditCents: snapshot.availableCreditCents,
+      },
+    });
     if (snapshot.rates.length === 0) continue;
     await tx.insert(financeStatementRates).values(
       snapshot.rates.map((rate) => ({
@@ -226,7 +260,32 @@ async function persistStatements(
       })),
     );
   }
-  return { created, skipped };
+  return { created, skipped, changes };
+}
+
+function importEvidence(
+  file: ImportFile,
+  detectedFormat: string,
+): Record<string, unknown> {
+  const bytes = file.bytes ?? new TextEncoder().encode(file.text ?? "");
+  return {
+    filename: file.name,
+    size: bytes.byteLength,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    detectedFormat,
+  };
+}
+
+function importMonths(
+  account: ParsedAccount,
+  statements: readonly ParsedStatement[],
+): string[] {
+  return [
+    ...new Set([
+      ...account.transactions.map((row) => monthKeyOf(row.transactionDate)),
+      ...statements.map((row) => monthKeyOf(row.periodEnd)),
+    ]),
+  ].sort();
 }
 
 /**
@@ -286,7 +345,8 @@ async function existingOnAccount(
     description: row.description,
     // Only a live feed's rows get the looser comparison. Everything else keeps the exact
     // matching that CSV-to-CSV dedup already relies on.
-    fromLiveFeed: row.externalSource === "api:simplefin",
+    fromLiveFeed:
+      row.externalSource === "api:simplefin" || isScrapeFeed(row.externalSource ?? ""),
   }));
 }
 
@@ -353,11 +413,15 @@ async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
 export async function importFinanceCsvFiles({
   userId,
   files,
+  auditBatchId: requestedAuditBatchId,
 }: {
   userId: string;
   files: readonly ImportFile[];
+  /** Reused when one browser selection must be uploaded in several bounded requests. */
+  auditBatchId?: string;
 }): Promise<ImportResult> {
   const importStartedAt = await transactionIngestionWatermark();
+  const batchId = requestedAuditBatchId ?? financeAuditBatchId();
   const warnings: string[] = [];
   let created = 0;
   let skipped = 0;
@@ -366,14 +430,19 @@ export async function importFinanceCsvFiles({
   let statementsSkipped = 0;
   let resolutionsCreated = 0;
   let resolutionsSkipped = 0;
+  let auditBatchId: string | null = null;
 
   for (const file of files) {
     const text = file.text ?? "";
-    if (looksLikePlannerPending(text)) {
+    if (looksLikeBankBrowserSnapshot(text) || looksLikeLegacyPlannerPending(text)) {
       try {
-        const outcome = await replaceScrapedPending(userId, text, "");
-        created += outcome.inserted;
-        skipped += outcome.skippedPosted;
+        const outcome = await applyBankBrowserSnapshot(userId, text, {
+          auditBatchId: batchId,
+        });
+        created +=
+          outcome.posted.inserted + outcome.posted.replaced + outcome.pending.inserted;
+        skipped += outcome.posted.duplicates;
+        auditBatchId = outcome.auditBatchId;
       } catch (error) {
         warnings.push(
           error instanceof Error
@@ -397,9 +466,30 @@ export async function importFinanceCsvFiles({
         );
         continue;
       }
-      const outcome = await persistPaypalResolutions(userId, parsed.entries);
+      const outcome = await db.transaction(async (tx) => {
+        const budgetMonths = [
+          ...new Set(parsed.entries.map((entry) => monthKeyOf(entry.date))),
+        ].sort();
+        const scope = { budgetMonths };
+        const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+        const persisted = await persistPaypalResolutions(userId, parsed.entries, tx);
+        const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+        const audit = await writeFinanceAuditEvent(tx, userId, {
+          kind: "finance_import",
+          origin: "PayPal statement import",
+          batchId,
+          summary: `${file.name}: stored ${persisted.created} PayPal resolution${persisted.created === 1 ? "" : "s"}; skipped ${persisted.skipped}.`,
+          scope,
+          sourceEvidence: importEvidence(file, "statement:paypal"),
+          beforeCheckpoint,
+          afterCheckpoint,
+          changes: persisted.changes,
+        });
+        return { ...persisted, auditBatchId: audit.batchId };
+      });
       resolutionsCreated += outcome.created;
       resolutionsSkipped += outcome.skipped;
+      auditBatchId = outcome.auditBatchId;
       continue;
     }
 
@@ -425,6 +515,12 @@ export async function importFinanceCsvFiles({
       );
       const outcome = await db.transaction(async (tx) => {
         const resolved = await resolveAccount(tx, userId, feed, account);
+        const scope = {
+          accountIds: [resolved.id],
+          accountNames: [resolved.name],
+          budgetMonths: importMonths(account, snapshots),
+        };
+        const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
         await markClosedIfNeeded(tx, userId, resolved.id, account.closedOn);
         const snapshotCounts = await persistStatements(
           tx,
@@ -466,15 +562,76 @@ export async function importFinanceCsvFiles({
         }));
 
         let inserted = 0;
+        const transactionChanges: FinanceAuditChange[] = [];
         for (let start = 0; start < values.length; start += INSERT_CHUNK_ROWS) {
           const chunk = values.slice(start, start + INSERT_CHUNK_ROWS);
           const rows = await tx
             .insert(financeTransactions)
             .values(chunk)
             .onConflictDoNothing()
-            .returning({ id: financeTransactions.id });
+            .returning({
+              id: financeTransactions.id,
+              accountId: financeTransactions.accountId,
+              transactionDate: financeTransactions.transactionDate,
+              postedDate: financeTransactions.postedDate,
+              amount: financeTransactions.amount,
+              externalSource: financeTransactions.externalSource,
+              externalId: financeTransactions.externalId,
+            });
           inserted += rows.length;
+          transactionChanges.push(
+            ...rows.map((row) => ({
+              entityType: "transaction",
+              entityIdentity: row.id,
+              before: null,
+              after: {
+                accountId: row.accountId,
+                transactionDate: row.transactionDate,
+                postedDate: row.postedDate,
+                amountCents: numericStringToCents(row.amount) ?? 0,
+                pending: false,
+                externalSource: row.externalSource,
+                externalId: row.externalId,
+              },
+            })),
+          );
         }
+
+        const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+        const changes: FinanceAuditChange[] = [
+          ...(resolved.created
+            ? [
+                {
+                  entityType: "account",
+                  entityIdentity: resolved.id,
+                  before: null,
+                  after: {
+                    kind: resolved.kind,
+                    offBudget: defaultOffBudget(resolved.kind),
+                    externalSource: feed,
+                    externalKey: account.externalKey,
+                  },
+                },
+              ]
+            : []),
+          ...transactionChanges,
+          ...snapshotCounts.changes,
+        ];
+        const audit = await writeFinanceAuditEvent(tx, userId, {
+          kind: "finance_import",
+          origin: "File import",
+          batchId,
+          summary:
+            `${file.name}: imported ${inserted} transaction${inserted === 1 ? "" : "s"}, ` +
+            `${snapshotCounts.created} statement${snapshotCounts.created === 1 ? "" : "s"}; ` +
+            `skipped ${skipCount + (values.length - inserted) + snapshotCounts.skipped}.`,
+          scope,
+          warnings: errors.map((error) => error.message),
+          sourceEvidence: importEvidence(file, feed),
+          beforeCheckpoint,
+          afterCheckpoint,
+          changes,
+        });
 
         return {
           accountId: resolved.id,
@@ -484,25 +641,32 @@ export async function importFinanceCsvFiles({
           skipped: skipCount + (values.length - inserted),
           statementsCreated: snapshotCounts.created,
           statementsSkipped: snapshotCounts.skipped,
+          auditBatchId: audit.batchId,
         };
       });
 
       if (outcome.accountCreated) {
         accountsCreated += 1;
         if (!defaultOffBudget(outcome.accountKind)) {
-          await includeNewOnBudgetAccount(userId, outcome.accountId);
+          await includeNewOnBudgetAccount(userId, outcome.accountId, {
+            auditBatchId: batchId,
+            auditOrigin: "File import",
+          });
         }
       }
       created += outcome.inserted;
       skipped += outcome.skipped;
       statementsCreated += outcome.statementsCreated;
       statementsSkipped += outcome.statementsSkipped;
+      auditBatchId = outcome.auditBatchId;
     }
   }
 
   if (created > 0) {
     await finalizeTransactionIngestion(userId, {
       applyAutoCategorySince: importStartedAt,
+      auditBatchId: batchId,
+      auditOrigin: "File import classification",
     });
   }
 
@@ -515,5 +679,6 @@ export async function importFinanceCsvFiles({
     resolutionsCreated,
     resolutionsSkipped,
     warnings,
+    auditBatchId,
   };
 }

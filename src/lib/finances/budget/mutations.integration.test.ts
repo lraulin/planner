@@ -3,12 +3,14 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
+  bankAccountLinks,
   financeBudgetAllocations,
   financeBudgetCategories,
   financeTransactions,
   users,
 } from "@/db/schema";
 import { localDateKey } from "@/lib/schedule/geometry";
+import { linkAccount, saveConnection } from "@/lib/banksync/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import {
   applyBudgetTemplates,
@@ -559,6 +561,22 @@ describeDb("budget mutations", () => {
 
   it("counts only the authoritative pending feed in activity and backlog", async () => {
     const { cardId } = await seedAccounts(userId);
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://test:test@example.invalid/simplefin",
+    });
+    const linkId = await linkAccount(userId, {
+      connectionId,
+      externalAccountId: `pending-${crypto.randomUUID()}`,
+      accountId: cardId,
+    });
+    await db
+      .update(bankAccountLinks)
+      .set({
+        balanceCents: 0,
+        balanceAsOf: new Date(),
+        scrapeBalanceAsOf: new Date(),
+      })
+      .where(eq(bankAccountLinks.id, linkId));
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
     const ids = await envelopes(userId);
     const discretionaryId = ids.get("Discretionary")!;
@@ -868,7 +886,9 @@ describeDb("budget mutations", () => {
     const august = findMonth(budget.months, MONTH)!;
     expect(categoryMonth(august, ids.get("Bills")!).assignedCents).toBe(10_000);
     expect(august.readyToAssignCents).toBe(0);
-    expect(budget.movementNotes).toContain("Bills");
+    expect(budget.movementEvents.some((event) => event.summary.includes("Bills"))).toBe(
+      true,
+    );
   });
 
   it("assigns into a future month and leaves current Ready to Assign", async () => {

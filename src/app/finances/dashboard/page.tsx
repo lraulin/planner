@@ -71,6 +71,7 @@ export default async function FinancesDashboardPage() {
           budgetConfigured={budget.configured}
           underfundedBills={underfundedBills}
           upcoming={upcoming}
+          loadedAtMs={data.loadedAtMs}
         />
       </Suspense>
     </AppShell>

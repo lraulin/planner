@@ -51,10 +51,9 @@ import {
   type SupplySuggestion,
 } from "@/lib/finances/supplies/suggestions";
 import {
-  clearScrapedPending,
-  replaceScrapedPending,
-  type ReplaceScrapedPendingResult,
-} from "@/lib/finances/scrapePending";
+  applyBankBrowserSnapshot,
+  type BankSnapshotApplyResult,
+} from "@/lib/finances/bankSnapshotApply";
 import {
   deleteTransaction,
   deleteTransactions,
@@ -110,10 +109,6 @@ import type { AssignOption } from "@/lib/finances/budget/assign/types";
 import type { BudgetPreset } from "@/lib/finances/budget/presets";
 import type { EnvelopeKind, EnvelopeStatus } from "@/db/schema";
 import {
-  finalizeTransactionIngestion,
-  transactionIngestionWatermark,
-} from "@/lib/finances/ingestion";
-import {
   getTransaction,
   listAccounts,
   listSplitChildren,
@@ -124,6 +119,14 @@ import {
   loadTrackAsBillDraft,
 } from "@/lib/finances/queries";
 import type { TrackAsBillDraft } from "@/lib/finances/registerBillDraft";
+import {
+  listFinanceAuditEvents,
+  loadFinanceAuditEvent,
+} from "@/lib/finances/audit/queries";
+import type {
+  FinanceAuditEvent,
+  FinanceAuditEventSummary,
+} from "@/lib/finances/audit/types";
 import type { RegisterPrepared, RegisterRowBlock } from "@/lib/finances/registerQuery";
 import { parseRegisterQuery, REGISTER_BLOCK_SIZE } from "@/lib/finances/registerQuery";
 import { loadWorkingPendingSelection } from "@/lib/finances/workingPendingQuery";
@@ -414,26 +417,10 @@ export async function setPayeeNotACommitmentAction(
   return run((userId) => setPayeeNotACommitment(userId, payeeId, notACommitment));
 }
 
-export async function pasteScrapedPendingAction(
+export async function pasteBankSnapshotAction(
   text: string,
-  todayKey: string,
-): Promise<DataActionResult<ReplaceScrapedPendingResult>> {
-  return runWithData(async (userId) => {
-    const startedAt = await transactionIngestionWatermark();
-    const result = await replaceScrapedPending(userId, text, todayKey);
-    if (result.inserted > 0) {
-      await finalizeTransactionIngestion(userId, {
-        applyAutoCategorySince: startedAt,
-      });
-    }
-    return result;
-  });
-}
-
-export async function clearScrapedPendingAction(
-  todayKey: string,
-): Promise<DataActionResult<ReplaceScrapedPendingResult>> {
-  return runWithData((userId) => clearScrapedPending(userId, todayKey));
+): Promise<DataActionResult<BankSnapshotApplyResult>> {
+  return runWithData((userId) => applyBankBrowserSnapshot(userId, text));
 }
 
 export async function upcomingBillsAction(
@@ -441,6 +428,18 @@ export async function upcomingBillsAction(
   horizonDays: number,
 ): Promise<QueryResult<UpcomingBillRow[]>> {
   return runQuery((userId) => loadUpcomingBills(userId, todayKey, horizonDays));
+}
+
+export async function listFinanceActivityAction(): Promise<
+  QueryResult<FinanceAuditEventSummary[]>
+> {
+  return runQuery((userId) => listFinanceAuditEvents(userId));
+}
+
+export async function loadFinanceActivityEventAction(
+  eventId: string,
+): Promise<QueryResult<FinanceAuditEvent | null>> {
+  return runQuery((userId) => loadFinanceAuditEvent(userId, eventId));
 }
 
 // ─────────────────────────── Envelope budget ───────────────────────────

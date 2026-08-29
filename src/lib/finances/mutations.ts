@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -34,6 +34,9 @@ import {
 } from "./payees/mutations";
 import { applyClaimedPayees } from "./payees/claims";
 import { aliasFor, payeeIndex } from "./payees/resolve";
+import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
+import { writeFinanceAuditEvent } from "./audit/writes";
+import { monthKeyOf } from "./budget/envelope";
 
 /**
  * Writes for the register.
@@ -79,15 +82,6 @@ async function requireTransaction(
   if (!row) throw new Error("Transaction not found.");
 }
 
-async function requireAccount(userId: string, accountId: string): Promise<void> {
-  const [row] = await db
-    .select({ id: financeAccounts.id })
-    .from(financeAccounts)
-    .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
-    .limit(1);
-  if (!row) throw new Error("Account not found.");
-}
-
 export type TransactionEdit = {
   /** Null clears it back to uncategorised. */
   category?: string | null;
@@ -97,6 +91,50 @@ export type TransactionEdit = {
   excludeFromBaseline?: boolean;
   eventLabel?: string;
 };
+
+const TRANSACTION_AUDIT_COLUMNS = {
+  id: financeTransactions.id,
+  accountId: financeTransactions.accountId,
+  transactionDate: financeTransactions.transactionDate,
+  amount: financeTransactions.amount,
+  pending: financeTransactions.pending,
+  category: financeTransactions.category,
+  budgetCategoryId: financeTransactions.budgetCategoryId,
+  derivedFlow: financeTransactions.derivedFlow,
+  flowOverride: financeTransactions.flowOverride,
+  excludeFromBaseline: financeTransactions.excludeFromBaseline,
+  isParent: financeTransactions.isParent,
+  parentId: financeTransactions.parentId,
+} as const;
+
+type TransactionAuditRow = {
+  [
+    K in keyof typeof TRANSACTION_AUDIT_COLUMNS
+  ]: (typeof financeTransactions.$inferSelect)[K];
+};
+
+function transactionAuditFields(row: TransactionAuditRow) {
+  return {
+    accountId: row.accountId,
+    transactionDate: row.transactionDate,
+    amount: row.amount,
+    pending: row.pending,
+    category: row.category,
+    budgetCategoryId: row.budgetCategoryId,
+    derivedFlow: row.derivedFlow,
+    flowOverride: row.flowOverride,
+    excludeFromBaseline: row.excludeFromBaseline,
+    isParent: row.isParent,
+    parentId: row.parentId,
+  };
+}
+
+function transactionAuditScope(rows: readonly TransactionAuditRow[]) {
+  return {
+    accountIds: [...new Set(rows.map((row) => row.accountId))],
+    budgetMonths: [...new Set(rows.map((row) => monthKeyOf(row.transactionDate)))],
+  };
+}
 
 /**
  * Edit the user-owned half of a transaction.
@@ -110,8 +148,6 @@ export async function updateTransaction(
   transactionId: string,
   edit: TransactionEdit,
 ): Promise<void> {
-  await requireTransaction(userId, transactionId);
-
   const values: {
     category?: string | null;
     notes?: string;
@@ -134,15 +170,70 @@ export async function updateTransaction(
   }
   if (edit.eventLabel !== undefined) values.eventLabel = edit.eventLabel.trim();
 
-  await db
-    .update(financeTransactions)
-    .set(values)
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    );
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select(TRANSACTION_AUDIT_COLUMNS)
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.id, transactionId),
+          eq(financeTransactions.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (!before) throw new Error("Transaction not found.");
+
+    const categoryAfter =
+      values.category !== undefined ? values.category : before.category;
+    const flowOverrideAfter =
+      values.flowOverride !== undefined ? values.flowOverride : before.flowOverride;
+    const excludedAfter = values.excludeFromBaseline ?? before.excludeFromBaseline;
+    const moneyChanged =
+      categoryAfter !== before.category ||
+      flowOverrideAfter !== before.flowOverride ||
+      excludedAfter !== before.excludeFromBaseline;
+    const scope = transactionAuditScope([before]);
+    const beforeCheckpoint = moneyChanged
+      ? await captureFinanceMoneyCheckpoint(userId, scope, tx)
+      : null;
+
+    await tx
+      .update(financeTransactions)
+      .set(values)
+      .where(
+        and(
+          eq(financeTransactions.id, transactionId),
+          eq(financeTransactions.userId, userId),
+        ),
+      );
+
+    if (!moneyChanged) return;
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "transaction_change",
+      origin: "Register",
+      summary: "Changed transaction classification.",
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: [
+        {
+          entityType: "transaction",
+          entityIdentity: transactionId,
+          before: {
+            category: before.category,
+            flowOverride: before.flowOverride,
+            excludeFromBaseline: before.excludeFromBaseline,
+          },
+          after: {
+            category: categoryAfter,
+            flowOverride: flowOverrideAfter,
+            excludeFromBaseline: excludedAfter,
+          },
+        },
+      ],
+    });
+  });
 }
 
 /**
@@ -168,14 +259,47 @@ export async function deleteTransactions(
 ): Promise<void> {
   const unique = [...new Set(transactionIds)];
   if (unique.length === 0) return;
-  await db
-    .delete(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        inArray(financeTransactions.id, unique),
-      ),
-    );
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .select(TRANSACTION_AUDIT_COLUMNS)
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          or(
+            inArray(financeTransactions.id, unique),
+            inArray(financeTransactions.parentId, unique),
+          ),
+        ),
+      );
+    const selected = rows.filter((row) => unique.includes(row.id));
+    if (selected.length === 0) return;
+    const scope = transactionAuditScope(rows);
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await tx
+      .delete(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          inArray(financeTransactions.id, unique),
+        ),
+      );
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "transaction_delete",
+      origin: "Register",
+      summary: `Deleted ${selected.length} transaction${selected.length === 1 ? "" : "s"}.`,
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: rows.map((row) => ({
+        entityType: row.parentId ? "transaction_split_child" : "transaction",
+        entityIdentity: row.id,
+        before: transactionAuditFields(row),
+        after: null,
+      })),
+    });
+  });
 }
 
 async function requirePaymentResolution(
@@ -362,6 +486,8 @@ export type ReclassifySummary = {
   paydayCount: number;
   medianPaycheckCents: number;
   normalizedMonthlyIncomeCents: number;
+  auditEventId: string;
+  auditBatchId: string;
 };
 
 /**
@@ -514,6 +640,7 @@ export async function previewDerivedChanges(userId: string): Promise<DerivedPrev
 
 export async function reclassifyTransactions(
   userId: string,
+  options: { auditBatchId?: string; auditOrigin?: string } = {},
 ): Promise<ReclassifySummary> {
   // Mint the stable ids before planning. The planner then assigns those ids in the same
   // row-shaped update as the other recomputable facts rather than maintaining a second
@@ -522,8 +649,13 @@ export async function reclassifyTransactions(
 
   const { parsed, plan, changed } = await loadAndPlanReclassify(userId);
 
-  if (changed.length > 0) {
-    await db.transaction(async (tx) => {
+  const audit = await db.transaction(async (tx) => {
+    const scope = {
+      accountIds: [...new Set(parsed.map((row) => row.accountId))],
+      budgetMonths: [...new Set(parsed.map((row) => monthKeyOf(row.transactionDate)))],
+    };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    if (changed.length > 0) {
       for (let start = 0; start < changed.length; start += RECLASSIFY_CHUNK) {
         const chunk = changed.slice(start, start + RECLASSIFY_CHUNK);
         const values = sql.join(
@@ -543,8 +675,38 @@ export async function reclassifyTransactions(
           where t.id = v.id and t.user_id = ${userId}::uuid
         `);
       }
+    }
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    const beforeById = new Map(parsed.map((row) => [row.id, row]));
+    return writeFinanceAuditEvent(tx, userId, {
+      kind: "transaction_classification",
+      origin: options.auditOrigin ?? "Finance classifier",
+      batchId: options.auditBatchId,
+      summary: `Reclassified ${changed.length} of ${parsed.length} transactions.`,
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: changed.map((row) => {
+        const before = beforeById.get(row.id);
+        return {
+          entityType: "transaction",
+          entityIdentity: row.id,
+          before: before
+            ? {
+                derivedFlow: before.derivedFlow,
+                transferGroupId: before.transferGroupId,
+                payeeId: before.payeeId,
+              }
+            : null,
+          after: {
+            derivedFlow: row.derivedFlow,
+            transferGroupId: row.transferGroupId,
+            payeeId: row.payeeId,
+          },
+        };
+      }),
     });
-  }
+  });
 
   return {
     scanned: parsed.length,
@@ -552,6 +714,8 @@ export async function reclassifyTransactions(
     paydayCount: plan.paydays.length,
     medianPaycheckCents: plan.medianPaycheckCents,
     normalizedMonthlyIncomeCents: plan.normalizedMonthlyIncomeCents,
+    auditEventId: audit.eventId,
+    auditBatchId: audit.batchId,
   };
 }
 
@@ -569,17 +733,6 @@ export async function setOneOff(
 ): Promise<number> {
   if (transactionIds.length === 0) return 0;
 
-  const owned = await db
-    .select({ id: financeTransactions.id })
-    .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        inArray(financeTransactions.id, [...transactionIds]),
-      ),
-    );
-  if (owned.length !== transactionIds.length) throw new Error("Transaction not found.");
-
   const values: {
     excludeFromBaseline: boolean;
     eventLabel?: string;
@@ -590,25 +743,117 @@ export async function setOneOff(
   if (edit.eventLabel !== undefined) values.eventLabel = edit.eventLabel.trim();
   else if (!edit.excludeFromBaseline) values.eventLabel = "";
 
-  await db
-    .update(financeTransactions)
-    .set(values)
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        inArray(financeTransactions.id, [...transactionIds]),
-      ),
-    );
-
-  return owned.length;
+  return db.transaction(async (tx) => {
+    const owned = await tx
+      .select(TRANSACTION_AUDIT_COLUMNS)
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          inArray(financeTransactions.id, [...transactionIds]),
+        ),
+      );
+    if (owned.length !== transactionIds.length) {
+      throw new Error("Transaction not found.");
+    }
+    const scope = transactionAuditScope(owned);
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await tx
+      .update(financeTransactions)
+      .set(values)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          inArray(financeTransactions.id, [...transactionIds]),
+        ),
+      );
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "transaction_change",
+      origin: "Register",
+      summary: `${edit.excludeFromBaseline ? "Excluded" : "Restored"} ${owned.length} transaction${owned.length === 1 ? "" : "s"} ${edit.excludeFromBaseline ? "from" : "to"} the baseline.`,
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: owned.map((row) => ({
+        entityType: "transaction",
+        entityIdentity: row.id,
+        before: { excludeFromBaseline: row.excludeFromBaseline },
+        after: { excludeFromBaseline: edit.excludeFromBaseline },
+      })),
+    });
+    return owned.length;
+  });
 }
 
 /** Delete an account and, by cascade, every transaction on it. */
 export async function deleteAccount(userId: string, accountId: string): Promise<void> {
-  await requireAccount(userId, accountId);
-  await db
-    .delete(financeAccounts)
-    .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)));
+  await db.transaction(async (tx) => {
+    const [account] = await tx
+      .select({
+        id: financeAccounts.id,
+        name: financeAccounts.name,
+        kind: financeAccounts.kind,
+        offBudget: financeAccounts.offBudget,
+        externalSource: financeAccounts.externalSource,
+        externalKey: financeAccounts.externalKey,
+      })
+      .from(financeAccounts)
+      .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
+      .limit(1);
+    if (!account) throw new Error("Account not found.");
+    const transactions = await tx
+      .select(TRANSACTION_AUDIT_COLUMNS)
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.accountId, accountId),
+          eq(financeTransactions.userId, userId),
+        ),
+      );
+    const scope = {
+      accountIds: [accountId],
+      accountNames: [account.name],
+      budgetMonths: [
+        ...new Set(transactions.map((row) => monthKeyOf(row.transactionDate))),
+      ],
+    };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await tx
+      .delete(financeAccounts)
+      .where(
+        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
+      );
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "account_delete",
+      origin: "Finance accounts",
+      summary: `Deleted ${account.name} and ${transactions.length} transaction${transactions.length === 1 ? "" : "s"}.`,
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: [
+        {
+          entityType: "account",
+          entityIdentity: account.id,
+          before: {
+            name: account.name,
+            kind: account.kind,
+            offBudget: account.offBudget,
+            externalSource: account.externalSource,
+            externalKey: account.externalKey,
+          },
+          after: null,
+        },
+        ...transactions.map((row) => ({
+          entityType: row.parentId ? "transaction_split_child" : "transaction",
+          entityIdentity: row.id,
+          before: transactionAuditFields(row),
+          after: null,
+        })),
+      ],
+    });
+  });
 }
 
 export type BillEnvelopeEdit = {
@@ -1093,16 +1338,23 @@ async function writeSplitChildren(
 ): Promise<void> {
   const now = new Date();
   await db.transaction(async (tx) => {
-    const existing = await tx
-      .select({ id: financeTransactions.id })
+    const beforeRows = await tx
+      .select(TRANSACTION_AUDIT_COLUMNS)
       .from(financeTransactions)
       .where(
         and(
           eq(financeTransactions.userId, userId),
-          eq(financeTransactions.parentId, parent.id),
+          or(
+            eq(financeTransactions.id, parent.id),
+            eq(financeTransactions.parentId, parent.id),
+          ),
         ),
       );
-    const existingIds = new Set(existing.map((row) => row.id));
+    const scope = transactionAuditScope(beforeRows);
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    const existingIds = new Set(
+      beforeRows.flatMap((row) => (row.parentId === parent.id ? [row.id] : [])),
+    );
 
     const kept = new Set(
       children.flatMap((child) =>
@@ -1171,6 +1423,37 @@ async function writeSplitChildren(
           eq(financeTransactions.id, parent.id),
         ),
       );
+
+    const afterRows = await tx
+      .select(TRANSACTION_AUDIT_COLUMNS)
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          or(
+            eq(financeTransactions.id, parent.id),
+            eq(financeTransactions.parentId, parent.id),
+          ),
+        ),
+      );
+    const beforeById = new Map(beforeRows.map((row) => [row.id, row]));
+    const afterById = new Map(afterRows.map((row) => [row.id, row]));
+    const ids = [...new Set([...beforeById.keys(), ...afterById.keys()])];
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "transaction_split",
+      origin: "Register",
+      summary: `${parent.isParent ? "Changed" : "Split"} a transaction into ${children.length} part${children.length === 1 ? "" : "s"}.`,
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: ids.map((id) => ({
+        entityType: id === parent.id ? "transaction" : "transaction_split_child",
+        entityIdentity: id,
+        before: beforeById.has(id) ? transactionAuditFields(beforeById.get(id)!) : null,
+        after: afterById.has(id) ? transactionAuditFields(afterById.get(id)!) : null,
+      })),
+    });
   });
 }
 
@@ -1253,6 +1536,20 @@ export async function unsplitTransaction(
 
   const now = new Date();
   await db.transaction(async (tx) => {
+    const beforeRows = await tx
+      .select(TRANSACTION_AUDIT_COLUMNS)
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          or(
+            eq(financeTransactions.id, transactionId),
+            eq(financeTransactions.parentId, transactionId),
+          ),
+        ),
+      );
+    const scope = transactionAuditScope(beforeRows);
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await tx
       .delete(financeTransactions)
       .where(
@@ -1270,6 +1567,35 @@ export async function unsplitTransaction(
           eq(financeTransactions.id, transactionId),
         ),
       );
+    const [afterParent] = await tx
+      .select(TRANSACTION_AUDIT_COLUMNS)
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.id, transactionId),
+        ),
+      )
+      .limit(1);
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "transaction_split",
+      origin: "Register",
+      summary: "Removed a transaction split.",
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: beforeRows.map((row) => ({
+        entityType:
+          row.id === transactionId ? "transaction" : "transaction_split_child",
+        entityIdentity: row.id,
+        before: transactionAuditFields(row),
+        after:
+          row.id === transactionId && afterParent
+            ? transactionAuditFields(afterParent)
+            : null,
+      })),
+    });
   });
   await markAmazonMatchSplitProtected(userId, transactionId);
 }

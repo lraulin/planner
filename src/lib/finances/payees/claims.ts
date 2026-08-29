@@ -12,6 +12,10 @@ import { financeAccounts, financePayees, financeTransactions } from "@/db/schema
 import type { MonthKey } from "../budget/envelope";
 import { categoryForNewTransaction } from "./autoCategory";
 import type { AutoCategoryMode } from "./autoCategory";
+import type { FinanceExecutor } from "../dbExecutor";
+import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
+import { writeFinanceAuditEvent } from "../audit/writes";
+import { monthKeyOf } from "../budget/envelope";
 
 /**
  * File claimed payees' on-budget charges into the envelope that claims them.
@@ -28,8 +32,13 @@ export async function applyPayeeClaims(
     payeeIds?: readonly string[];
     uncategorizedOnly?: boolean;
   } = {},
+  executor?: FinanceExecutor,
 ): Promise<{ moved: number }> {
-  const rows = await db
+  if (!executor) {
+    return db.transaction((tx) => applyPayeeClaims(userId, options, tx));
+  }
+
+  const rows = await executor
     .select({
       id: financeTransactions.id,
       categoryId: financePayees.claimedBudgetCategoryId,
@@ -71,20 +80,18 @@ export async function applyPayeeClaims(
   }
 
   let moved = 0;
-  await db.transaction(async (tx) => {
-    for (const [categoryId, ids] of byCategory) {
-      await tx
-        .update(financeTransactions)
-        .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            inArray(financeTransactions.id, ids),
-          ),
-        );
-      moved += ids.length;
-    }
-  });
+  for (const [categoryId, ids] of byCategory) {
+    await executor
+      .update(financeTransactions)
+      .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          inArray(financeTransactions.id, ids),
+        ),
+      );
+    moved += ids.length;
+  }
 
   return { moved };
 }
@@ -95,11 +102,85 @@ export async function applyPayeeClaims(
  */
 export async function applyClaimedPayees(
   userId: string,
-  _envelopeId: string,
+  envelopeId: string,
   payeeIds: readonly string[],
 ): Promise<void> {
   if (payeeIds.length === 0) return;
-  await applyPayeeClaims(userId, { payeeIds });
+  await db.transaction(async (tx) => {
+    const candidates = await tx
+      .select({
+        id: financeTransactions.id,
+        accountId: financeTransactions.accountId,
+        transactionDate: financeTransactions.transactionDate,
+        budgetCategoryId: financeTransactions.budgetCategoryId,
+      })
+      .from(financeTransactions)
+      .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
+      .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financePayees.userId, userId),
+          eq(financeAccounts.userId, userId),
+          eq(financeAccounts.offBudget, false),
+          sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
+          sql`${financePayees.claimedBudgetCategoryId} is not null`,
+          sql`${financeTransactions.budgetCategoryId} is distinct from ${financePayees.claimedBudgetCategoryId}`,
+          inArray(financePayees.id, [...payeeIds]),
+        ),
+      );
+    if (candidates.length === 0) return;
+
+    const scope = {
+      accountIds: [...new Set(candidates.map((row) => row.accountId))],
+      budgetMonths: [
+        ...new Set(candidates.map((row) => monthKeyOf(row.transactionDate))),
+      ],
+      envelopeIds: [
+        ...new Set([
+          envelopeId,
+          ...candidates.flatMap((row) =>
+            row.budgetCategoryId ? [row.budgetCategoryId] : [],
+          ),
+        ]),
+      ],
+    };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await applyPayeeClaims(userId, { payeeIds }, tx);
+    const afterRows = await tx
+      .select({
+        id: financeTransactions.id,
+        budgetCategoryId: financeTransactions.budgetCategoryId,
+      })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          inArray(
+            financeTransactions.id,
+            candidates.map((row) => row.id),
+          ),
+        ),
+      );
+    const beforeById = new Map(candidates.map((row) => [row.id, row]));
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "transaction_classification",
+      origin: "Payee claim",
+      summary: `Filed ${afterRows.length} transaction${afterRows.length === 1 ? "" : "s"} from a payee claim.`,
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: afterRows.map((row) => ({
+        entityType: "transaction",
+        entityIdentity: row.id,
+        before: {
+          budgetCategoryId: beforeById.get(row.id)?.budgetCategoryId ?? null,
+        },
+        after: { budgetCategoryId: row.budgetCategoryId },
+      })),
+    });
+  });
 }
 
 /**
@@ -109,57 +190,97 @@ export async function applyClaimedPayees(
  */
 export async function applyPayeeAutoCategories(
   userId: string,
-  options: { createdSince?: Date; payeeIds?: readonly string[] } = {},
+  options: {
+    createdSince?: Date;
+    payeeIds?: readonly string[];
+    auditBatchId?: string;
+    auditOrigin?: string;
+  } = {},
 ): Promise<number> {
-  const claimed = await applyPayeeClaims(userId, {
-    ...options,
-    uncategorizedOnly: true,
-  });
-
-  const rows = await db
-    .select({
-      id: financeTransactions.id,
-      claimedBudgetCategoryId: financePayees.claimedBudgetCategoryId,
-      defaultBudgetCategoryId: financePayees.defaultBudgetCategoryId,
-      autoCategoryMode: financePayees.autoCategoryMode,
-    })
-    .from(financeTransactions)
-    .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        eq(financePayees.userId, userId),
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.offBudget, false),
-        isNull(financeTransactions.budgetCategoryId),
-        sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
-        ...(options.createdSince
-          ? [gte(financeTransactions.createdAt, options.createdSince)]
-          : []),
-        ...(options.payeeIds && options.payeeIds.length > 0
-          ? [inArray(financePayees.id, [...options.payeeIds])]
-          : []),
-      ),
+  return db.transaction(async (tx) => {
+    const candidates = await tx
+      .select({
+        id: financeTransactions.id,
+        accountId: financeTransactions.accountId,
+        transactionDate: financeTransactions.transactionDate,
+      })
+      .from(financeTransactions)
+      .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
+      .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financePayees.userId, userId),
+          eq(financeAccounts.userId, userId),
+          eq(financeAccounts.offBudget, false),
+          isNull(financeTransactions.budgetCategoryId),
+          sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
+          ...(options.createdSince
+            ? [gte(financeTransactions.createdAt, options.createdSince)]
+            : []),
+          ...(options.payeeIds && options.payeeIds.length > 0
+            ? [inArray(financePayees.id, [...options.payeeIds])]
+            : []),
+        ),
+      );
+    const scope = {
+      accountIds: [...new Set(candidates.map((row) => row.accountId))],
+      budgetMonths: [
+        ...new Set(candidates.map((row) => monthKeyOf(row.transactionDate))),
+      ],
+    };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    const claimed = await applyPayeeClaims(
+      userId,
+      {
+        createdSince: options.createdSince,
+        payeeIds: options.payeeIds,
+        uncategorizedOnly: true,
+      },
+      tx,
     );
 
-  const byCategory = new Map<string, string[]>();
-  for (const row of rows) {
-    const categoryId = categoryForNewTransaction({
-      claimedBudgetCategoryId: row.claimedBudgetCategoryId,
-      defaultBudgetCategoryId: row.defaultBudgetCategoryId,
-      autoCategoryMode: row.autoCategoryMode as AutoCategoryMode,
-    });
-    if (!categoryId) continue;
-    const bucket = byCategory.get(categoryId) ?? [];
-    bucket.push(row.id);
-    byCategory.set(categoryId, bucket);
-  }
+    const rows = await tx
+      .select({
+        id: financeTransactions.id,
+        claimedBudgetCategoryId: financePayees.claimedBudgetCategoryId,
+        defaultBudgetCategoryId: financePayees.defaultBudgetCategoryId,
+        autoCategoryMode: financePayees.autoCategoryMode,
+      })
+      .from(financeTransactions)
+      .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
+      .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financePayees.userId, userId),
+          eq(financeAccounts.userId, userId),
+          eq(financeAccounts.offBudget, false),
+          isNull(financeTransactions.budgetCategoryId),
+          sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
+          ...(options.createdSince
+            ? [gte(financeTransactions.createdAt, options.createdSince)]
+            : []),
+          ...(options.payeeIds && options.payeeIds.length > 0
+            ? [inArray(financePayees.id, [...options.payeeIds])]
+            : []),
+        ),
+      );
 
-  let filled = claimed.moved;
-  if (byCategory.size === 0) return filled;
+    const byCategory = new Map<string, string[]>();
+    for (const row of rows) {
+      const categoryId = categoryForNewTransaction({
+        claimedBudgetCategoryId: row.claimedBudgetCategoryId,
+        defaultBudgetCategoryId: row.defaultBudgetCategoryId,
+        autoCategoryMode: row.autoCategoryMode as AutoCategoryMode,
+      });
+      if (!categoryId) continue;
+      const bucket = byCategory.get(categoryId) ?? [];
+      bucket.push(row.id);
+      byCategory.set(categoryId, bucket);
+    }
 
-  await db.transaction(async (tx) => {
+    let filled = claimed.moved;
     for (const [categoryId, ids] of byCategory) {
       await tx
         .update(financeTransactions)
@@ -172,7 +293,42 @@ export async function applyPayeeAutoCategories(
         );
       filled += ids.length;
     }
-  });
+    const afterRows =
+      candidates.length === 0
+        ? []
+        : await tx
+            .select({
+              id: financeTransactions.id,
+              budgetCategoryId: financeTransactions.budgetCategoryId,
+            })
+            .from(financeTransactions)
+            .where(
+              and(
+                eq(financeTransactions.userId, userId),
+                inArray(
+                  financeTransactions.id,
+                  candidates.map((row) => row.id),
+                ),
+              ),
+            );
+    const changed = afterRows.filter((row) => row.budgetCategoryId !== null);
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "transaction_classification",
+      origin: options.auditOrigin ?? "Automatic filing",
+      batchId: options.auditBatchId,
+      summary: `Automatically filed ${changed.length} transaction${changed.length === 1 ? "" : "s"}.`,
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: changed.map((row) => ({
+        entityType: "transaction",
+        entityIdentity: row.id,
+        before: { budgetCategoryId: null },
+        after: { budgetCategoryId: row.budgetCategoryId },
+      })),
+    });
 
-  return filled;
+    return filled;
+  });
 }

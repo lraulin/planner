@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Planner: copy Chase pending
+// @name         Planner: copy Chase bank snapshot
 // @namespace    planner
-// @version      1.0
-// @description  Copy Chase's pending table as a Planner TSV. Paste it on /finances/dashboard. Includes Current balance.
+// @version      2.1
+// @description  Copy Chase current-cycle posted and pending activity for Planner.
 // @match        https://secure.chase.com/*
 // @match        https://*.chase.com/*
 // @grant        GM.setClipboard
@@ -10,65 +10,31 @@
 // ==/UserScript==
 
 /**
- * Thin extractor. Planner's parser in src/lib/finances/capitalOnePending.ts is the
- * source of truth for cents, last-4, and dates. This file only reads the DOM.
- *
- * Chase dates live on the row: visible `Aug 18, 2026` and `data-values="08/18/2026,CVS,$22.84,"`.
- * Current balance is posted-only and sits in the recon bar next to the activity table.
- *
- * An empty pending accordion is a real snapshot. The Amazon charges that just posted
- * will not be in this table; that is the point of pasting it.
+ * DOM-only extractor. Planner validates the fail-closed JSON, parses money/dates, resolves
+ * the existing card, reconciles rows, and stores the exact clipboard as audit evidence.
+ * Nothing is sent from Chase to Planner or anywhere else.
  */
-
-(function plannerChasePending() {
-  const BUTTON_ID = "planner-copy-chase-pending";
+(function plannerChaseBankSnapshot() {
+  const BUTTON_ID = "planner-copy-chase-bank-snapshot";
   const LAST4_KEY = "planner-chase-last4";
-  // Personal tool: the Prime Visa last four, used only when the header is off-screen.
   const KNOWN_LAST4 = "9910";
-  const MONTHS = {
-    Jan: "01",
-    Feb: "02",
-    Mar: "03",
-    Apr: "04",
-    May: "05",
-    Jun: "06",
-    Jul: "07",
-    Aug: "08",
-    Sep: "09",
-    Oct: "10",
-    Nov: "11",
-    Dec: "12",
-  };
-
-  function localDateKey() {
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${now.getFullYear()}-${month}-${day}`;
-  }
-
-  function parseVisibleDate(raw) {
-    const match = /^([A-Za-z]{3}) (\d{1,2}), (\d{4})$/.exec(raw.trim());
-    if (!match) return "";
-    const month = MONTHS[match[1]];
-    if (!month) return "";
-    return `${match[3]}-${month}-${String(match[2]).padStart(2, "0")}`;
-  }
-
-  function parseSlashDate(raw) {
-    const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw.trim());
-    if (!match) return "";
-    return `${match[3]}-${match[1].padStart(2, "0")}-${match[2].padStart(2, "0")}`;
-  }
+  const AMOUNT = /(?:-?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\))/;
+  const DATE = /(?:[A-Za-z]{3} \d{1,2}, \d{4}|\d{1,2}\/\d{1,2}\/\d{4})/;
 
   function pageText() {
     return document.body ? document.body.innerText : "";
   }
 
+  function clean(value) {
+    return (value ?? "").replace(/\s+/g, " ").trim();
+  }
+
   function isCardActivityPage() {
-    if (document.querySelector("[data-testid='activity-container']")) return true;
-    if (document.querySelector("[data-testid='pending-container']")) return true;
-    return /pending charges/i.test(pageText());
+    return Boolean(
+      document.querySelector("[data-testid='activity-container']") ||
+      document.querySelector("[data-testid='pending-container']") ||
+      /current balance[\s\S]{0,500}(?:activity|pending charges)/i.test(pageText()),
+    );
   }
 
   function rememberLast4(value) {
@@ -76,114 +42,200 @@
     try {
       localStorage.setItem(LAST4_KEY, value);
     } catch {
-      // Private mode can refuse storage.
+      // Private browsing can reject storage; the visible heading still wins next time.
     }
   }
 
   function last4FromPage() {
-    const text = pageText();
-    const match = /(?:ending in|••••|•••|\.\.\.|XXXX)\s*(\d{4})/i.exec(text);
+    const match = /(?:ending in|••••|•••|\.\.\.|XXXX)\s*(\d{4})/i.exec(pageText());
     if (match) {
       rememberLast4(match[1]);
       return match[1];
     }
     try {
-      const stored = localStorage.getItem(LAST4_KEY);
-      if (stored) return stored;
+      return localStorage.getItem(LAST4_KEY) || KNOWN_LAST4;
     } catch {
-      // ignore
+      return KNOWN_LAST4;
     }
-    return KNOWN_LAST4;
   }
 
   function currentBalance() {
     const labeled = document.querySelector(".activity-tile__recon-bar-balance");
-    if (labeled) {
-      const match = /\$[\d,]+(?:\.\d{2})?/.exec(labeled.textContent ?? "");
-      if (match) return match[0];
-    }
-    const text = pageText();
-    const fromText = /Current balance[^$\n]{0,40}(\$[\d,]+\.\d{2})/i.exec(text);
-    return fromText ? fromText[1] : "";
+    const direct = AMOUNT.exec(labeled?.textContent ?? "");
+    if (direct) return direct[0];
+    const nearby =
+      /Current balance[^$\n(\-]{0,60}((?:-?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\)))/i.exec(
+        pageText(),
+      );
+    return nearby?.[1] ?? "";
+  }
+
+  function postedTable() {
+    return (
+      document.querySelector('[id^="ACTIVITY-dataTableId"][id$="data-table"]') ||
+      document.querySelector(
+        "[data-testid='ACTIVITY-dataTableId-mds-diy-data-table']",
+      ) ||
+      document.querySelector("[data-testid='activity-container'] table")
+    );
   }
 
   function pendingTable() {
     return (
       document.querySelector('[id^="PENDING-dataTableId"][id$="data-table"]') ||
-      document.querySelector("[data-testid='PENDING-dataTableId-mds-diy-data-table']")
+      document.querySelector(
+        "[data-testid='PENDING-dataTableId-mds-diy-data-table']",
+      ) ||
+      document.querySelector("[data-testid='pending-container'] table")
     );
   }
 
-  function pendingRows() {
-    const table = pendingTable();
-    if (!table) return [];
-    return [...table.querySelectorAll("tbody tr")];
-  }
-
-  function rowFromValues(row) {
-    const raw = row.getAttribute("data-values") ?? "";
-    const parts = raw.split(",");
-    if (parts.length < 3) return null;
-    const date = parseSlashDate(parts[0] ?? "");
-    const description = (parts[1] ?? "").trim();
-    const amountPart = parts.find((part) => /\$[\d,]+(?:\.\d{2})?/.test(part));
-    const amount = amountPart
-      ? (/(-?\$[\d,]+(?:\.\d{2})?)/.exec(amountPart)?.[1] ?? "")
-      : "";
-    if (description === "" || amount === "") return null;
-    return { date, description, amount };
-  }
-
-  function rowFromCells(row) {
+  function rowFromCells(row, pending) {
     const cells = [...row.querySelectorAll("th, td")];
-    const dateCell = cells[0]?.textContent ?? "";
-    const date = parseVisibleDate(dateCell.replace(/\s+/g, " ").trim());
+    if (cells.length === 0) return null;
+    const texts = cells.map((cell) => clean(cell.textContent));
+    const date = texts.map((text) => DATE.exec(text)?.[0] ?? "").find(Boolean) ?? "";
+    const amountIndex = texts.findLastIndex((text) => AMOUNT.test(text));
+    const amount = amountIndex >= 0 ? (AMOUNT.exec(texts[amountIndex])?.[0] ?? "") : "";
     const accessible = row.querySelector("[data-testid='rich-text-accessible-text']");
-    const description = (accessible?.textContent ?? cells[1]?.textContent ?? "")
-      .replace(/\s+/g, " ")
-      .trim();
-    const amountMatch = /(-?\$[\d,]+(?:\.\d{2})?)/.exec(cells[2]?.textContent ?? "");
-    const amount = amountMatch ? amountMatch[1] : "";
-    if (description === "" || amount === "") return null;
-    return { date, description, amount };
+    const description = clean(
+      accessible?.textContent ??
+        texts.find(
+          (text, index) => index > 0 && index !== amountIndex && !DATE.test(text),
+        ),
+    );
+    const category =
+      texts.find(
+        (text, index) =>
+          index > 0 &&
+          index !== amountIndex &&
+          text !== description &&
+          !DATE.test(text),
+      ) ?? "";
+    if (!date || !description || !amount) return null;
+    return {
+      transactionDate: date,
+      postedDate: pending ? null : date,
+      description,
+      category,
+      amount,
+    };
   }
 
-  async function copyPending() {
-    const last4 = last4FromPage();
-    if (!last4) {
-      setStatus("Could not find the card last four.");
-      return;
-    }
+  function rowFromValues(row, pending) {
+    const raw = row.getAttribute("data-values") ?? "";
+    const date = DATE.exec(raw)?.[0] ?? "";
+    const amountMatches = [...raw.matchAll(/-?\$[\d,]+(?:\.\d{2})?/g)];
+    const amount = amountMatches.at(-1)?.[0] ?? "";
+    if (!date || !amount) return null;
+    const between = raw
+      .slice(raw.indexOf(date) + date.length, raw.lastIndexOf(amount))
+      .replace(/^\s*,|,\s*$/g, "")
+      .split(",")
+      .map(clean)
+      .filter(Boolean);
+    const description = between[0] ?? "";
+    const category = between.slice(1).join(", ");
+    if (!description) return null;
+    return {
+      transactionDate: date,
+      postedDate: pending ? null : date,
+      description,
+      category,
+      amount,
+    };
+  }
 
-    const scraped = localDateKey();
-    const current = currentBalance();
-    const lines = [
-      "# planner-pending v1",
-      `# account=${last4}`,
-      "# source=chase",
-      `# scraped=${scraped}`,
-    ];
-    if (current) lines.push(`# current=${current}`);
-    lines.push("date\tdescription\tcategory\tamount");
+  function rowsOf(table, pending) {
+    if (!table) return { rows: [], failed: 0 };
+    const candidates = [...table.querySelectorAll("tbody tr")].filter(
+      (row) =>
+        clean(row.textContent) !== "" || clean(row.getAttribute("data-values")) !== "",
+    );
+    const parsed = candidates.map(
+      (row) => rowFromCells(row, pending) ?? rowFromValues(row, pending),
+    );
+    return {
+      rows: parsed.filter(Boolean),
+      failed: parsed.filter((row) => row === null).length,
+    };
+  }
 
-    for (const row of pendingRows()) {
-      const parsed = rowFromValues(row) ?? rowFromCells(row);
-      if (!parsed) continue;
-      lines.push([parsed.date, parsed.description, "", parsed.amount].join("\t"));
-    }
+  function searched() {
+    return [
+      ...document.querySelectorAll(
+        "input[type='search'], input[placeholder*='search' i], input[aria-label*='search' i]",
+      ),
+    ].some((input) => clean(input.value) !== "");
+  }
 
-    const tsv = `${lines.join("\n")}\n`;
-    await writeClipboard(tsv);
-    const count = lines.length - (current ? 6 : 5);
-    if (count === 0) {
-      setStatus(
-        current
-          ? `Copied 0 pending, current ${current}. Paste on Planner → Finances → Dashboard.`
-          : "Copied 0 pending. Paste on Planner → Finances → Dashboard.",
-      );
-      return;
-    }
-    setStatus(`Copied ${count} pending rows. Paste on Planner → Finances → Dashboard.`);
+  function filtered() {
+    const query = new URLSearchParams(location.search);
+    if ([...query.keys()].some((key) => /filter/i.test(key))) return true;
+    return [
+      ...document.querySelectorAll(
+        "button[aria-pressed='true'], [role='button'][aria-pressed='true']",
+      ),
+    ].some((button) => /filter/i.test(clean(button.textContent)));
+  }
+
+  function completeness(postedTable, pendingTable, postedRows, pendingRows) {
+    const text = pageText();
+    const postedKnown =
+      Boolean(postedTable) ||
+      /no (?:recent |current )?(?:activity|transactions)/i.test(text);
+    const pendingKnown =
+      Boolean(pendingTable) || /no pending (?:charges|transactions)/i.test(text);
+    const more = [...document.querySelectorAll("button, a")].some(
+      (node) =>
+        /(?:load|show) more/i.test(clean(node.textContent)) &&
+        !node.hasAttribute("disabled"),
+    );
+    return {
+      currentCycle:
+        postedKnown &&
+        pendingKnown &&
+        postedRows.failed === 0 &&
+        pendingRows.failed === 0 &&
+        !more,
+      posted: postedKnown && postedRows.failed === 0 && !more,
+      pending: pendingKnown && pendingRows.failed === 0,
+      filtered: filtered(),
+      searched: searched(),
+    };
+  }
+
+  async function copySnapshot() {
+    const accountLast4 = last4FromPage();
+    const balance = currentBalance();
+    const posted = postedTable();
+    const pending = pendingTable();
+    const postedRows = rowsOf(posted, false);
+    const pendingRows = rowsOf(pending, true);
+    const body = {
+      version: 1,
+      source: "chase",
+      capturedAt: new Date().toISOString(),
+      accountLast4,
+      balanceKind: "posted_only",
+      currentBalance: balance,
+      completeness: completeness(posted, pending, postedRows, pendingRows),
+      posted: postedRows.rows,
+      pending: pendingRows.rows,
+    };
+    const text = `# planner-bank-snapshot v1\n${JSON.stringify(body, null, 2)}\n`;
+    await writeClipboard(text);
+    const complete =
+      body.completeness.currentCycle &&
+      body.completeness.posted &&
+      body.completeness.pending &&
+      !body.completeness.filtered &&
+      !body.completeness.searched;
+    setStatus(
+      complete && accountLast4 && balance
+        ? `Copied ${body.posted.length} posted + ${body.pending.length} pending. Paste in Planner → Finances → Dashboard.`
+        : "Copied an incomplete snapshot. Clear search/filters and load the full current cycle before applying it.",
+    );
   }
 
   async function writeClipboard(text) {
@@ -204,31 +256,24 @@
   }
 
   function hostForButton() {
-    const pending = document.querySelector("[data-testid='pending-container']");
-    if (pending && pending.parentElement) {
-      return { parent: pending.parentElement, before: pending };
-    }
-    const heading = document.querySelector(".activity-layout__heading");
-    if (heading && heading.parentElement) {
-      return { parent: heading.parentElement, before: heading.nextSibling };
-    }
+    const activity = document.querySelector("[data-testid='activity-container']");
+    if (activity?.parentElement)
+      return { parent: activity.parentElement, before: activity };
     const main = document.querySelector("main") || document.body;
     return { parent: main, before: main.firstChild };
   }
 
   function mount() {
-    if (document.getElementById(BUTTON_ID)) return;
-    if (!isCardActivityPage()) return;
-
+    if (document.getElementById(BUTTON_ID) || !isCardActivityPage()) return;
     const host = hostForButton();
     const button = document.createElement("button");
     button.id = BUTTON_ID;
     button.type = "button";
-    button.textContent = "Copy pending for Planner";
+    button.textContent = "Copy bank snapshot for Planner";
     button.style.cssText =
       "margin:8px 0;padding:6px 10px;font:14px/1.3 system-ui;cursor:pointer;";
     button.addEventListener("click", () => {
-      void copyPending().catch((error) => {
+      void copySnapshot().catch((error) => {
         setStatus(error instanceof Error ? error.message : "Copy failed.");
       });
     });

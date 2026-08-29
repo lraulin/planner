@@ -8,6 +8,7 @@ import { updateAccount, updateTransaction } from "./mutations";
 import { listAccounts, listStatements, listTransactions } from "./queries";
 import { seedBudget } from "./budget/mutations";
 import { createPayee, setPayeeAutoCategory } from "./payees/mutations";
+import { loadFinanceAuditEvent } from "./audit/queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -93,6 +94,42 @@ describeDb("finance CSV import", () => {
       ["Capital One •••3448", "credit_card", 4],
       ["Chase •••9910", "credit_card", 2],
     ]);
+  });
+
+  it("audits file metadata and a successful duplicate-only import without storing bytes", async () => {
+    const first = await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    expect(first.auditBatchId).toEqual(expect.any(String));
+    const firstAudit = await loadFinanceAuditEvent(userId, first.auditBatchId!);
+    const evidenceText = JSON.stringify(firstAudit?.sourceEvidence);
+    expect(evidenceText).toContain(chaseFile.name);
+    expect(evidenceText).toContain(String(Buffer.byteLength(chaseFile.text ?? "")));
+    expect(evidenceText).toMatch(/[a-f0-9]{64}/);
+    expect(evidenceText).not.toContain("AMAZON MKTPL*5H1YV8C82");
+
+    const second = await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    expect(second).toMatchObject({ created: 0, skipped: 2 });
+    const secondAudit = await loadFinanceAuditEvent(userId, second.auditBatchId!);
+    expect(secondAudit?.changes).toEqual([]);
+    expect(secondAudit?.summary).toContain("imported 0 transactions");
+  });
+
+  it("keeps bounded requests from one import selection in one audit batch", async () => {
+    const auditBatchId = crypto.randomUUID();
+    const first = await importFinanceCsvFiles({
+      userId,
+      files: [chaseFile],
+      auditBatchId,
+    });
+    const second = await importFinanceCsvFiles({
+      userId,
+      files: [caponeCardFile],
+      auditBatchId,
+    });
+
+    expect(first.auditBatchId).toBe(auditBatchId);
+    expect(second.auditBatchId).toBe(auditBatchId);
+    const audit = await loadFinanceAuditEvent(userId, auditBatchId);
+    expect(audit?.summary).toContain("related");
   });
 
   it("normalises every feed onto positive-is-money-in", async () => {
@@ -998,6 +1035,31 @@ describeDb("importing a statement after a live sync", () => {
     const rows = await listTransactions(userId);
     const amazon = rows.filter((row) => row.description.includes("5H1YV8C82"));
     // One row, not two — and it is the synced one, since import never updates.
+    expect(amazon).toHaveLength(1);
+    expect(amazon[0].transactionDate).toBe("2026-08-09");
+    expect(result.skipped).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not re-import a transaction a bank-page snapshot already posted", async () => {
+    const userId = await makeUser();
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    const [account] = await listAccounts(userId);
+    await db.delete(financeTransactions).where(eq(financeTransactions.userId, userId));
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId: account.id,
+      transactionDate: "2026-08-09",
+      postedDate: "2026-08-09",
+      description: "AMAZON MKTPL*5H1YV8C82",
+      amount: "-10.59",
+      externalSource: "scrape:chase",
+      externalId: "browser-posted-1",
+    });
+
+    const result = await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    const amazon = (await listTransactions(userId)).filter((row) =>
+      row.description.includes("5H1YV8C82"),
+    );
     expect(amazon).toHaveLength(1);
     expect(amazon[0].transactionDate).toBe("2026-08-09");
     expect(result.skipped).toBeGreaterThanOrEqual(1);

@@ -311,6 +311,7 @@ export async function loadBillForecast(
  * them server-side makes the result depend on the deploy region's clock.
  */
 export type DashboardData = {
+  loadedAtMs: number;
   accounts: FinanceAccountRow[];
   /** Rows the bank has not yet posted. Signed in module convention. */
   pending: PendingRow[];
@@ -331,6 +332,7 @@ export type DashboardData = {
 };
 
 export async function loadDashboard(userId: string): Promise<DashboardData> {
+  const loadedAtMs = Date.now();
   const [accounts, rows, bills, connections, dismissedPayeeIds] = await Promise.all([
     listAccounts(userId),
     loadInsightsRows(userId),
@@ -343,7 +345,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
         and(eq(financePayees.userId, userId), eq(financePayees.notACommitment, true)),
       ),
   ]);
-  const pending = await loadSelectedWorkingPending(userId, accounts);
+  const pending = await loadSelectedWorkingPending(userId, accounts, loadedAtMs);
 
   // One index, built once, and the only route from a bank string to a bill envelope. Resolving
   // per panel is how a merchant ends up folded into a bill on one surface and not another.
@@ -368,6 +370,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
   }
 
   return {
+    loadedAtMs,
     accounts,
     pending,
     bills,

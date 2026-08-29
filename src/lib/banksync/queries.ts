@@ -19,6 +19,8 @@ import {
 import { numericStringToCents } from "@/lib/finances/money";
 import type { ExistingRow } from "./syncPlan";
 import { bankRows } from "@/lib/finances/splitRows";
+import { isScrapeFeed } from "@/lib/finances/bankSnapshot";
+import { SCRAPE_BALANCE_HOLD_MS } from "./scrapeBalance";
 
 /** A connection as the settings page shows it. Deliberately without the access URL. */
 export type BankConnectionRow = {
@@ -180,8 +182,16 @@ export async function existingRowsInWindow(
       externalId: financeTransactions.externalId,
       externalSource: financeTransactions.externalSource,
       pending: financeTransactions.pending,
+      scrapeBalanceAsOf: bankAccountLinks.scrapeBalanceAsOf,
     })
     .from(financeTransactions)
+    .leftJoin(
+      bankAccountLinks,
+      and(
+        eq(bankAccountLinks.userId, userId),
+        eq(bankAccountLinks.accountId, financeTransactions.accountId),
+      ),
+    )
     .where(
       and(
         eq(financeTransactions.userId, userId),
@@ -205,6 +215,11 @@ export async function existingRowsInWindow(
       externalId:
         row.externalSource === "api:simplefin" ? (row.externalId ?? null) : null,
       pending: row.pending,
+      authoritativeBrowserPending:
+        row.pending &&
+        isScrapeFeed(row.externalSource ?? "") &&
+        row.scrapeBalanceAsOf !== null &&
+        Date.now() - row.scrapeBalanceAsOf.getTime() < SCRAPE_BALANCE_HOLD_MS,
     });
     out.set(row.accountId, bucket);
   }

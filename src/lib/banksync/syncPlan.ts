@@ -58,6 +58,8 @@ export type ExistingRow = {
   /** Non-null only for rows this feed wrote. */
   externalId: string | null;
   pending: boolean;
+  /** Browser pending on an account whose 36-hour bank-page authority is still live. */
+  authoritativeBrowserPending?: boolean;
 };
 
 export type SyncPlan = {
@@ -177,19 +179,33 @@ export function planSync(input: SyncPlanInput): SyncPlan {
   // leaving it in would drop the posted row as a duplicate of a row about to disappear.
   let skippedDuplicate = 0;
   for (const [accountId, candidates] of candidatesByAccount) {
-    const existing = (existingByAccount.get(accountId) ?? []).filter(
+    const accountExisting = existingByAccount.get(accountId) ?? [];
+    const authoritativePending = accountExisting.filter(
+      (row) => row.pending && row.authoritativeBrowserPending,
+    );
+    const pageAuthority = selectUnmatched(
+      authoritativePending,
+      candidates.map((candidate) => candidate.transaction),
+    );
+    const allowedTransactions = new Set(pageAuthority.keep);
+    const allowedCandidates = candidates.filter((candidate) =>
+      allowedTransactions.has(candidate.transaction),
+    );
+    skippedDuplicate += candidates.length - allowedCandidates.length;
+
+    const existing = accountExisting.filter(
       (row) => !row.pending && !(row.externalId && deleted.has(row.externalId)),
     );
     if (existing.length === 0) {
-      inserts.push(...candidates);
+      inserts.push(...allowedCandidates);
       continue;
     }
     const { keep } = selectUnmatched(
       existing,
-      candidates.map((candidate) => candidate.transaction),
+      allowedCandidates.map((candidate) => candidate.transaction),
     );
     const kept = new Set(keep);
-    for (const candidate of candidates) {
+    for (const candidate of allowedCandidates) {
       if (kept.has(candidate.transaction)) inserts.push(candidate);
       else skippedDuplicate++;
     }

@@ -152,6 +152,8 @@ export type ImportResult = {
   resolutionsCreated: number;
   resolutionsSkipped: number;
   warnings: string[];
+  /** One logical Activity receipt for this import call, when audited. */
+  auditBatchId: string | null;
 };
 
 /** An account with its derived balance, for the register's account picker. */

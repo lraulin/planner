@@ -66,6 +66,9 @@ import { planAssign } from "./assign/plan";
 import { assignEnvelopeFromRow, assignHistoryWithLookback } from "./assign/fromBudget";
 import type { AssignOption } from "./assign/types";
 import { parseTarget, parseTargetOrThrow } from "./targets/types";
+import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
+import { writeFinanceAuditEvent } from "../audit/writes";
+import type { FinanceAuditKind } from "../audit/types";
 
 /**
  * Writes for the envelope budget.
@@ -79,9 +82,6 @@ import { parseTarget, parseTargetOrThrow } from "./targets/types";
  * write and every clamp lives there, tested without a database. Here we load, fold, apply,
  * and append the audit line.
  */
-
-/** Guards the note column against unbounded growth from a month of fiddling. */
-const MAX_NOTE_LINES = 200;
 
 async function requireCategory(userId: string, categoryId: string) {
   const [row] = await db
@@ -402,8 +402,18 @@ export async function performBudgetOperation(
   const edit = editFor(operation, month, data.months, expenses, data.todayKey);
   if (isEmptyEdit(edit)) return { applied: false, note: "" };
 
-  await applyEdit(userId, edit);
+  await applyEdit(userId, edit, budgetOperationAuditKind(operation));
   return { applied: true, note: edit.note };
+}
+
+function budgetOperationAuditKind(operation: BudgetOperation): FinanceAuditKind {
+  return operation.kind === "transfer" || operation.kind === "cover"
+    ? "budget_transfer"
+    : operation.kind === "copy-previous" ||
+        operation.kind === "average" ||
+        operation.kind === "zero"
+      ? "budget_bulk_funding"
+      : "budget_assignment";
 }
 
 function touchedRefs(operation: BudgetOperation): EnvelopeRef[] {
@@ -421,9 +431,48 @@ function touchedRefs(operation: BudgetOperation): EnvelopeRef[] {
   }
 }
 
-/** Upsert the allocations, upsert the buffer, append the note. One transaction. */
-async function applyEdit(userId: string, edit: BudgetEdit): Promise<void> {
+/** Upsert allocations/buffer and their canonical audit evidence in one transaction. */
+async function applyEdit(
+  userId: string,
+  edit: BudgetEdit,
+  auditKind: FinanceAuditKind,
+): Promise<void> {
   await db.transaction(async (tx) => {
+    const month = edit.buffered?.month ?? edit.allocations[0]?.month;
+    if (!month) return;
+    const categoryIds = [...new Set(edit.allocations.map((row) => row.categoryId))];
+    const scope = { budgetMonths: [month], envelopeIds: categoryIds };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    const beforeRows =
+      categoryIds.length === 0
+        ? []
+        : await tx
+            .select({
+              month: financeBudgetAllocations.month,
+              categoryId: financeBudgetAllocations.categoryId,
+              amountCents: financeBudgetAllocations.amountCents,
+              goalCents: financeBudgetAllocations.goalCents,
+            })
+            .from(financeBudgetAllocations)
+            .where(
+              and(
+                eq(financeBudgetAllocations.userId, userId),
+                eq(financeBudgetAllocations.month, month),
+                inArray(financeBudgetAllocations.categoryId, categoryIds),
+              ),
+            );
+    const beforeByCategory = new Map(beforeRows.map((row) => [row.categoryId, row]));
+    const [beforeMonth] = await tx
+      .select({ bufferedCents: financeBudgetMonths.bufferedCents })
+      .from(financeBudgetMonths)
+      .where(
+        and(
+          eq(financeBudgetMonths.userId, userId),
+          eq(financeBudgetMonths.month, month),
+        ),
+      )
+      .limit(1);
+
     for (const write of edit.allocations) {
       await tx
         .insert(financeBudgetAllocations)
@@ -448,43 +497,58 @@ async function applyEdit(userId: string, edit: BudgetEdit): Promise<void> {
         });
     }
 
-    const month = edit.buffered?.month ?? edit.allocations[0]?.month;
-    if (!month) return;
-
-    const [existing] = await tx
-      .select({ notes: financeBudgetMonths.notes })
-      .from(financeBudgetMonths)
-      .where(
-        and(
-          eq(financeBudgetMonths.userId, userId),
-          eq(financeBudgetMonths.month, month),
-        ),
-      )
-      .limit(1);
-
-    const notes = appendNote(existing?.notes ?? "", edit.note);
     const bufferedCents = edit.buffered?.bufferedCents;
 
     await tx
       .insert(financeBudgetMonths)
-      .values({ userId, month, bufferedCents: bufferedCents ?? 0, notes })
+      .values({ userId, month, bufferedCents: bufferedCents ?? 0 })
       .onConflictDoUpdate({
         target: [financeBudgetMonths.userId, financeBudgetMonths.month],
         set: {
           ...(bufferedCents === undefined ? {} : { bufferedCents }),
-          notes,
           updatedAt: new Date(),
         },
       });
-  });
-}
 
-/** Newest last, oldest dropped past the cap. */
-export function appendNote(existing: string, line: string): string {
-  if (line === "") return existing;
-  const lines = existing === "" ? [] : existing.split("\n");
-  lines.push(line);
-  return lines.slice(-MAX_NOTE_LINES).join("\n");
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: auditKind,
+      origin: "Budget",
+      summary: edit.note || "Updated budget allocations",
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: [
+        ...edit.allocations.map((write) => {
+          const before = beforeByCategory.get(write.categoryId);
+          return {
+            entityType: "allocation",
+            entityIdentity: `${write.month}|${write.categoryId}`,
+            before: before
+              ? {
+                  amountCents: before.amountCents,
+                  goalCents: before.goalCents,
+                }
+              : null,
+            after: {
+              amountCents: write.amountCents,
+              goalCents: write.goalCents ?? before?.goalCents ?? null,
+            },
+          };
+        }),
+        ...(bufferedCents === undefined
+          ? []
+          : [
+              {
+                entityType: "budget_month",
+                entityIdentity: month,
+                before: { bufferedCents: beforeMonth?.bufferedCents ?? 0 },
+                after: { bufferedCents },
+              },
+            ]),
+      ],
+    });
+  });
 }
 
 /**
@@ -501,6 +565,26 @@ export async function setCarryover(
   await requireCategory(userId, params.categoryId);
 
   await db.transaction(async (tx) => {
+    const existing = await tx
+      .select({
+        month: financeBudgetAllocations.month,
+        amountCents: financeBudgetAllocations.amountCents,
+        carryover: financeBudgetAllocations.carryover,
+      })
+      .from(financeBudgetAllocations)
+      .where(
+        and(
+          eq(financeBudgetAllocations.userId, userId),
+          eq(financeBudgetAllocations.categoryId, params.categoryId),
+          sql`${financeBudgetAllocations.month} >= ${params.month}`,
+        ),
+      );
+    const budgetMonths = [
+      ...new Set([params.month, ...existing.map((row) => row.month)]),
+    ];
+    const scope = { budgetMonths, envelopeIds: [params.categoryId] };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+
     await tx
       .insert(financeBudgetAllocations)
       .values({
@@ -529,6 +613,31 @@ export async function setCarryover(
           sql`${financeBudgetAllocations.month} > ${params.month}`,
         ),
       );
+
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    const byMonth = new Map(existing.map((row) => [row.month, row]));
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "budget_carryover",
+      origin: "Budget",
+      summary: `${params.carryover ? "Enabled" : "Disabled"} overspending carryover from ${params.month.slice(0, 7)}`,
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: budgetMonths.map((month) => {
+        const before = byMonth.get(month);
+        return {
+          entityType: "allocation",
+          entityIdentity: `${month}|${params.categoryId}`,
+          before: before
+            ? { amountCents: before.amountCents, carryover: before.carryover }
+            : null,
+          after: {
+            amountCents: before?.amountCents ?? 0,
+            carryover: params.carryover,
+          },
+        };
+      }),
+    });
   });
 }
 
@@ -805,8 +914,64 @@ export async function deleteBudgetCategory(
   userId: string,
   categoryId: string,
 ): Promise<void> {
-  await requireCategory(userId, categoryId);
   await db.transaction(async (tx) => {
+    const [category] = await tx
+      .select({
+        id: financeBudgetCategories.id,
+        name: financeBudgetCategories.name,
+        kind: financeBudgetCategories.kind,
+        groupId: financeBudgetCategories.groupId,
+      })
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.id, categoryId),
+          eq(financeBudgetCategories.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (!category) throw new Error("That envelope does not exist.");
+    const [allocations, filedTransactions] = await Promise.all([
+      tx
+        .select({
+          id: financeBudgetAllocations.id,
+          month: financeBudgetAllocations.month,
+          amountCents: financeBudgetAllocations.amountCents,
+          goalCents: financeBudgetAllocations.goalCents,
+          carryover: financeBudgetAllocations.carryover,
+        })
+        .from(financeBudgetAllocations)
+        .where(
+          and(
+            eq(financeBudgetAllocations.userId, userId),
+            eq(financeBudgetAllocations.categoryId, categoryId),
+          ),
+        ),
+      tx
+        .select({
+          id: financeTransactions.id,
+          accountId: financeTransactions.accountId,
+          transactionDate: financeTransactions.transactionDate,
+        })
+        .from(financeTransactions)
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            eq(financeTransactions.budgetCategoryId, categoryId),
+          ),
+        ),
+    ]);
+    const scope = {
+      accountIds: [...new Set(filedTransactions.map((row) => row.accountId))],
+      budgetMonths: [
+        ...new Set([
+          ...allocations.map((row) => row.month),
+          ...filedTransactions.map((row) => monthKeyOf(row.transactionDate)),
+        ]),
+      ],
+      envelopeIds: [categoryId],
+    };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await tx
       .update(financePayees)
       .set({ claimedBudgetCategoryId: null, updatedAt: new Date() })
@@ -837,6 +1002,44 @@ export async function deleteBudgetCategory(
           eq(financeBudgetCategories.userId, userId),
         ),
       );
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "budget_delete",
+      origin: "Budget",
+      summary: `Deleted the ${category.name} envelope.`,
+      scope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: [
+        {
+          entityType: "budget_envelope",
+          entityIdentity: categoryId,
+          before: {
+            name: category.name,
+            kind: category.kind,
+            groupId: category.groupId,
+          },
+          after: null,
+        },
+        ...allocations.map((row) => ({
+          entityType: "budget_allocation",
+          entityIdentity: row.id,
+          before: {
+            month: row.month,
+            amountCents: row.amountCents,
+            goalCents: row.goalCents,
+            carryover: row.carryover,
+          },
+          after: null,
+        })),
+        ...filedTransactions.map((row) => ({
+          entityType: "transaction",
+          entityIdentity: row.id,
+          before: { budgetCategoryId: categoryId },
+          after: { budgetCategoryId: null },
+        })),
+      ],
+    });
   });
 }
 
@@ -1053,6 +1256,7 @@ const CATEGORY_ROW_COLUMNS = {
   flowOverride: financeTransactions.flowOverride,
   amount: financeTransactions.amount,
   payeeId: financeTransactions.payeeId,
+  budgetCategoryId: financeTransactions.budgetCategoryId,
   isParent: financeTransactions.isParent,
 } as const;
 
@@ -1144,15 +1348,48 @@ export async function setTransactionBudgetCategories(
         );
 
   if (assignable.length > 0) {
-    await db
-      .update(financeTransactions)
-      .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          inArray(financeTransactions.id, assignable),
+    const affected = rows.filter((row) => assignable.includes(row.id));
+    await db.transaction(async (tx) => {
+      const envelopeIds = [
+        ...new Set(
+          [categoryId, ...affected.map((row) => row.budgetCategoryId)].filter(
+            (id): id is string => id !== null,
+          ),
         ),
-      );
+      ];
+      const scope = {
+        accountIds: [...new Set(affected.map((row) => row.accountId))],
+        budgetMonths: [
+          ...new Set(affected.map((row) => monthKeyOf(row.transactionDate))),
+        ],
+        ...(envelopeIds.length === 0 ? {} : { envelopeIds }),
+      };
+      const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+      await tx
+        .update(financeTransactions)
+        .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            inArray(financeTransactions.id, assignable),
+          ),
+        );
+      const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+      await writeFinanceAuditEvent(tx, userId, {
+        kind: "transaction_change",
+        origin: "Budget filing",
+        summary: `${categoryId === null ? "Unfiled" : "Filed"} ${assignable.length} transaction${assignable.length === 1 ? "" : "s"}.`,
+        scope,
+        beforeCheckpoint,
+        afterCheckpoint,
+        changes: affected.map((row) => ({
+          entityType: "transaction",
+          entityIdentity: row.id,
+          before: { budgetCategoryId: row.budgetCategoryId },
+          after: { budgetCategoryId: categoryId },
+        })),
+      });
+    });
   }
 
   if (categoryId !== null) {
@@ -1332,16 +1569,20 @@ export async function applyBudgetTemplates(
     return { applied: 0, errors: result.errors.map((error) => error.message) };
   }
 
-  await applyEdit(userId, {
-    allocations: result.allocations.map((row) => ({
-      month: month.month,
-      categoryId: row.categoryId,
-      amountCents: row.amountCents,
-      goalCents: row.goalCents,
-    })),
-    buffered: null,
-    note: result.note,
-  });
+  await applyEdit(
+    userId,
+    {
+      allocations: result.allocations.map((row) => ({
+        month: month.month,
+        categoryId: row.categoryId,
+        amountCents: row.amountCents,
+        goalCents: row.goalCents,
+      })),
+      buffered: null,
+      note: result.note,
+    },
+    "budget_bulk_funding",
+  );
 
   return {
     applied: result.allocations.length,
@@ -1394,16 +1635,20 @@ export async function assignBudget(
     return { applied: 0, errors: result.errors.map((error) => error.message) };
   }
 
-  await applyEdit(userId, {
-    allocations: result.allocations.map((row) => ({
-      month: month.month,
-      categoryId: row.categoryId,
-      amountCents: row.amountCents,
-      goalCents: row.goalCents,
-    })),
-    buffered: null,
-    note: result.note,
-  });
+  await applyEdit(
+    userId,
+    {
+      allocations: result.allocations.map((row) => ({
+        month: month.month,
+        categoryId: row.categoryId,
+        amountCents: row.amountCents,
+        goalCents: row.goalCents,
+      })),
+      buffered: null,
+      note: result.note,
+    },
+    "budget_bulk_funding",
+  );
 
   return {
     applied: result.lines.filter((line) => line.deltaCents !== 0).length,

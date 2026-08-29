@@ -193,10 +193,40 @@ describe("planSync — pending resolution", () => {
     expect(plan.deletes).toEqual([]);
   });
 
-  it("does not treat a scrape-pending row as a posted duplicate", () => {
-    // Capital One pending arrives from a paste, not this feed, so it has no SimpleFIN id.
-    // If it stayed in the comparison set, the posted Chipotle would be skipped and the
-    // scrape row would never be deleted by applySync (wrong source).
+  it("suppresses a SimpleFIN replacement while the browser pending set is authoritative", () => {
+    const plan = planSync(
+      input({
+        accounts: [
+          account(EXT_CARD, [
+            txn({
+              id: "posted-chipotle",
+              amount: "-16.91",
+              description: "CHIPOTLE 0123",
+            }),
+          ]),
+        ],
+        existingByAccount: new Map([
+          [
+            ACCT_CARD,
+            [
+              existing({
+                description: "CHIPOTLE 0123",
+                amountCents: -1691,
+                pending: true,
+                externalId: null,
+                authoritativeBrowserPending: true,
+              }),
+            ],
+          ],
+        ]),
+      }),
+    );
+    expect(plan.inserts).toEqual([]);
+    expect(plan.deletes).toEqual([]);
+    expect(plan.skippedDuplicate).toBe(1);
+  });
+
+  it("lets SimpleFIN resume once browser authority has expired", () => {
     const plan = planSync(
       input({
         accounts: [
@@ -217,6 +247,7 @@ describe("planSync — pending resolution", () => {
                 amountCents: -1691,
                 pending: true,
                 externalId: null,
+                authoritativeBrowserPending: false,
               }),
             ],
           ],
@@ -224,8 +255,6 @@ describe("planSync — pending resolution", () => {
       }),
     );
     expect(plan.inserts.map((row) => row.externalId)).toEqual(["posted-chipotle"]);
-    expect(plan.deletes).toEqual([]);
-    expect(plan.skippedDuplicate).toBe(0);
   });
 
   it("inserts the posted replacement AND deletes the pending row it supersedes", () => {

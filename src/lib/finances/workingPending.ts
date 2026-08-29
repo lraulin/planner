@@ -8,7 +8,7 @@
  */
 
 import { SCRAPE_BALANCE_HOLD_MS } from "@/lib/banksync/scrapeBalance";
-import { isScrapeFeed } from "./capitalOnePending";
+import { isScrapeFeed } from "./bankSnapshot";
 
 export type WorkingPendingAccount = {
   id: string;
@@ -25,10 +25,7 @@ export function selectWorkingPending<T extends WorkingPendingRow>(
   accounts: readonly WorkingPendingAccount[],
   nowMs: number,
 ): T[] {
-  const hasScrape = new Set(
-    pending.filter((row) => isScrapeFeed(row.source)).map((row) => row.accountId),
-  );
-  const hold = new Set(
+  const authoritative = new Set(
     accounts
       .filter(
         (account) =>
@@ -39,7 +36,10 @@ export function selectWorkingPending<T extends WorkingPendingRow>(
   );
 
   return pending.filter((row) => {
-    if (!hasScrape.has(row.accountId) && !hold.has(row.accountId)) return true;
-    return isScrapeFeed(row.source);
+    // Browser rows are the authority only inside the 36-hour window. After it expires they
+    // are retained as evidence but excluded from money, and SimpleFIN resumes automatically.
+    return authoritative.has(row.accountId)
+      ? isScrapeFeed(row.source)
+      : !isScrapeFeed(row.source);
   });
 }

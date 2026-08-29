@@ -826,6 +826,15 @@ dollar is in is working against the point.
   a share per paycheck and re-anchoring when the charge posts. `/finances`
   now opens on Dashboard, with the page bar ordered by how often a page is
   read rather than when it was built.
+  ✅ Complete card snapshots and Finance Activity shipped 2026-08-29 —
+  `agent-os/specs/2026-08-29-0845-bank-snapshots-finance-audit/`. The Chase and
+  Capital One browser helpers now capture the complete current-cycle posted and
+  pending view plus the posted-only headline, so a pending charge posting cannot
+  disappear from Budget activity. Posted transitions preserve user filing and splits
+  when safe; browser pending is authoritative for 36 hours before SimpleFIN resumes.
+  `/finances/activity` is the canonical append-only explanation trail for bank
+  snapshots, sync/import, register, account, and Budget money changes. It also replaces
+  the capped per-month Budget movement notes after migrating their legacy text.
   ✅ Commitments shipped 2026-08-16 —
   `agent-os/specs/2026-08-16-1938-commitments/`. **This closes the envelopes MVP
   item**, under a name chosen because "envelope" promises the every-dollar-gets-a-
@@ -1197,10 +1206,10 @@ period)` so money already spent stops being held twice and only going over bites
 - **Eventually:** **Plaid** (or equivalent) remains a metered fallback if SimpleFIN
   staleness is unacceptable. Live bank sync shipped 2026-08-16 —
   `specs/2026-08-15-1315-live-bank-sync` — SimpleFIN setup-token paste, linked to
-  existing accounts, replaceable pending set, no forced refresh. Capital One pending
-  that SimpleFIN will not send is the scrape
-  (`specs/2026-08-16-1556-capitalone-pending-scrape`); Chase pending lag is
-  `specs/2026-08-18-1645-chase-pending-scrape`.
+  existing accounts, replaceable pending set, no forced refresh. The pending-only
+  Capital One and Chase scrapes were superseded 2026-08-29 by complete, fail-closed
+  current-cycle bank snapshots with a 36-hour authority window and audit receipts —
+  `specs/2026-08-29-0845-bank-snapshots-finance-audit`.
 
 ---
 

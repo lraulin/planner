@@ -2,6 +2,7 @@
 
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { formatUsd } from "@/lib/finances/money";
 import type { BankConnectionRow } from "@/lib/banksync/queries";
@@ -58,6 +59,7 @@ export function BankSyncPanel({ connections, linked }: Props) {
   const [reconnecting, setReconnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [auditBatchId, setAuditBatchId] = useState<string | null>(null);
   const [binding, setBinding] = useState<ConnectResult | null>(null);
   const [removing, setRemoving] = useState<BankConnectionRow | null>(null);
   const [pending, startTransition] = useTransition();
@@ -65,6 +67,7 @@ export function BankSyncPanel({ connections, linked }: Props) {
   const submitToken = () => {
     setError(null);
     setNotice(null);
+    setAuditBatchId(null);
     const value = token.trim();
     if (!value) {
       setError("Paste the setup token first.");
@@ -137,6 +140,7 @@ export function BankSyncPanel({ connections, linked }: Props) {
   const refresh = () => {
     setError(null);
     setNotice(null);
+    setAuditBatchId(null);
     startTransition(async () => {
       const result = await syncAction();
       if (!result.ok) {
@@ -144,6 +148,7 @@ export function BankSyncPanel({ connections, linked }: Props) {
         return;
       }
       if (result.data) setNotice(describeSync(result.data));
+      setAuditBatchId(result.data?.auditBatchId ?? null);
       router.refresh();
     });
   };
@@ -188,6 +193,17 @@ export function BankSyncPanel({ connections, linked }: Props) {
         {notice && (
           <p className="mt-3 border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem]">
             {notice}
+            {auditBatchId && (
+              <>
+                {" "}
+                <Link
+                  href={`/finances/activity?batch=${auditBatchId}`}
+                  className="text-ink-muted underline decoration-rule underline-offset-2 hover:text-ink"
+                >
+                  View Activity receipt
+                </Link>
+              </>
+            )}
           </p>
         )}
 

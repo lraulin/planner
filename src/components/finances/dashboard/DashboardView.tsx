@@ -4,12 +4,12 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  clearScrapedPendingAction,
-  pasteScrapedPendingAction,
+  pasteBankSnapshotAction,
   setSubscriptionStatusAction,
 } from "@/app/finances/actions";
 import { syncAction } from "@/app/settings/bankSyncActions";
 import type { BankConnectionRow } from "@/lib/banksync/queries";
+import { SCRAPE_BALANCE_HOLD_MS } from "@/lib/banksync/scrapeBalance";
 import { accountPoolBreakdown } from "@/lib/finances/accountPool";
 import { nextPayday, type BillCharge } from "@/lib/finances/available";
 import {
@@ -26,6 +26,7 @@ import {
 } from "@/lib/finances/commitments";
 import { ACCOUNT_KIND_LABELS } from "@/lib/finances/accountKind";
 import { formatUsd } from "@/lib/finances/money";
+import type { BankSnapshotApplyResult } from "@/lib/finances/bankSnapshotApply";
 import type { FinanceAccountRow } from "@/lib/finances/types";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { parsePayday, serializePayday } from "@/lib/settings/finances";
@@ -70,6 +71,7 @@ export function DashboardView({
   budgetConfigured,
   underfundedBills,
   upcoming,
+  loadedAtMs,
 }: {
   accounts: readonly FinanceAccountRow[];
   pending: readonly PendingRow[];
@@ -88,6 +90,8 @@ export function DashboardView({
   }[];
   /** Bill occurrences due within the horizon — not held-back money, just a heads-up. */
   upcoming: readonly UpcomingBillRow[];
+  /** Server capture time, so freshness does not depend on an impure client render clock. */
+  loadedAtMs: number;
 }) {
   const today = useToday();
   const formatDate = useDateFormatter();
@@ -117,6 +121,15 @@ export function DashboardView({
   ).length;
   const { position, payday, stale } = analysis;
   const openAccounts = accounts.filter((account) => account.closedAt === null);
+  const staleSnapshotAccountNames = accounts
+    .filter(
+      (account) =>
+        account.kind === "credit_card" &&
+        account.scrapeBalanceAsOf !== null &&
+        loadedAtMs - new Date(account.scrapeBalanceAsOf).getTime() >=
+          SCRAPE_BALANCE_HOLD_MS,
+    )
+    .map((account) => account.name);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
@@ -334,7 +347,7 @@ export function DashboardView({
         </ul>
       </Panel>
 
-      <CapOnePendingPaste />
+      <BankSnapshotPaste staleAccountNames={staleSnapshotAccountNames} />
     </div>
   );
 }
@@ -402,6 +415,7 @@ function RefreshBanksButton() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [notice, setNotice] = useState<string | null>(null);
+  const [auditBatchId, setAuditBatchId] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -411,9 +425,11 @@ function RefreshBanksButton() {
         title="Re-read what SimpleFIN currently holds. It cannot make a bank hand over something newer."
         onClick={() => {
           setNotice(null);
+          setAuditBatchId(null);
           startTransition(async () => {
             const result = await syncAction();
             setNotice(result.ok ? "Re-read the bank feed." : result.error);
+            if (result.ok) setAuditBatchId(result.data?.auditBatchId ?? null);
             router.refresh();
           });
         }}
@@ -421,37 +437,50 @@ function RefreshBanksButton() {
       >
         {pending ? "Working…" : "Refresh now"}
       </button>
-      {notice && <span className="text-[0.75rem] text-ink-muted">{notice}</span>}
+      {notice && (
+        <span className="text-[0.75rem] text-ink-muted">
+          {notice}
+          {auditBatchId && (
+            <>
+              {" · "}
+              <Link
+                href={`/finances/activity?batch=${auditBatchId}`}
+                className="underline decoration-rule underline-offset-2 hover:text-ink"
+              >
+                Activity
+              </Link>
+            </>
+          )}
+        </span>
+      )}
     </div>
   );
 }
 
 /**
- * Capital One never sends pending through SimpleFIN. Chase does, a day late. The
- * Tampermonkey scripts copy the bank page's pending table; this is the paste that writes
- * them.
+ * The Tampermonkey scripts copy the complete current-cycle card view. This paste reconciles
+ * posted transitions and makes the page's pending section authoritative for 36 hours.
  */
-function CapOnePendingPaste() {
-  const today = useToday();
+function BankSnapshotPaste({ staleAccountNames }: { staleAccountNames: string[] }) {
   const router = useRouter();
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<BankSnapshotApplyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function apply(value: string) {
     const payload = value.trim() === "" ? (areaRef.current?.value ?? "") : value;
-    if (today === null || payload.trim() === "") return;
+    if (payload.trim() === "") return;
     setError(null);
-    setMessage(null);
+    setReceipt(null);
     startTransition(async () => {
-      const outcome = await pasteScrapedPendingAction(payload, today);
+      const outcome = await pasteBankSnapshotAction(payload);
       if (!outcome.ok) {
         setError(outcome.error);
         return;
       }
       const data = outcome.data;
-      setMessage(data ? describePendingWrite(data) : "Updated.");
+      if (data) setReceipt(data);
       if (areaRef.current) areaRef.current.value = "";
       router.refresh();
     });
@@ -459,13 +488,19 @@ function CapOnePendingPaste() {
 
   return (
     <Panel
-      title="Card pending"
-      subtitle="Copy on the Chase or Capital One card page — including when it says there are none — then paste here. Chase's current is posted; pending sits on top."
+      title="Bank snapshot"
+      subtitle="Copy a complete current-cycle snapshot on the Chase or Capital One card page, then paste it here. Planner reconciles posted and pending together."
     >
+      {staleAccountNames.length > 0 && (
+        <p role="status" className="mb-2 text-[0.8125rem] text-[var(--chart-spend)]">
+          Capture a fresh snapshot for {staleAccountNames.join(", ")}. Its browser
+          pending is stale, so SimpleFIN pending is active until you refresh it.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          disabled={pending || today === null}
+          disabled={pending}
           onClick={() => {
             void navigator.clipboard.readText().then(
               (value) => {
@@ -483,37 +518,38 @@ function CapOnePendingPaste() {
         </button>
         <button
           type="button"
-          disabled={pending || today === null}
+          disabled={pending}
           onClick={() => apply(areaRef.current?.value ?? "")}
           className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
         >
           Apply text
         </button>
-        <button
-          type="button"
-          disabled={pending || today === null}
-          onClick={() => {
-            if (today === null) return;
-            setError(null);
-            setMessage(null);
-            startTransition(async () => {
-              const outcome = await clearScrapedPendingAction(today);
-              if (!outcome.ok) {
-                setError(outcome.error);
-                return;
-              }
-              setMessage(
-                outcome.data ? describePendingWrite(outcome.data) : "Cleared.",
-              );
-              router.refresh();
-            });
-          }}
-          className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
-        >
-          None pending
-        </button>
       </div>
-      {message && <p className="mt-2 text-[0.8125rem] text-ink">{message}</p>}
+      {receipt && (
+        <div className="mt-2 text-[0.8125rem] text-ink">
+          <p>{describeBankSnapshotWrite(receipt)}</p>
+          <p className="mt-1 text-ink-muted">
+            Working {formatSignedDelta(receipt.checkpointDelta.workingBalanceCents)} ·
+            Budget pool {formatSignedDelta(receipt.checkpointDelta.accountPoolCents)} ·
+            Ready to Assign{" "}
+            {formatSignedDelta(receipt.checkpointDelta.readyToAssignCents)}
+            {" · "}
+            <Link
+              href={`/finances/activity?event=${receipt.auditEventId}`}
+              className="text-ink-muted underline decoration-rule underline-offset-2 hover:text-ink"
+            >
+              View Activity
+            </Link>
+          </p>
+          {receipt.warnings.length > 0 && (
+            <ul className="mt-1 list-disc pl-5 text-[var(--chart-spend)]">
+              {receipt.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {error && (
         <p role="alert" className="mt-2 text-[0.8125rem] text-[var(--chart-spend)]">
           {error}
@@ -523,33 +559,27 @@ function CapOnePendingPaste() {
         ref={areaRef}
         spellCheck={false}
         rows={3}
-        aria-label="Card pending paste"
-        placeholder="# planner-pending v1"
+        aria-label="Bank snapshot paste"
+        placeholder="# planner-bank-snapshot v1"
         className="mt-2 w-full rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.75rem] text-ink"
       />
     </Panel>
   );
 }
 
-function describePendingWrite(data: {
-  inserted: number;
-  skippedPosted: number;
-  replaced: number;
-  accountName: string;
-  balanceUpdated: boolean;
-}): string {
-  if (data.inserted === 0) {
-    return (
-      `Cleared pending on ${data.accountName}` +
-      (data.balanceUpdated ? " · current balance updated" : "") +
-      "."
-    );
-  }
+function describeBankSnapshotWrite(data: BankSnapshotApplyResult): string {
+  const transitions = data.posted.transitioned + data.posted.replaced;
   return (
-    `Wrote ${data.inserted} pending on ${data.accountName}` +
-    (data.skippedPosted > 0 ? ` · ${data.skippedPosted} already posted` : "") +
+    `${data.accountName}: ${transitions} posted transition${transitions === 1 ? "" : "s"}, ` +
+    `${data.posted.inserted} new posted, ${data.pending.received} pending` +
+    (data.posted.duplicates > 0 ? ` · ${data.posted.duplicates} already present` : "") +
     "."
   );
+}
+
+function formatSignedDelta(cents: number): string {
+  if (cents === 0) return "$0.00";
+  return `${cents > 0 ? "+" : "−"}${formatUsd(Math.abs(cents))}`;
 }
 
 /** "5 days" / "1 day" / "Today", or a dash before hydration knows the reader's day. */

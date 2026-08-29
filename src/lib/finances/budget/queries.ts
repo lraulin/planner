@@ -37,6 +37,7 @@ import type { BillSnapshot } from "./targets/derive";
 import { ASSIGN_AVERAGE_MONTHS } from "./assign/types";
 import type { ActivityPoint } from "./assign/fromBudget";
 import { moneyRows } from "../splitRows";
+import { listBudgetMovementAudit } from "../audit/queries";
 
 /**
  * Reads for the envelope budget. Every one takes `userId` and scopes on it.
@@ -168,8 +169,8 @@ export type BudgetData = {
    * the recorded `settings.openingCents` is the answer.
    */
   prospectiveOpeningCents: number;
-  /** Append-only movement descriptions for the selected month, newest shown first. */
-  movementNotes: string;
+  /** Canonical immutable finance-audit entries for the selected month, newest first. */
+  movementEvents: { id: string; occurredAt: Date; summary: string }[];
   /**
    * Categorised activity in the 12 months before `startMonth`. Assigned is not stored
    * there; Average Spent / Spent Last Month still need the spend.
@@ -425,6 +426,7 @@ export async function loadBudget(
   userId: string,
   requestedMonth: MonthKey | null,
   executor: FinanceExecutor = db,
+  options: { includeMovementEvents?: boolean } = {},
 ): Promise<BudgetData> {
   const todayKey = localDateKey(new Date());
   const currentMonth = monthKeyOf(todayKey);
@@ -459,7 +461,7 @@ export async function loadBudget(
     uncategorizedCents: 0,
     goals: {},
     prospectiveOpeningCents: 0,
-    movementNotes: "",
+    movementEvents: [],
     preStartActivity: [],
   };
 
@@ -498,7 +500,6 @@ export async function loadBudget(
         .select({
           month: financeBudgetMonths.month,
           bufferedCents: financeBudgetMonths.bufferedCents,
-          notes: financeBudgetMonths.notes,
         })
         .from(financeBudgetMonths)
         .where(eq(financeBudgetMonths.userId, userId)),
@@ -561,6 +562,10 @@ export async function loadBudget(
     : (months.find((entry) => entry.month >= wanted)?.month ??
       months[months.length - 1]?.month ??
       currentMonth);
+  const movementEvents =
+    options.includeMovementEvents === false
+      ? []
+      : await listBudgetMovementAudit(userId, month, executor);
 
   return {
     ...empty,
@@ -568,7 +573,7 @@ export async function loadBudget(
     months,
     month,
     goals,
-    movementNotes: bufferedRows.find((row) => row.month === month)?.notes ?? "",
+    movementEvents,
     ...backlog,
     preStartActivity,
   };

@@ -1485,17 +1485,13 @@ export function BudgetView({
             composer={composerFor("income")}
           />
 
-          {data.movementNotes ? (
+          {data.movementEvents.length > 0 ? (
             <details className="rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
               <summary className="cursor-pointer text-ink">Movement log</summary>
               <ol className="mt-2 space-y-1 text-ink-muted">
-                {data.movementNotes
-                  .split("\n")
-                  .filter(Boolean)
-                  .reverse()
-                  .map((line, index) => (
-                    <li key={`${index}:${line}`}>{line}</li>
-                  ))}
+                {data.movementEvents.map((event) => (
+                  <li key={event.id}>{event.summary}</li>
+                ))}
               </ol>
             </details>
           ) : null}

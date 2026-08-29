@@ -270,6 +270,13 @@ const PAGES = {
       keywords: "transactions ledger accounts import",
     },
     {
+      id: "activity",
+      label: "Activity",
+      segment: "activity",
+      status: "built",
+      keywords: "audit history changes imports sync reconciliation evidence",
+    },
+    {
       id: "payees",
       label: "Payees",
       segment: "payees",

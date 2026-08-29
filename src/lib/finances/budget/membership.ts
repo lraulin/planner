@@ -19,6 +19,8 @@ import { monthKeyOf } from "./envelope";
 import { findMonth } from "./envelope";
 import { loadBudget, openingPositionFor } from "./queries";
 import type { FinanceExecutor } from "../dbExecutor";
+import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
+import { writeFinanceAuditEvent } from "../audit/writes";
 
 export type PoolSnapshot = {
   openingCents: number;
@@ -195,6 +197,16 @@ export async function rebaseAccountMembership(
       const beforeData = await loadBudget(userId, null, tx);
       const before = snapshotOf(beforeData);
       const startMonth = beforeData.settings.startMonth;
+      const auditScope = {
+        accountIds: [accountId],
+        accountNames: [owned.name],
+        ...(startMonth ? { budgetMonths: [startMonth] } : {}),
+      };
+      const beforeCheckpoint = await captureFinanceMoneyCheckpoint(
+        userId,
+        auditScope,
+        tx,
+      );
       const positionCents = startMonth
         ? assertIntegerCents(
             await openingPositionFor(userId, startMonth, [accountId], tx),
@@ -223,6 +235,34 @@ export async function rebaseAccountMembership(
       const after = snapshotOf(afterData);
       if (afterData.configured) assertPoolIdentity(after);
 
+      const afterCheckpoint = await captureFinanceMoneyCheckpoint(
+        userId,
+        auditScope,
+        tx,
+      );
+      await writeFinanceAuditEvent(tx, userId, {
+        kind: "account_membership",
+        origin: "Finance accounts",
+        summary: `${owned.name} ${offBudgetAfter ? "left" : "joined"} the budget pool.`,
+        scope: auditScope,
+        beforeCheckpoint,
+        afterCheckpoint,
+        changes: [
+          {
+            entityType: "account",
+            entityIdentity: accountId,
+            before: {
+              offBudget: owned.offBudget,
+              openingCents: before.openingCents,
+            },
+            after: {
+              offBudget: offBudgetAfter,
+              openingCents: after.openingCents,
+            },
+          },
+        ],
+      });
+
       const receipt = { transitions: [transition], before, after };
       if (options.dryRun) throw new DryRunRollback(receipt);
       return receipt;
@@ -242,6 +282,7 @@ export async function rebaseAccountMembership(
 export async function includeNewOnBudgetAccount(
   userId: string,
   accountId: string,
+  options: { auditBatchId?: string; auditOrigin?: string } = {},
 ): Promise<MembershipReceipt> {
   const account = await requireOwnedAccount(userId, accountId);
   if (account.offBudget) {
@@ -271,10 +312,38 @@ export async function includeNewOnBudgetAccount(
       before.openingCents + positionCents,
       "opening position",
     );
+    const auditScope = {
+      accountIds: [accountId],
+      accountNames: [account.name],
+      budgetMonths: [startMonth],
+    };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(
+      userId,
+      auditScope,
+      tx,
+    );
     await writeOpeningCents(tx, userId, startMonth, nextOpeningCents);
     const afterData = await loadBudget(userId, null, tx);
     const after = snapshotOf(afterData);
     if (afterData.configured) assertPoolIdentity(after);
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, auditScope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "account_membership",
+      origin: options.auditOrigin ?? "Finance import",
+      batchId: options.auditBatchId,
+      summary: `${account.name} joined the budget pool.`,
+      scope: auditScope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: [
+        {
+          entityType: "account",
+          entityIdentity: accountId,
+          before: { offBudget: false, openingCents: before.openingCents },
+          after: { offBudget: false, openingCents: after.openingCents },
+        },
+      ],
+    });
     return {
       transitions: [
         {

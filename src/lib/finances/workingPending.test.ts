@@ -23,7 +23,7 @@ describe("selectWorkingPending", () => {
     ).toEqual([row("chase", "api:simplefin", -5905)]);
   });
 
-  it("drops SimpleFIN pending on an account that has scrape rows", () => {
+  it("uses only browser pending while that account's snapshot is authoritative", () => {
     const selected = selectWorkingPending(
       [
         row("chase", "api:simplefin", -5905),
@@ -36,10 +36,7 @@ describe("selectWorkingPending", () => {
       ],
       NOW,
     );
-    expect(selected).toEqual([
-      row("chase", "scrape:chase", -2284),
-      row("capone", "scrape:capitalone", -1691),
-    ]);
+    expect(selected).toEqual([row("chase", "scrape:chase", -2284)]);
   });
 
   it("treats an empty scrape inside the hold as no pending", () => {
@@ -52,10 +49,10 @@ describe("selectWorkingPending", () => {
     ).toEqual([]);
   });
 
-  it("returns SimpleFIN pending once the scrape hold expires", () => {
+  it("excludes stale browser pending and resumes SimpleFIN after expiry", () => {
     expect(
       selectWorkingPending(
-        [row("chase", "api:simplefin", -5905)],
+        [row("chase", "api:simplefin", -5905), row("chase", "scrape:chase", -2284)],
         [
           {
             id: "chase",

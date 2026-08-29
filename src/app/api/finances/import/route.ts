@@ -24,6 +24,19 @@ export async function POST(request: Request) {
   try {
     const userId = await getCurrentUserId();
     const form = await request.formData();
+    const requestedAuditBatchId = form.get("auditBatchId");
+    if (
+      requestedAuditBatchId !== null &&
+      (typeof requestedAuditBatchId !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          requestedAuditBatchId,
+        ))
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "The import receipt identity is invalid." },
+        { status: 400 },
+      );
+    }
 
     const rawFiles = form.getAll("files").filter((v): v is File => v instanceof File);
     if (rawFiles.length === 0) {
@@ -63,7 +76,13 @@ export async function POST(request: Request) {
       if (isPdfBytes(bytes) || /\.pdf$/i.test(file.name)) {
         files.push({ name: file.name, bytes });
       } else {
-        files.push({ name: file.name, text: new TextDecoder("utf-8").decode(bytes) });
+        files.push({
+          name: file.name,
+          text: new TextDecoder("utf-8").decode(bytes),
+          // Keep the uploaded bytes through the request so the audit hash is exact. They
+          // are not written to the database.
+          bytes,
+        });
       }
     }
 
@@ -74,7 +93,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await importFinanceCsvFiles({ userId, files });
+    const result = await importFinanceCsvFiles({
+      userId,
+      files,
+      auditBatchId:
+        typeof requestedAuditBatchId === "string" ? requestedAuditBatchId : undefined,
+    });
     revalidatePath("/", "layout");
 
     const warnings =
@@ -94,6 +118,7 @@ export async function POST(request: Request) {
       statementsSkipped: result.statementsSkipped,
       resolutionsCreated: result.resolutionsCreated,
       resolutionsSkipped: result.resolutionsSkipped,
+      auditBatchId: result.auditBatchId,
       warnings,
     });
   } catch (error) {

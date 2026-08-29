@@ -239,7 +239,9 @@ describeDb("applySync", () => {
       unmatchedAccountCount: 0,
     });
 
-    expect(result).toEqual({ inserted: 1, updated: 0, deleted: 0 });
+    expect(result).toMatchObject({ inserted: 1, updated: 0, deleted: 0 });
+    expect(result.auditEventId).toEqual(expect.any(String));
+    expect(result.auditBatchId).toEqual(expect.any(String));
     expect((await loadConnectionsForSync(userId))[0].syncedThrough).toBe("2026-08-16");
     expect((await listConnections(userId))[0].lastSyncedAt).not.toBeNull();
   });
@@ -440,6 +442,7 @@ describeDb("queries for the sync window", () => {
         description: "CSV ROW",
         externalId: null,
         pending: true,
+        authoritativeBrowserPending: false,
       },
     ]);
   });

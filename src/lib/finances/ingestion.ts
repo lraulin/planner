@@ -24,15 +24,25 @@ export async function transactionIngestionWatermark(): Promise<Date> {
  */
 export async function finalizeTransactionIngestion(
   userId: string,
-  options: { forceReclassify?: boolean; applyAutoCategorySince?: Date } = {},
+  options: {
+    forceReclassify?: boolean;
+    applyAutoCategorySince?: Date;
+    auditBatchId?: string;
+    auditOrigin?: string;
+  } = {},
 ): Promise<{ reclassified: ReclassifySummary | null }> {
   let reclassified: ReclassifySummary | null = null;
   if (options.forceReclassify || options.applyAutoCategorySince) {
-    reclassified = await reclassifyTransactions(userId);
+    reclassified = await reclassifyTransactions(userId, {
+      auditBatchId: options.auditBatchId,
+      auditOrigin: options.auditOrigin,
+    });
   }
   if (options.applyAutoCategorySince) {
     await applyPayeeAutoCategories(userId, {
       createdSince: options.applyAutoCategorySince,
+      auditBatchId: options.auditBatchId,
+      auditOrigin: options.auditOrigin,
     });
   }
   return { reclassified };
