@@ -26,6 +26,7 @@ function row(
     description: extras.description ?? id,
     amountCents: extras.amountCents ?? -10000,
     sourceCategory: "",
+    externalSource: null,
     category: null,
     derivedCategory: null,
     derivedFlow: extras.derivedFlow ?? "spend",

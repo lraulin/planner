@@ -7,7 +7,7 @@
 import { effectiveFlow, effectiveMerchant } from "./analytics";
 import { flowLabel } from "./flowLabels";
 import { formatUsd } from "./money";
-import type { TransactionListRow } from "./types";
+import { feedLabel, type TransactionListRow } from "./types";
 import type { FilterKind } from "@/lib/grid/customFilter";
 import type { GridFilterValue } from "@/lib/grid/filterValue";
 
@@ -22,6 +22,7 @@ export const REGISTER_VISIBLE_COLUMN_IDS = [
   "amount",
   "posted",
   "balance",
+  "source",
   "notes",
 ] as const;
 
@@ -37,6 +38,7 @@ export const REGISTER_FIELD_IDS = [
   "amount",
   "posted",
   "balance",
+  "source",
   "notes",
 ] as const;
 
@@ -122,6 +124,12 @@ export const registerFields: Record<RegisterFieldId, RegisterField> = {
     filterValue: (row) =>
       row.balanceAfterCents === null ? null : formatUsd(row.balanceAfterCents),
     sortValue: (row) => row.balanceAfterCents,
+  },
+  source: {
+    id: "source",
+    filterKind: "enum",
+    filterValue: (row) => feedLabel(row.externalSource ?? null),
+    sortValue: (row) => feedLabel(row.externalSource ?? null).toLowerCase(),
   },
   notes: {
     id: "notes",

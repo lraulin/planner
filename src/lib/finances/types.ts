@@ -35,6 +35,22 @@ export const FEED_LABELS: Record<FinanceFeed, string> = {
   "scrape:chase": "Chase pending",
 };
 
+export function isFinanceFeed(value: string): value is FinanceFeed {
+  return (FINANCE_FEEDS as readonly string[]).includes(value);
+}
+
+/**
+ * Which feed wrote a row, for the register's Source column.
+ *
+ * Unknown or absent sources render as an em dash rather than a raw string: the column is
+ * read to answer "where did this come from", and a half-recognised identifier answers it
+ * worse than an honest blank.
+ */
+export function feedLabel(externalSource: string | null): string {
+  if (externalSource === null || externalSource === "") return "—";
+  return isFinanceFeed(externalSource) ? FEED_LABELS[externalSource] : externalSource;
+}
+
 /** Fail-closed PDF dispatch names every format we actually parse. */
 export const SUPPORTED_STATEMENT_PDFS =
   "Supported PDFs are Chase Prime Visa monthly statements, Capital One card monthly statements, Capital One 360 monthly bank statements, and PayPal monthly statements.";
@@ -223,6 +239,13 @@ export type TransactionListRow = {
   description: string;
   amountCents: number;
   sourceCategory: string;
+  /**
+   * The feed that wrote this row — `api:simplefin`, `scrape:chase`, a `csv:*` download.
+   *
+   * Surfaced because provenance questions here are recurring and the answer decides which
+   * feed owns the row's day (`feedWatermark.ts`). Null on nothing this app writes.
+   */
+  externalSource: string | null;
   category: string | null;
   /** Optional test fixture stand-in; not loaded from the database. */
   derivedCategory?: string | null;

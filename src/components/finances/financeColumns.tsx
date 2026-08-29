@@ -6,6 +6,7 @@ import { effectiveFlow, effectiveMerchant } from "@/lib/finances/analytics";
 import { flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { RegisterTransactionRow } from "@/lib/finances/registerQuery";
+import { feedLabel } from "@/lib/finances/types";
 import {
   REGISTER_VISIBLE_COLUMN_IDS,
   registerFields,
@@ -359,6 +360,17 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     ...accessors("balance"),
     compact: "hidden",
     render: (row) => <Amount cents={row.node.balanceAfterCents} />,
+  },
+  {
+    id: "source",
+    label: "Source",
+    width: "minmax(8rem,0.6fr)",
+    // Which feed wrote the row. Provenance decides which feed owns the row's day
+    // (`feedWatermark.ts`), and answering "where did this come from" should not need a
+    // database query.
+    ...accessors("source"),
+    compact: "hidden",
+    render: (row) => <Text value={feedLabel(row.node.externalSource ?? null)} />,
   },
   {
     id: "notes",

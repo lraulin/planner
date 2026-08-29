@@ -70,6 +70,7 @@ const TRANSACTION_LIST_COLUMNS = {
   description: financeTransactions.description,
   amount: financeTransactions.amount,
   sourceCategory: financeTransactions.sourceCategory,
+  externalSource: financeTransactions.externalSource,
   category: financeTransactions.category,
   derivedFlow: financeTransactions.derivedFlow,
   transferGroupId: financeTransactions.transferGroupId,
@@ -302,6 +303,7 @@ function toTransactionListRow(row: {
   description: string;
   amount: string;
   sourceCategory: string;
+  externalSource: string | null;
   category: string | null;
   derivedFlow: TransactionListRow["derivedFlow"];
   transferGroupId: string | null;
@@ -329,6 +331,7 @@ function toTransactionListRow(row: {
     description: row.description,
     amountCents: numericStringToCents(row.amount) ?? 0,
     sourceCategory: row.sourceCategory,
+    externalSource: row.externalSource,
     category: row.category,
     derivedFlow: row.derivedFlow,
     transferGroupId: row.transferGroupId,

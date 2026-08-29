@@ -30,6 +30,7 @@ function tx(
     description: over.description ?? over.id,
     amountCents: -1000,
     sourceCategory: "",
+    externalSource: null,
     category: null,
     derivedCategory: null,
     derivedFlow: "spend",

@@ -31,6 +31,7 @@ function placeholder(id: string): TransactionListRow {
     description: "",
     amountCents: 0,
     sourceCategory: "",
+    externalSource: null,
     category: null,
 
     derivedFlow: null,
