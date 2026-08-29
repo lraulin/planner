@@ -521,14 +521,8 @@ export function BudgetView({
     };
   }, [rows, previous, data.months, data.preStartActivity, data.settings.startMonth]);
   const indicators = useMemo(
-    () =>
-      indicatorsFromAssign(
-        data.month,
-        data.todayKey,
-        assignInputs.envelopes,
-        assignInputs.bills,
-      ),
-    [data.month, data.todayKey, assignInputs.envelopes, assignInputs.bills],
+    () => indicatorsFromAssign(data.month, assignInputs.envelopes, assignInputs.bills),
+    [data.month, assignInputs.envelopes, assignInputs.bills],
   );
 
   const assignPlans = useMemo(() => {

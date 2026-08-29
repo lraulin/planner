@@ -151,11 +151,10 @@ describe("Underfunded", () => {
   it("counts a remaining underfunded ask without planning an assign", () => {
     const rent = bill({ nextDueKey: "2026-08-01" });
     const bills = new Map([["rent", snapshot("rent", 210_000, "2026-08-01")]]);
-    expect(underfundedGapCents(MONTH, TODAY, [rent], bills)).toBe(210_000);
+    expect(underfundedGapCents(MONTH, [rent], bills)).toBe(210_000);
     expect(
       underfundedGapCents(
         MONTH,
-        TODAY,
         [bill({ nextDueKey: "2026-09-01" })],
         new Map([["rent", snapshot("rent", 210_000, "2026-09-01")]]),
       ),
@@ -299,7 +298,7 @@ describe("neededAssigned", () => {
       activityCents: -40_000,
       balanceCents: -40_000,
     });
-    expect(neededAssigned(overspent, MONTH, TODAY, new Map()).needed).toBe(40_000);
+    expect(neededAssigned(overspent, MONTH, new Map()).needed).toBe(40_000);
   });
 });
 
@@ -308,26 +307,32 @@ describe("weekly upTo through Underfunded", () => {
   const groceries = (over: Partial<AssignEnvelope> = {}) =>
     envelope({ target: weeklyUpTo(18_000, 0), ...over });
 
-  it("asks remaining occurrences, and a future month the whole set", () => {
-    expect(
-      neededAssigned(groceries(), "2026-08-01", "2026-08-01", new Map()).needed,
-    ).toBe(90_000);
-    expect(
-      neededAssigned(groceries(), "2026-09-01", "2026-08-01", new Map()).needed,
-    ).toBe(72_000);
+  it("asks the whole month's Sundays, and September its own four", () => {
+    expect(neededAssigned(groceries(), "2026-08-01", new Map()).needed).toBe(90_000);
+    expect(neededAssigned(groceries(), "2026-09-01", new Map()).needed).toBe(72_000);
   });
 
-  it("asks only the Sundays still left when today is late in the month", () => {
-    // 24 August 2026: the 23rd has passed, the 30th remains.
+  it("still asks for the Sundays that have passed, late in the month", () => {
+    // 24 August 2026: four Sundays are behind and the cap is still five of them. Assigning
+    // for a week you have already shopped is what paid for that week (`target-refill-basis` D1).
     const result = run("underfunded", [groceries()]);
-    expect(result.lines[0]?.deltaCents).toBe(18_000);
+    expect(result.lines[0]?.deltaCents).toBe(90_000);
   });
 
-  it("lets leftover available reduce the weekly ask", () => {
+  it("lets carry-in reduce the weekly ask", () => {
     const withCarry = groceries({ carryInCents: 50_000, balanceCents: 50_000 });
-    expect(
-      neededAssigned(withCarry, "2026-08-01", "2026-08-01", new Map()).needed,
-    ).toBe(40_000);
+    expect(neededAssigned(withCarry, "2026-08-01", new Map()).needed).toBe(40_000);
+  });
+
+  it("does not let spending create a fresh ask", () => {
+    // $900 assigned against $900 of groceries already bought: the month is funded.
+    const spent = groceries({
+      assignedCents: 90_000,
+      activityCents: -90_000,
+      balanceCents: 0,
+    });
+    expect(neededAssigned(spent, "2026-08-01", new Map()).needed).toBe(90_000);
+    expect(run("underfunded", [spent]).lines).toEqual([]);
   });
 
   it("ranks a weekly ask ahead of an envelope with no ask", () => {

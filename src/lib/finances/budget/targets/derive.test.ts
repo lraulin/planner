@@ -101,26 +101,22 @@ describe("a monthly bill still does not sink across months", () => {
   const bills = billsOf(rent);
 
   it("asks the full amount in the due month", () => {
-    expect(targetDemand(envelope(), "2026-08-01", "2026-08-01", bills).amount).toBe(
-      150_000,
-    );
+    expect(targetDemand(envelope(), "2026-08-01", bills).amount).toBe(150_000);
   });
 
   it("asks $0 in every other month", () => {
-    expect(targetDemand(envelope(), "2026-07-01", "2026-07-01", bills).amount).toBe(0);
-    expect(targetDemand(envelope(), "2026-09-01", "2026-08-01", bills).amount).toBe(0);
+    expect(targetDemand(envelope(), "2026-07-01", bills).amount).toBe(0);
+    expect(targetDemand(envelope(), "2026-09-01", bills).amount).toBe(0);
   });
 
   it("asks $0 when carry-in already covers it", () => {
     const funded = envelope({ carryInCents: 150_000 });
-    expect(targetDemand(funded, "2026-08-01", "2026-08-01", bills).amount).toBe(0);
+    expect(targetDemand(funded, "2026-08-01", bills).amount).toBe(0);
   });
 
   it("asks only the shortfall when carry-in covers part of it", () => {
     const partly = envelope({ carryInCents: 50_000 });
-    expect(targetDemand(partly, "2026-08-01", "2026-08-01", bills).amount).toBe(
-      100_000,
-    );
+    expect(targetDemand(partly, "2026-08-01", bills).amount).toBe(100_000);
   });
 });
 
@@ -129,37 +125,36 @@ describe("a paid bill stops asking and a late one does not", () => {
     // Paid on the 1st: activity carries the charge and the outstanding charge is September's.
     const paid = billsOf(bill({ nextDueKey: "2026-09-01", expectedKey: "2026-09-01" }));
     const spent = envelope({ carryInCents: 150_000, activityCents: -150_000 });
-    expect(targetDemand(spent, "2026-08-01", "2026-08-20", paid).amount).toBe(0);
+    expect(targetDemand(spent, "2026-08-01", paid).amount).toBe(0);
   });
 
   it("keeps asking past its due date while it is still unpaid", () => {
     // Due the 15th, never charged: `nextDueKey` has rolled to September, `expectedKey` has not.
     const late = billsOf(bill({ nextDueKey: "2026-09-15", expectedKey: "2026-08-15" }));
-    expect(targetDemand(envelope(), "2026-08-01", "2026-08-28", late).amount).toBe(
-      150_000,
-    );
+    expect(targetDemand(envelope(), "2026-08-01", late).amount).toBe(150_000);
   });
 
-  it("counts a full monthly bill amount in Activity when its payee anchor lags", () => {
+  it("asks once, not twice, when a paid bill's payee anchor lags", () => {
     const stale = billsOf(
       bill({ nextDueKey: "2026-08-01", expectedKey: "2026-08-01" }),
     );
     const spent = envelope({ activityCents: -150_000 });
 
-    // The envelope still needs $1,500 Assigned to cover what was spent, not another $1,500
-    // for an occurrence that Activity shows was already paid.
-    expect(targetDemand(spent, "2026-08-01", "2026-08-20", stale).amount).toBe(150_000);
+    // The bill's own amount, once. `paidFromActivity` used to be needed here because Activity
+    // sat in the basis and asked for the charge a second time; with the basis on carry-in the
+    // arithmetic gets there by itself (`target-refill-basis` D4).
+    expect(targetDemand(spent, "2026-08-01", stale).amount).toBe(150_000);
   });
 
-  it("does not mistake partial Activity for a paid monthly bill", () => {
+  it("does not let incidental spending inflate the bill's ask", () => {
     const stale = billsOf(
       bill({ nextDueKey: "2026-08-01", expectedKey: "2026-08-01" }),
     );
     const incidental = envelope({ activityCents: -1_200 });
 
-    expect(targetDemand(incidental, "2026-08-01", "2026-08-20", stale).amount).toBe(
-      151_200,
-    );
+    // The $12 is overspend, and `assignedToZeroBalance` is what asks for it back — the target
+    // asks for the charge and nothing else.
+    expect(targetDemand(incidental, "2026-08-01", stale).amount).toBe(150_000);
   });
 });
 
@@ -177,18 +172,16 @@ describe("yearly and quarterly bills still sink", () => {
   const p = (parts: Partial<DemandEnvelope> = {}) => envelope({ id: "p1", ...parts });
 
   it("divides the remaining hole by the months until the charge, inclusive", () => {
-    expect(targetDemand(p(), "2026-08-01", "2026-08-01", bills).amount).toBe(40_000);
-    expect(
-      targetDemand(p({ carryInCents: 40_000 }), "2026-09-01", "2026-09-01", bills)
-        .amount,
-    ).toBe(40_000);
+    expect(targetDemand(p(), "2026-08-01", bills).amount).toBe(40_000);
+    expect(targetDemand(p({ carryInCents: 40_000 }), "2026-09-01", bills).amount).toBe(
+      40_000,
+    );
   });
 
   it("asks the whole remaining hole in the charge month", () => {
-    expect(
-      targetDemand(p({ carryInCents: 80_000 }), "2026-10-01", "2026-10-01", bills)
-        .amount,
-    ).toBe(40_000);
+    expect(targetDemand(p({ carryInCents: 80_000 }), "2026-10-01", bills).amount).toBe(
+      40_000,
+    );
   });
 
   it("sinks a quarterly bill over its three months", () => {
@@ -201,14 +194,13 @@ describe("yearly and quarterly bills still sink", () => {
         expectedKey: "2026-10-10",
       }),
     );
-    expect(
-      targetDemand(envelope({ id: "q1" }), "2026-08-01", "2026-08-01", quarterly)
-        .amount,
-    ).toBe(10_000);
+    expect(targetDemand(envelope({ id: "q1" }), "2026-08-01", quarterly).amount).toBe(
+      10_000,
+    );
   });
 });
 
-describe("a weekly bill sums the charges still ahead of today", () => {
+describe("a weekly bill sums the charges still outstanding", () => {
   const daycare = bill({
     id: "d1",
     cadenceMonths: 0,
@@ -219,15 +211,16 @@ describe("a weekly bill sums the charges still ahead of today", () => {
   });
   const bills = billsOf(daycare);
 
-  it("counts the charges left, not every charge in the month", () => {
-    // Charges on the 6th, 13th, 20th and 27th; two remain on the 18th.
-    expect(
-      targetDemand(envelope({ id: "d1" }), "2026-08-01", "2026-08-18", bills).amount,
-    ).toBe(40_000);
+  it("counts the charges still outstanding, not every charge in the month", () => {
+    // Charges on the 6th, 13th, 20th and 27th; the 20th is the one being waited for, so two
+    // are outstanding — the calendar and today have nothing to do with it.
+    expect(targetDemand(envelope({ id: "d1" }), "2026-08-01", bills).amount).toBe(
+      40_000,
+    );
   });
 
-  it("subtracts what is already available, like any other refill", () => {
+  it("subtracts what carried in, like any other refill", () => {
     const held = envelope({ id: "d1", carryInCents: 20_000 });
-    expect(targetDemand(held, "2026-08-01", "2026-08-18", bills).amount).toBe(20_000);
+    expect(targetDemand(held, "2026-08-01", bills).amount).toBe(20_000);
   });
 });

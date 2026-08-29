@@ -9,7 +9,8 @@
  * preview stay YNAB's Assign behaviour — named in `docs/actual-budget/README.md`.
  *
  * Spec: `agent-os/specs/2026-08-24-1311-budget-assign-options/` D1–D5, D9, as amended by
- * `agent-os/specs/2026-08-28-1000-ynab-target-engine/` D3–D6.
+ * `agent-os/specs/2026-08-28-1000-ynab-target-engine/` D3–D6 and
+ * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D3.
  */
 
 import { formatUsd } from "@/lib/finances/money";
@@ -69,21 +70,26 @@ export function assignedToZeroBalance(envelope: AssignEnvelope): number {
   );
 }
 
-/** A this-month ask, not a deadline-free floor and not leftover Ready to Assign. */
+/**
+ * An ask, as opposed to leftover Ready to Assign. A deadline-free floor counts: raiding one is
+ * a real shortfall this month (`target-refill-basis` D3), it is only ranked below the rest.
+ */
 function hasUnderfundedAsk(envelope: AssignEnvelope): boolean {
-  if (envelope.kind === "bill") return true;
-  const target = envelope.target;
-  return target !== null && target.cadence.unit !== "none";
+  return envelope.kind === "bill" || envelope.target !== null;
+}
+
+/** A floor with no deadline — funded, but only after everything with a date on it. */
+function isDeadlineFreeFloor(envelope: AssignEnvelope): boolean {
+  return envelope.target?.cadence.unit === "none";
 }
 
 export function neededAssigned(
   envelope: AssignEnvelope,
   month: MonthKey,
-  todayKey: string,
   bills: ReadonlyMap<string, BillSnapshot>,
 ): { needed: number; errors: string[] } {
   const demand = hasUnderfundedAsk(envelope)
-    ? targetDemand(envelope, month, todayKey, bills)
+    ? targetDemand(envelope, month, bills)
     : { amount: 0, errors: [] as string[] };
   const needed = Math.max(demand.amount, assignedToZeroBalance(envelope));
   return { needed, errors: demand.errors };
@@ -96,14 +102,13 @@ function gapOf(envelope: AssignEnvelope, needed: number): number {
 /** Total remaining ask on the current month — the month-ahead note, not a gate. */
 export function underfundedGapCents(
   month: MonthKey,
-  todayKey: string,
   envelopes: readonly AssignEnvelope[],
   bills: ReadonlyMap<string, BillSnapshot>,
 ): number {
   let gap = 0;
   for (const envelope of envelopes) {
     if (!eligible(envelope, undefined)) continue;
-    gap += gapOf(envelope, neededAssigned(envelope, month, todayKey, bills).needed);
+    gap += gapOf(envelope, neededAssigned(envelope, month, bills).needed);
   }
   return gap;
 }
@@ -112,7 +117,13 @@ function sinkingCadence(target: Target | null): boolean {
   return target?.cadence.unit === "by" || target?.cadence.unit === "year";
 }
 
-/** D4: overspend, then bills by due date, then sinking targets by deadline, then rest. */
+/**
+ * D4: overspend, then bills by due date, then sinking targets by deadline, then ordinary asks,
+ * then deadline-free floors, then the rest.
+ *
+ * The floor bucket is last of the asks on purpose: a $100,000 down-payment floor would
+ * otherwise drain Ready to Assign ahead of groceries (`target-refill-basis` D3).
+ */
 export function compareUnderfunded(
   left: AssignEnvelope,
   right: AssignEnvelope,
@@ -123,8 +134,9 @@ export function compareUnderfunded(
     if (envelope.balanceCents < 0) return 0;
     if (envelope.kind === "bill") return 1;
     if (sinkingCadence(envelope.target)) return 2;
+    if (isDeadlineFreeFloor(envelope)) return 4;
     if (hasUnderfundedAsk(envelope)) return 3;
-    return 4;
+    return 5;
   };
   const byBucket = bucket(left) - bucket(right);
   if (byBucket !== 0) return byBucket;
@@ -279,7 +291,6 @@ function desiredAssigned(
   option: AssignOption,
   envelope: AssignEnvelope,
   month: MonthKey,
-  todayKey: string,
   history: readonly AssignHistoryMonth[],
   bills: ReadonlyMap<string, BillSnapshot>,
 ): { desired: number | null; errors: string[] } {
@@ -309,7 +320,7 @@ function desiredAssigned(
     }
     case "reduce-overfunding": {
       if (!hasUnderfundedAsk(envelope)) return { desired: null, errors: [] };
-      const { needed, errors } = neededAssigned(envelope, month, todayKey, bills);
+      const { needed, errors } = neededAssigned(envelope, month, bills);
       if (envelope.assignedCents <= needed) return { desired: null, errors };
       return { desired: needed, errors };
     }
@@ -388,12 +399,7 @@ function planUnderfunded(
   const goals = new Map<string, number>();
 
   for (const envelope of participants) {
-    const { needed, errors: demandErrors } = neededAssigned(
-      envelope,
-      month,
-      todayKey,
-      bills,
-    );
+    const { needed, errors: demandErrors } = neededAssigned(envelope, month, bills);
     neededById.set(envelope.id, needed);
     for (const message of demandErrors) {
       errors.push({
@@ -476,7 +482,6 @@ export function planAssign(params: PlanAssignParams): AssignResult {
       params.option,
       envelope,
       params.month,
-      params.todayKey,
       params.history,
       params.bills,
     );

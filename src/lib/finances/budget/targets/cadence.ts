@@ -1,16 +1,20 @@
 /**
  * Counting a cadence's anchor dates inside one month, and measuring the distance to a future
- * anchor. Nothing here knows what a target *asks* — `demand.ts` owns that — so the two claims
- * this spec is built on ("remaining occurrences, not whole ones" and "measured against
- * Available") can be tested one at a time.
+ * anchor. Nothing here knows what a target *asks* — `demand.ts` owns that.
+ *
+ * **Today does not enter a count.** A period cap is the whole month's anchors from the day the
+ * target started (`since`), and a bill is counted against the charge it is waiting for, not
+ * against the calendar. `remainingOccurrences` used to trim the cap as anchors passed; that was
+ * the same mistake as putting Activity in the basis, one function over
+ * (`target-refill-basis` D2).
  *
  * **No `Date` loop and no process-local clock.** Weekday counts are closed form from the
- * weekday of the 1st and the month's length; `todayKey` arrives as a parameter. The weekday of
- * the 1st comes from `weekdayOfDateKey`, which reads the UTC-noon encoding —
- * `new Date(key).getDay()` reports Saturday evening for a Sunday in the Americas
- * (`standards/development/dates.md`).
+ * weekday of the 1st and the month's length. The weekday of the 1st comes from
+ * `weekdayOfDateKey`, which reads the UTC-noon encoding — `new Date(key).getDay()` reports
+ * Saturday evening for a Sunday in the Americas (`standards/development/dates.md`).
  *
- * Spec: `agent-os/specs/2026-08-28-1000-ynab-target-engine/` D3.
+ * Spec: `agent-os/specs/2026-08-28-1000-ynab-target-engine/` D3, as superseded by
+ * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1, D2.
  */
 
 import { cadenceOf, shiftDateKeyMonths } from "@/lib/finances/recurringBills";
@@ -138,56 +142,35 @@ export function monthAnchorDay(month: MonthKey, day: number): number {
 }
 
 /**
- * Anchor dates inside `month`, ignoring today.
+ * Anchor dates inside `month`, ignoring today but not ignoring `since`.
  *
- * This is what an `add` line counts: a contribution is not coverage of trips, so skipping a
- * week does not make the month cheaper (`weekly-envelope-targets` D2, whose argument survives
- * exactly where it still holds).
+ * The month's cap does not shrink as Fridays pass: a week that has already happened was still a
+ * week the target asked for, and money assigned for it is what pays for it
+ * (`target-refill-basis` D2). What a target genuinely does not ask for is a week that predates
+ * it — `since` is the day it started, and anchors before that day are not counted.
+ *
+ * `add` counted the whole month for its own reason (a contribution is not coverage of trips,
+ * `weekly-envelope-targets` D2); `upTo` now counts it too, because the ask is measured against
+ * Assigned rather than against what is left after spending.
  */
 export function wholeOccurrences(
   cadence: Cadence,
   month: MonthKey,
   bill?: ScheduleBill,
+  since?: string,
 ): number {
+  if (since && monthKeyOf(since) > month) return 0;
+  const fromDay =
+    since && monthKeyOf(since) === month ? Number(since.slice(8, 10)) : null;
   switch (cadence.unit) {
     case "week":
-      return countWeekdayInMonth(month, cadence.weekday);
+      return fromDay === null
+        ? countWeekdayInMonth(month, cadence.weekday)
+        : countWeekdayFromDay(month, cadence.weekday, fromDay);
     case "month":
-      return 1;
+      return fromDay === null || monthAnchorDay(month, cadence.day) >= fromDay ? 1 : 0;
     case "schedule":
       return bill ? occurrenceDatesInMonth(bill, month).length : 0;
-    default:
-      return 0;
-  }
-}
-
-/**
- * Anchor dates inside `month` that are still **on or after `todayKey`**.
- *
- * A wholly future month therefore counts all of them and a wholly past month counts none — a
- * weekly target asks nothing for a month that has already happened. Today's own occurrence
- * counts: the money is needed today.
- */
-export function remainingOccurrences(
-  cadence: Cadence,
-  month: MonthKey,
-  todayKey: string,
-  bill?: ScheduleBill,
-): number {
-  // A bill is counted against the charge it is **waiting for**, not against the calendar: an
-  // overdue charge is anchored before today and still counts, and a paid one has already
-  // moved `expectedKey` on. That is the whole difference between "late" and "settled".
-  if (cadence.unit === "schedule") return bill ? outstandingCharges(bill, month) : 0;
-
-  const todayMonth = monthKeyOf(todayKey);
-  if (month > todayMonth) return wholeOccurrences(cadence, month, bill);
-  if (month < todayMonth) return 0;
-  const today = Number(todayKey.slice(8, 10));
-  switch (cadence.unit) {
-    case "week":
-      return countWeekdayFromDay(month, cadence.weekday, today);
-    case "month":
-      return monthAnchorDay(month, cadence.day) >= today ? 1 : 0;
     default:
       return 0;
   }
@@ -201,7 +184,7 @@ export function remainingOccurrences(
  * the due month, $0 in every other", which this spec does not supersede. A **day cadence**
  * (weekly, biweekly, 28-day) charges in every month, so it sums whatever the month still holds.
  */
-function outstandingCharges(bill: ScheduleBill, month: MonthKey): number {
+export function outstandingCharges(bill: ScheduleBill, month: MonthKey): number {
   const anchor = scheduleAnchor(bill);
   if (cadenceOf(bill).unit === "month") return monthKeyOf(anchor) === month ? 1 : 0;
   return occurrenceDatesInMonth(bill, month).filter((date) => date >= anchor).length;

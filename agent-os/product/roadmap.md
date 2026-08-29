@@ -1055,6 +1055,19 @@ period)` so money already spent stops being held twice and only going over bites
   there asks $152.90, not $211.21 of extra assignment. A bill with no stored target
   derives one from its cadence. Remainder is gone; leftover Ready to Assign stays in
   Ready to Assign. The drawer offers the seven sentences, never "refill" vs "set aside".
+  Its measurement rule was corrected the next day by the refill basis below; the $152.90 in
+  the paragraph above is the answer that spec reversed.
+  ✅ **Target refill basis corrected 2026-08-28.**
+  `agent-os/specs/2026-08-28-2039-target-refill-basis/`. A period refill (`week`, `month`, a
+  bill charging inside the month) is an **assignment** question: `add` asks the whole month's
+  cap, `upTo` asks it less carry-in, and Activity is nowhere in it — spending money that was
+  already assigned for that spending cannot ask for it again. Verified against YNAB with the
+  same target, the same four charges and the same money assigned. A pile (`year`, `by`,
+  `none`, a quarterly or yearly bill) keeps the Available basis, because raiding a pile has to
+  ask for it back — including a deadline-free floor, which now asks this month instead of
+  saying "needed eventually", ranked after everything with a date on it. The month's cap no
+  longer shrinks as anchors pass; what trims it is `since`, the day the target started,
+  stamped on the envelope's first target and preserved through every later edit.
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
   budget states a shortfall per bill envelope rather than as one collapsed number, and
   Assign → Underfunded names which envelopes will not be funded. The scan layer makes those

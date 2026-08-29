@@ -8,6 +8,7 @@ import {
   financeTransactions,
   users,
 } from "@/db/schema";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import {
   applyBudgetTemplates,
@@ -1060,7 +1061,9 @@ describeDb("budget mutations", () => {
     const stored = (await loadBudget(userId, MONTH)).categories.find(
       (row) => row.id === groceries,
     );
-    expect(stored?.target).toEqual(weekly);
+    // The server stamps the day the target started; the client never supplies it.
+    const since = localDateKey(new Date());
+    expect(stored?.target).toEqual({ ...weekly, since });
 
     // A second user must fail to read it, change it, or clear it.
     const intruderId = await makeUser();
@@ -1083,7 +1086,39 @@ describeDb("budget mutations", () => {
     const after = (await loadBudget(userId, MONTH)).categories.find(
       (row) => row.id === groceries,
     );
-    expect(after?.target).toEqual(weekly);
+    expect(after?.target).toEqual({ ...weekly, since });
+  });
+
+  it("keeps the day a target started through every later edit", async () => {
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const groceries = ids.get("Recurring spend")!;
+    const target = (amountCents: number) => ({
+      behavior: "upTo" as const,
+      cadence: { unit: "week" as const, weekday: 0 },
+      amountCents,
+    });
+    const readBack = async () =>
+      (await loadBudget(userId, MONTH)).categories.find((row) => row.id === groceries)
+        ?.target as { since?: string } | null | undefined;
+
+    await saveEnvelopeTarget(userId, groceries, target(18_000));
+    const since = (await readBack())?.since;
+    expect(since).toBe(localDateKey(new Date()));
+
+    // Changing the amount, the cadence, or a client-supplied `since` does not restart it.
+    await saveEnvelopeTarget(userId, groceries, {
+      ...target(21_096),
+      cadence: { unit: "month", day: 15 },
+      since: "2000-01-01",
+    });
+    expect((await readBack())?.since).toBe(since);
+
+    // Removing the target and starting over does start a new one.
+    await saveEnvelopeTarget(userId, groceries, null);
+    expect(await readBack()).toBeNull();
+    await saveEnvelopeTarget(userId, groceries, target(18_000));
+    expect((await readBack())?.since).toBe(localDateKey(new Date()));
   });
 
   it("Underfunded clamps to Ready to Assign and keeps the full ask as the goal", async () => {

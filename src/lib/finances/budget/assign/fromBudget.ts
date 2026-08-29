@@ -155,7 +155,6 @@ export function currentMonthUnderfundedGap(params: {
   );
   return underfundedGapCents(
     currentKey,
-    params.todayKey,
     rows.map((row) => assignEnvelopeFromRow(row, previous)),
     assignBillsFromRows(rows),
   );

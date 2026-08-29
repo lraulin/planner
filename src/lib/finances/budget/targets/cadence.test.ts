@@ -6,7 +6,7 @@ import {
   monthAnchorDay,
   monthsLeft,
   occurrenceDatesInMonth,
-  remainingOccurrences,
+  outstandingCharges,
   scheduleSpreads,
   wholeOccurrences,
   type ScheduleBill,
@@ -80,40 +80,41 @@ describe("monthAnchorDay", () => {
   });
 });
 
-describe("remainingOccurrences", () => {
-  it("counts none for a wholly past month and all for a wholly future one", () => {
-    expect(remainingOccurrences(sunday, "2026-07-01", "2026-08-28")).toBe(0);
-    expect(remainingOccurrences(sunday, "2026-09-01", "2026-08-28")).toBe(4);
-  });
-
-  it("leaves one Sunday in August 2026 on the 28th", () => {
-    // Sundays: 2, 9, 16, 23, 30.
-    expect(remainingOccurrences(sunday, "2026-08-01", "2026-08-28")).toBe(1);
-  });
-
-  it("counts today's own occurrence — the money is needed today", () => {
-    expect(remainingOccurrences(sunday, "2026-08-01", "2026-08-30")).toBe(1);
-    expect(remainingOccurrences(sunday, "2026-08-01", "2026-08-31")).toBe(0);
-  });
-
-  it("counts every Sunday when today is the 1st", () => {
-    expect(remainingOccurrences(sunday, "2026-08-01", "2026-08-01")).toBe(5);
-  });
-
-  it("counts a monthly anchor only while it is still ahead", () => {
-    const fifteenth: Cadence = { unit: "month", day: 15 };
-    expect(remainingOccurrences(fifteenth, "2026-08-01", "2026-08-15")).toBe(1);
-    expect(remainingOccurrences(fifteenth, "2026-08-01", "2026-08-16")).toBe(0);
-    expect(
-      remainingOccurrences({ unit: "month", day: 31 }, "2027-02-01", "2027-02-28"),
-    ).toBe(1);
-  });
-});
-
 describe("wholeOccurrences", () => {
-  it("ignores today — a contribution is not coverage of trips", () => {
+  it("counts the whole month, however many anchors have already passed", () => {
+    // Sundays: 2, 9, 16, 23, 30. The 28th does not make August cheaper.
     expect(wholeOccurrences(sunday, "2026-08-01")).toBe(5);
+    expect(wholeOccurrences(sunday, "2026-09-01")).toBe(4);
     expect(wholeOccurrences({ unit: "month", day: 1 }, "2026-08-01")).toBe(1);
+  });
+
+  it("skips the weeks that predate the target", () => {
+    // Started on the 28th: only the 30th is left in August.
+    expect(wholeOccurrences(sunday, "2026-08-01", undefined, "2026-08-28")).toBe(1);
+  });
+
+  it("counts an anchor the target started on", () => {
+    // 2026-08-30 is itself a Sunday, and a target created that day asks for it.
+    expect(wholeOccurrences(sunday, "2026-08-01", undefined, "2026-08-30")).toBe(1);
+  });
+
+  it("asks nothing for a month entirely before the target, and all of one after", () => {
+    expect(wholeOccurrences(sunday, "2026-07-01", undefined, "2026-08-28")).toBe(0);
+    expect(wholeOccurrences(sunday, "2026-09-01", undefined, "2026-08-28")).toBe(4);
+  });
+
+  it("counts a monthly anchor only when it falls on or after the start day", () => {
+    const fifteenth: Cadence = { unit: "month", day: 15 };
+    expect(wholeOccurrences(fifteenth, "2026-08-01", undefined, "2026-08-15")).toBe(1);
+    expect(wholeOccurrences(fifteenth, "2026-08-01", undefined, "2026-08-16")).toBe(0);
+  });
+
+  it("clamps a 31st anchor into February before comparing it to the start day", () => {
+    const last: Cadence = { unit: "month", day: 31 };
+    // February 2027 ends on the 28th, so its anchor is the 28th: a target started on the
+    // 20th still gets it, and one started in March does not.
+    expect(wholeOccurrences(last, "2027-02-01", undefined, "2027-02-20")).toBe(1);
+    expect(wholeOccurrences(last, "2027-02-01", undefined, "2027-03-01")).toBe(0);
   });
 });
 
@@ -180,24 +181,24 @@ describe("scheduleSpreads", () => {
   });
 });
 
-describe("remainingOccurrences for a bill", () => {
-  const schedule: Cadence = { unit: "schedule" };
-
+describe("outstandingCharges", () => {
   it("keeps a late unpaid bill asking after its due date", () => {
     // Due the 15th, unpaid on the 28th: `expectedKey` is still the 15th.
-    const bill = monthly("2026-09-15", "2026-08-15");
-    expect(remainingOccurrences(schedule, "2026-08-01", "2026-08-28", bill)).toBe(1);
+    expect(outstandingCharges(monthly("2026-09-15", "2026-08-15"), "2026-08-01")).toBe(
+      1,
+    );
   });
 
   it("stops asking once the charge is paid and the expected date moves on", () => {
     // Paid: the last posted charge advanced, so the outstanding charge is September's.
-    const bill = monthly("2026-09-15", "2026-09-15");
-    expect(remainingOccurrences(schedule, "2026-08-01", "2026-08-28", bill)).toBe(0);
+    expect(outstandingCharges(monthly("2026-09-15", "2026-09-15"), "2026-08-01")).toBe(
+      0,
+    );
   });
 
-  it("counts only the weekly charges still ahead", () => {
+  it("counts only the weekly charges still outstanding", () => {
     const bill = weeklyBill("2026-08-20");
-    expect(remainingOccurrences(schedule, "2026-08-01", "2026-08-18", bill)).toBe(2);
-    expect(wholeOccurrences(schedule, "2026-08-01", bill)).toBe(4);
+    expect(outstandingCharges(bill, "2026-08-01")).toBe(2);
+    expect(wholeOccurrences({ unit: "schedule" }, "2026-08-01", bill)).toBe(4);
   });
 });

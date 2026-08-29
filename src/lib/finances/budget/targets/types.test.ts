@@ -230,6 +230,51 @@ describe("parseTargetOrThrow", () => {
   });
 });
 
+describe("`since` — the day the target started asking", () => {
+  const weekly = {
+    behavior: "upTo",
+    cadence: { unit: "week", weekday: 0 },
+    amountCents: 21_096,
+  };
+
+  it("round-trips a date key", () => {
+    expect(parseTarget({ ...weekly, since: "2026-08-28" })?.since).toBe("2026-08-28");
+  });
+
+  it("means `always` when it is absent, which is what a legacy target means", () => {
+    expect(parseTarget(weekly)).not.toBeNull();
+    expect(parseTarget(weekly)?.since).toBeUndefined();
+    expect(parseTarget({ ...weekly, since: null })?.since).toBeUndefined();
+  });
+
+  it("rejects anything that is not a `YYYY-MM-DD` day", () => {
+    for (const since of [
+      "2026-08",
+      "2026-8-28",
+      "08/28/2026",
+      "2026-13-01",
+      "2026-08-32",
+      "2026-08-28T00:00:00Z",
+      20_260_828,
+      {},
+    ]) {
+      expect(parseTarget({ ...weekly, since })).toBeNull();
+    }
+  });
+
+  it("does not rescue an illegal target", () => {
+    // A stored `schedule` cadence is still rejected, `since` or no `since`.
+    expect(
+      parseTarget({
+        behavior: "upTo",
+        cadence: { unit: "schedule" },
+        amountCents: 5000,
+        since: "2026-08-28",
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("assertCents", () => {
   it("throws on a non-integer", () => {
     expect(() => assertCents(1.5, "amount")).toThrow(

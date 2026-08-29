@@ -7,7 +7,6 @@ import type { BillSnapshot } from "./targets/derive";
 import type { Target } from "./targets/types";
 
 const MONTH = "2026-08-01";
-const TODAY = "2026-08-01";
 
 const addMonthly = (cents: number): Target => ({
   behavior: "add",
@@ -87,7 +86,7 @@ function indicate(
   row: AssignEnvelope,
   bills: ReadonlyMap<string, BillSnapshot> = new Map(),
 ) {
-  return envelopeIndicator(row, MONTH, TODAY, bills);
+  return envelopeIndicator(row, MONTH, bills);
 }
 
 describe("envelopeIndicator", () => {
@@ -96,7 +95,7 @@ describe("envelopeIndicator", () => {
     const bills = new Map<string, BillSnapshot>();
     const indicator = indicate(row, bills);
     expect(indicator.moreNeededCents).toBe(
-      Math.max(0, neededAssigned(row, MONTH, TODAY, bills).needed - row.assignedCents),
+      Math.max(0, neededAssigned(row, MONTH, bills).needed - row.assignedCents),
     );
     expect(indicator.moreNeededCents).toBe(40_000);
   });
@@ -215,17 +214,41 @@ describe("envelopeIndicator", () => {
     expect(indicator.copy).toBeNull();
   });
 
-  it("treats a deadline-free floor as eventually, not this month", () => {
+  it("asks a raided deadline-free floor for it back this month", () => {
+    // `$100,000 with $99,500 in it` asks $500 now, in the ordinary copy: a floor that says
+    // "needed eventually" is a floor that never gets refilled (`target-refill-basis` D3).
     const row = envelope({
-      target: { behavior: "balance", cadence: { unit: "none" }, amountCents: 50_000 },
+      target: {
+        behavior: "balance",
+        cadence: { unit: "none" },
+        amountCents: 10_000_000,
+      },
       assignedCents: 0,
-      balanceCents: 0,
+      carryInCents: 9_950_000,
+      balanceCents: 9_950_000,
     });
     const indicator = indicate(row);
-    expect(indicator.state).toBe("safe");
-    expect(indicator.moreNeededCents).toBe(0);
-    expect(indicator.copy).toBe("$500.00 needed eventually");
-    expect(indicator.pill).toBe("green");
+    expect(indicator.state).toBe("underfunded");
+    expect(indicator.moreNeededCents).toBe(50_000);
+    expect(indicator.copy).toBe("$500.00 more needed this month");
+    expect(indicator.pill).toBe("yellow");
+    // The bar reads the pile, not the month's assignment.
+    expect(indicator.bar?.fill01).toBeCloseTo(0.995, 3);
+  });
+
+  it("calls a full deadline-free floor Funded", () => {
+    const row = envelope({
+      target: {
+        behavior: "balance",
+        cadence: { unit: "none" },
+        amountCents: 50_000,
+      },
+      assignedCents: 0,
+      carryInCents: 50_000,
+      balanceCents: 50_000,
+    });
+    expect(indicate(row).state).toBe("funded");
+    expect(indicate(row).moreNeededCents).toBe(0);
   });
 
   it("greens leftover with no ask", () => {
@@ -300,7 +323,7 @@ describe("envelopeIndicator", () => {
     const row = billRow({ nextDueKey: "2026-09-01" });
     const bills = new Map([["rent", snapshot("rent", 210_000, "2026-09-01")]]);
     const indicator = indicate(row, bills);
-    expect(neededAssigned(row, MONTH, TODAY, bills).needed).toBe(0);
+    expect(neededAssigned(row, MONTH, bills).needed).toBe(0);
     expect(indicator.state).toBe("idle");
     expect(indicator.copy).toBeNull();
   });
@@ -340,7 +363,7 @@ describe("envelopeIndicator", () => {
       nextDueKey: "2027-06-01",
     });
     const bills = new Map([["geico", snapshot("geico", 600_000, "2027-06-01", 12)]]);
-    const needed = neededAssigned(row, MONTH, TODAY, bills).needed;
+    const needed = neededAssigned(row, MONTH, bills).needed;
     const funded = indicate(
       { ...row, assignedCents: needed, balanceCents: needed },
       bills,
@@ -384,7 +407,6 @@ describe("envelopeIndicator", () => {
   it("skips income envelopes when mapping a page", () => {
     const map = indicatorsFromAssign(
       MONTH,
-      TODAY,
       [envelope({ id: "pay", kind: "income", target: null }), envelope({ id: "food" })],
       new Map(),
     );

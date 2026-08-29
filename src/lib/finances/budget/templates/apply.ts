@@ -86,12 +86,10 @@ export function applyTemplates(options: ApplyOptions): ApplyResult {
   const names: string[] = [];
 
   for (const envelope of participants) {
-    const ran = targetDemand(envelope, options.month, options.todayKey, options.bills);
+    const ran = targetDemand(envelope, options.month, options.bills);
     for (const message of ran.errors) {
       errors.push({ categoryId: envelope.id, categoryName: envelope.name, message });
     }
-    // A deadline-free floor is reported, never funded.
-    if (ran.eventuallyCents !== null) continue;
     allocations.push({
       categoryId: envelope.id,
       amountCents: ran.amount,

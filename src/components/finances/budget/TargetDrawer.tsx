@@ -4,6 +4,7 @@ import { useId, useMemo, useState, useTransition } from "react";
 
 import { saveEnvelopeTargetAction } from "@/app/finances/actions";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { weekdayLongLabel } from "@/lib/dateFormat";
 import type { AssignHistoryMonth } from "@/lib/finances/budget/assign/types";
 import {
@@ -12,10 +13,7 @@ import {
   monthName,
   type MonthKey,
 } from "@/lib/finances/budget/envelope";
-import {
-  remainingOccurrences,
-  wholeOccurrences,
-} from "@/lib/finances/budget/targets/cadence";
+import { wholeOccurrences } from "@/lib/finances/budget/targets/cadence";
 import { targetDemand } from "@/lib/finances/budget/targets/demand";
 import { resolveTarget, type BillSnapshot } from "@/lib/finances/budget/targets/derive";
 import { suggestWeeklyAmountCents } from "@/lib/finances/budget/templates/suggest";
@@ -163,6 +161,7 @@ export function TargetDrawer({
   onSaved: () => void;
 }) {
   const titleId = useId();
+  const formatDate = useDateFormatter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -172,17 +171,18 @@ export function TargetDrawer({
   const baseline = useMemo(() => JSON.stringify(defaultDraft(envelope)), [envelope]);
   const dirty = overriding !== !derived || JSON.stringify(draft) !== baseline;
 
-  const parsed = targetFromDraft(draft);
-  const demand = targetDemand(
-    { ...envelope, target: overriding ? parsed : envelope.target },
-    month,
-    todayKey,
-    bills,
-  );
-  const resolved = resolveTarget(
-    { ...envelope, target: overriding ? parsed : envelope.target },
-    bills,
-  );
+  // A target keeps the day it started; a brand-new one starts today. Anchors before that day
+  // are not this target's to ask for, and it is the only thing that trims a month's cap. The
+  // preview has to apply the same rule `saveEnvelopeTarget` will, or it previews a different
+  // target from the one the Save button writes (`target-refill-basis` D2).
+  const since = envelope.target ? envelope.target.since : todayKey;
+  const draftTarget = targetFromDraft(draft);
+  const parsed = draftTarget
+    ? { ...draftTarget, ...(since ? { since } : {}) }
+    : draftTarget;
+  const previewing = { ...envelope, target: overriding ? parsed : envelope.target };
+  const demand = targetDemand(previewing, month, bills);
+  const resolved = resolveTarget(previewing, bills);
 
   const suggested =
     draft.unit === "week"
@@ -232,14 +232,15 @@ export function TargetDrawer({
     onClose();
   }
 
-  const whole =
+  const periodCadence =
     parsed && (parsed.cadence.unit === "week" || parsed.cadence.unit === "month")
-      ? wholeOccurrences(parsed.cadence, month)
+      ? parsed.cadence
       : null;
-  const remaining =
-    parsed && (parsed.cadence.unit === "week" || parsed.cadence.unit === "month")
-      ? remainingOccurrences(parsed.cadence, month, todayKey)
-      : null;
+  const count = periodCadence
+    ? wholeOccurrences(periodCadence, month, undefined, since)
+    : null;
+  const trimmed =
+    periodCadence && count !== null && count < wholeOccurrences(periodCadence, month);
 
   return (
     <Drawer open onClose={requestClose} labelledBy={titleId}>
@@ -369,12 +370,16 @@ export function TargetDrawer({
               </p>
             ) : null}
 
-            {parsed && whole !== null && remaining !== null ? (
+            {parsed && periodCadence && count !== null ? (
               <p className="text-[0.75rem] text-ink-muted">
-                {monthLabel(month)}: {whole} × {formatUsd(parsed.amountCents)} ={" "}
-                {formatUsd(parsed.amountCents * whole)}. Remaining: {remaining} ×{" "}
-                {formatUsd(parsed.amountCents)} ={" "}
-                {formatUsd(parsed.amountCents * remaining)}.
+                {monthLabel(month)}:{" "}
+                {periodCadence.unit === "week"
+                  ? `${count} ${weekdayLongLabel(periodCadence.weekday)}${count === 1 ? "" : "s"} × ${formatUsd(parsed.amountCents)} = `
+                  : ""}
+                {formatUsd(parsed.amountCents * count)}.
+                {trimmed && since
+                  ? ` Counted from ${formatDate(since)}, when this target started.`
+                  : ""}
               </p>
             ) : null}
 
@@ -416,11 +421,9 @@ export function TargetDrawer({
         )}
 
         <p className="text-[0.8125rem] text-ink">
-          {demand.eventuallyCents
-            ? `${formatUsd(demand.eventuallyCents)} needed eventually — nothing this month.`
-            : resolved.target
-              ? `${summarize(resolved.target)}. This month asks ${formatUsd(demand.amount)}.`
-              : "No target."}
+          {resolved.target
+            ? `${summarize(resolved.target)}. This month asks ${formatUsd(demand.amount)}.`
+            : "No target."}
         </p>
       </div>
       <DrawerFooter

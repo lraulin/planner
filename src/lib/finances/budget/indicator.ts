@@ -7,17 +7,17 @@
  * second demand.
  *
  * Spec: `agent-os/specs/2026-08-25-1310-budget-funding-indicators/` D3–D6, as
- * amended by `agent-os/specs/2026-08-28-1000-ynab-target-engine/` Task 8.
+ * amended by `agent-os/specs/2026-08-28-1000-ynab-target-engine/` Task 8 and
+ * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1–D3.
  */
 
 import { formatUsd } from "@/lib/finances/money";
 import type { MonthKey } from "./envelope";
 import { neededAssigned } from "./assign/plan";
 import type { AssignEnvelope } from "./assign/types";
-import { monthsLeft, remainingOccurrences, scheduleSpreads } from "./targets/cadence";
-import { availableBefore } from "./targets/demand";
+import { monthsLeft } from "./targets/cadence";
+import { isPeriodFamily, periodCapCents } from "./targets/demand";
 import { resolveTarget, type BillSnapshot } from "./targets/derive";
-import type { Target } from "./targets/types";
 
 export type IndicatorState =
   "overspent" | "underfunded" | "fully-spent" | "on-track" | "funded" | "safe" | "idle";
@@ -40,11 +40,19 @@ export type EnvelopeIndicator = {
   bar: EnvelopeBar | null;
 };
 
+/**
+ * What the envelope is being measured against, and therefore what its bar fills toward.
+ *
+ * A **period** refill fills with `carry-in + assigned` toward the month's cap, because that is
+ * exactly the comparison the ask makes; spending is drawn as the spent overlay, not as a
+ * shortfall. A **pile** — sinking while it still has months, a floor once it does not — fills
+ * with what is actually in it.
+ */
 type Horizon =
   | { kind: "none" }
-  | { kind: "this-month"; periodTargetCents: number }
+  | { kind: "period"; capCents: number }
   | { kind: "sinking"; targetCents: number }
-  | { kind: "eventually"; holeCents: number };
+  | { kind: "floor"; amountCents: number };
 
 function clamp01(value: number): number {
   if (value <= 0) return 0;
@@ -64,90 +72,25 @@ function isInactive(envelope: AssignEnvelope): boolean {
   return envelope.status === "paused" || envelope.status === "cancelled";
 }
 
-function occurrencePeriodTarget(
-  target: Target,
-  month: MonthKey,
-  todayKey: string,
-  bill: BillSnapshot | null,
-): number {
-  return (
-    target.amountCents *
-    remainingOccurrences(target.cadence, month, todayKey, bill ?? undefined)
-  );
-}
-
 function horizonOf(
   envelope: AssignEnvelope,
   month: MonthKey,
-  todayKey: string,
   bills: ReadonlyMap<string, BillSnapshot>,
 ): Horizon {
   if (isInactive(envelope) || envelope.kind === "income") return { kind: "none" };
 
-  const resolved = resolveTarget(envelope, bills);
-  const target = resolved.target;
+  const { target, bill } = resolveTarget(envelope, bills);
   if (!target) return { kind: "none" };
 
-  switch (target.cadence.unit) {
-    case "week":
-    case "month": {
-      const periodTargetCents = occurrencePeriodTarget(
-        target,
-        month,
-        todayKey,
-        resolved.bill,
-      );
-      return periodTargetCents > 0
-        ? { kind: "this-month", periodTargetCents }
-        : { kind: "none" };
-    }
-    case "schedule": {
-      if (resolved.bill && scheduleSpreads(resolved.bill)) {
-        const left = monthsLeft(target.cadence, month, resolved.bill);
-        if (left !== null && left > 0) {
-          return {
-            kind: "sinking",
-            targetCents: target.amountCents,
-          };
-        }
-      }
-      const periodTargetCents = occurrencePeriodTarget(
-        target,
-        month,
-        todayKey,
-        resolved.bill,
-      );
-      return periodTargetCents > 0
-        ? { kind: "this-month", periodTargetCents }
-        : { kind: "none" };
-    }
-    case "year": {
-      const left = monthsLeft(target.cadence, month);
-      if (left === null || left <= 0) {
-        return { kind: "this-month", periodTargetCents: target.amountCents };
-      }
-      return {
-        kind: "sinking",
-        targetCents: target.amountCents,
-      };
-    }
-    case "by": {
-      const left = monthsLeft(target.cadence, month);
-      if (left === null) return { kind: "none" };
-      if (left <= 0) {
-        return { kind: "this-month", periodTargetCents: target.amountCents };
-      }
-      return {
-        kind: "sinking",
-        targetCents: target.amountCents,
-      };
-    }
-    case "none":
-      return {
-        kind: "eventually",
-        holeCents: Math.max(0, target.amountCents - availableBefore(envelope)),
-      };
+  if (isPeriodFamily(target, bill)) {
+    const capCents = periodCapCents(target, month, bill);
+    return capCents > 0 ? { kind: "period", capCents } : { kind: "none" };
   }
+
+  const left = monthsLeft(target.cadence, month, bill ?? undefined);
+  return left !== null && left > 0
+    ? { kind: "sinking", targetCents: target.amountCents }
+    : { kind: "floor", amountCents: target.amountCents };
 }
 
 function barToward(funded: number, target: number, spent: number): EnvelopeBar {
@@ -161,7 +104,6 @@ function barToward(funded: number, target: number, spent: number): EnvelopeBar {
 export function envelopeIndicator(
   envelope: AssignEnvelope,
   month: MonthKey,
-  todayKey: string,
   bills: ReadonlyMap<string, BillSnapshot>,
 ): EnvelopeIndicator {
   const available = envelope.balanceCents;
@@ -169,20 +111,24 @@ export function envelopeIndicator(
   const funded = fundedCents(envelope);
   const { needed } = isInactive(envelope)
     ? { needed: 0 }
-    : neededAssigned(envelope, month, todayKey, bills);
+    : neededAssigned(envelope, month, bills);
   const moreNeededCents = Math.max(0, needed - envelope.assignedCents);
-  const horizon = horizonOf(envelope, month, todayKey, bills);
-  const asked = horizon.kind !== "none" && horizon.kind !== "eventually";
+  const horizon = horizonOf(envelope, month, bills);
+  const asked = horizon.kind !== "none";
   const periodTarget =
-    horizon.kind === "sinking"
-      ? horizon.targetCents
-      : horizon.kind === "this-month"
-        ? horizon.periodTargetCents
-        : envelope.carryInCents + needed;
-  const occurrenceBar =
-    horizon.kind === "this-month"
-      ? barToward(available, Math.max(periodTarget, 1), spent)
-      : barToward(funded, Math.max(periodTarget, 1), spent);
+    horizon.kind === "period"
+      ? horizon.capCents
+      : horizon.kind === "sinking"
+        ? horizon.targetCents
+        : horizon.kind === "floor"
+          ? horizon.amountCents
+          : envelope.carryInCents + needed;
+  // A refill's bar answers the ask's own question — is the month's cap assigned? A pile's
+  // answers whether the pile is full.
+  const askBar =
+    horizon.kind === "period"
+      ? barToward(funded, Math.max(periodTarget, 1), spent)
+      : barToward(available, Math.max(periodTarget, 1), spent);
 
   if (available < 0) {
     return {
@@ -195,21 +141,6 @@ export function envelopeIndicator(
     };
   }
 
-  if (horizon.kind === "eventually" && horizon.holeCents > 0) {
-    return {
-      state: "safe",
-      moreNeededCents: 0,
-      copy: `${formatUsd(horizon.holeCents)} needed eventually`,
-      pill: "green",
-      icon: "check",
-      bar: {
-        fill01: 1,
-        spent01: clamp01(spent / Math.max(funded, 1)),
-        striped: false,
-      },
-    };
-  }
-
   if (asked && moreNeededCents > 0) {
     return {
       state: "underfunded",
@@ -217,7 +148,7 @@ export function envelopeIndicator(
       copy: `${formatUsd(moreNeededCents)} more needed this month`,
       pill: "yellow",
       icon: "clock",
-      bar: occurrenceBar,
+      bar: askBar,
     };
   }
 
@@ -290,14 +221,13 @@ export function envelopeIndicator(
 /** One indicator per spending envelope, same inputs Assign already folds. */
 export function indicatorsFromAssign(
   month: MonthKey,
-  todayKey: string,
   envelopes: readonly AssignEnvelope[],
   bills: ReadonlyMap<string, BillSnapshot>,
 ): Map<string, EnvelopeIndicator> {
   const result = new Map<string, EnvelopeIndicator>();
   for (const envelope of envelopes) {
     if (envelope.kind === "income") continue;
-    result.set(envelope.id, envelopeIndicator(envelope, month, todayKey, bills));
+    result.set(envelope.id, envelopeIndicator(envelope, month, bills));
   }
   return result;
 }

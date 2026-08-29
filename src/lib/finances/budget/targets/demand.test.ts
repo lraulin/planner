@@ -27,31 +27,44 @@ const sundayRefill: Target = {
   amountCents: 21_096,
 };
 
-describe("the Groceries case this spec exists for", () => {
-  // 2026-08-28: assigned $843.59, activity −$785.53, carry-in $0 → Available $58.06.
-  const groceries = envelope(sundayRefill, { activityCents: -78_553 });
-
-  it("asks $152.90 more, not $211.21 — one Sunday left, less what is already there", () => {
-    const { amount } = targetDemand(groceries, "2026-08-01", "2026-08-28", NO_BILLS);
-    // Needed assigned; the gap against $843.59 already assigned is $152.90.
-    expect(amount).toBe(99_649);
-    expect(amount - 84_359).toBe(15_290);
+describe("a period refill is an assignment question", () => {
+  it("does not let the last pizza of the month create a new ask", () => {
+    // The reported bug. `upTo` Friday $33.05, August 2026 (four Fridays), $134.76 assigned
+    // against $132.20 of pizza already bought: YNAB says "You've met your target".
+    const pizza: Target = {
+      behavior: "upTo",
+      cadence: { unit: "week", weekday: 5 },
+      amountCents: 3305,
+    };
+    const august = envelope(pizza, { name: "Pizza", activityCents: -13_220 });
+    const { amount } = targetDemand(august, "2026-08-01", NO_BILLS);
+    expect(amount).toBe(13_220);
+    // Needed assigned less what is assigned: no gap.
+    expect(Math.max(0, amount - 13_476)).toBe(0);
   });
 
-  it("asks four Sundays in September, less whatever August leaves behind", () => {
+  it("asks Groceries $211.21 more, not $152.90 — five Sundays, spending aside", () => {
+    // 2026-08-28: assigned $843.59, activity −$785.53, carry-in $0.
+    // This is the number `ynab-target-engine` was written to eliminate, and it is the right
+    // one: four weeks' worth was assigned against a five-Sunday month.
+    const groceries = envelope(sundayRefill, { activityCents: -78_553 });
+    const { amount } = targetDemand(groceries, "2026-08-01", NO_BILLS);
+    expect(amount).toBe(21_096 * 5);
+    expect(amount - 84_359).toBe(21_121);
+  });
+
+  it("lets carry-in reduce a refill, and never asks a negative", () => {
     const september = envelope(sundayRefill, { carryInCents: 5806 });
-    const { amount } = targetDemand(september, "2026-09-01", "2026-08-28", NO_BILLS);
-    expect(amount).toBe(21_096 * 4 - 5806);
+    expect(targetDemand(september, "2026-09-01", NO_BILLS).amount).toBe(
+      21_096 * 4 - 5806,
+    );
+    const flush = envelope(sundayRefill, { carryInCents: 500_000 });
+    expect(targetDemand(flush, "2026-09-01", NO_BILLS).amount).toBe(0);
   });
 
-  it("asks nothing for a month that has already happened", () => {
-    const july = envelope(sundayRefill);
-    expect(targetDemand(july, "2026-07-01", "2026-08-28", NO_BILLS).amount).toBe(0);
-  });
-});
-
-describe("upTo measures against Available, not carry-in", () => {
-  it("asks $300 to keep $500 when $400 carried in and $200 was spent", () => {
+  it("is not a floor: keeping $500 with $400 carried in and $200 spent asks $100", () => {
+    // `ynab-target-engine` asserted $300 here, which is the floor rule applied to a refill —
+    // the pizza bug in a different envelope.
     const keep500: Target = {
       behavior: "upTo",
       cadence: { unit: "month", day: 31 },
@@ -59,17 +72,18 @@ describe("upTo measures against Available, not carry-in", () => {
     };
     const e = envelope(keep500, { carryInCents: 40_000, activityCents: -20_000 });
     expect(availableBefore(e)).toBe(20_000);
-    expect(targetDemand(e, "2026-08-01", "2026-08-01", NO_BILLS).amount).toBe(30_000);
+    expect(targetDemand(e, "2026-08-01", NO_BILLS).amount).toBe(10_000);
   });
 
-  it("never returns a negative when the envelope is already over its target", () => {
-    const keep500: Target = {
-      behavior: "upTo",
-      cadence: { unit: "month", day: 31 },
-      amountCents: 50_000,
-    };
-    const e = envelope(keep500, { carryInCents: 90_000 });
-    expect(targetDemand(e, "2026-08-01", "2026-08-01", NO_BILLS).amount).toBe(0);
+  it("asks nothing for a month before the target started", () => {
+    const july = envelope({ ...sundayRefill, since: "2026-08-01" });
+    expect(targetDemand(july, "2026-07-01", NO_BILLS).amount).toBe(0);
+  });
+
+  it("asks only the Sundays the target has existed for", () => {
+    const started = envelope({ ...sundayRefill, since: "2026-08-28" });
+    expect(targetDemand(started, "2026-08-01", NO_BILLS).amount).toBe(21_096);
+    expect(targetDemand(started, "2026-09-01", NO_BILLS).amount).toBe(21_096 * 4);
   });
 });
 
@@ -83,12 +97,8 @@ describe("add ignores what is already in the envelope", () => {
   it("asks the full contribution however much carried in or was spent", () => {
     const rich = envelope(addMonthly, { carryInCents: 500_000 });
     const spent = envelope(addMonthly, { activityCents: -100_000 });
-    expect(targetDemand(rich, "2026-08-01", "2026-08-15", NO_BILLS).amount).toBe(
-      25_000,
-    );
-    expect(targetDemand(spent, "2026-08-01", "2026-08-15", NO_BILLS).amount).toBe(
-      25_000,
-    );
+    expect(targetDemand(rich, "2026-08-01", NO_BILLS).amount).toBe(25_000);
+    expect(targetDemand(spent, "2026-08-01", NO_BILLS).amount).toBe(25_000);
   });
 
   it("counts the whole month of weekly contributions even late in the month", () => {
@@ -97,14 +107,11 @@ describe("add ignores what is already in the envelope", () => {
       cadence: { unit: "week", weekday: 0 },
       amountCents: 10_000,
     };
-    // Five Sundays in August 2026; the 28th leaves only one, and `add` does not care.
-    expect(
-      targetDemand(envelope(weekly), "2026-08-01", "2026-08-28", NO_BILLS).amount,
-    ).toBe(50_000);
+    expect(targetDemand(envelope(weekly), "2026-08-01", NO_BILLS).amount).toBe(50_000);
   });
 });
 
-describe("balance spreads the hole over the months left", () => {
+describe("a pile measures what is actually in it", () => {
   const downPayment = (month: string): Target => ({
     behavior: "balance",
     cadence: { unit: "by", month },
@@ -113,37 +120,24 @@ describe("balance spreads the hole over the months left", () => {
 
   it("asks half of a $100,000 goal that is due next month", () => {
     const e = envelope(downPayment("2026-09"));
-    expect(targetDemand(e, "2026-08-01", "2026-08-01", NO_BILLS).amount).toBe(
-      5_000_000,
-    );
+    expect(targetDemand(e, "2026-08-01", NO_BILLS).amount).toBe(5_000_000);
   });
 
   it("asks the whole remaining hole at once once the deadline has passed", () => {
     const e = envelope(downPayment("2026-06"), { carryInCents: 9_500_000 });
-    expect(targetDemand(e, "2026-08-01", "2026-08-01", NO_BILLS).amount).toBe(500_000);
+    expect(targetDemand(e, "2026-08-01", NO_BILLS).amount).toBe(500_000);
   });
 
-  it("asks nothing but reports the hole when there is no deadline", () => {
+  it("makes a deadline-free floor ask this month, not eventually", () => {
+    // Raiding the down-payment fund has to nag now; a $0 ask and a soothing sentence is the
+    // one thing a floor must not say (`target-refill-basis` D3).
     const floor: Target = {
       behavior: "balance",
       cadence: { unit: "none" },
       amountCents: 10_000_000,
     };
-    const e = envelope(floor, { carryInCents: 9_500_000 });
-    const demand = targetDemand(e, "2026-08-01", "2026-08-01", NO_BILLS);
-    expect(demand.amount).toBe(0);
-    expect(demand.eventuallyCents).toBe(500_000);
-  });
-
-  it("reports no eventual figure for a shape that has a deadline", () => {
-    expect(
-      targetDemand(
-        envelope(downPayment("2026-09")),
-        "2026-08-01",
-        "2026-08-01",
-        NO_BILLS,
-      ).eventuallyCents,
-    ).toBeNull();
+    const e = envelope(floor, { carryInCents: 9_950_000 });
+    expect(targetDemand(e, "2026-08-01", NO_BILLS).amount).toBe(50_000);
   });
 });
 
@@ -156,28 +150,25 @@ describe("a yearly upTo sinks toward its anchor month", () => {
 
   it("divides the hole across the months up to and including the anchor", () => {
     // August → October is two months out, so three payments including this one.
-    expect(
-      targetDemand(envelope(propane), "2026-08-01", "2026-08-01", NO_BILLS).amount,
-    ).toBe(40_000);
+    expect(targetDemand(envelope(propane), "2026-08-01", NO_BILLS).amount).toBe(40_000);
   });
 
   it("asks the whole remaining hole in the anchor month", () => {
     const e = envelope(propane, { carryInCents: 80_000 });
-    expect(targetDemand(e, "2026-10-01", "2026-10-01", NO_BILLS).amount).toBe(40_000);
+    expect(targetDemand(e, "2026-10-01", NO_BILLS).amount).toBe(40_000);
   });
 
-  it("restarts over twelve months once the anchor has passed", () => {
+  it("asks a raided pile for it back: $100/month once the year's propane is spent", () => {
     const e = envelope(propane, { carryInCents: 120_000, activityCents: -120_000 });
-    expect(targetDemand(e, "2026-11-01", "2026-11-01", NO_BILLS).amount).toBe(10_000);
+    expect(targetDemand(e, "2026-11-01", NO_BILLS).amount).toBe(10_000);
   });
 });
 
 describe("an envelope with no target", () => {
   it("asks nothing, and leaves overspend to `assignedToZeroBalance`", () => {
     const e = envelope(null, { activityCents: -12_345 });
-    expect(targetDemand(e, "2026-08-01", "2026-08-01", NO_BILLS)).toEqual({
+    expect(targetDemand(e, "2026-08-01", NO_BILLS)).toEqual({
       amount: 0,
-      eventuallyCents: null,
       errors: [],
     });
   });

@@ -1,6 +1,6 @@
 # Target demand is an assignment question, not a cash-coverage question
 
-**Status: active**
+**Status: frozen / complete** — 2026-08-28
 Spec folder: `agent-os/specs/2026-08-28-2039-target-refill-basis/`
 
 ## Spec relationships
@@ -153,33 +153,43 @@ Each of these is a number that changes on Lee's live budget. None is a regressio
 
 ## Acceptance criteria
 
-- [ ] Pizza — `upTo` week/Friday $33.05, August 2026, carry-in $0, assigned $134.76, activity
+- [x] Pizza — `upTo` week/Friday $33.05, August 2026, carry-in $0, assigned $134.76, activity
       −$132.20, today 2026-08-28 — reads **Funded**. This is the reported bug.
-- [ ] Groceries — `upTo` week/Sunday $210.96, assigned $843.59, activity −$785.53, carry-in $0 —
+- [x] Groceries — `upTo` week/Sunday $210.96, assigned $843.59, activity −$785.53, carry-in $0 —
       reads **"$211.21 more needed this month"**, and Assign → Underfunded offers the same figure.
-- [ ] "Have $500 available each month", carry-in $400, spent $200, assigned $0 → asks **$100**.
-- [ ] `add` is unchanged: the full contribution regardless of carry-in, activity, or the day of
+- [x] "Have $500 available each month", carry-in $400, spent $200, assigned $0 → asks **$100**.
+- [x] `add` is unchanged: the full contribution regardless of carry-in, activity, or the day of
       the month.
-- [ ] A target with `since` = 2026-08-28 asks one Sunday in August 2026, five in a month it spans
+- [x] A target with `since` = 2026-08-28 asks one Sunday in August 2026, five in a month it spans
       wholly, and nothing in a month entirely before it.
-- [ ] A `balance` + no-deadline $100,000 target with $99,500 available asks **$500 this month**,
+- [x] A `balance` + no-deadline $100,000 target with $99,500 available asks **$500 this month**,
       with "more needed this month" copy, and sorts after ordinary targets in Underfunded.
-- [ ] Propane — `upTo` + year, $1,200, October — still asks $400 in August, and $100/month in the
+- [x] Propane — `upTo` + year, $1,200, October — still asks $400 in August, and $100/month in the
       November after the whole pile was spent.
-- [ ] A paid monthly bill still asks nothing with `paidFromActivity` deleted; a late unpaid one
+- [x] A paid monthly bill still asks nothing with `paidFromActivity` deleted; a late unpaid one
       still asks; a monthly bill still asks its full amount in the due month and $0 in every
       other (`month-ahead-zero-based` D1).
-- [ ] Overspend still asks: Available −$500 asks at least $500 whatever the target says.
-- [ ] `parseTarget` round-trips `since`, rejects anything that is not `YYYY-MM-DD`, and a second
+- [x] Overspend still asks: Available −$500 asks at least $500 whatever the target says.
+- [x] `parseTarget` round-trips `since`, rejects anything that is not `YYYY-MM-DD`, and a second
       user cannot read, change or delete the first user's target.
+
+Each criterion is defended by a test named for it (`targets/demand.test.ts`,
+`targets/cadence.test.ts`, `targets/derive.test.ts`, `indicator.test.ts`, `assign/plan.test.ts`,
+`mutations.integration.test.ts`). The Pizza and Groceries figures were checked as unit cases
+against the numbers in Context, not against Lee's live budget — the development database is a
+seed. The live walk on `/finances/budget` happens on the deployed app.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                        | Why                                                                                                                                                                                                                                                                                                                                           |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `todayKey` was **removed** from `targetDemand`, `demandForTarget`, `neededAssigned`, `underfundedGapCents`, `envelopeIndicator` and `indicatorsFromAssign` rather than left as a dead parameter.                                              | With D2 the ask no longer reads the clock at all: a period cap is the whole month from `since`, a bill counts from the charge it is waiting for, and a pile counts months. Keeping the parameter would have been a standing invitation to put today back in. `planAssign` and `applyTemplates` keep theirs — they date the movement-log note. |
+| 2   | The indicator's `Horizon` was re-cut into `period` / `sinking` / `floor` so it mirrors `isPeriodFamily` exactly, instead of switching on the cadence unit again.                                                                              | The old `this-month` arm re-derived the family from `cadence.unit` and could disagree with the ask (a quarterly bill in its charge month took the period arm while the ask took the pile arm). `budget-funding-indicators` D3 says one demand; now there is one family test too, exported from `demand.ts`.                                   |
+| 3   | `summarize` does **not** mention `since`. The Files table asked it to "mention it when it trims the count"; it has no month to trim against, and after the backfill every target carries a `since`, so the suffix would be on every sentence. | The drawer's computed line says it instead, where the month is known and the note only appears when the count is actually trimmed: "August 2026: 1 Friday × $33.05 = $33.05. Counted from 8/24/2026, when this target started."                                                                                                               |
+| 4   | `TargetDrawer` applies the `since` rule to the target it previews, not just to the count line.                                                                                                                                                | Caught in the browser: the preview line read "1 Friday" while the sentence under it read "This month asks $132.20" — the count used the stored `since` and the demand used the unstamped draft. The preview must run the target `saveEnvelopeTarget` will actually write.                                                                     |
+| 5   | `applyTemplates` lost its "a deadline-free floor is reported, never funded" skip.                                                                                                                                                             | D3 makes a floor an ordinary this-month ask; `hasUnderfundedAsk` stopped excluding `none` for Assign, and Apply had the same exclusion one file over. Leaving it would have made Apply and Assign disagree about the same envelope.                                                                                                           |
 
 ## Files
 

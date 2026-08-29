@@ -53,9 +53,22 @@ export type Target = {
   cadence: Cadence;
   /** Integer cents, > 0. */
   amountCents: number;
+  /**
+   * `YYYY-MM-DD` — the day this target started asking. Anchors before it are not counted, so a
+   * target created on the last Friday of the month asks for one Friday, not four. Absent means
+   * "always", which is what a target that predates the field means.
+   *
+   * Stamped by `saveEnvelopeTarget` on the envelope's first target and preserved through every
+   * later edit: changing the amount or the cadence does not restart it. Derived bill targets
+   * carry none — `outstandingCharges` already anchors them on the charge being waited for.
+   *
+   * Spec: `agent-os/specs/2026-08-28-2039-target-refill-basis/` D2.
+   */
+  since?: string;
 };
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 /**
  * The legal `behavior` × `cadence.unit` matrix (D2). **This table lives here and nowhere
@@ -140,10 +153,15 @@ export function parseTarget(raw: unknown, allowSchedule = false): Target | null 
   ) {
     return null;
   }
+  if (raw.since !== undefined && raw.since !== null) {
+    if (typeof raw.since !== "string" || !DATE.test(raw.since)) return null;
+  }
+  const since = typeof raw.since === "string" ? raw.since : undefined;
   return {
     behavior: behavior as TargetBehavior,
     cadence,
     amountCents: raw.amountCents,
+    ...(since ? { since } : {}),
   };
 }
 

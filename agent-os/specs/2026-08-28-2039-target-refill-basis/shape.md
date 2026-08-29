@@ -1,6 +1,6 @@
 # Target demand is an assignment question — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** — 2026-08-28
 
 ## Scope
 

@@ -10,6 +10,7 @@ import {
   financeTransactions,
   type EnvelopeKind,
 } from "@/db/schema";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { serializeBudget } from "@/lib/settings/finances";
 import { writeUserSetting } from "@/lib/settings/mutations";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
@@ -63,7 +64,7 @@ import { applyTemplates as runApply, templateCarryIn } from "./templates/apply";
 import { planAssign } from "./assign/plan";
 import { assignEnvelopeFromRow, assignHistoryWithLookback } from "./assign/fromBudget";
 import type { AssignOption } from "./assign/types";
-import { parseTargetOrThrow } from "./targets/types";
+import { parseTarget, parseTargetOrThrow } from "./targets/types";
 
 /**
  * Writes for the envelope budget.
@@ -1175,7 +1176,7 @@ export async function setTransactionBudgetCategory(
 async function requireTargetableCategory(
   userId: string,
   categoryId: string,
-): Promise<{ id: string }> {
+): Promise<{ id: string; target: unknown }> {
   const [row] = await db
     .select({
       id: financeBudgetCategories.id,
@@ -1195,7 +1196,7 @@ async function requireTargetableCategory(
     throw new Error("Income envelopes cannot hold a target.");
   }
 
-  return { id: row.id };
+  return { id: row.id, target: row.target };
 }
 
 export async function saveEnvelopeTarget(
@@ -1203,12 +1204,22 @@ export async function saveEnvelopeTarget(
   categoryId: string,
   target: unknown,
 ): Promise<void> {
-  await requireTargetableCategory(userId, categoryId);
+  const existing = await requireTargetableCategory(userId, categoryId);
   const parsed =
     target === null || target === undefined ? null : parseTargetOrThrow(target);
+  // `since` is the server's to set, never the client's. The envelope's first target starts
+  // today; every later edit keeps the day it already had, so changing the amount or the
+  // cadence does not restart the count (`target-refill-basis` D2).
+  const stored = parseTarget(existing.target);
+  const stamped =
+    parsed === null
+      ? null
+      : stored
+        ? { ...parsed, ...(stored.since ? { since: stored.since } : {}) }
+        : { ...parsed, since: localDateKey(new Date()) };
   await db
     .update(financeBudgetCategories)
-    .set({ target: parsed, updatedAt: new Date() })
+    .set({ target: stamped, updatedAt: new Date() })
     .where(
       and(
         eq(financeBudgetCategories.id, categoryId),
