@@ -560,6 +560,34 @@ describeDb("budget mutations", () => {
     expect((await loadBudget(userId, MONTH)).uncategorizedCount).toBe(0);
   });
 
+  it("names a future-dated uncategorized row as the term, not as reconciliation", async () => {
+    const { checkingId } = await seedAccounts(userId);
+    // Derived from today because the term only exists on the current month, and the row has
+    // to fall past its end for the old upper bound to have been able to drop it.
+    const todayKey = localDateKey(new Date());
+    const currentMonth = monthKeyOf(todayKey);
+    const nextMonth = nextMonthKey(currentMonth);
+    await addTransactions(userId, [
+      {
+        accountId: checkingId,
+        date: `${nextMonth.slice(0, 8)}15`,
+        description: "PREAUTH VET",
+        amount: "-75.00",
+        flow: "spend",
+      },
+    ]);
+    await seedBudget(userId, { preset: "minimal", startMonth: currentMonth, todayKey });
+
+    const data = await loadBudget(userId, currentMonth);
+    const month = findMonth(data.months, currentMonth)!;
+
+    // The tray offers the row, so the named term has to claim it. Bounding the term at the
+    // month end left it in the residual `Account reconciliation`, which has no rows to click.
+    expect(data.uncategorizedCount).toBe(1);
+    expect(data.uncategorizedCents).toBe(-7_500);
+    expect(month.uncategorizedActivityCents).toBe(-7_500);
+  });
+
   it("counts only the authoritative pending feed in activity and backlog", async () => {
     const { cardId } = await seedAccounts(userId);
     const connectionId = await saveConnection(userId, {

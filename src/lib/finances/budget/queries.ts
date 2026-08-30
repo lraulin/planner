@@ -315,7 +315,16 @@ async function activitySince(
   }));
 }
 
-/** On-budget rows since `since` that nothing has put in an envelope yet. */
+/**
+ * On-budget rows since `since` that nothing has put in an envelope yet.
+ *
+ * The count feeds the Budget card's uncategorized line and the sum is Ready to Assign's
+ * `Uncategorized activity` term, so both come from one predicate: what the tray offers to
+ * categorize is exactly what the term names. There is deliberately **no upper date bound** —
+ * a future-dated uncategorized row is in the working pool
+ * (`workingBalance.ts` bounds no pending row), so bounding the term at the current month end
+ * would push it into `Account reconciliation`, which is the residual and cannot be clicked.
+ */
 async function backlogSince(
   userId: string,
   since: MonthKey,
@@ -363,57 +372,6 @@ async function backlogSince(
     uncategorizedCount: row?.count ?? 0,
     uncategorizedCents: numericStringToCents(row?.amount ?? "0") ?? 0,
   };
-}
-
-/**
- * Signed uncategorized on-budget activity from `since` through the end of `through`.
- *
- * Current Ready to Assign names this as its own term. Future-dated uncategorized rows stay
- * in the backlog tray but are not a term against today's pool.
- */
-async function uncategorizedActivityThrough(
-  userId: string,
-  since: MonthKey,
-  through: MonthKey,
-  supersededPendingIds: readonly string[],
-  executor: FinanceExecutor = db,
-): Promise<number> {
-  const [row] = await executor
-    .select({
-      amount: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
-    })
-    .from(financeTransactions)
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.offBudget, false),
-        // Leaves, for the same reason as `backlogSince`: a split parent's null envelope is
-        // not unassigned money, it is money assigned one level down.
-        moneyRows,
-        notSupersededPending(supersededPendingIds),
-        sql`${financeTransactions.budgetCategoryId} is null`,
-        gte(financeTransactions.transactionDate, since),
-        sql`${financeTransactions.transactionDate} <= ${monthEndKey(through)}`,
-        sql`(
-          ${financeTransactions.transferGroupId} is not null
-          or coalesce(${financeTransactions.flowOverride}::text, ${financeTransactions.derivedFlow}::text, '') <> 'internal_transfer'
-        )`,
-        sql`not exists (
-          select 1
-            from ${financeTransactions} as other
-            join ${financeAccounts} as other_account
-              on other_account.id = other.account_id
-           where other.transfer_group_id = ${financeTransactions.transferGroupId}
-             and other.id <> ${financeTransactions.id}
-             and other.user_id = ${userId}
-             and other_account.off_budget = false
-        )`,
-      ),
-    );
-
-  return numericStringToCents(row?.amount ?? "0") ?? 0;
 }
 
 /**
@@ -483,41 +441,33 @@ export async function loadBudget(
     BUDGET_HORIZON_MONTHS,
   );
 
-  const [allocations, bufferedRows, activity, backlog, uncategorizedActivityCents] =
-    await Promise.all([
-      executor
-        .select({
-          month: financeBudgetAllocations.month,
-          categoryId: financeBudgetAllocations.categoryId,
-          amountCents: financeBudgetAllocations.amountCents,
-          carryover: financeBudgetAllocations.carryover,
-          snoozed: financeBudgetAllocations.snoozed,
-          goalCents: financeBudgetAllocations.goalCents,
-        })
-        .from(financeBudgetAllocations)
-        .where(eq(financeBudgetAllocations.userId, userId)),
-      executor
-        .select({
-          month: financeBudgetMonths.month,
-          bufferedCents: financeBudgetMonths.bufferedCents,
-        })
-        .from(financeBudgetMonths)
-        .where(eq(financeBudgetMonths.userId, userId)),
-      activitySince(
-        userId,
-        shiftMonthKey(startMonth, -ASSIGN_AVERAGE_MONTHS),
-        pending.supersededTransactionIds,
-        executor,
-      ),
-      backlogSince(userId, startMonth, pending.supersededTransactionIds, executor),
-      uncategorizedActivityThrough(
-        userId,
-        startMonth,
-        currentMonth,
-        pending.supersededTransactionIds,
-        executor,
-      ),
-    ]);
+  const [allocations, bufferedRows, activity, backlog] = await Promise.all([
+    executor
+      .select({
+        month: financeBudgetAllocations.month,
+        categoryId: financeBudgetAllocations.categoryId,
+        amountCents: financeBudgetAllocations.amountCents,
+        carryover: financeBudgetAllocations.carryover,
+        snoozed: financeBudgetAllocations.snoozed,
+        goalCents: financeBudgetAllocations.goalCents,
+      })
+      .from(financeBudgetAllocations)
+      .where(eq(financeBudgetAllocations.userId, userId)),
+    executor
+      .select({
+        month: financeBudgetMonths.month,
+        bufferedCents: financeBudgetMonths.bufferedCents,
+      })
+      .from(financeBudgetMonths)
+      .where(eq(financeBudgetMonths.userId, userId)),
+    activitySince(
+      userId,
+      shiftMonthKey(startMonth, -ASSIGN_AVERAGE_MONTHS),
+      pending.supersededTransactionIds,
+      executor,
+    ),
+    backlogSince(userId, startMonth, pending.supersededTransactionIds, executor),
+  ]);
   const foldActivity = activity.filter((row) => row.month >= startMonth);
   const preStartActivity = activity.filter((row) => row.month < startMonth);
 
@@ -544,7 +494,7 @@ export async function loadBudget(
         ? {
             month: currentMonth,
             accountPoolCents: poolCents,
-            uncategorizedActivityCents,
+            uncategorizedActivityCents: backlog.uncategorizedCents,
           }
         : undefined,
   });
