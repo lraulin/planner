@@ -58,6 +58,7 @@ import {
   nextMonthKey,
   prevMonthKey,
   type BudgetMonth,
+  type MonthKey,
 } from "@/lib/finances/budget/envelope";
 import {
   budgetExportDocument,
@@ -112,7 +113,12 @@ import { cadenceOf } from "@/lib/finances/recurringBills";
 import type { BillForecast } from "@/lib/finances/dashboardQueries";
 import { AssignDialog, AssignPreviewDialog } from "./AssignDialog";
 import { FixThisDialog } from "./FixThisDialog";
-import { billColumns, envelopeColumns, type BudgetColumnCtx } from "./budgetColumns";
+import {
+  ActivityAmountLink,
+  billColumns,
+  envelopeColumns,
+  type BudgetColumnCtx,
+} from "./budgetColumns";
 import { BudgetInspector } from "./BudgetInspector";
 import { BudgetSummary } from "./BudgetSummary";
 import { CommitmentPayeeDialog } from "./CommitmentPayeeDialog";
@@ -1389,7 +1395,6 @@ export function BudgetView({
   }
 
   const editingRow = rows.find((row) => row.id === editing) ?? null;
-  const backlog = data.uncategorizedCount;
 
   /**
    * A group header's own subtotal, over the rows that group contributes to this section,
@@ -1508,6 +1513,11 @@ export function BudgetView({
           accountPoolCents={
             data.month === monthKeyOf(data.todayKey) ? data.accountPoolCents : undefined
           }
+          uncategorizedCount={data.uncategorizedCount}
+          uncategorizedCents={data.uncategorizedCents}
+          uncategorizedSinceLabel={
+            data.settings.startMonth ? monthLabel(data.settings.startMonth) : undefined
+          }
           action={canFixThis ? "fix-this" : "assign"}
           onAction={() => {
             if (canFixThis) {
@@ -1541,6 +1551,7 @@ export function BudgetView({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
           <IncomeSection
             rows={sections.income}
+            month={data.month}
             receivedCents={receivedThisMonthCents}
             expectedCents={forecast.comparison.income.monthlyCents}
             onNew={() => openComposer("envelope", "income", null)}
@@ -1580,8 +1591,6 @@ export function BudgetView({
               </button>
             </p>
           ) : null}
-
-          {backlog > 0 ? <Backlog data={data} /> : null}
 
           {/* `shrink-0`, not `min-h-0`: these are stacked inside the page scroller, and a flex
             item allowed to shrink below its content collapses both grids to one row. */}
@@ -2133,39 +2142,6 @@ function GroupRenameInput({
   );
 }
 
-function Backlog({ data }: { data: BudgetData }) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem]">
-      <a
-        href="/finances/register?view=uncategorized"
-        className="text-ink hover:underline"
-      >
-        {data.uncategorizedCount}{" "}
-        {data.uncategorizedCount === 1 ? "transaction has" : "transactions have"} no
-        category
-        {/* The backlog spans the whole budget, not the month on screen. Unqualified, it
-            reads as September's when you have paged forward — and this figure is the one
-            that explains the gap between the budget and the bank, so it has to say what it
-            is counting. */}
-        {data.settings.startMonth
-          ? ` since ${monthLabel(data.settings.startMonth)}`
-          : ""}
-      </a>
-      <span className="tabular text-ink-muted">
-        {formatUsd(data.uncategorizedCents)} unaccounted for
-      </span>
-      <span className="ml-auto flex gap-2">
-        <a
-          href="/finances/register?view=uncategorized"
-          className="rounded border border-rule px-2 py-1 text-ink hover:bg-surface"
-        >
-          Categorize
-        </a>
-      </span>
-    </div>
-  );
-}
-
 /**
  * A table, its heading and its own subtotal, as one card.
  *
@@ -2279,12 +2255,15 @@ function BudgetSection({
  */
 function IncomeSection({
   rows,
+  month,
   receivedCents,
   expectedCents,
   onNew,
   composer,
 }: {
   rows: readonly BudgetRow[];
+  /** The month on screen; each amount links to its own envelope's rows for it. */
+  month: MonthKey;
   receivedCents: number;
   expectedCents: number;
   /** Income is a list, not a grid, but it creates envelopes the same way the tables do. */
@@ -2319,7 +2298,11 @@ function IncomeSection({
           {rows.map((row) => (
             <li key={row.id}>
               {row.name}{" "}
-              <span className="tabular text-ink">{formatUsd(row.activityCents)}</span>
+              <ActivityAmountLink
+                categoryId={row.id}
+                month={month}
+                cents={row.activityCents}
+              />
             </li>
           ))}
         </ul>
