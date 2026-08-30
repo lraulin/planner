@@ -1,7 +1,9 @@
 # Clear priority on settle
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-30)  
 Spec folder: `agent-os/specs/2026-08-30-1001-clear-priority-on-settle/`
+
+This is the as-built record. Further change opens a new delta-spec.
 
 ## Spec relationships
 
@@ -57,19 +59,25 @@ One hook: `applyStateTransition` in `src/lib/tree/mutations.ts`. Every complete/
 - The ranking engine’s mechanics. Callers invoke `planClear`; do not teach the engine to watch state.
 - Sibling-pool membership by state. After this, settled rows are unprioritized, so they occupy no letter. Do not also filter the pool by state.
 
+## As built
+
+- Policy: `src/lib/priority/settle.ts` (`priorityFieldsToClearOnSettle`).
+- Write: `applySettlePriorityClear` at the end of each complete/cancel path in `applyStateTransition` (`src/lib/tree/mutations.ts`). Outline uses `planOutlinePriorityClear` + `applyPriorityAssignments`. TC uses `planTcClear` + inner `applyTcAssignments(tx, …)` so settle does not open a nested transaction.
+- Backfill: `drizzle/0087_clear_settled_priorities.sql` (clear settled ranks, densify remaining outline and TC groups). Dry-ran on a copy of the local database, then migrated.
+
 ## Acceptance criteria
 
-- [ ] Completing a non-recurring A1 (outline) unprioritizes it and densifies remaining siblings (old A2 becomes A1) in the same transaction.
-- [ ] Completing a non-recurring TC-A1 unprioritizes it and densifies remaining TC ranks the same way.
-- [ ] Cancelling does the same for both fields, including a cancelled recurring task.
-- [ ] Completing a recurring task that cycles: outline Pri unchanged; TC Pri cleared and remaining TC densified; Focus still set; row still `not_started` / deferred.
-- [ ] Completing a recurring task whose series is over: both fields clear (real finish).
-- [ ] Reopening a completed/cancelled item does not restore the old ranks.
-- [ ] Completing a parent that settles descendants clears those descendants’ ranks the same as a hand-typed settle (recurring descendants still cycle instead of settling).
-- [ ] Drawer, day-page, and organizer complete/cancel match the grid — they share `applyStateTransition`.
-- [ ] A second user cannot change the first user’s ranks by completing anything.
-- [ ] Existing completed/cancelled rows are repaired: both fields cleared, remaining groups densified. Recurring tasks that are Not Started / Deferred are left alone.
-- [ ] Day-list ABC, Focus, and postpone behaviour unchanged.
+- [x] Completing a non-recurring A1 (outline) unprioritizes it and densifies remaining siblings (old A2 becomes A1) in the same transaction.
+- [x] Completing a non-recurring TC-A1 unprioritizes it and densifies remaining TC ranks the same way.
+- [x] Cancelling does the same for both fields, including a cancelled recurring task.
+- [x] Completing a recurring task that cycles: outline Pri unchanged; TC Pri cleared and remaining TC densified; Focus still set; row still `not_started` / deferred.
+- [x] Completing a recurring task whose series is over: both fields clear (real finish).
+- [x] Reopening a completed/cancelled item does not restore the old ranks.
+- [x] Completing a parent that settles descendants clears those descendants’ ranks the same as a hand-typed settle (recurring descendants still cycle instead of settling).
+- [x] Drawer, day-page, and organizer complete/cancel match the grid — they share `applyStateTransition`.
+- [x] A second user cannot change the first user’s ranks by completing anything.
+- [x] Existing completed/cancelled rows are repaired: both fields cleared, remaining groups densified. Recurring tasks that are Not Started / Deferred are left alone.
+- [x] Day-list ABC, Focus, and postpone behaviour unchanged.
 
 ## Out of scope
 
@@ -85,15 +93,17 @@ One hook: `applyStateTransition` in `src/lib/tree/mutations.ts`. Every complete/
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                     | Why |
+| --- | ------------------------------------------------------------------------------------------ | --- |
+|     | None. As-built matches the matrix, the `applyStateTransition` hook, and the 0087 backfill. |     |
 
 ## Task 1: Save Spec Documentation
 
-Create this folder with `plan.md`, `shape.md`, `standards.md`, `references.md`. Then **stop**. Implementation is a fresh session against the saved folder.
+Done. Folder saved; implementation was a fresh session.
 
 ## Task 2: Pure settle policy
+
+Done. `src/lib/priority/settle.ts` + `settle.test.ts`.
 
 New small module beside the engine, named for the concept (e.g. `src/lib/priority/settle.ts` + `settle.test.ts`):
 
@@ -102,6 +112,8 @@ Given `{ requested: NodeState, cycles: boolean }` return which fields to clear (
 This is the only place the product rule lives. Mutations ask it; they do not restate the table.
 
 ## Task 3: Clear through `applyStateTransition`
+
+Done.
 
 Inside the existing transaction, after the state write (so recurrence has already decided cycle vs finish):
 
@@ -115,6 +127,8 @@ Extend existing `setState` / `applyStateTransition` integration tests (and the r
 
 ## Task 4: Backfill existing settled ranks
 
+Done. `drizzle/0087_clear_settled_priorities.sql`.
+
 Hand-written data migration (no schema change), same shape as `drizzle/0054_typical_steel_serpent.sql`:
 
 1. `UPDATE nodes SET priority_letter/rank = NULL WHERE state IN ('completed','cancelled')` (and the matching TC columns).
@@ -127,6 +141,8 @@ Follow `database/migrations`: hand-written SQL is allowed for a backfill `db:gen
 
 ## Task 5: Verify, freeze spec, update roadmap
 
+Done.
+
 - In the running app: complete a ranked one-shot task in the Outline and in the To-do List; confirm remaining ranks close. Complete a recurring task; confirm outline Pri and Focus stay, TC Pri drops, row defers. Cancel a ranked item. Reopen; ranks stay blank.
 - After migrate: no completed/cancelled node still holds outline or TC Pri; remaining groups are dense `1..n`.
 - `npm run test:unit` and `npm test` with Postgres up (no skip warning). After any `src/app/**` touch, `npm run smoke`.
@@ -134,6 +150,6 @@ Follow `database/migrations`: hand-written SQL is allowed for a backfill `db:gen
 - Mark **Status: frozen / complete** (date). Optional one-liner under the always-ranked / recurrence bullets in `roadmap.md` — this is not a listed item.
 - Commit and push to `origin/master` with Spec trailer `agent-os/specs/2026-08-30-1001-clear-priority-on-settle`.
 
----
+## Follow-ups (new work — not amendments to this frozen spec)
 
-While this spec is **active**, when we make a material change to requirements, design, or scope (including from feedback on what was implemented), update the relevant sections and append to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+None. Further change opens a new delta-spec.

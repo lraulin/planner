@@ -18,8 +18,10 @@ import {
   setAllCollapsed,
   setCollapsed,
   setEffort,
+  setFocus,
   setPriority,
   setState,
+  setTcPriorities,
   skipRecurrence,
 } from "./mutations";
 import { loadOutline } from "./queries";
@@ -981,6 +983,38 @@ describeDb("tree mutations", () => {
       expect(node.completedAt).toBeNull();
     });
 
+    it("keeps outline Pri and Focus on a cycle, and drops TC Pri", async () => {
+      const sibling = await createNode({
+        userId,
+        parentId: null,
+        type: "task",
+        name: "Other",
+      });
+      const task = await recurringTask();
+      await setPriority(userId, task, "A", 1);
+      await setPriority(userId, sibling, "A", 2);
+      await setTcPriorities(userId, [
+        { nodeId: task, letter: "A", rank: 1 },
+        { nodeId: sibling, letter: "A", rank: 2 },
+      ]);
+      await setFocus(userId, task, true);
+
+      await setState(userId, task, "completed");
+
+      const byId = new Map((await loadOutline(userId)).map((n) => [n.id, n]));
+      const cycled = byId.get(task)!;
+      expect(cycled.state).toBe("postponed");
+      expect(cycled.priorityLetter).toBe("A");
+      expect(cycled.priorityRank).toBe(1);
+      expect(cycled.focus).toBe(true);
+      expect(cycled.tcPriorityLetter).toBeNull();
+      expect(cycled.tcPriorityRank).toBeNull();
+      // Remaining TC densifies; outline siblings are untouched because the row kept A1.
+      expect(byId.get(sibling)!.priorityRank).toBe(2);
+      expect(byId.get(sibling)!.tcPriorityLetter).toBe("A");
+      expect(byId.get(sibling)!.tcPriorityRank).toBe(1);
+    });
+
     it("defers itself by the interval, measured from the completion", async () => {
       const task = await recurringTask({ frequency: "weekly", interval: 2 });
       await setState(userId, task, "completed");
@@ -1098,12 +1132,17 @@ describeDb("tree mutations", () => {
       // The path most likely to be missed: `saveNodeDetail` writes state without going
       // anywhere near `setState`, and used to stamp `completedAt` on its own.
       const task = await recurringTask({ frequency: "daily", interval: 3 });
+      await setPriority(userId, task, "A", 1);
+      await setTcPriorities(userId, [{ nodeId: task, letter: "A", rank: 1 }]);
       await saveNodeDetail(userId, task, { state: "completed" });
 
       const [node] = await loadOutline(userId);
       expect(node.state).toBe("postponed");
       expect(localKey((await nodeRow(task)).deferredDate!)).toBe(daysFromToday(3));
       expect(await completionsOf(userId, task)).toHaveLength(1);
+      expect(node.priorityLetter).toBe("A");
+      expect(node.priorityRank).toBe(1);
+      expect(node.tcPriorityLetter).toBeNull();
     });
 
     it("cycles a due-again routine from the drawer without leaping other dates", async () => {
@@ -1346,15 +1385,22 @@ describeDb("tree mutations", () => {
           recurrenceEnd: "count",
           recurrenceCount: 2,
         });
+        await setPriority(userId, task, "A", 1);
+        await setTcPriorities(userId, [{ nodeId: task, letter: "A", rank: 1 }]);
 
         await setState(userId, task, "completed");
-        expect((await loadOutline(userId))[0].state).toBe("postponed");
+        const afterCycle = (await loadOutline(userId))[0];
+        expect(afterCycle.state).toBe("postponed");
+        expect(afterCycle.priorityLetter).toBe("A");
+        expect(afterCycle.tcPriorityLetter).toBeNull();
 
         await setState(userId, task, "completed");
         const [node] = await loadOutline(userId);
         expect(node.state).toBe("completed");
         expect(node.completedAt).not.toBeNull();
         expect(await completionsOf(userId, task)).toHaveLength(2);
+        expect(node.priorityLetter).toBeNull();
+        expect(node.tcPriorityLetter).toBeNull();
       });
 
       it("finishes for real once the until date has passed", async () => {
@@ -1703,6 +1749,221 @@ describeDb("tree mutations", () => {
         project: "not_started",
         taskA: "not_started",
       });
+    });
+  });
+
+  describe("clear priority on settle", () => {
+    async function rankedSiblings() {
+      const parent = await createNode({
+        userId,
+        parentId: null,
+        type: "project",
+        name: "Parent",
+      });
+      const a1 = await createNode({
+        userId,
+        parentId: parent,
+        type: "task",
+        name: "First",
+      });
+      const a2 = await createNode({
+        userId,
+        parentId: parent,
+        type: "task",
+        name: "Second",
+      });
+      const a3 = await createNode({
+        userId,
+        parentId: parent,
+        type: "task",
+        name: "Third",
+      });
+      await setPriority(userId, a1, "A", 1);
+      await setPriority(userId, a2, "A", 2);
+      await setPriority(userId, a3, "A", 3);
+      return { parent, a1, a2, a3 };
+    }
+
+    async function outlinePri(userId: string) {
+      return (await loadOutline(userId))
+        .filter((row) => row.priorityLetter !== null)
+        .sort(
+          (a, b) =>
+            (a.parentId ?? "").localeCompare(b.parentId ?? "") ||
+            a.priorityLetter!.localeCompare(b.priorityLetter!) ||
+            (a.priorityRank ?? 0) - (b.priorityRank ?? 0),
+        )
+        .map((row) => `${row.name}→${row.priorityLetter}${row.priorityRank}`);
+    }
+
+    async function tcPri(userId: string) {
+      return (await loadOutline(userId))
+        .filter((row) => row.tcPriorityLetter !== null)
+        .sort(
+          (a, b) =>
+            a.tcPriorityLetter!.localeCompare(b.tcPriorityLetter!) ||
+            (a.tcPriorityRank ?? 0) - (b.tcPriorityRank ?? 0),
+        )
+        .map((row) => `${row.name}→${row.tcPriorityLetter}${row.tcPriorityRank}`);
+    }
+
+    it("unprioritizes a completed A1 and densifies remaining siblings", async () => {
+      const { a1 } = await rankedSiblings();
+      await setState(userId, a1, "completed");
+
+      const byId = new Map((await loadOutline(userId)).map((n) => [n.id, n]));
+      expect(byId.get(a1)!.priorityLetter).toBeNull();
+      expect(byId.get(a1)!.priorityRank).toBeNull();
+      expect(await outlinePri(userId)).toEqual(["Second→A1", "Third→A2"]);
+    });
+
+    it("unprioritizes a completed TC-A1 and densifies remaining TC ranks", async () => {
+      const first = await createNode({
+        userId,
+        parentId: null,
+        type: "task",
+        name: "First",
+      });
+      const second = await createNode({
+        userId,
+        parentId: null,
+        type: "task",
+        name: "Second",
+      });
+      const third = await createNode({
+        userId,
+        parentId: null,
+        type: "task",
+        name: "Third",
+      });
+      await setTcPriorities(userId, [
+        { nodeId: first, letter: "A", rank: 1 },
+        { nodeId: second, letter: "A", rank: 2 },
+        { nodeId: third, letter: "A", rank: 3 },
+      ]);
+
+      await setState(userId, first, "completed");
+
+      const byId = new Map((await loadOutline(userId)).map((n) => [n.id, n]));
+      expect(byId.get(first)!.tcPriorityLetter).toBeNull();
+      expect(await tcPri(userId)).toEqual(["Second→A1", "Third→A2"]);
+    });
+
+    it("clears both fields on cancel, including a cancelled recurring task", async () => {
+      const { a1, a2 } = await rankedSiblings();
+      await setTcPriorities(userId, [
+        { nodeId: a1, letter: "A", rank: 1 },
+        { nodeId: a2, letter: "A", rank: 2 },
+      ]);
+      await setState(userId, a1, "cancelled");
+
+      const cancelled = (await loadOutline(userId)).find((n) => n.id === a1)!;
+      expect(cancelled.priorityLetter).toBeNull();
+      expect(cancelled.tcPriorityLetter).toBeNull();
+      expect(await outlinePri(userId)).toEqual(["Second→A1", "Third→A2"]);
+      expect(await tcPri(userId)).toEqual(["Second→A1"]);
+
+      const habit = await createNode({
+        userId,
+        parentId: null,
+        type: "task",
+        name: "Habit",
+      });
+      await db
+        .update(taskDetails)
+        .set({ recurrenceFrequency: "daily", recurrenceInterval: 1 })
+        .where(eq(taskDetails.nodeId, habit));
+      await setPriority(userId, habit, "B", 1);
+      await setTcPriorities(userId, [{ nodeId: habit, letter: "B", rank: 1 }]);
+      await setState(userId, habit, "cancelled");
+
+      const row = (await loadOutline(userId)).find((n) => n.id === habit)!;
+      expect(row.state).toBe("cancelled");
+      expect(row.priorityLetter).toBeNull();
+      expect(row.tcPriorityLetter).toBeNull();
+    });
+
+    it("does not restore ranks on reopen, and does not touch them on postpone", async () => {
+      const { a1, a2 } = await rankedSiblings();
+      await setState(userId, a1, "completed");
+      await setState(userId, a1, "in_progress");
+
+      const reopened = (await loadOutline(userId)).find((n) => n.id === a1)!;
+      expect(reopened.priorityLetter).toBeNull();
+      expect(reopened.priorityRank).toBeNull();
+      expect(await outlinePri(userId)).toEqual(["Second→A1", "Third→A2"]);
+
+      await setState(userId, a2, "postponed");
+      expect(await outlinePri(userId)).toEqual(["Second→A1", "Third→A2"]);
+    });
+
+    it("clears cascaded descendants the same way as a hand-typed settle", async () => {
+      const parent = await createNode({
+        userId,
+        parentId: null,
+        type: "project",
+        name: "Project",
+      });
+      const child1 = await createNode({
+        userId,
+        parentId: parent,
+        type: "task",
+        name: "Child 1",
+      });
+      const child2 = await createNode({
+        userId,
+        parentId: parent,
+        type: "task",
+        name: "Child 2",
+      });
+      await setPriority(userId, child1, "A", 1);
+      await setPriority(userId, child2, "A", 2);
+      await setTcPriorities(userId, [
+        { nodeId: child1, letter: "A", rank: 1 },
+        { nodeId: child2, letter: "A", rank: 2 },
+      ]);
+
+      await setState(userId, parent, "completed");
+
+      const byId = new Map((await loadOutline(userId)).map((n) => [n.id, n]));
+      expect(byId.get(child1)!.state).toBe("completed");
+      expect(byId.get(child2)!.state).toBe("completed");
+      expect(byId.get(child1)!.priorityLetter).toBeNull();
+      expect(byId.get(child2)!.priorityLetter).toBeNull();
+      expect(byId.get(child1)!.tcPriorityLetter).toBeNull();
+      expect(byId.get(child2)!.tcPriorityLetter).toBeNull();
+    });
+
+    it("does not let a second user change the first user's ranks by completing anything", async () => {
+      const other = await makeUser();
+      const { a1, a2 } = await rankedSiblings();
+      await setTcPriorities(userId, [
+        { nodeId: a1, letter: "A", rank: 1 },
+        { nodeId: a2, letter: "A", rank: 2 },
+      ]);
+
+      const theirs = await createNode({
+        userId: other,
+        parentId: null,
+        type: "task",
+        name: "Theirs",
+      });
+      await setPriority(other, theirs, "A", 1);
+      await setTcPriorities(other, [{ nodeId: theirs, letter: "A", rank: 1 }]);
+
+      await setState(other, a1, "completed");
+      await setState(userId, theirs, "completed");
+      await setState(other, theirs, "completed");
+
+      expect(await outlinePri(userId)).toEqual(["First→A1", "Second→A2", "Third→A3"]);
+      expect(await tcPri(userId)).toEqual(["First→A1", "Second→A2"]);
+      const theirRow = (await loadOutline(other)).find((n) => n.id === theirs)!;
+      expect(theirRow.priorityLetter).toBeNull();
+      expect(theirRow.tcPriorityLetter).toBeNull();
+      expect(theirRow.state).toBe("completed");
+      expect((await loadOutline(userId)).find((n) => n.id === a1)!.state).toBe(
+        "not_started",
+      );
     });
   });
 

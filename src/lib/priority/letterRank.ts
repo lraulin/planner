@@ -18,8 +18,10 @@ import { comparePriorityOrder, rankOrderValue } from "./order";
  * Two guarantees apply to assignments emitted by this engine:
  *
  * 1. **A touched letter is dense.** Its supplied members are assigned 1..n with no gaps or
- *    ties. Existing gaps can remain until that letter is touched; nothing renumbers merely
- *    because an item was completed or hidden.
+ *    ties. Existing gaps can remain until that letter is touched. Completing or cancelling
+ *    is a caller-side `planClear` (see `lib/priority/settle`); the engine itself still
+ *    only densifies a letter it was asked to touch. Hidden items are the same: the engine
+ *    never watches visibility.
  * 2. **An emitted letter always carries a rank.** Input may contain a bare Outline letter,
  *    but assigning or dragging places the item somewhere and therefore emits a number.
  *

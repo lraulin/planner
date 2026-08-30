@@ -1,5 +1,7 @@
 # Standards for Clear priority on settle
 
+**Status: frozen / complete** (2026-08-30)
+
 Applied as of standards commit `a48386634d73644cdac630eb99ed1ebd4aaef8ce`. References, not copies — see AGENTS.md. Recover a file with `git show a48386634d73644cdac630eb99ed1ebd4aaef8ce:agent-os/standards/<path>`.
 
 - `agent-os/standards/development/testing.md` — the matrix is pure logic (`src/lib`, sibling test); the write is a mutation, so integration tests including a second user. Do not add React tests. Do not restate the implementation.

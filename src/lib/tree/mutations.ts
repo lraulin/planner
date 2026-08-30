@@ -10,7 +10,7 @@ import {
   taskDetails,
 } from "@/db/schema";
 import type { ExternalRef, NodeState, NodeType, PriorityLetter } from "@/db/schema";
-import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { addDays, daysBetween } from "@/lib/dateMath";
 import { nextDue } from "@/lib/recurrence/nextDue";
 import { nextOccurrence } from "@/lib/recurrence/pattern";
@@ -36,8 +36,11 @@ import {
 } from "./hierarchy";
 import { planNodeConversion } from "./conversion";
 import { assertRankedLetterPriorities } from "@/lib/priority/letterRank";
+import { planTcClear } from "@/lib/chooser/tcPriority";
+import { priorityFieldsToClearOnSettle } from "@/lib/priority/settle";
 import {
   planOutlinePriorityAssign,
+  planOutlinePriorityClear,
   planOutlinePriorityMove,
   type PriorityNode,
 } from "./outlinePriority";
@@ -429,6 +432,52 @@ async function applyPriorityAssignments(
         updatedAt: new Date(),
       })
       .where(and(eq(nodes.userId, userId), eq(nodes.id, assignment.id)));
+  }
+}
+
+/**
+ * Drop a settled node out of outline and/or TC ranking, densifying the letter it left.
+ *
+ * Runs inside the caller's transaction, after the state write, so recurrence has already
+ * decided cycle vs finish. The policy lives in `lib/priority/settle`; this only loads the
+ * pools and persists `planClear`.
+ */
+async function applySettlePriorityClear(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  requested: NodeState,
+  cycles: boolean,
+): Promise<void> {
+  const clear = priorityFieldsToClearOnSettle({ requested, cycles });
+  if (!clear.outline && !clear.tc) return;
+
+  if (clear.outline) {
+    const [node] = await tx
+      .select({ parentId: nodes.parentId })
+      .from(nodes)
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+      .limit(1);
+    if (node) {
+      const siblings = await siblingPriorityPool(tx, userId, node.parentId);
+      await applyPriorityAssignments(
+        tx,
+        userId,
+        planOutlinePriorityClear(siblings, nodeId),
+      );
+    }
+  }
+
+  if (clear.tc) {
+    const ranked = await tx
+      .select({
+        id: nodes.id,
+        tcPriorityLetter: nodes.tcPriorityLetter,
+        tcPriorityRank: nodes.tcPriorityRank,
+      })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), isNotNull(nodes.tcPriorityLetter)));
+    await applyTcAssignments(tx, userId, planTcClear(ranked, nodeId));
   }
 }
 
@@ -827,6 +876,7 @@ export async function applyStateTransition(
       .set({ state: "cancelled", completedAt: null, updatedAt: now })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
     await syncDayLineOnCancel(tx, userId, nodeId, now);
+    await applySettlePriorityClear(tx, userId, nodeId, state, false);
     return;
   }
 
@@ -869,6 +919,7 @@ export async function applyStateTransition(
   if (!recurrence) {
     await finish();
     await syncDayLineOnCompletion(tx, userId, nodeId, now);
+    await applySettlePriorityClear(tx, userId, nodeId, state, false);
     return;
   }
 
@@ -891,6 +942,7 @@ export async function applyStateTransition(
     // The series is over, so nothing follows it onto a future day — but the day line still
     // gets checked off, exactly as it would for any other task being finished.
     await syncDayLineOnCompletion(tx, userId, nodeId, now);
+    await applySettlePriorityClear(tx, userId, nodeId, state, false);
     return;
   }
 
@@ -956,6 +1008,7 @@ export async function applyStateTransition(
 
   await syncDayLineOnCompletion(tx, userId, nodeId, now);
   await syncDayLineToTargetStart(tx, userId, nodeId);
+  await applySettlePriorityClear(tx, userId, nodeId, state, true);
 }
 
 /**
@@ -1684,15 +1737,28 @@ export async function setTcPriorities(
   assertRankedLetterPriorities(assignments);
 
   await db.transaction(async (tx) => {
-    for (const assignment of assignments) {
-      await tx
-        .update(nodes)
-        .set({
-          tcPriorityLetter: assignment.letter,
-          tcPriorityRank: assignment.rank,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(nodes.id, assignment.nodeId), eq(nodes.userId, userId)));
-    }
+    await applyTcAssignments(tx, userId, assignments);
   });
+}
+
+/** Persist TC assignments inside a transaction the caller already owns. */
+async function applyTcAssignments(
+  tx: Executor,
+  userId: string,
+  assignments: {
+    nodeId: string;
+    letter: PriorityLetter | null;
+    rank: number | null;
+  }[],
+): Promise<void> {
+  for (const assignment of assignments) {
+    await tx
+      .update(nodes)
+      .set({
+        tcPriorityLetter: assignment.letter,
+        tcPriorityRank: assignment.rank,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(nodes.id, assignment.nodeId), eq(nodes.userId, userId)));
+  }
 }

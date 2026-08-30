@@ -1,5 +1,7 @@
 # References for Clear priority on settle
 
+**Status: frozen / complete** (2026-08-30)
+
 ## Governing specs
 
 ### `agent-os/specs/2026-08-19-0912-always-ranked-priorities/`

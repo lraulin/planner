@@ -117,9 +117,11 @@ describeDb("shared command mutations", () => {
       name: "Visible",
     });
     await setPriority(userId, hidden, "A", 1);
-    await setState(userId, hidden, "completed");
+    // Shelved, not completed: settled rows are unprioritized, so they cannot be the
+    // "filtered but still ranked" sibling this test needs. Postpone is still in the
+    // ranking and still filtered out of available-work views.
+    await setState(userId, hidden, "postponed");
 
-    // A completed sibling is filtered out of most views but still holds A1.
     await setPriority(userId, visible, "A", 1);
 
     const rows = await loadOutline(userId);

@@ -1,6 +1,6 @@
 # Clear priority on settle — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-30)
 
 ## Scope
 

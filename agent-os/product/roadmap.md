@@ -28,7 +28,9 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   List. Its three deferrals — Priority/State submenus and multi-select actions — closed under
   "Right-click completion" below; `Shift+F10` is still out.
 - **✅ Priorities & scheduling fields.** Priority (A/B/C/D + rank — always ranked and unique
-  within a sibling group since `specs/2026-08-19-0912-always-ranked-priorities`), deadline,
+  within a sibling group since `specs/2026-08-19-0912-always-ranked-priorities`; completing or
+  cancelling now drops the row out of that ranking, and out of TC Pri,
+  `specs/2026-08-30-1001-clear-priority-on-settle`), deadline,
   focus, effort
   (with rollups), plus lifecycle state for Goals, Projects, and Tasks. Result Areas are
   enduring roles and deliberately have no state (see the delta below). Effort Left, Actual
@@ -202,7 +204,8 @@ Features that complete or surround the original product, plus making it multi-de
   regeneration-based recurrence (§3.9.1) for tasks — "repeats every N days/weeks/months/
   years after each completion" — implemented as **deferral, never as a deadline**. A
   routine has no deadline, so it can never read as Overdue; completing it cycles the same
-  row (Not Started, progress reset, completed children un-completed) and pushes
+  row (Not Started, progress reset, completed children un-completed; outline Pri and Focus
+  stay, TC Pri is cleared — `specs/2026-08-30-1001-clear-priority-on-settle`) and pushes
   `deferred_date` out, which drops it from the Task Chooser until it is due again. Each
   completion is logged to `task_completions`, so history survives without a year of
   duplicate rows in the outline. This is what keeps **Overdue** meaning something.

@@ -114,6 +114,14 @@ export function planOutlinePriorityAssign(
   return engine.planAssign([...siblings], nodeId, letter, rank);
 }
 
+/** Drop out of the sibling ranking, closing the gap left behind. */
+export function planOutlinePriorityClear(
+  siblings: readonly PriorityNode[],
+  nodeId: string | readonly string[],
+): PriorityAssignment[] {
+  return engine.planClear([...siblings], nodeId);
+}
+
 /**
  * The whole priority plan for a node that is moving, in one place.
  *
