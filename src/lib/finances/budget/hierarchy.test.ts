@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { applyGroupCollapse } from "@/lib/grid/collapse";
+import { groupMembers } from "@/lib/grid/groupMembers";
+
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
 import type { BudgetRow } from "./rows";
 import {
@@ -84,7 +87,7 @@ describe("budget hierarchy", () => {
     category("electric", "utilities", "A"),
   ];
 
-  it("orders siblings by name, ignoring stored sort keys", () => {
+  it("orders envelopes before groups, by name, ignoring stored sort keys", () => {
     const groups = [group("zoo", null, "A"), group("apple", null, "Z")];
     const categories = [
       category("milk", null, "A"),
@@ -92,9 +95,9 @@ describe("budget hierarchy", () => {
       category("apple-juice", "apple", "A"),
     ];
     expect(budgetChildren(groups, categories, null).map((item) => item.id)).toEqual([
-      "apple",
       "bread",
       "milk",
+      "apple",
       "zoo",
     ]);
     expect(budgetChildren(groups, categories, "apple").map((item) => item.id)).toEqual([
@@ -102,10 +105,10 @@ describe("budget hierarchy", () => {
     ]);
   });
 
-  it("orders groups and envelopes together and emits recursive counts", () => {
+  it("puts a parent's own envelopes above its groups and emits recursive counts", () => {
     expect(
       budgetChildren(groups, categories, "spending").map((item) => item.id),
-    ).toEqual(["bills", "discretionary"]);
+    ).toEqual(["discretionary", "bills"]);
 
     expect(
       nestedBudgetGridRows(
@@ -119,12 +122,35 @@ describe("budget hierarchy", () => {
       ),
     ).toEqual([
       "spending:0:3",
+      "discretionary:1",
       "bills:1:2",
       "other:2",
       "utilities:2:1",
       "electric:3",
-      "discretionary:1",
     ]);
+  });
+
+  // The grid reads membership from position: a header owns every row after it until a
+  // header at its own depth or shallower. `discretionary` belongs to `spending`, so
+  // emitting it after the `utilities` header made it a `utilities` row — counted in that
+  // total and hidden when `utilities` collapsed.
+  it("never emits an envelope after a header it does not belong to", () => {
+    const rows = nestedBudgetGridRows(
+      groups,
+      categories,
+      categories.map((entry) => row(entry.id, entry.groupId)),
+    );
+    const members = groupMembers(rows);
+    const idsUnder = (id: string) =>
+      (members.get(id) ?? []).map((entry) => entry.id).sort();
+
+    expect(idsUnder("spending")).toEqual(["discretionary", "electric", "other"]);
+    expect(idsUnder("bills")).toEqual(["electric", "other"]);
+    expect(idsUnder("utilities")).toEqual(["electric"]);
+
+    expect(
+      applyGroupCollapse(rows, new Set(["utilities"])).map((entry) => entry.id),
+    ).toEqual(["spending", "discretionary", "bills", "other", "utilities"]);
   });
 
   it("detects cycles rather than silently dropping a branch", () => {
@@ -179,7 +205,7 @@ describe("budget hierarchy", () => {
     });
   });
 
-  it("renders an envelope with no group at the section root, above the empty groups", () => {
+  it("renders an envelope with no group at the section root, above the groups", () => {
     const ungrouped = category("rent", null, "A", "bill");
     expect(budgetChildren(groups, [ungrouped], null).map((item) => item.id)).toEqual([
       "rent",
@@ -304,7 +330,7 @@ describe("budgetSiblings", () => {
   it("returns only the moving item's own section at the root", () => {
     expect(
       budgetSiblings(groups, categories, null, "bill").map((item) => item.id),
-    ).toEqual(["bills", "rent"]);
+    ).toEqual(["rent", "bills"]);
     expect(
       budgetSiblings(groups, categories, null, "savings").map((item) => item.id),
     ).toEqual(["emergency"]);

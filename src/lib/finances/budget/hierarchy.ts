@@ -27,18 +27,29 @@ type StructureItem = BudgetStructureRef & {
  * Case-insensitive, numeric-aware English name order.
  *
  * Groups and envelopes share one sibling sequence, so this is what the Budget tables and
- * the category picker both walk. `sortKey` is still written on create/move; display ignores
- * it so a newly named envelope cannot land at the bottom of an otherwise alphabetical list.
+ * the category picker both walk — within a kind, see `compareItems`. `sortKey` is still
+ * written on create/move; display ignores it so a newly named envelope cannot land at the
+ * bottom of an otherwise alphabetical list.
  */
 export function compareBudgetNames(left: string, right: string): number {
   return left.localeCompare(right, "en", { sensitivity: "base", numeric: true });
 }
 
+/**
+ * Envelopes first, then groups, each run in name order.
+ *
+ * Kind beats name because the grid renders this tree as a flat row stream where a header
+ * **owns every row after it** until a header at its own depth or shallower — that is how
+ * `groupMembers`, `dropEmptyGroups` and `applyGroupCollapse` all read membership, and node
+ * rows cannot state it themselves (in the outline grouping path a node's depth is its tree
+ * depth, unrelated to the headers above it). Interleaving by name alone put a loose envelope
+ * after a sibling group's header, so it read as that group's row: counted in its total, and
+ * hidden with it when collapsed. Sorting kind-first makes the stream say what the tree means.
+ */
 function compareItems(left: StructureItem, right: StructureItem): number {
+  if (left.kind !== right.kind) return left.kind === "category" ? -1 : 1;
   const byName = compareBudgetNames(left.name, right.name);
-  if (byName !== 0) return byName;
-  const byKind = left.kind.localeCompare(right.kind);
-  return byKind !== 0 ? byKind : left.id.localeCompare(right.id);
+  return byName !== 0 ? byName : left.id.localeCompare(right.id);
 }
 
 export function budgetChildren(
