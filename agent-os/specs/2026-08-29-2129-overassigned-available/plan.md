@@ -1,6 +1,6 @@
 # Overassigned Available (scan layer + Fix This)
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-29)  
 Spec folder: `agent-os/specs/2026-08-29-2129-overassigned-available/`
 
 ## Spec relationships
@@ -40,13 +40,21 @@ Fully-spent still wins when Available is $0 (you overassigned and spent it).
 
 ## Acceptance criteria
 
-- [ ] Assigned > this month's ask, Available > 0 → state `overassigned`, green pill, `extra` icon, copy `$X extra`. Grid name column and Available pill agree.
-- [ ] Assigned equal to the ask → still Funded or On Track, not overassigned, even if Available > 0 (unspent).
-- [ ] Sinking: assigned > installment and pile not full → overassigned, not On Track. Assigned == installment, pile remaining → On Track.
-- [ ] No-target leftover → still `safe`. Overspent / snoozed / underfunded / fully-spent unchanged and still win.
-- [ ] Fix This list uses that pill (not a plain number). Future picker month uses that month's indicator. Selecting a row still works; the pill does not open cover/move.
-- [ ] Tools ▸ Assign, default unassign amount, list order, inspector unchanged.
-- [ ] Lint, typecheck, unit tests (`indicator.test.ts`, picker if it now carries indicator facts). Browser: a funded bill vs an overassigned envelope vs no-target leftover on the grid and in Fix This; desktop and ~390-wide.
+- [x] Assigned > this month's ask, Available > 0 → state `overassigned`, green pill, `extra` icon, copy `$X extra`. Grid name column and Available pill agree.
+- [x] Assigned equal to the ask → still Funded or On Track, not overassigned, even if Available > 0 (unspent).
+- [x] Sinking: assigned > installment and pile not full → overassigned, not On Track. Assigned == installment, pile remaining → On Track.
+- [x] No-target leftover → still `safe`. Overspent / snoozed / underfunded / fully-spent unchanged and still win.
+- [x] Fix This list uses that pill (not a plain number). Future picker month uses that month's indicator. Selecting a row still works; the pill does not open cover/move.
+- [x] Tools ▸ Assign, default unassign amount, list order, inspector unchanged.
+- [x] Lint, typecheck, unit tests (`indicator.test.ts`, picker if it now carries indicator facts). Browser: a funded bill vs an overassigned envelope vs no-target leftover on the grid and in Fix This; desktop and ~390-wide.
+
+## As-built
+
+- `overassigned` / `extra` in `src/lib/finances/budget/indicator.ts`, after fully-spent.
+- Extra = `assigned − neededAssigned`. Copy `$X extra`. Same green pill as Funded; bar full green with spent overlay.
+- `AvailableAmount` in `FundingChrome.tsx` is the non-button pill; `AvailablePill` wraps it as the cover/move button; Fix This uses the span.
+- `assignScanInputs` folds a picker month the same way the Budget grid does; Fix This reads `indicatorsFromAssign` for that fold.
+- Inspector still prints `indicator.copy`, so `$X extra` appears there without an inspector change.
 
 ## Changes from original plan
 
@@ -59,6 +67,10 @@ Material refinements during implementation (requirements, design, scope). Omit p
 ## Task 1: Save Spec Documentation
 
 Create `agent-os/specs/2026-08-29-2129-overassigned-available/` with `plan.md`, `shape.md`, `standards.md` (references only, pin `8f9b8adc8388a62e4269b6a204ced15cde59a301`), `references.md`. No visuals. Then stop — implementation is a fresh session.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+None.
 
 ## Task 2: `overassigned` in `envelopeIndicator`
 

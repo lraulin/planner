@@ -1051,6 +1051,10 @@ period)` so money already spent stops being held twice and only going over bites
   current or future month, the summary control next to the number becomes Fix This and
   opens an Un-assign list (this month and later months with Available). Envelope math
   stays Actual; the gesture is YNAB. Tools ▸ Assign is unchanged.
+  ✅ **Overassigned Available shipped 2026-08-29.**
+  `agent-os/specs/2026-08-29-2129-overassigned-available/`. Assigned above this month's
+  ask is a scan state of its own (`$X extra`, plus icon, same green as Funded). Exact-ask
+  Funded / On Track stay. Fix This reuses the Available pill for the picker month.
   ✅ **Funding scan layer shipped 2026-08-25.**
   `agent-os/specs/2026-08-25-1310-budget-funding-indicators/`. Budget rows show a progress
   bar, Funded / `$X more needed` / Fully Spent / On Track copy, and a colored Available

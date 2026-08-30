@@ -1853,6 +1853,9 @@ export function BudgetView({
           months={data.months}
           groups={data.groups}
           categories={data.categories}
+          goals={data.goals}
+          nextDueKeys={nextDueKeys}
+          expectedKeys={expectedKeys}
           showHidden={showHidden}
           pending={pending}
           onCancel={() => setFixing(false)}

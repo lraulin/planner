@@ -3,9 +3,12 @@
 import { useId, useMemo, useState } from "react";
 
 import { ModalShell } from "@/components/detail/ModalShell";
+import { AvailableAmount } from "@/components/finances/budget/FundingChrome";
+import { assignScanInputs } from "@/lib/finances/budget/assign/fromBudget";
 import {
   findMonth,
   monthLabel,
+  prevMonthKey,
   type BudgetMonth,
   type MonthKey,
 } from "@/lib/finances/budget/envelope";
@@ -16,6 +19,7 @@ import {
   fixThisSourceMonths,
   unassignPreview,
 } from "@/lib/finances/budget/fixThis";
+import { indicatorsFromAssign } from "@/lib/finances/budget/indicator";
 import type { EnvelopeRef } from "@/lib/finances/budget/operations";
 import type { BudgetCategoryRow, BudgetGroupRow } from "@/lib/finances/budget/queries";
 import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
@@ -31,13 +35,17 @@ function dollars(cents: number): string {
  * Unmount on close (parent) so the next open starts clean. After a write the parent
  * refreshes; this stays mounted while the hole remains.
  *
- * Spec: `agent-os/specs/2026-08-29-2033-budget-fix-this/` D3–D4.
+ * Spec: `agent-os/specs/2026-08-29-2033-budget-fix-this/` D3–D4, as amended by
+ * `agent-os/specs/2026-08-29-2129-overassigned-available/` D6.
  */
 export function FixThisDialog({
   viewedMonth,
   months,
   groups,
   categories,
+  goals,
+  nextDueKeys,
+  expectedKeys,
   showHidden,
   pending,
   onCancel,
@@ -47,6 +55,9 @@ export function FixThisDialog({
   months: readonly BudgetMonth[];
   groups: readonly BudgetGroupRow[];
   categories: readonly BudgetCategoryRow[];
+  goals: Readonly<Record<string, number>>;
+  nextDueKeys: ReadonlyMap<string, string>;
+  expectedKeys: ReadonlyMap<string, string>;
   showHidden: boolean;
   pending: boolean;
   onCancel: () => void;
@@ -78,6 +89,7 @@ export function FixThisDialog({
     ? pickerMonth
     : (sourceMonths[0] ?? viewedMonth);
   const source = findMonth(months, activeMonth);
+  const previous = findMonth(months, prevMonthKey(activeMonth));
   const sections = useMemo(
     () =>
       source
@@ -90,6 +102,28 @@ export function FixThisDialog({
         : [],
     [source, groups, categories, showHidden],
   );
+  const indicators = useMemo(() => {
+    if (!source) return new Map();
+    const scan = assignScanInputs({
+      month: source,
+      previous,
+      groups,
+      categories,
+      goals,
+      nextDueKeys,
+      expectedKeys,
+    });
+    return indicatorsFromAssign(activeMonth, scan.envelopes, scan.bills);
+  }, [
+    source,
+    previous,
+    groups,
+    categories,
+    goals,
+    nextDueKeys,
+    expectedKeys,
+    activeMonth,
+  ]);
 
   const selected = useMemo(() => {
     for (const section of sections) {
@@ -178,35 +212,46 @@ export function FixThisDialog({
           ) : (
             <ul className="py-1">
               {sections.flatMap((section) =>
-                section.rows.map((row) =>
-                  row.kind === "heading" ? (
-                    <li
-                      key={row.id}
-                      className="px-3 pt-2 pb-0.5 text-[0.6875rem] font-medium tracking-wider text-ink-muted uppercase"
-                      style={{ paddingLeft: `${12 + row.depth * 12}px` }}
-                    >
-                      {row.label}
-                    </li>
-                  ) : (
+                section.rows.map((row) => {
+                  if (row.kind === "heading") {
+                    return (
+                      <li
+                        key={row.id}
+                        className="px-3 pt-2 pb-0.5 text-[0.6875rem] font-medium tracking-wider text-ink-muted uppercase"
+                        style={{ paddingLeft: `${12 + row.depth * 12}px` }}
+                      >
+                        {row.label}
+                      </li>
+                    );
+                  }
+                  const indicator = indicators.get(row.id);
+                  return (
                     <li key={row.id}>
                       <button
                         type="button"
                         onClick={() => selectEnvelope(row.id, row.availableCents)}
-                        className={`flex min-h-tap w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-[0.8125rem] md:min-h-0 ${
+                        className={`flex min-h-tap w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-[0.8125rem] md:min-h-0 ${
                           selectedId === row.id
                             ? "bg-select"
                             : "hover:bg-surface-raised"
                         }`}
                         style={{ paddingLeft: `${12 + row.depth * 12}px` }}
                       >
-                        <span className="text-ink">{row.name}</span>
-                        <span className="tabular text-ink">
-                          {formatUsd(row.availableCents)}
-                        </span>
+                        <span className="min-w-0 truncate text-ink">{row.name}</span>
+                        {indicator ? (
+                          <AvailableAmount
+                            cents={row.availableCents}
+                            indicator={indicator}
+                          />
+                        ) : (
+                          <span className="tabular text-ink">
+                            {formatUsd(row.availableCents)}
+                          </span>
+                        )}
                       </button>
                     </li>
-                  ),
-                ),
+                  );
+                }),
               )}
             </ul>
           )}

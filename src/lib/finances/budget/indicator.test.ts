@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { assignScanInputs } from "./assign/fromBudget";
 import { neededAssigned } from "./assign/plan";
 import type { AssignEnvelope } from "./assign/types";
+import { buildBudget, findMonth } from "./envelope";
 import { envelopeIndicator, indicatorsFromAssign } from "./indicator";
+import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
 import type { BillSnapshot } from "./targets/derive";
 import type { Target } from "./targets/types";
 
@@ -166,6 +169,31 @@ describe("envelopeIndicator", () => {
     expect(indicator.bar?.spent01).toBe(0.4);
   });
 
+  it("marks extra above this month's ask as overassigned", () => {
+    const row = envelope({
+      assignedCents: 70_000,
+      balanceCents: 70_000,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("overassigned");
+    expect(indicator.pill).toBe("green");
+    expect(indicator.icon).toBe("extra");
+    expect(indicator.copy).toBe("$200.00 extra");
+    expect(indicator.moreNeededCents).toBe(0);
+    expect(indicator.bar?.fill01).toBe(1);
+  });
+
+  it("keeps an exact-ask leftover Funded even when Available is still the ask", () => {
+    const row = envelope({
+      assignedCents: 50_000,
+      balanceCents: 50_000,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("funded");
+    expect(indicator.copy).toBe("Funded");
+    expect(indicator.icon).toBe("check");
+  });
+
   it("marks fully spent when Available is $0 after spending a met ask", () => {
     const row = envelope({
       assignedCents: 50_000,
@@ -252,6 +280,18 @@ describe("envelopeIndicator", () => {
     expect(indicate(row).moreNeededCents).toBe(0);
   });
 
+  it("lets fully spent win when extra assigned was spent to $0 Available", () => {
+    const row = envelope({
+      assignedCents: 70_000,
+      activityCents: -70_000,
+      balanceCents: 0,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("fully-spent");
+    expect(indicator.copy).toBe("Fully Spent");
+    expect(indicator.moreNeededCents).toBe(0);
+  });
+
   it("greens leftover with no ask", () => {
     const row = envelope({
       target: null,
@@ -264,6 +304,21 @@ describe("envelopeIndicator", () => {
     expect(indicator.pill).toBe("green");
     expect(indicator.copy).toBeNull();
     expect(indicator.bar?.fill01).toBe(1);
+  });
+
+  it("calls sinking extra overassigned instead of On Track", () => {
+    // $1,200 by December; August is 4 months away (5 installments).
+    const installment = Math.round(120_000 / 5);
+    const row = envelope({
+      target: byDate(120_000, "2026-12"),
+      assignedCents: installment + 5_000,
+      balanceCents: installment + 5_000,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("overassigned");
+    expect(indicator.icon).toBe("extra");
+    expect(indicator.copy).toBe("$50.00 extra");
+    expect(indicator.moreNeededCents).toBe(0);
   });
 
   it("puts a by-date template On Track after this month's installment", () => {
@@ -339,6 +394,13 @@ describe("envelopeIndicator", () => {
     );
     expect(funded.state).toBe("funded");
     expect(funded.icon).toBe("check");
+    const extra = indicate(
+      billRow({ assignedCents: 250_000, balanceCents: 250_000 }),
+      bills,
+    );
+    expect(extra.state).toBe("overassigned");
+    expect(extra.copy).toBe("$400.00 extra");
+    expect(extra.icon).toBe("extra");
   });
 
   it("marks a fully assigned and spent bill Fully Spent when its payee anchor lags", () => {
@@ -372,6 +434,12 @@ describe("envelopeIndicator", () => {
     expect(funded.state).toBe("on-track");
     expect(funded.copy).toBe("On Track");
     expect(funded.icon).toBe("pie");
+    const extra = indicate(
+      { ...row, assignedCents: needed + 10_000, balanceCents: needed + 10_000 },
+      bills,
+    );
+    expect(extra.state).toBe("overassigned");
+    expect(extra.copy).toBe("$100.00 extra");
   });
 
   it("labels a quarterly derived bill installment as needed this month", () => {
@@ -413,6 +481,89 @@ describe("envelopeIndicator", () => {
     );
     expect(map.has("pay")).toBe(false);
     expect(map.get("food")?.state).toBe("underfunded");
+  });
+});
+
+describe("picker-month fold", () => {
+  // Fix This must scan the picker month's assigned, not the viewed month's.
+  it("reads overassigned from that month's fold", () => {
+    const groups: BudgetGroupRow[] = [
+      {
+        id: "spend",
+        parentGroupId: null,
+        name: "Spending",
+        kind: "spending",
+        sortKey: "spend",
+        hidden: false,
+      },
+    ];
+    const categories: BudgetCategoryRow[] = [
+      {
+        id: "food",
+        groupId: "spend",
+        name: "Groceries",
+        sortKey: "food",
+        hidden: false,
+        notes: "",
+        target: addMonthly(50_000),
+        kind: "spending",
+        isIncome: false,
+        bill: null,
+      },
+    ];
+    const months = buildBudget({
+      categories: [{ id: "food", groupId: "spend", isIncome: false }],
+      allocations: [
+        {
+          month: "2026-08-01",
+          categoryId: "food",
+          amountCents: 50_000,
+          carryover: false,
+          snoozed: false,
+        },
+        {
+          month: "2026-09-01",
+          categoryId: "food",
+          amountCents: 70_000,
+          carryover: false,
+          snoozed: false,
+        },
+      ],
+      activity: [],
+      buffered: [],
+      startMonth: "2026-08-01",
+      endMonth: "2026-09-01",
+      openingCents: 200_000,
+    });
+    const august = findMonth(months, "2026-08-01");
+    const september = findMonth(months, "2026-09-01");
+    if (!august || !september) throw new Error("missing months");
+
+    const augustScan = assignScanInputs({
+      month: august,
+      previous: null,
+      groups,
+      categories,
+    });
+    expect(
+      indicatorsFromAssign("2026-08-01", augustScan.envelopes, augustScan.bills).get(
+        "food",
+      )?.state,
+    ).toBe("funded");
+
+    const septemberScan = assignScanInputs({
+      month: september,
+      previous: august,
+      groups,
+      categories,
+    });
+    const septemberIndicator = indicatorsFromAssign(
+      "2026-09-01",
+      septemberScan.envelopes,
+      septemberScan.bills,
+    ).get("food");
+    expect(septemberIndicator?.state).toBe("overassigned");
+    expect(septemberIndicator?.copy).toBe("$200.00 extra");
   });
 });
 

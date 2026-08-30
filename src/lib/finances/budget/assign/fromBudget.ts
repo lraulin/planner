@@ -161,6 +161,30 @@ export function currentMonthUnderfundedGap(params: {
   );
 }
 
+/** The same Assign envelopes the Budget grid scans, for any already-folded month. */
+export function assignScanInputs(params: {
+  month: BudgetMonth;
+  previous: BudgetMonth | null;
+  groups: Parameters<typeof budgetRows>[0];
+  categories: Parameters<typeof budgetRows>[1];
+  goals?: Parameters<typeof budgetRows>[3];
+  nextDueKeys?: Parameters<typeof budgetRows>[4];
+  expectedKeys?: Parameters<typeof budgetRows>[5];
+}): { envelopes: AssignEnvelope[]; bills: Map<string, BillSnapshot> } {
+  const rows = budgetRows(
+    params.groups,
+    params.categories,
+    params.month,
+    params.goals ?? {},
+    params.nextDueKeys ?? new Map(),
+    params.expectedKeys ?? new Map(),
+  );
+  return {
+    envelopes: rows.map((row) => assignEnvelopeFromRow(row, params.previous)),
+    bills: assignBillsFromRows(rows),
+  };
+}
+
 export function assignBillsFromRows(
   rows: readonly BudgetRow[],
 ): Map<string, BillSnapshot> {

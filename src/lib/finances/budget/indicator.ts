@@ -7,8 +7,9 @@
  * second demand.
  *
  * Spec: `agent-os/specs/2026-08-25-1310-budget-funding-indicators/` D3–D6, as
- * amended by `agent-os/specs/2026-08-28-1000-ynab-target-engine/` Task 8 and
- * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1–D3.
+ * amended by `agent-os/specs/2026-08-28-1000-ynab-target-engine/` Task 8,
+ * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1–D3, and
+ * `agent-os/specs/2026-08-29-2129-overassigned-available/` D1–D4.
  */
 
 import { formatUsd } from "@/lib/finances/money";
@@ -24,13 +25,14 @@ export type IndicatorState =
   | "snoozed"
   | "underfunded"
   | "fully-spent"
+  | "overassigned"
   | "on-track"
   | "funded"
   | "safe"
   | "idle";
 
 export type IndicatorPill = "red" | "yellow" | "green" | "gray";
-export type IndicatorIcon = "clock" | "check" | "pie" | "snooze";
+export type IndicatorIcon = "clock" | "check" | "pie" | "snooze" | "extra";
 
 export type EnvelopeBar = {
   fill01: number;
@@ -181,6 +183,24 @@ export function envelopeIndicator(
       pill: "gray",
       icon: "check",
       bar: { fill01: 1, spent01: 1, striped: true },
+    };
+  }
+
+  // Assigned above this month's ask is raidable without missing the ask. Fully-spent
+  // already won at $0 Available; On Track is only exact-installment with pile remaining.
+  const extraCents = envelope.assignedCents - needed;
+  if (asked && extraCents > 0 && available > 0) {
+    return {
+      state: "overassigned",
+      moreNeededCents: 0,
+      copy: `${formatUsd(extraCents)} extra`,
+      pill: "green",
+      icon: "extra",
+      bar: {
+        fill01: 1,
+        spent01: clamp01(spent / Math.max(funded, 1)),
+        striped: false,
+      },
     };
   }
 

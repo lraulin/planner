@@ -96,10 +96,12 @@ narrowed by later deltas:
   Assign (YNAB). Hold is removed from the product; `buffered_cents` remains for leftover
   rows. See that spec's D2–D3.
 - **The Budget grid's scan layer is YNAB, not Actual.** Leftover is labeled Available.
-  Underfunded / funded / on-track / fully-spent show as a progress bar, status copy, and
-  a colored pill with an icon. Envelope math is still Actual's; the ask is Assign's
-  `neededAssigned`. Actual colors leftover by sign and puts goal status in a tooltip.
-  See `agent-os/specs/2026-08-25-1310-budget-funding-indicators/`.
+  Underfunded / funded / on-track / fully-spent / overassigned show as a progress bar,
+  status copy, and a colored pill with an icon. Overassigned is assigned above this
+  month's ask (`neededAssigned`), not leftover on a funded envelope. Envelope math is
+  still Actual's. Actual colors leftover by sign and puts goal status in a tooltip.
+  See `agent-os/specs/2026-08-25-1310-budget-funding-indicators/` and
+  `agent-os/specs/2026-08-29-2129-overassigned-available/`.
 - **The Budget page has a YNAB-shaped inspector.** Category details (bill cadence, next
   charge, status, URL, notes, target status) live in a right pane on desktop and a
   full-screen sheet below `md`. Envelope math and bill-cadence demand stay Actual-derived.

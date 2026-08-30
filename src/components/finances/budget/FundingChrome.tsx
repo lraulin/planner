@@ -95,12 +95,70 @@ function SnoozeIcon() {
   );
 }
 
+/** Plus in a circle — assigned above this month's ask. */
+function ExtraIcon() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
+      <circle
+        cx="6"
+        cy="6"
+        r="4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+      />
+      <path
+        d="M6 3.75v4.5M3.75 6h4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function FundingIcon({ icon }: { icon: EnvelopeIndicator["icon"] }) {
   if (icon === "clock") return <ClockIcon />;
   if (icon === "check") return <CheckIcon />;
   if (icon === "pie") return <PieIcon />;
   if (icon === "snooze") return <SnoozeIcon />;
+  if (icon === "extra") return <ExtraIcon />;
   return null;
+}
+
+function pillClass(indicator: EnvelopeIndicator): string {
+  return `tabular inline-flex min-h-tap items-center gap-1 rounded-full px-2 text-[0.8125rem] font-medium md:min-h-0 md:py-0.5 ${PILL[indicator.pill]}`;
+}
+
+function AvailableContents({
+  cents,
+  indicator,
+}: {
+  cents: number;
+  indicator: EnvelopeIndicator;
+}) {
+  return (
+    <>
+      <FundingIcon icon={indicator.icon} />
+      {formatUsd(cents)}
+    </>
+  );
+}
+
+/** Icon + amount + pill classes, not a button — the grid wraps this in one; Fix This does not. */
+export function AvailableAmount({
+  cents,
+  indicator,
+}: {
+  cents: number;
+  indicator: EnvelopeIndicator;
+}) {
+  return (
+    <span className={pillClass(indicator)}>
+      <AvailableContents cents={cents} indicator={indicator} />
+    </span>
+  );
 }
 
 export function FundingBar({ indicator }: { indicator: EnvelopeIndicator }) {
@@ -150,10 +208,9 @@ export function AvailablePill({
       onClick={(event) => onOpen({ x: event.clientX, y: event.clientY })}
       title={indicator.copy ?? "Cover, move money, or roll overspending forward"}
       aria-label={`Available in ${label}: ${formatUsd(cents)}`}
-      className={`tabular inline-flex min-h-tap items-center gap-1 rounded-full px-2 text-[0.8125rem] font-medium md:min-h-0 md:py-0.5 ${PILL[indicator.pill]}`}
+      className={pillClass(indicator)}
     >
-      <FundingIcon icon={indicator.icon} />
-      {formatUsd(cents)}
+      <AvailableContents cents={cents} indicator={indicator} />
     </button>
   );
 }
