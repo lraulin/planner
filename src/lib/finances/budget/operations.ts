@@ -178,6 +178,55 @@ export function transferBetweenCategories(params: {
 }
 
 /**
+ * How much of `amountCents` can actually come out of an envelope's Available.
+ *
+ * Shared with the Fix This preview so the dialog cannot promise a different number than
+ * the write. Clamped to `[0, max(0, available)]` — leftover/carry-in is Available, and
+ * taking it may drive Assigned negative, which is valid.
+ */
+export function unassignMovedCents(
+  amountCents: number,
+  availableCents: number,
+): number {
+  return Math.min(Math.max(0, Math.trunc(amountCents)), Math.max(0, availableCents));
+}
+
+/**
+ * The inverse of `assignFromReadyToAssign`: take Available out of an envelope and give it
+ * back to Ready to Assign.
+ *
+ * Writes `assigned' = assigned − moved`. Assigned may go negative when the money is leftover
+ * rather than this month's assignment — the same as YNAB, and the point of unassigning a
+ * funded envelope that was filled last month. Available cannot go negative: `moved` is
+ * clamped to it. Income never holds Available, so it is a no-op.
+ *
+ * Spec: `agent-os/specs/2026-08-29-2033-budget-fix-this/` D5.
+ */
+export function unassignToReadyToAssign(params: {
+  month: BudgetMonth;
+  from: EnvelopeRef;
+  amountCents: number;
+  todayKey: string;
+}): BudgetEdit {
+  const { month, from, amountCents, todayKey } = params;
+  const source = categoryMonth(month, from.id);
+  const moved = unassignMovedCents(amountCents, source.balanceCents);
+  if (moved <= 0) return NO_EDIT;
+
+  return {
+    allocations: [
+      {
+        month: month.month,
+        categoryId: from.id,
+        amountCents: source.assignedCents - moved,
+      },
+    ],
+    buffered: null,
+    note: `Unassigned ${formatUsd(moved)} from ${from.name} to Ready to Assign ${onDay(todayKey)}`,
+  };
+}
+
+/**
  * Give an envelope money from Ready to Assign.
  *
  * `amountCents: null` means all of it, which is the "Assign remaining" affordance. Clamped to

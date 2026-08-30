@@ -13,6 +13,7 @@ import {
   setToAverage,
   setZero,
   transferBetweenCategories,
+  unassignToReadyToAssign,
   type BudgetEdit,
 } from "./operations";
 
@@ -266,6 +267,140 @@ describe("transferBetweenCategories", () => {
         month: from,
         from: FOOD,
         to: FOOD,
+        amountCents: 5_000,
+        todayKey: TODAY,
+      }),
+    ).toEqual(NO_EDIT);
+  });
+});
+
+describe("unassignToReadyToAssign", () => {
+  const base = {
+    openingCents: 200_000,
+    allocations: [
+      { month: "2026-08-01", categoryId: FOOD.id, amountCents: 40_000 },
+      { month: "2026-08-01", categoryId: FUN.id, amountCents: 10_000 },
+    ],
+  };
+
+  it("returns money to Ready to Assign and leaves the rest of the month's assignments", () => {
+    const months = ledger(base);
+    const before = month(months);
+    const edit = unassignToReadyToAssign({
+      month: before,
+      from: FOOD,
+      amountCents: 15_000,
+      todayKey: TODAY,
+    });
+    expect(edit.allocations).toEqual([
+      { month: "2026-08-01", categoryId: FOOD.id, amountCents: 25_000 },
+    ]);
+    expect(edit.note).toBe(
+      "Unassigned $150.00 from Groceries to Ready to Assign on August 22",
+    );
+
+    const after = month(apply(months, edit, base));
+    expect(after.categories[FOOD.id]?.balanceCents).toBe(25_000);
+    expect(after.categories[FUN.id]?.assignedCents).toBe(10_000);
+    expect(after.readyToAssignCents).toBe(before.readyToAssignCents + 15_000);
+  });
+
+  it("clamps at Available rather than digging a hole in the envelope", () => {
+    const months = ledger(base);
+    const edit = unassignToReadyToAssign({
+      month: month(months),
+      from: FUN,
+      amountCents: 999_999,
+      todayKey: TODAY,
+    });
+    const after = month(apply(months, edit, base));
+    expect(after.categories[FUN.id]?.balanceCents).toBe(0);
+    expect(after.categories[FUN.id]?.assignedCents).toBe(0);
+  });
+
+  it("may drive Assigned negative when the money is leftover, not this month's assignment", () => {
+    // A positive balance always rolls forward. Unassigning it in a later month is how
+    // leftover goes back to Ready to Assign, and Assigned is allowed to go negative so
+    // Available can hit zero.
+    const leftover = {
+      openingCents: 200_000,
+      allocations: [{ month: "2026-06-01", categoryId: FOOD.id, amountCents: 40_000 }],
+    };
+    const months = ledger(leftover);
+    const august = month(months);
+    expect(august.categories[FOOD.id]?.assignedCents).toBe(0);
+    expect(august.categories[FOOD.id]?.balanceCents).toBe(40_000);
+
+    const edit = unassignToReadyToAssign({
+      month: august,
+      from: FOOD,
+      amountCents: 40_000,
+      todayKey: TODAY,
+    });
+    expect(edit.allocations).toEqual([
+      { month: "2026-08-01", categoryId: FOOD.id, amountCents: -40_000 },
+    ]);
+
+    const after = month(apply(months, edit, leftover));
+    expect(after.categories[FOOD.id]?.assignedCents).toBe(-40_000);
+    expect(after.categories[FOOD.id]?.balanceCents).toBe(0);
+  });
+
+  it("writes only the source month when that month is later than the viewed one", () => {
+    const base2 = {
+      openingCents: 200_000,
+      allocations: [
+        { month: "2026-08-01", categoryId: FOOD.id, amountCents: 40_000 },
+        { month: "2026-09-01", categoryId: RENT.id, amountCents: 30_000 },
+      ],
+    };
+    const months = ledger(base2);
+    const edit = unassignToReadyToAssign({
+      month: month(months, "2026-09-01"),
+      from: RENT,
+      amountCents: 20_000,
+      todayKey: TODAY,
+    });
+    expect(edit.allocations).toEqual([
+      { month: "2026-09-01", categoryId: RENT.id, amountCents: 10_000 },
+    ]);
+
+    const after = apply(months, edit, base2);
+    expect(month(after, "2026-08-01").categories[FOOD.id]?.assignedCents).toBe(40_000);
+    expect(month(after, "2026-09-01").categories[RENT.id]?.assignedCents).toBe(10_000);
+  });
+
+  it("does nothing at 0, with no Available, or from income", () => {
+    const months = ledger(base);
+    const from = month(months);
+    expect(
+      unassignToReadyToAssign({
+        month: from,
+        from: FOOD,
+        amountCents: 0,
+        todayKey: TODAY,
+      }),
+    ).toEqual(NO_EDIT);
+    expect(
+      unassignToReadyToAssign({
+        month: from,
+        from: FOOD,
+        amountCents: -5_000,
+        todayKey: TODAY,
+      }),
+    ).toEqual(NO_EDIT);
+    expect(
+      unassignToReadyToAssign({
+        month: from,
+        from: RENT,
+        amountCents: 5_000,
+        todayKey: TODAY,
+      }),
+    ).toEqual(NO_EDIT);
+    expect(
+      unassignToReadyToAssign({
+        month: from,
+        from: { id: "pay", name: "Paycheck" },
         amountCents: 5_000,
         todayKey: TODAY,
       }),
