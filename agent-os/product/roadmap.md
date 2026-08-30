@@ -1051,6 +1051,15 @@ period)` so money already spent stops being held twice and only going over bites
   current or future month, the summary control next to the number becomes Fix This and
   opens an Un-assign list (this month and later months with Available). Envelope math
   stays Actual; the gesture is YNAB. Tools ▸ Assign is unchanged.
+  ✅ **Ready to Assign reads as a derivation, shipped 2026-08-29.**
+  `agent-os/specs/2026-08-29-2206-ready-to-assign-derivation/`. The seven terms move behind
+  a `How this adds up` disclosure and are typeset as an equation — aligned column, rule,
+  restated total — instead of seven equal-weight chips. The uncategorized backlog gets one
+  amber, clickable line inside the card (gated on the count, so it survives a sum that
+  cancels to zero) and the unnoticed Backlog strip is gone. Income category amounts now
+  drill to the Register. The uncategorized _term_ dropped its upper date bound so it counts
+  the same rows the tray offers, instead of leaving future-dated ones in the
+  Account reconciliation residual.
   ✅ **Overassigned Available shipped 2026-08-29.**
   `agent-os/specs/2026-08-29-2129-overassigned-available/`. Assigned above this month's
   ask is a scan state of its own (`$X extra`, plus icon, same green as Funded). Exact-ask

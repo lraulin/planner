@@ -1,6 +1,6 @@
 # Ready to Assign derivation — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete**
 
 ## Scope
 

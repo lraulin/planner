@@ -1,6 +1,6 @@
 # Ready to Assign — make the derivation read as a derivation
 
-**Status: active**
+**Status: frozen / complete**
 Spec folder: `agent-os/specs/2026-08-29-2206-ready-to-assign-derivation/`
 
 ## Spec relationships
@@ -100,62 +100,75 @@ records (`audit/checkpoints.ts:67`).
 
 ## Acceptance criteria
 
-- [ ] The collapsed summary card is materially shorter than today's: headline, note, action
+- [x] The collapsed summary card is materially shorter than today's: headline, note, action
       button, pool figure, and the amber line when it applies.
-- [ ] `How this adds up` expands to a right-aligned column whose terms visibly sum to the
+- [x] `How this adds up` expands to a right-aligned column whose terms visibly sum to the
       restated `Ready to Assign` total, including `Assigned in future months` when non-zero.
-- [ ] The seven terms still come from `month.terms`; the component cannot render a breakdown
+- [x] The seven terms still come from `month.terms`; the component cannot render a breakdown
       that fails to sum to its own headline.
-- [ ] The amber line appears whenever `uncategorizedCount > 0`, **including when the amount
+- [x] The amber line appears whenever `uncategorizedCount > 0`, **including when the amount
       cancels to $0.00**, and is absent at zero count.
-- [ ] Categorize lands on `?view=uncategorized` showing exactly the number of rows the line
+- [x] Categorize lands on `?view=uncategorized` showing exactly the number of rows the line
       claims.
-- [ ] The `Backlog` strip and its call site are gone.
-- [ ] Each income category amount opens the register filtered to that envelope and month.
-- [ ] `uncategorizedActivityThrough` and `backlogSince` return figures for the same row set;
+- [x] The `Backlog` strip and its call site are gone.
+- [x] Each income category amount opens the register filtered to that envelope and month.
+- [x] `uncategorizedActivityThrough` and `backlogSince` return figures for the same row set;
       `assertPoolIdentity` and `envelope.test.ts:517` still hold.
-- [ ] The pool sentence is unchanged in wording and present inside the disclosure.
+- [x] The pool sentence is unchanged in wording and present inside the disclosure.
+
+**Verified 2026-08-29** against the local budget (August 2026): the disclosure's terms sum
+`$119.18 + $100,030.95 + $0.00 − $3,318.26 − $0.00 − $43.97 − $118.88 = $96,669.02`, the
+restated total; the amber line reads `2 transactions have no category since August 2026
+-$43.97` and Categorize lands on exactly those two rows; the Gifts amount opens the Register
+on `Gifts · August 2026`. Two criteria are structural rather than observed, because this data
+does not produce them: the `$0.00`-sum amber line (the gate is on `uncategorizedCount`, never
+on the amount) and `Assigned in future months` (zero this month, and the column maps
+`month.terms` whole). The iPhone width check is Lee's, after the push.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                 | Why                                                                                                                                                                                                                              |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **The drift measured zero.** No on-budget, leaf, non-superseded, uncategorized row is dated past the current month end — the database holds nothing after 2026-08-28 — so none of the reconciliation figure was misattributed backlog. | Task 2 asked for the measurement before the change. It says the bound fix is definitional, not a restatement: it cannot move a number today, and prevents one being misattributed the first time a future-dated row is imported. |
+| 2   | **`uncategorizedActivityThrough` was deleted rather than edited.** Dropping the upper bound makes its predicate identical to `backlogSince`, so the fold now takes the term from the same result the tray displays.                    | Two queries for one concept is what allowed the drift. One predicate cannot disagree with itself, and `clean-code` prefers deleting the second definition to keeping it in sync.                                                 |
+| 3   | **The account-pool figure moved to the headline row** (right-aligned, beside Fix This / Assign) rather than staying on its own line.                                                                                                   | D6 keeps the figure visible on the collapsed card; the wireframe puts it there, and the first acceptance criterion asks the collapsed card to be materially shorter.                                                             |
+| 4   | **The disclosure column is capped at `max-w-sm`.**                                                                                                                                                                                     | Full-card width put labels and amounts ~1300px apart, which defeats the alignment the whole change is for.                                                                                                                       |
+| 5   | **The summary carries an explicit `▸` caret** that rotates when open.                                                                                                                                                                  | `list-none` removes the native marker, and without a caret the row did not read as expandable next to the Movement log disclosure right below it, which has one.                                                                 |
 
 ## Task 1: Save spec documentation
 
 Create this folder with `plan.md`, `shape.md`, `standards.md`, `references.md`, and
 `visuals/approved-wireframe.md`. **Done** — this file.
 
-## Task 2: Measure the drift
+## Task 2: Measure the drift — **done**
 
 Query on-budget, leaf, non-superseded, uncategorized rows dated after the current month end.
 Record the count and sum in **Changes from original plan**; it decides how much of the
 `-$122.09` reconciliation is genuine drift versus misattributed backlog.
 
-## Task 3: Bound fix
+## Task 3: Bound fix — **done**
 
 Drop the upper bound in `uncategorizedActivityThrough` so its predicate matches `backlogSince`.
 Re-verify `assertPoolIdentity` (`membership.ts:80-92`) and `envelope.test.ts:517`. Add a test
 that a future-dated uncategorized row lands in the term rather than in reconciliation.
 
-## Task 4: The disclosure
+## Task 4: The disclosure — **done**
 
 Restructure `BudgetSummary`: headline row, amber line, pool figure, then a `<details>`
 containing the aligned term column, the rule, the restated total, and the pool sentence. Terms
 still map `month.terms`.
 
-## Task 5: Amber line
+## Task 5: Amber line — **done**
 
 Gate on `uncategorizedCount > 0` using the `AssignDialog.tsx:200` idiom (`role="status"`,
 `border-[var(--goal-unmet)] bg-[var(--goal-unmet)]/10`). Thread count and cents into
 `BudgetSummary`. Delete `Backlog` and its call site (`BudgetView.tsx:1584`).
 
-## Task 6: Income links
+## Task 6: Income links — **done**
 
 Swap `IncomeSection`'s amount `<span>` (`BudgetView.tsx:2325`) for `ActivityAmountLink`.
 
-## Task 7: Verify, freeze spec, update roadmap
+## Task 7: Verify, freeze spec, update roadmap — **done**
 
 - `npm run test:unit` — sum-to-headline, pool identity, `export.test.ts` captions.
 - `npm run test:integration` with Postgres up — the bound change is DB-side.
@@ -169,6 +182,5 @@ Swap `IncomeSection`'s amount `<span>` (`BudgetView.tsx:2325`) for `ActivityAmou
 
 ---
 
-**Standing rule while active:** keep this file and `shape.md` current with material changes to
-requirements, design or scope — including feedback on what was actually built — and append a row
-to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+**Frozen 2026-08-29.** This is the as-built record. Further change opens a new delta-spec rather
+than an edit to this folder.
