@@ -13,7 +13,9 @@ const COMMIT_CHORD = formatBindings(COMMIT_FORM) ?? "⌘⏎";
  *
  * The outline stays visible and readable behind it — that is the whole reason this is not a
  * modal — so the backdrop is a light scrim rather than a blackout, and the panel starts
- * below the app chrome so the tab strip stays clickable.
+ * below the app chrome so the tab strip stays clickable. That last part is geometry, not
+ * stacking: above `md` this overlay is `absolute` in AppShell's page slot. A `fixed
+ * inset-0` drawer under the menu/page bar's `z-50` is what clipped the form tabs.
  *
  * Below `md` it is a **full-screen sheet** instead — no scrim, no chrome behind it. Context
  * preservation is what the side drawer buys, and at 390px it is unaffordable: there is no
@@ -61,7 +63,7 @@ export function Drawer({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
+    <div className="fixed inset-0 z-40 flex justify-end md:absolute">
       <div
         onClick={onClose}
         aria-hidden

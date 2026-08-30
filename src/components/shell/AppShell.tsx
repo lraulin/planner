@@ -70,7 +70,12 @@ export function AppShell({
               <PageBar active={active} />
             </Suspense>
 
-            <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+            {/*
+              `relative` is the drawer's containing block above `md` (`Drawer` is
+              `md:absolute` here). That is what keeps the form tabs below the menu and
+              page bar instead of painting under their z-50 stacking.
+            */}
+            <div className="relative flex min-h-0 flex-1 flex-col">{children}</div>
 
             <MobileNav active={active} />
           </div>

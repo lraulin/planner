@@ -101,7 +101,7 @@ export function PageBar({ active }: { active: ModuleId | null }) {
   return (
     <nav
       aria-label={`${entry.label} pages`}
-      className="relative z-50 flex flex-none items-stretch gap-1 overflow-x-auto border-b border-rule bg-surface px-3 md:overflow-x-visible"
+      className="relative flex flex-none items-stretch gap-1 overflow-x-auto border-b border-rule bg-surface px-3 md:z-50 md:overflow-x-visible"
     >
       {pages.map(({ page, href }, index) => {
         const isActive = page.id === current?.id;
