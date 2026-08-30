@@ -1046,6 +1046,11 @@ period)` so money already spent stops being held twice and only going over bites
   leftover Ready to Assign is assigned into future-month categories, and current Ready to
   Assign subtracts those jobs. Expected vs Income / Next 12 months dropped the pay-period
   axis. Insights still has pay-period charts; Dashboard still shows days until payday.
+  ✅ **Fix This (negative Ready to Assign) shipped 2026-08-29.**
+  `agent-os/specs/2026-08-29-2033-budget-fix-this/`. When Ready to Assign is red on a
+  current or future month, the summary control next to the number becomes Fix This and
+  opens an Un-assign list (this month and later months with Available). Envelope math
+  stays Actual; the gesture is YNAB. Tools ▸ Assign is unchanged.
   ✅ **Funding scan layer shipped 2026-08-25.**
   `agent-os/specs/2026-08-25-1310-budget-funding-indicators/`. Budget rows show a progress
   bar, Funded / `$X more needed` / Fully Spent / On Track copy, and a colored Available

@@ -1,6 +1,6 @@
 # Fix This (negative Ready to Assign) — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-29)
 
 ## Scope
 

@@ -1,6 +1,6 @@
 # Fix This (negative Ready to Assign)
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-29)  
 Spec folder: `agent-os/specs/2026-08-29-2033-budget-fix-this/`
 
 ## Spec relationships
@@ -48,23 +48,32 @@ Copy is the existing note plus the verbs Fix This / Un-assign. Empty picker mont
 
 ## Acceptance criteria
 
-- [ ] When the viewed month is current or future and Ready to Assign `< 0`, the summary button reads **Fix This**, sits next to the number (not `ml-auto`), and uses spend emphasis. The muted note is not between the number and the button.
-- [ ] When Ready to Assign `≥ 0`, or the viewed month is in the past, the same slot reads **Assign** and opens Assign as today.
-- [ ] Fix This opens a ModalShell listing Regular / Bills / Savings envelopes with Available `> 0`, grouped like the Budget tables, with a month switcher for this and later months that have such envelopes.
-- [ ] Picking a row, editing amount (default `min(Available, hole)`, MAX = Available, expressions), and Un-assign writes one clamped unassign. Assigned may go negative. Available does not go negative. Ready to Assign of the viewed month moves by the moved amount.
-- [ ] Unassigning in a future month recovers current (viewed) Ready to Assign via assigned-in-future. The Budget page `?month=` does not change.
-- [ ] After each write the dialog stays open and refreshes until Ready to Assign `≥ 0`, then it closes.
-- [ ] Tools ▸ Assign, Move money to…, Cover overspending, and leftover Hold Release are unchanged.
-- [ ] A second user cannot unassign the first user’s allocations.
-- [ ] Lint, typecheck, unit tests, integration tests (Postgres up), `npm run smoke` on the running server. Browser: drive a real negative RTA (over-assign inline, and assign-into-next-month) through Fix This, including a future-month source and MAX overshoot.
+- [x] When the viewed month is current or future and Ready to Assign `< 0`, the summary button reads **Fix This**, sits next to the number (not `ml-auto`), and uses spend emphasis. The muted note is not between the number and the button.
+- [x] When Ready to Assign `≥ 0`, or the viewed month is in the past, the same slot reads **Assign** and opens Assign as today.
+- [x] Fix This opens a ModalShell listing Regular / Bills / Savings envelopes with Available `> 0`, grouped like the Budget tables, with a month switcher for this and later months that have such envelopes.
+- [x] Picking a row, editing amount (default `min(Available, hole)`, MAX = Available, expressions), and Un-assign writes one clamped unassign. Assigned may go negative. Available does not go negative. Ready to Assign of the viewed month moves by the moved amount.
+- [x] Unassigning in a future month recovers current (viewed) Ready to Assign via assigned-in-future. The Budget page `?month=` does not change.
+- [x] After each write the dialog stays open and refreshes until Ready to Assign `≥ 0`, then it closes.
+- [x] Tools ▸ Assign, Move money to…, Cover overspending, and leftover Hold Release are unchanged.
+- [x] A second user cannot unassign the first user’s allocations.
+- [x] Lint, typecheck, unit tests, integration tests (Postgres up), `npm run smoke` on the running server. Browser: drive a real negative RTA (over-assign inline, and assign-into-next-month) through Fix This, including a future-month source and MAX overshoot.
+
+## As-built
+
+- `unassignToReadyToAssign` / `unassignMovedCents` in `src/lib/finances/budget/operations.ts`
+- Picker model in `src/lib/finances/budget/fixThis.ts`
+- `BudgetOperation` kind `unassign` in `mutations.ts`; `budget.fix-this` in `BudgetView`
+- `BudgetSummary` action slot; `FixThisDialog`
+
+This budget’s start month is the current month, so a past-month page clamps to now. The past-month gate is `fixThisUnavailableReason` (`viewedMonth < monthKeyOf(todayKey)`).
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change | Why |
+| --- | ------ | --- |
+|     | None   |     |
 
 ## Task 1: Save Spec Documentation
 
