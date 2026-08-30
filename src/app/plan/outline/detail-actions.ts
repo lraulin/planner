@@ -17,7 +17,9 @@ import {
   actionErrorMessage,
   run,
   runQuery,
+  runWithData,
   type ActionResult,
+  type DataActionResult,
   type QueryResult,
 } from "../../actionResult";
 
@@ -112,8 +114,8 @@ export async function importNodeItemsAction(params: {
 export async function updateNodeItemAction(
   itemId: string,
   values: NodeItemValues,
-): Promise<ActionResult> {
-  return run(async (userId) => {
+): Promise<DataActionResult<{ warning?: string }>> {
+  return runWithData(async (userId) => {
     await detail.updateNodeItem(userId, itemId, values);
     // Fill a blank attachment name from the page title when a URL is set or the name
     // is cleared (so a bad autofill can be fixed by clearing Name without re-pasting).
@@ -122,8 +124,11 @@ export async function updateNodeItemAction(
       "title" in values &&
       typeof values.title === "string" &&
       values.title.trim().length === 0;
-    if (urlSet || titleCleared) {
-      await detail.autofillAttachmentTitleFromUrl(userId, itemId);
+    if (!urlSet && !titleCleared) return;
+
+    const result = await detail.autofillAttachmentTitleFromUrl(userId, itemId);
+    if (result.outcome === "fetch-failed") {
+      return { warning: PAGE_TITLE_FETCH_FAILED };
     }
   });
 }

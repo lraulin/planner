@@ -1301,6 +1301,23 @@ describeDb("detail mutations", () => {
         vi.restoreAllMocks();
       });
 
+      it("leaves a blank name and reports fetch-failed when the page cannot be read", async () => {
+        mockTitleFetch({ "https://example.com/missing": null });
+        const id = await createNodeItem({
+          userId,
+          nodeId: projectId,
+          kind: "attachment",
+          values: { title: "", url: "https://example.com/missing" },
+        });
+
+        expect(await autofillAttachmentTitleFromUrl(userId, id)).toEqual({
+          outcome: "fetch-failed",
+        });
+
+        const detail = await loadNodeDetail(userId, projectId);
+        expect(detail?.items.find((item) => item.id === id)?.title).toBe("");
+      });
+
       it("force overwrites a name the automatic path refuses", async () => {
         mockTitleFetch({ "https://example.com/doc": "Fetched title" });
         const id = await createNodeItem({

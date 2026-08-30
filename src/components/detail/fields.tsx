@@ -283,6 +283,9 @@ export function TextArea({
  * The main forms hold their state in the drawer and write it on Save, so a keystroke costs
  * nothing there. List rows write straight through to the server, the way the outline grid's
  * inline cells do — so they commit once, when the field is done with.
+ *
+ * `immediateCommit` is the exception for values that are complete the moment they land
+ * (a URL-shaped paste): waiting for blur looked like autofill never ran.
  */
 export function DraftTextField({
   label,
@@ -290,6 +293,7 @@ export function DraftTextField({
   onCommit,
   placeholder,
   action,
+  immediateCommit,
   className,
 }: {
   label: string;
@@ -297,11 +301,17 @@ export function DraftTextField({
   onCommit: (value: string) => void;
   placeholder?: string;
   action?: ReactNode;
+  immediateCommit?: (text: string) => boolean;
   className?: string;
 }) {
   const id = useId();
   const [text, setText] = useState(value);
   const focusedRef = useRef(false);
+  const pastedRef = useRef(false);
+  const textRef = useRef(text);
+  const valueRef = useRef(value);
+  const onCommitRef = useRef(onCommit);
+  const immediateCommitRef = useRef(immediateCommit);
 
   // Accept external updates while idle (e.g. attachment title autofill after a URL save).
   // While focused, keep the in-progress edit — don't clobber keystrokes.
@@ -309,12 +319,42 @@ export function DraftTextField({
     if (!focusedRef.current) setText(value);
   }, [value]);
 
+  useEffect(() => {
+    textRef.current = text;
+    valueRef.current = value;
+    onCommitRef.current = onCommit;
+    immediateCommitRef.current = immediateCommit;
+  });
+
+  useEffect(() => {
+    return () => {
+      const latest = textRef.current;
+      if (latest !== valueRef.current && immediateCommitRef.current?.(latest)) {
+        onCommitRef.current(latest);
+      }
+    };
+  }, []);
+
+  const commitIfImmediate = (next: string) => {
+    if (next !== value && immediateCommit?.(next)) onCommit(next);
+  };
+
   return (
     <Field label={label} htmlFor={id} action={action} className={className}>
       <input
         id={id}
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          const next = event.target.value;
+          setText(next);
+          if (pastedRef.current) {
+            pastedRef.current = false;
+            commitIfImmediate(next);
+          }
+        }}
+        onPaste={() => {
+          if (immediateCommit) pastedRef.current = true;
+        }}
         onFocus={() => {
           focusedRef.current = true;
         }}

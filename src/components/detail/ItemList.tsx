@@ -75,7 +75,10 @@ export function ItemList({
   kind: NodeItemKind;
   items: NodeItem[];
   onCreate: () => void;
-  onChange: (itemId: string, values: NodeItemValues) => void;
+  onChange: (
+    itemId: string,
+    values: NodeItemValues,
+  ) => void | Promise<{ ok: true; warning?: string } | { ok: false; error: string }>;
   onDelete: (item: NodeItem) => void;
   onMove: (itemId: string, direction: "up" | "down") => void;
   onImport: (
@@ -129,6 +132,22 @@ export function ItemList({
   );
   // Manual reorder only makes sense against stored order, not a temporary column sort.
   const canReorder = sort === null;
+
+  const reportListResult = (
+    result: { ok: true; warning?: string } | { ok: false; error: string },
+  ) => {
+    if (!result.ok) {
+      setStatus(null);
+      setError(result.error);
+      return;
+    }
+    if (result.warning) {
+      setStatus(null);
+      setError(result.warning);
+      return;
+    }
+    setError(null);
+  };
 
   const exportCsv = () => {
     const exportedAt = new Date();
@@ -355,17 +374,14 @@ export function ItemList({
                         )
                       }
                       busy={busy}
-                      onChange={(values) => onChange(item.id, values)}
+                      onChange={(values) => {
+                        const result = onChange(item.id, values);
+                        if (result) void result.then(reportListResult);
+                      }}
                       onFetchTitle={
                         onFetchTitle
                           ? async () => {
-                              const result = await onFetchTitle(item.id);
-                              if (!result.ok) {
-                                setStatus(null);
-                                setError(result.error);
-                                return;
-                              }
-                              setError(null);
+                              reportListResult(await onFetchTitle(item.id));
                             }
                           : undefined
                       }
@@ -619,6 +635,11 @@ function ItemEditor({
                 label={field.label}
                 value={stringValue(item, field.key)}
                 onCommit={(value) => onChange({ [field.key]: value })}
+                immediateCommit={
+                  field.key === "url" && item.kind === "attachment"
+                    ? (draft) => normalizeHttpUrl(draft) !== null
+                    : undefined
+                }
                 action={
                   fetchTitle ? (
                     <button

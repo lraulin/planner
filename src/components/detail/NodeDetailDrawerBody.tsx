@@ -356,7 +356,21 @@ function DetailForm({
               item.id === itemId ? { ...item, ...changes } : item,
             ),
           );
-          runItemAction(() => updateNodeItemAction(itemId, changes));
+          return new Promise((resolve) => {
+            startTransition(async () => {
+              const result = await updateNodeItemAction(itemId, changes);
+              if (!result.ok) {
+                resolve(result);
+                return;
+              }
+              await refreshItems();
+              resolve(
+                result.data?.warning
+                  ? { ok: true, warning: result.data.warning }
+                  : { ok: true },
+              );
+            });
+          });
         }}
         onDelete={setPendingDelete}
         onMove={(itemId, direction) =>
