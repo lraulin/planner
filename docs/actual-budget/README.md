@@ -106,6 +106,11 @@ narrowed by later deltas:
   The Available breakdown is leftover identity (carry-in + assigned + activity), not
   YNAB's cash-vs-credit split. See
   `agent-os/specs/2026-08-25-1633-budget-inspector/`.
+- **Fix This is YNAB's gesture, not Actual's.** Actual has no banner for a negative To
+  Budget. Envelope arithmetic stays Actual (Assigned may go negative when leftover is
+  unassigned; Available is clamped at zero). The UI — summary verb on the red number,
+  Un-assign money from a month's envelopes, including a later month — is YNAB. See
+  `agent-os/specs/2026-08-29-2033-budget-fix-this/`.
 - **Unparseable amount entry reverts instead of committing zero.** Actual's `fromEdit`
   returns a caller-supplied default for anything it cannot read, and the budget cell's
   `onSave` turns that into `0` — so clearing a cell zeroes the envelope. This app writes

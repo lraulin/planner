@@ -97,6 +97,7 @@ import {
   type AssignOption,
   type AssignResult,
 } from "@/lib/finances/budget/assign/types";
+import { fixThisUnavailableReason } from "@/lib/finances/budget/fixThis";
 import {
   budgetGroupDepths,
   budgetSiblings,
@@ -110,6 +111,7 @@ import type { RecurringMerchant } from "@/lib/finances/analytics";
 import { cadenceOf } from "@/lib/finances/recurringBills";
 import type { BillForecast } from "@/lib/finances/dashboardQueries";
 import { AssignDialog, AssignPreviewDialog } from "./AssignDialog";
+import { FixThisDialog } from "./FixThisDialog";
 import { billColumns, envelopeColumns, type BudgetColumnCtx } from "./budgetColumns";
 import { BudgetInspector } from "./BudgetInspector";
 import { BudgetSummary } from "./BudgetSummary";
@@ -217,6 +219,7 @@ export function BudgetView({
   const [filing, setFiling] = useState<PayeeEvidenceRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [preview, setPreview] = useState<AssignResult | null>(null);
   const [previewScope, setPreviewScope] = useState<readonly string[] | undefined>();
   const [reviewing, setReviewing] = useState(false);
@@ -249,6 +252,14 @@ export function BudgetView({
     (savingsGrid.switches["show-hidden"] ?? false);
 
   const month = findMonth(data.months, data.month);
+  const canFixThis =
+    !!month &&
+    fixThisUnavailableReason({
+      viewedMonth: data.month,
+      todayKey: data.todayKey,
+      readyToAssignCents: month.readyToAssignCents,
+    }) === null;
+
   const rows = useMemo(
     () =>
       month
@@ -824,6 +835,14 @@ export function BudgetView({
       },
     ];
 
+    const fixThisReason = canFixThis
+      ? null
+      : (fixThisUnavailableReason({
+          viewedMonth: data.month,
+          todayKey: data.todayKey,
+          readyToAssignCents: month?.readyToAssignCents ?? 0,
+        }) ?? "Ready to Assign is not negative");
+
     return [
       ...structureCommands,
       {
@@ -837,11 +856,39 @@ export function BudgetView({
         title: "Detected recurring merchants no envelope has claimed yet",
         run: () => setReviewing(true),
       },
+      {
+        id: "budget.fix-this",
+        label: "Fix This",
+        group: "view",
+        menu: "tools",
+        keywords: "unassign negative ready over-assigned ynab",
+        disabled: fixThisReason !== null,
+        title: fixThisReason ?? undefined,
+        run: () => {
+          if (fixThisReason) return;
+          setAssigning(false);
+          setFixing(true);
+        },
+      },
       ...assignCommands,
     ];
-  }, [assignPlans, bannerScope, review.length, startAssign, selectedRow]);
+  }, [
+    assignPlans,
+    bannerScope,
+    review.length,
+    startAssign,
+    selectedRow,
+    data.month,
+    data.todayKey,
+    month,
+    canFixThis,
+  ]);
 
   useRegisterCommands(commands);
+
+  if (fixing && !canFixThis) {
+    setFixing(false);
+  }
 
   if (!month) return null;
 
@@ -1461,7 +1508,16 @@ export function BudgetView({
           accountPoolCents={
             data.month === monthKeyOf(data.todayKey) ? data.accountPoolCents : undefined
           }
-          onAssign={() => setAssigning(true)}
+          action={canFixThis ? "fix-this" : "assign"}
+          onAction={() => {
+            if (canFixThis) {
+              setAssigning(false);
+              setFixing(true);
+            } else {
+              setFixing(false);
+              setAssigning(true);
+            }
+          }}
         />
         {isFutureBudgetMonth(data.month, data.todayKey) ? (
           <p className="text-[0.75rem] leading-snug text-ink-muted">
@@ -1789,6 +1845,27 @@ export function BudgetView({
               }),
             );
           }}
+        />
+      ) : null}
+      {fixing && canFixThis ? (
+        <FixThisDialog
+          viewedMonth={data.month}
+          months={data.months}
+          groups={data.groups}
+          categories={data.categories}
+          showHidden={showHidden}
+          pending={pending}
+          onCancel={() => setFixing(false)}
+          onUnassign={(sourceMonth, from, amountCents) =>
+            run(() =>
+              budgetOperationAction({
+                kind: "unassign",
+                month: sourceMonth,
+                from,
+                amountCents,
+              }),
+            )
+          }
         />
       ) : null}
       {assigning && !preview ? (

@@ -935,6 +935,122 @@ describeDb("budget mutations", () => {
     ).toBe(20_000);
   });
 
+  it("unassigns Available back to Ready to Assign and appends the movement note", async () => {
+    const { checkingId } = await seedAccounts(userId);
+    await addTransactions(userId, [
+      {
+        accountId: checkingId,
+        date: "2026-07-01",
+        description: "OPENING",
+        amount: "100.00",
+      },
+    ]);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const bills = { id: ids.get("Bills")!, name: "Bills" };
+
+    await performBudgetOperation(userId, {
+      kind: "assign",
+      month: MONTH,
+      category: bills,
+      amountCents: 40_000,
+    });
+    const over = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
+    expect(over.readyToAssignCents).toBe(-30_000);
+
+    const result = await performBudgetOperation(userId, {
+      kind: "unassign",
+      month: MONTH,
+      from: bills,
+      amountCents: 15_000,
+    });
+    expect(result.applied).toBe(true);
+    expect(result.note).toContain("Unassigned $150.00 from Bills to Ready to Assign");
+
+    const budget = await loadBudget(userId, MONTH);
+    const august = findMonth(budget.months, MONTH)!;
+    expect(categoryMonth(august, bills.id).assignedCents).toBe(25_000);
+    expect(august.readyToAssignCents).toBe(-15_000);
+    expect(
+      budget.movementEvents.some((event) =>
+        event.summary.includes("Unassigned $150.00 from Bills"),
+      ),
+    ).toBe(true);
+  });
+
+  it("unassigns a future month without rewriting this month's assigned", async () => {
+    const { checkingId } = await seedAccounts(userId);
+    await addTransactions(userId, [
+      {
+        accountId: checkingId,
+        date: "2026-07-01",
+        description: "OPENING",
+        amount: "100.00",
+      },
+    ]);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const bills = { id: ids.get("Bills")!, name: "Bills" };
+
+    await performBudgetOperation(userId, {
+      kind: "assign",
+      month: "2026-09-01",
+      category: bills,
+      amountCents: 20_000,
+    });
+    await performBudgetOperation(userId, {
+      kind: "unassign",
+      month: "2026-09-01",
+      from: bills,
+      amountCents: 8_000,
+    });
+
+    const data = await loadBudget(userId, MONTH);
+    expect(categoryMonth(findMonth(data.months, MONTH)!, bills.id).assignedCents).toBe(
+      0,
+    );
+    expect(
+      categoryMonth(findMonth(data.months, "2026-09-01")!, bills.id).assignedCents,
+    ).toBe(12_000);
+    expect(findMonth(data.months, MONTH)!.assignedInFutureMonthsCents).toBe(12_000);
+  });
+
+  it("does not let a second user unassign the first user's allocation", async () => {
+    const { checkingId } = await seedAccounts(userId);
+    await addTransactions(userId, [
+      {
+        accountId: checkingId,
+        date: "2026-07-01",
+        description: "OPENING",
+        amount: "100.00",
+      },
+    ]);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const bills = { id: ids.get("Bills")!, name: "Bills" };
+    await performBudgetOperation(userId, {
+      kind: "assign",
+      month: MONTH,
+      category: bills,
+      amountCents: 40_000,
+    });
+
+    await expect(
+      performBudgetOperation(await makeUser(), {
+        kind: "unassign",
+        month: MONTH,
+        from: bills,
+        amountCents: 10_000,
+      }),
+    ).rejects.toThrow();
+    expect(
+      categoryMonth(
+        findMonth((await loadBudget(userId, MONTH)).months, MONTH)!,
+        bills.id,
+      ).assignedCents,
+    ).toBe(40_000);
+  });
+
   it("sets carryover on this month and every later one", async () => {
     await seedAccounts(userId);
     await seedBudget(userId, {
@@ -1501,6 +1617,14 @@ describeDb("budget mutations — cross-user isolation", () => {
         kind: "assign",
         month: MONTH,
         category: ref,
+        amountCents: 5_000,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      performBudgetOperation(intruderId, {
+        kind: "unassign",
+        month: MONTH,
+        from: ref,
         amountCents: 5_000,
       }),
     ).rejects.toThrow();

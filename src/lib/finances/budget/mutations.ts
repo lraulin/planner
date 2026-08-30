@@ -49,6 +49,7 @@ import {
   setToAverage,
   setZero,
   transferBetweenCategories,
+  unassignToReadyToAssign,
   type BudgetEdit,
   type EnvelopeRef,
 } from "./operations";
@@ -307,7 +308,13 @@ export type BudgetOperation =
   | { kind: "release-hold"; month: MonthKey }
   | { kind: "copy-previous"; month: MonthKey }
   | { kind: "average"; month: MonthKey }
-  | { kind: "zero"; month: MonthKey };
+  | { kind: "zero"; month: MonthKey }
+  | {
+      kind: "unassign";
+      month: MonthKey;
+      from: EnvelopeRef;
+      amountCents: number;
+    };
 
 function expenseRefs(
   categories: readonly { id: string; name: string; kind: EnvelopeKind }[],
@@ -373,6 +380,13 @@ function editFor(
       });
     case "zero":
       return setZero({ month, categories: expenses, todayKey });
+    case "unassign":
+      return unassignToReadyToAssign({
+        month,
+        from: operation.from,
+        amountCents: operation.amountCents,
+        todayKey,
+      });
   }
 }
 
@@ -426,6 +440,8 @@ function touchedRefs(operation: BudgetOperation): EnvelopeRef[] {
       return [operation.from, operation.to];
     case "assign-remaining":
       return [operation.to];
+    case "unassign":
+      return [operation.from];
     default:
       return [];
   }

@@ -16,12 +16,15 @@ import { readyToAssignNote, type BudgetMonth } from "@/lib/finances/budget/envel
 export function BudgetSummary({
   month,
   accountPoolCents,
-  onAssign,
+  action = "assign",
+  onAction,
 }: {
   month: BudgetMonth;
   /** When viewing the current month, the live on-budget working pool. */
   accountPoolCents?: number;
-  onAssign?: () => void;
+  /** Same slot: Assign, or Fix This when Ready to Assign is negative on a current/future month. */
+  action?: "assign" | "fix-this";
+  onAction?: () => void;
 }) {
   const ready = month.readyToAssignCents;
   const tone =
@@ -30,6 +33,7 @@ export function BudgetSummary({
       : ready === 0
         ? "text-[var(--chart-income)]"
         : "text-ink";
+  const fixThis = action === "fix-this";
 
   return (
     <section className="rounded border border-rule bg-surface p-3">
@@ -37,19 +41,21 @@ export function BudgetSummary({
         <span className={`tabular text-[2.25rem] leading-none font-medium ${tone}`}>
           {formatUsd(ready)}
         </span>
-        <span className="text-[0.8125rem] text-ink-muted">
-          {readyToAssignNote(ready)}
-        </span>
-        {onAssign ? (
+        {onAction ? (
           <button
             type="button"
-            onClick={onAssign}
-            className="ml-auto rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised"
+            onClick={onAction}
+            className={
+              fixThis
+                ? "min-h-tap rounded border border-[var(--chart-spend)] px-2 py-1 text-[0.8125rem] text-[var(--chart-spend)] hover:bg-[color-mix(in_srgb,var(--chart-spend)_12%,transparent)] md:min-h-0"
+                : "min-h-tap rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
+            }
           >
-            Assign
+            {fixThis ? "Fix This" : "Assign"}
           </button>
         ) : null}
       </div>
+      <p className="mt-1 text-[0.8125rem] text-ink-muted">{readyToAssignNote(ready)}</p>
 
       <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-rule pt-2">
         {month.terms.map((term) => (
