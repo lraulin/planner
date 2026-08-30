@@ -1,6 +1,6 @@
 # Attachment clipboard button, title autofill, and fetch-name — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-30)
 
 ## Scope
 

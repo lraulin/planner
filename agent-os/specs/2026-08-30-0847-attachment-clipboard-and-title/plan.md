@@ -1,7 +1,10 @@
 # Attachment clipboard button, title autofill, and fetch-name
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-30)  
 Spec folder: `agent-os/specs/2026-08-30-0847-attachment-clipboard-and-title/`
+
+This document is the durable record of **what was built and why**. Further change opens a
+new delta-spec rather than editing this folder.
 
 ## Spec relationships
 
@@ -40,46 +43,56 @@ Phase 2 attachments MVP (links only). Capture-quality on the form, same as the 2
 
 ## Acceptance criteria
 
-- [ ] Attachments tab **From clipboard** with a link on the clipboard creates the row(s) without Add attachment first; title autofills when fetch succeeds
-- [ ] Several distinct URLs in one clip each become a row; already-attached URLs are not duplicated
-- [ ] Clipboard empty, non-URL, or unreadable → error on the list; nothing written
-- [ ] Button is absent on other ItemList kinds (Objectives, Risks, …)
-- [ ] Pasting a URL into an attachment URL field fills a blank Name from the page when fetch succeeds, without a second trip to rename
-- [ ] Fetch failure on automatic fill still saves the URL; Name stays blank; the failure is visible (not silent)
-- [ ] **Fetch name from page** overwrites Name with the current page title; on failure keeps the current name and shows the error
-- [ ] A second user cannot attach to, or refetch a title on, the first user’s row
-- [ ] Outline **Item ▸ Add attachment from clipboard** still works as today
+- [x] Attachments tab **From clipboard** with a link on the clipboard creates the row(s) without Add attachment first; title autofills when fetch succeeds
+- [x] Several distinct URLs in one clip each become a row; already-attached URLs are not duplicated
+- [x] Clipboard empty, non-URL, or unreadable → error on the list; nothing written
+- [x] Button is absent on other ItemList kinds (Objectives, Risks, …)
+- [x] Pasting a URL into an attachment URL field fills a blank Name from the page when fetch succeeds, without a second trip to rename
+- [x] Fetch failure on automatic fill still saves the URL; Name stays blank; the failure is visible (not silent)
+- [x] **Fetch name from page** overwrites Name with the current page title; on failure keeps the current name and shows the error
+- [x] A second user cannot attach to, or refetch a title on, the first user’s row
+- [x] Outline **Item ▸ Add attachment from clipboard** still works as today
+
+## As built
+
+- `autofillAttachmentTitleFromUrl(userId, itemId, { force })` returns `filled` / `skipped` / `fetch-failed`. Automatic path still uses `shouldAutofillAttachmentTitle`; force overwrites.
+- `fetchAttachmentTitleAction` is the thin force wrapper; fetch failure is `Could not read the page title.`
+- `updateNodeItemAction` returns `{ warning }` via `runWithData` when automatic fill cannot read the page, so the URL write still succeeds and the list can show the error.
+- `DraftTextField` commits a URL-shaped paste (and unmount) on attachment URL fields — that was the silent autofill: paste never left the field, so blur never wrote.
+- Attachments `ItemList`: **From clipboard** (tooltip is the existing command label) and **Fetch name from page** next to Name. Clipboard read lives in the list; attach still goes through `attachUrlsToNodeAction`. Objectives/Risks do not get the button.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, or scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change | Why                                                                                                   |
+| --- | ------ | ----------------------------------------------------------------------------------------------------- |
+|     | None   | The blur-only commit was the predicted cause; force-overwrite and list error line shipped as planned. |
 
-## Task 1: Save Spec Documentation
+## Task 1: Save Spec Documentation — done
 
-Create this folder with plan, shape, standards, and references. **Status: active.** Pin standards commit `6192620bace854340d475553c5bb212b74e0cde4`.
+Create this folder with plan, shape, standards, and references. Pin standards commit `6192620bace854340d475553c5bb212b74e0cde4`.
 
-While this spec is **active**, when we make a material change to requirements, design, or scope (including from feedback on what was implemented), update the relevant sections and append to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
-
-## Task 2: Force title fetch in lib, then the editor control
+## Task 2: Force title fetch in lib, then the editor control — done
 
 - Extend the autofill helper with a force/overwrite path that still no-ops on missing/other-user/non-attachment/non-web-URL, but **does** replace a non-empty title.
 - Return the title or a distinct failure so the action can tell the UI.
 - Thin action next to `updateNodeItemAction`.
 - ItemEditor (attachment only): **Fetch name from page** next to Name. Cross-user integration test; unit test that force overwrites and the automatic path still refuses a set name.
 
-## Task 3: Make URL-paste autofill work, and stop swallowing fetch failure
+## Task 3: Make URL-paste autofill work, and stop swallowing fetch failure — done
 
 Trace the Add → paste URL path end to end (DraftTextField commit, `updateNodeItemAction`, `autofillAttachmentTitleFromUrl`, `refreshItems`). Fix the actual cause. If paste never commits until blur, commit a URL-shaped paste (and unmount) so leaving the field is not required. If fetch returns null, surface it on the list instead of looking like a no-op. Automatic fill still must not overwrite a name the user typed (`shouldAutofillAttachmentTitle`).
 
-## Task 4: From clipboard on the Attachments list
+## Task 4: From clipboard on the Attachments list — done
 
 Optional `onAttachFromClipboard` on `ItemList`, wired only from the attachment `list()` in `NodeDetailDrawerBody`. Read clipboard → `clipboardAttachRefusal` → `attachUrlsToNodeAction` → `refreshItems`. Reuse `useAttachFromClipboard` only if it can report into the list error/status line without a second dialog; otherwise a small parent callback is fine — do not copy `attachUrlsToNode`.
 
-## Task 5: Verify, freeze spec, update roadmap
+## Task 5: Verify, freeze spec, update roadmap — done
 
-Browser: Outline drawer Attachments — From clipboard (one URL, several, duplicate, empty clip); paste into URL fills Name; Fetch name from page overwrites; fetch failure keeps name and shows error; Objectives/Risks have no clipboard button. Grid Item ▸ Add attachment from clipboard still works. lint, typecheck, unit; integration against Postgres (cross-user). Freeze. Roadmap attachments line stays “links only”; no phase change.
+Browser (Learn Spanish project drawer): From clipboard unreadable → list error `Could not read the clipboard.`; Objectives/Risks have no clipboard button; paste `https://example.com` into URL filled Name with `Example Domain` without leaving the field; Fetch name from page overwrote `Temporary name`; Fetch disabled with `URL is blank` when empty; outline row menu still has **Add attachment from clipboard**. Multi-URL / dupe / force-fetch-fail / cross-user covered by `attachUrls` and `detail/mutations` integration tests (headless Chrome would not grant clipboard read, so the success clip path was not clicked in the browser). Roadmap attachments line stays “links only”; no phase change.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+None.
