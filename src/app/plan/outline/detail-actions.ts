@@ -2,7 +2,7 @@
 
 import type { NodeItemKind } from "@/db/schema";
 import * as detail from "@/lib/detail/mutations";
-import { attachUrlsToNode } from "@/lib/url/attachUrls";
+import { attachUrlsToNode, type AttachUrlsResult } from "@/lib/url/attachUrls";
 import { loadNodeDetail } from "@/lib/detail/queries";
 import type {
   ItemPosition,
@@ -66,8 +66,8 @@ export async function setResultAreaFieldsAction(
 export async function attachUrlsToNodeAction(
   nodeId: string,
   text: string,
-): Promise<ActionResult> {
-  return run((userId) => attachUrlsToNode(userId, nodeId, text));
+): Promise<DataActionResult<AttachUrlsResult>> {
+  return runWithData((userId) => attachUrlsToNode(userId, nodeId, text));
 }
 
 export async function createNodeItemAction(params: {

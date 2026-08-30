@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ATTACH_NO_LINK, clipboardAttachRefusal } from "./attachUrls";
+import {
+  ATTACH_NO_LINK,
+  clipboardAttachRefusal,
+  clipboardAttachStatus,
+} from "./attachUrls";
 
 describe("clipboardAttachRefusal", () => {
   it("refuses empty or non-URL clipboard text", () => {
@@ -14,5 +18,13 @@ describe("clipboardAttachRefusal", () => {
     expect(clipboardAttachRefusal("Read https://example.com/a later")).toBeNull();
     expect(clipboardAttachRefusal("www.example.com/path")).toBeNull();
     expect(clipboardAttachRefusal("example.com/docs")).toBeNull();
+  });
+});
+
+describe("clipboardAttachStatus", () => {
+  it("reports how many rows were created, and dupes as already attached", () => {
+    expect(clipboardAttachStatus(0)).toBe("Already attached.");
+    expect(clipboardAttachStatus(1)).toBe("Added 1 attachment.");
+    expect(clipboardAttachStatus(2)).toBe("Added 2 attachments.");
   });
 });

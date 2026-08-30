@@ -4,7 +4,10 @@ import { useCallback, useState, type ReactNode } from "react";
 import { attachUrlsToNodeAction } from "@/app/plan/outline/detail-actions";
 import { NoticeDialog } from "@/components/detail/NoticeDialog";
 import type { ActionResult } from "@/components/grid/useOptimisticNodes";
-import { clipboardAttachRefusal } from "@/lib/url/clipboardAttach";
+import {
+  CLIPBOARD_UNREADABLE,
+  clipboardAttachRefusal,
+} from "@/lib/url/clipboardAttach";
 
 /**
  * Read the clipboard, then attach its URLs to a project or task.
@@ -26,12 +29,12 @@ export function useAttachFromClipboard(
         let text: string;
         try {
           if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
-            setNotice("Could not read the clipboard.");
+            setNotice(CLIPBOARD_UNREADABLE);
             return;
           }
           text = await navigator.clipboard.readText();
         } catch {
-          setNotice("Could not read the clipboard.");
+          setNotice(CLIPBOARD_UNREADABLE);
           return;
         }
         const refusal = clipboardAttachRefusal(text);

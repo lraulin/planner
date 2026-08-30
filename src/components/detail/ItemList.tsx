@@ -25,6 +25,11 @@ import { toDateKey } from "@/lib/schedule/geometry";
 import { formatPriority } from "@/lib/tree/format";
 import { normalizeHttpUrl } from "@/lib/url/pageTitle";
 import {
+  CLIPBOARD_UNREADABLE,
+  clipboardAttachRefusal,
+  clipboardAttachStatus,
+} from "@/lib/url/clipboardAttach";
+import {
   CheckboxField,
   DateField,
   DraftTextArea,
@@ -70,6 +75,7 @@ export function ItemList({
   onMove,
   onImport,
   onFetchTitle,
+  onAttachFromClipboard,
   busy,
 }: {
   kind: NodeItemKind;
@@ -87,6 +93,9 @@ export function ItemList({
   onFetchTitle?: (
     itemId: string,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onAttachFromClipboard?: (
+    text: string,
+  ) => Promise<{ ok: true; created: number } | { ok: false; error: string }>;
   busy: boolean;
 }) {
   const config = ITEM_KINDS[kind];
@@ -210,6 +219,37 @@ export function ItemList({
     reader.readAsText(file);
   };
 
+  const attachFromClipboard = async () => {
+    if (!onAttachFromClipboard) return;
+    let text: string;
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
+        setStatus(null);
+        setError(CLIPBOARD_UNREADABLE);
+        return;
+      }
+      text = await navigator.clipboard.readText();
+    } catch {
+      setStatus(null);
+      setError(CLIPBOARD_UNREADABLE);
+      return;
+    }
+    const refusal = clipboardAttachRefusal(text);
+    if (refusal) {
+      setStatus(null);
+      setError(refusal);
+      return;
+    }
+    const result = await onAttachFromClipboard(text);
+    if (!result.ok) {
+      setStatus(null);
+      setError(result.error);
+      return;
+    }
+    setError(null);
+    setStatus(clipboardAttachStatus(result.created));
+  };
+
   return (
     <section className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -240,6 +280,17 @@ export function ItemList({
             className="hidden"
             onChange={importCsv}
           />
+          {onAttachFromClipboard && (
+            <button
+              type="button"
+              title="Add attachment from clipboard"
+              onClick={() => void attachFromClipboard()}
+              disabled={busy}
+              className="rounded border border-rule px-2 py-1 text-[0.75rem] leading-none text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:opacity-40"
+            >
+              From clipboard
+            </button>
+          )}
           <button
             type="button"
             onClick={onCreate}

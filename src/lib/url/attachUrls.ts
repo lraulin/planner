@@ -15,7 +15,12 @@ import { fetchPageTitle, normalizeHttpUrl } from "./pageTitle";
 import { extractHttpUrls } from "./extractHttpUrls";
 import { ATTACH_NO_LINK } from "./clipboardAttach";
 
-export { ATTACH_NO_LINK, clipboardAttachRefusal } from "./clipboardAttach";
+export {
+  ATTACH_NO_LINK,
+  CLIPBOARD_UNREADABLE,
+  clipboardAttachRefusal,
+  clipboardAttachStatus,
+} from "./clipboardAttach";
 export const ATTACH_KIND_REFUSAL = "Attachments live on projects and tasks.";
 
 export type AttachUrlsResult = {

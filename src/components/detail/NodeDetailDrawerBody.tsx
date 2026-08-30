@@ -23,6 +23,7 @@ import { TypeIcon } from "@/components/icons/TypeIcon";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { NodeDetail, NodeDetailValues, NodeItemValues } from "@/lib/detail/types";
 import {
+  attachUrlsToNodeAction,
   createNodeItemAction,
   fetchAttachmentTitleAction,
   importNodeItemsAction,
@@ -405,6 +406,22 @@ function DetailForm({
                     }
                     await refreshItems();
                     resolve({ ok: true });
+                  });
+                })
+            : undefined
+        }
+        onAttachFromClipboard={
+          kind === "attachment"
+            ? (text) =>
+                new Promise((resolve) => {
+                  startTransition(async () => {
+                    const result = await attachUrlsToNodeAction(detail.id, text);
+                    if (!result.ok) {
+                      resolve(result);
+                      return;
+                    }
+                    await refreshItems();
+                    resolve({ ok: true, created: result.data?.created ?? 0 });
                   });
                 })
             : undefined
