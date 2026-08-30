@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
 import { goalDetails, nodeItems, nodes, taskDetails, users } from "@/db/schema";
 import { createContact, deleteContact } from "@/lib/contacts/mutations";
@@ -1156,8 +1156,10 @@ describeDb("detail mutations", () => {
         values: { title: "Keep me", url: "https://example.com" },
       });
 
-      // Would hit the network if it tried to fill; a non-null return is the bug.
-      expect(await autofillAttachmentTitleFromUrl(userId, id)).toBeNull();
+      // Would hit the network if it tried to fill; filled/fetch-failed is the bug.
+      expect(await autofillAttachmentTitleFromUrl(userId, id)).toEqual({
+        outcome: "skipped",
+      });
 
       const detail = await loadNodeDetail(userId, projectId);
       expect(detail?.items.find((item) => item.id === id)?.title).toBe("Keep me");
@@ -1266,10 +1268,95 @@ describeDb("detail mutations", () => {
         values: { title: "", url: "https://example.com" },
       });
 
-      expect(await autofillAttachmentTitleFromUrl(otherUserId, id)).toBeNull();
+      expect(await autofillAttachmentTitleFromUrl(otherUserId, id)).toEqual({
+        outcome: "skipped",
+      });
 
       const detail = await loadNodeDetail(userId, projectId);
       expect(detail?.items.find((item) => item.id === id)?.title).toBe("");
+    });
+
+    describe("force title fetch", () => {
+      function mockTitleFetch(titleByUrl: Record<string, string | null>) {
+        vi.stubGlobal(
+          "fetch",
+          vi.fn((input: RequestInfo | URL) => {
+            const href = typeof input === "string" ? input : input.toString();
+            const title = titleByUrl[href];
+            if (title === null || title === undefined) {
+              return Promise.resolve(new Response("nope", { status: 500 }));
+            }
+            return Promise.resolve(
+              new Response(`<html><head><title>${title}</title></head></html>`, {
+                status: 200,
+                headers: { "content-type": "text/html" },
+              }),
+            );
+          }),
+        );
+      }
+
+      afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+      });
+
+      it("force overwrites a name the automatic path refuses", async () => {
+        mockTitleFetch({ "https://example.com/doc": "Fetched title" });
+        const id = await createNodeItem({
+          userId,
+          nodeId: projectId,
+          kind: "attachment",
+          values: { title: "Keep me", url: "https://example.com/doc" },
+        });
+
+        expect(await autofillAttachmentTitleFromUrl(userId, id)).toEqual({
+          outcome: "skipped",
+        });
+        expect(
+          await autofillAttachmentTitleFromUrl(userId, id, { force: true }),
+        ).toEqual({ outcome: "filled", title: "Fetched title" });
+
+        const detail = await loadNodeDetail(userId, projectId);
+        expect(detail?.items.find((item) => item.id === id)?.title).toBe(
+          "Fetched title",
+        );
+      });
+
+      it("keeps the current name when a forced fetch fails", async () => {
+        mockTitleFetch({ "https://example.com/missing": null });
+        const id = await createNodeItem({
+          userId,
+          nodeId: projectId,
+          kind: "attachment",
+          values: { title: "Keep me", url: "https://example.com/missing" },
+        });
+
+        expect(
+          await autofillAttachmentTitleFromUrl(userId, id, { force: true }),
+        ).toEqual({ outcome: "fetch-failed" });
+
+        const detail = await loadNodeDetail(userId, projectId);
+        expect(detail?.items.find((item) => item.id === id)?.title).toBe("Keep me");
+      });
+
+      it("will not force-fetch another user's attachment", async () => {
+        mockTitleFetch({ "https://example.com/doc": "Stolen" });
+        const otherUserId = await makeUser();
+        const id = await createNodeItem({
+          userId,
+          nodeId: projectId,
+          kind: "attachment",
+          values: { title: "Mine", url: "https://example.com/doc" },
+        });
+
+        expect(
+          await autofillAttachmentTitleFromUrl(otherUserId, id, { force: true }),
+        ).toEqual({ outcome: "skipped" });
+
+        const detail = await loadNodeDetail(userId, projectId);
+        expect(detail?.items.find((item) => item.id === id)?.title).toBe("Mine");
+      });
     });
   });
 });

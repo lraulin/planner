@@ -3,6 +3,7 @@ import {
   extractPageTitle,
   normalizeHttpUrl,
   shouldAutofillAttachmentTitle,
+  shouldFetchAttachmentTitle,
 } from "./pageTitle";
 
 describe("normalizeHttpUrl", () => {
@@ -71,6 +72,46 @@ describe("shouldAutofillAttachmentTitle", () => {
         kind: "attachment",
         title: "",
         url: "file:///notes.txt",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("shouldFetchAttachmentTitle", () => {
+  const named = {
+    kind: "attachment",
+    title: "Keep me",
+    url: "https://example.com",
+  };
+
+  it("force overwrites a name the automatic path would refuse", () => {
+    expect(shouldFetchAttachmentTitle(named)).toBe(false);
+    expect(shouldFetchAttachmentTitle({ ...named, force: true })).toBe(true);
+  });
+
+  it("force still no-ops on missing URL, other kinds, and non-web URLs", () => {
+    expect(
+      shouldFetchAttachmentTitle({
+        kind: "attachment",
+        title: "Keep me",
+        url: "",
+        force: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFetchAttachmentTitle({
+        kind: "risk",
+        title: "",
+        url: "https://example.com",
+        force: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFetchAttachmentTitle({
+        kind: "attachment",
+        title: "Keep me",
+        url: "file:///notes.txt",
+        force: true,
       }),
     ).toBe(false);
   });

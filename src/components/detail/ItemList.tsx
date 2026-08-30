@@ -69,6 +69,7 @@ export function ItemList({
   onDelete,
   onMove,
   onImport,
+  onFetchTitle,
   busy,
 }: {
   kind: NodeItemKind;
@@ -80,6 +81,9 @@ export function ItemList({
   onImport: (
     rows: NodeItemValues[],
   ) => Promise<{ ok: true; created: number } | { ok: false; error: string }>;
+  onFetchTitle?: (
+    itemId: string,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   busy: boolean;
 }) {
   const config = ITEM_KINDS[kind];
@@ -350,7 +354,21 @@ export function ItemList({
                             .map((other) => other.contactId as string),
                         )
                       }
+                      busy={busy}
                       onChange={(values) => onChange(item.id, values)}
+                      onFetchTitle={
+                        onFetchTitle
+                          ? async () => {
+                              const result = await onFetchTitle(item.id);
+                              if (!result.ok) {
+                                setStatus(null);
+                                setError(result.error);
+                                return;
+                              }
+                              setError(null);
+                            }
+                          : undefined
+                      }
                     />
                     <div className="mt-3 flex justify-end">
                       <button
@@ -475,13 +493,17 @@ function ItemEditor({
   fields,
   contacts,
   takenContactIds,
+  busy,
   onChange,
+  onFetchTitle,
 }: {
   item: NodeItem;
   fields: ItemField[];
   contacts: readonly ContactOption[];
   takenContactIds: ReadonlySet<string>;
+  busy: boolean;
   onChange: (values: NodeItemValues) => void;
+  onFetchTitle?: () => Promise<void>;
 }) {
   return (
     <FieldGrid>
@@ -580,15 +602,39 @@ function ItemEditor({
               />
             );
 
-          default:
+          default: {
+            const fetchTitle =
+              field.key === "title" && item.kind === "attachment" && onFetchTitle;
+            const fetchDisabledReason = fetchTitle
+              ? !item.url.trim()
+                ? "URL is blank"
+                : normalizeHttpUrl(item.url) === null
+                  ? "Not a web URL"
+                  : null
+              : null;
+
             return (
               <DraftTextField
                 key={field.key}
                 label={field.label}
                 value={stringValue(item, field.key)}
                 onCommit={(value) => onChange({ [field.key]: value })}
+                action={
+                  fetchTitle ? (
+                    <button
+                      type="button"
+                      onClick={() => void onFetchTitle()}
+                      disabled={busy || fetchDisabledReason !== null}
+                      title={fetchDisabledReason ?? undefined}
+                      className="min-h-tap shrink-0 rounded border border-rule px-2 py-1 text-[0.75rem] leading-none text-ink-muted transition-colors hover:border-rule-strong hover:bg-surface-raised hover:text-ink disabled:opacity-40 md:min-h-0"
+                    >
+                      Fetch name from page
+                    </button>
+                  ) : undefined
+                }
               />
             );
+          }
         }
       })}
     </FieldGrid>

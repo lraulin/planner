@@ -39,15 +39,33 @@ export function normalizeHttpUrl(input: string): string | null {
   return url.href;
 }
 
-/** True when this attachment row should receive a fetched page title. */
+/** Shown when a title fetch fails. The URL (and any existing name) stay as they were. */
+export const PAGE_TITLE_FETCH_FAILED = "Could not read the page title.";
+
+/**
+ * True when this attachment row should receive a fetched page title.
+ *
+ * The automatic path (`force` omitted/false) is the blank-name guard: a name the user
+ * already typed is left alone. `force` is the "Fetch name from page" path and overwrites.
+ */
+export function shouldFetchAttachmentTitle(params: {
+  kind: string;
+  title: string;
+  url: string;
+  force?: boolean;
+}): boolean {
+  if (params.kind !== "attachment") return false;
+  if (!params.force && params.title.trim()) return false;
+  return normalizeHttpUrl(params.url) !== null;
+}
+
+/** Automatic fill: blank attachment names with a usable web URL. */
 export function shouldAutofillAttachmentTitle(params: {
   kind: string;
   title: string;
   url: string;
 }): boolean {
-  if (params.kind !== "attachment") return false;
-  if (params.title.trim()) return false;
-  return normalizeHttpUrl(params.url) !== null;
+  return shouldFetchAttachmentTitle(params);
 }
 
 /**

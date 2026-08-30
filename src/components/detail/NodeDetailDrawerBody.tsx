@@ -24,6 +24,7 @@ import type { OutlineNode } from "@/lib/tree/types";
 import type { NodeDetail, NodeDetailValues, NodeItemValues } from "@/lib/detail/types";
 import {
   createNodeItemAction,
+  fetchAttachmentTitleAction,
   importNodeItemsAction,
   deleteNodeItemAction,
   loadNodeDetailAction,
@@ -377,6 +378,22 @@ function DetailForm({
               resolve({ ok: true, created: result.data.created });
             });
           })
+        }
+        onFetchTitle={
+          kind === "attachment"
+            ? (itemId) =>
+                new Promise((resolve) => {
+                  startTransition(async () => {
+                    const result = await fetchAttachmentTitleAction(itemId);
+                    if (!result.ok) {
+                      resolve(result);
+                      return;
+                    }
+                    await refreshItems();
+                    resolve({ ok: true });
+                  });
+                })
+            : undefined
         }
       />
     ),

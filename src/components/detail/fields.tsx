@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { PriorityLetter } from "@/db/schema";
 import { toDateKey, fromDateKey } from "@/lib/schedule/geometry";
 import {
@@ -42,23 +42,29 @@ function Field({
   label,
   htmlFor,
   hint,
+  action,
   children,
   className = "",
 }: {
   label: string;
   htmlFor?: string;
   hint?: string;
+  /** Sits on the label row — e.g. "Fetch name from page" next to Name. */
+  action?: ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
-      <label
-        htmlFor={htmlFor}
-        className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted"
-      >
-        {label}
-      </label>
+      <div className="flex items-center justify-between gap-2">
+        <label
+          htmlFor={htmlFor}
+          className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted"
+        >
+          {label}
+        </label>
+        {action}
+      </div>
       {children}
       {hint && <p className="text-[0.75rem] text-ink-faint">{hint}</p>}
     </div>
@@ -283,12 +289,14 @@ export function DraftTextField({
   value,
   onCommit,
   placeholder,
+  action,
   className,
 }: {
   label: string;
   value: string;
   onCommit: (value: string) => void;
   placeholder?: string;
+  action?: ReactNode;
   className?: string;
 }) {
   const id = useId();
@@ -302,7 +310,7 @@ export function DraftTextField({
   }, [value]);
 
   return (
-    <Field label={label} htmlFor={id} className={className}>
+    <Field label={label} htmlFor={id} action={action} className={className}>
       <input
         id={id}
         value={text}

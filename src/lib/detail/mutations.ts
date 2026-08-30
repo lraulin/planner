@@ -33,7 +33,7 @@ import { isStateEdit } from "./formState";
 import { stateFromDates } from "./stateFromDates";
 import { between } from "@/lib/tree/sortKey";
 import { RESULT_AREA_STATE_REFUSAL } from "@/lib/tree/lifecycle";
-import { fetchPageTitle, shouldAutofillAttachmentTitle } from "@/lib/url/pageTitle";
+import { fetchPageTitle, shouldFetchAttachmentTitle } from "@/lib/url/pageTitle";
 import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
 
 /**
@@ -1031,16 +1031,26 @@ export async function updateNodeItem(
   });
 }
 
+export type AutofillAttachmentTitleResult =
+  | { outcome: "filled"; title: string }
+  | { outcome: "skipped" }
+  | { outcome: "fetch-failed" };
+
 /**
- * If this row is an attachment with a web URL and a blank name, fetch the page title
- * and write it. Never throws: a failed fetch leaves the row as-is with the URL saved.
+ * Fetch the page title for an attachment URL and write it.
  *
- * Call after a URL write (create or update). Scoped by `userId` like every other mutation.
+ * Automatic (`force` omitted): blank names only. `force: true` overwrites a name that is
+ * already set. Missing, other-user, non-attachment, and non-web-URL rows are `skipped`
+ * (same no-op either way). A failed fetch is `fetch-failed` and does not change the row.
+ * Never throws.
+ *
+ * Call after a URL write, or from the Fetch-name control. Scoped by `userId`.
  */
 export async function autofillAttachmentTitleFromUrl(
   userId: string,
   itemId: string,
-): Promise<string | null> {
+  options: { force?: boolean } = {},
+): Promise<AutofillAttachmentTitleResult> {
   const [item] = await db
     .select({
       kind: nodeItems.kind,
@@ -1051,26 +1061,27 @@ export async function autofillAttachmentTitleFromUrl(
     .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)))
     .limit(1);
 
-  if (!item) return null;
+  if (!item) return { outcome: "skipped" };
   if (
-    !shouldAutofillAttachmentTitle({
+    !shouldFetchAttachmentTitle({
       kind: item.kind,
       title: item.title,
       url: item.url,
+      force: options.force,
     })
   ) {
-    return null;
+    return { outcome: "skipped" };
   }
 
   const title = await fetchPageTitle(item.url);
-  if (!title) return null;
+  if (!title) return { outcome: "fetch-failed" };
 
   await db
     .update(nodeItems)
     .set({ title, updatedAt: new Date() })
     .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)));
 
-  return title;
+  return { outcome: "filled", title };
 }
 
 export async function deleteNodeItem(userId: string, itemId: string): Promise<void> {

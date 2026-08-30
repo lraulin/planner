@@ -12,6 +12,7 @@ import type {
 } from "@/lib/detail/types";
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/auth";
+import { PAGE_TITLE_FETCH_FAILED } from "@/lib/url/pageTitle";
 import {
   actionErrorMessage,
   run,
@@ -123,6 +124,20 @@ export async function updateNodeItemAction(
       values.title.trim().length === 0;
     if (urlSet || titleCleared) {
       await detail.autofillAttachmentTitleFromUrl(userId, itemId);
+    }
+  });
+}
+
+/** Overwrite an attachment Name from the current page title. */
+export async function fetchAttachmentTitleAction(
+  itemId: string,
+): Promise<ActionResult> {
+  return run(async (userId) => {
+    const result = await detail.autofillAttachmentTitleFromUrl(userId, itemId, {
+      force: true,
+    });
+    if (result.outcome !== "filled") {
+      throw new Error(PAGE_TITLE_FETCH_FAILED);
     }
   });
 }
