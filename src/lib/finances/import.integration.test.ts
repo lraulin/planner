@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { financeBudgetCategories, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
+import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
 import { deleteTransaction, updateAccount, updateTransaction } from "./mutations";
 import { listAccounts, listStatements, listTransactions } from "./queries";
 import { seedBudget } from "./budget/mutations";
@@ -1185,5 +1186,131 @@ describeDb("importing a statement after a live sync", () => {
     const [stillOwned] = await listTransactions(ownerId);
     expect(stillOwned.description).toBe("Pizza Hut");
     expect(stillOwned.notes ?? "").not.toBe("stolen");
+  });
+});
+
+describeDb("CSV import onto a lagged SimpleFIN headline", () => {
+  /**
+   * The 2026-08-31 checking deposit. The row imported, Gifts income moved, and Ready to
+   * Assign did not — account reconciliation swallowed the cash because the live headline
+   * stayed on yesterday's SimpleFIN number.
+   */
+  const giftFile: ImportFile = {
+    name: "2026-08-31_360Checking...2322.csv",
+    text: [
+      CAPONE_BANK_HEADER,
+      "2322,Deposit from PAYPAL from LEE RAULIN TRANSFER,08/31/26,Credit,5000.00,16257.46",
+    ].join("\n"),
+  };
+
+  async function linkWithBalance(
+    userId: string,
+    accountId: string,
+    balanceCents: number,
+    asOfDay: string,
+  ): Promise<string> {
+    const connectionId = await saveConnection(userId, {
+      accessUrl: `https://a:b@${crypto.randomUUID()}.test`,
+    });
+    const linkId = await linkAccount(userId, {
+      connectionId,
+      externalAccountId: `sfin-${crypto.randomUUID()}`,
+      accountId,
+    });
+    await saveBalance(userId, {
+      linkId,
+      balanceCents,
+      availableCents: null,
+      asOf: new Date(`${asOfDay}T12:00:00.000Z`),
+    });
+    return linkId;
+  }
+
+  it("advances the live headline from a bank CSV running balance even when every row already exists", async () => {
+    const userId = await makeUser();
+    await importFinanceCsvFiles({ userId, files: [giftFile] });
+    const [account] = await listAccounts(userId);
+    await linkWithBalance(userId, account.id, 1_125_746, "2026-08-25");
+    expect((await listAccounts(userId))[0].balanceCents).toBe(1_125_746);
+
+    const again = await importFinanceCsvFiles({ userId, files: [giftFile] });
+    expect(again.created).toBe(0);
+
+    const after = (await listAccounts(userId))[0];
+    expect(after.balanceCents).toBe(1_625_746);
+    expect(after.scrapeBalanceAsOf).not.toBeNull();
+  });
+
+  it("does not let SimpleFIN walk that posted figure back on the next refresh", async () => {
+    const userId = await makeUser();
+    await importFinanceCsvFiles({ userId, files: [caponeBankFile] });
+    const [account] = await listAccounts(userId);
+    const linkId = await linkWithBalance(userId, account.id, 1_125_746, "2026-08-25");
+
+    await importFinanceCsvFiles({ userId, files: [giftFile] });
+    expect((await listAccounts(userId))[0].balanceCents).toBe(1_625_746);
+
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: 1_125_746,
+      availableCents: null,
+      asOf: new Date(),
+    });
+    expect((await listAccounts(userId))[0].balanceCents).toBe(1_625_746);
+  });
+
+  it("does not rewind the live headline from an older statement running balance", async () => {
+    const userId = await makeUser();
+    await importFinanceCsvFiles({ userId, files: [caponeBankFile] });
+    const [account] = await listAccounts(userId);
+    await linkWithBalance(userId, account.id, 1_125_746, "2026-08-25");
+
+    await importFinanceCsvFiles({
+      userId,
+      files: [
+        {
+          name: "2026-07-31_360Checking...2322.csv",
+          text: [
+            CAPONE_BANK_HEADER,
+            "2322,Monthly Interest Paid,07/31/26,Credit,1.20,1098.98",
+          ].join("\n"),
+        },
+      ],
+    });
+    expect((await listAccounts(userId))[0].balanceCents).toBe(1_125_746);
+  });
+
+  it("adds a newly imported Chase charge to a synced card that has no running-balance column", async () => {
+    const userId = await makeUser();
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    const [account] = await listAccounts(userId);
+    await linkWithBalance(userId, account.id, -5_978, "2026-08-16");
+
+    await importFinanceCsvFiles({
+      userId,
+      files: [
+        {
+          name: "Chase9910_Activity_20260831.csv",
+          text: [
+            CHASE_HEADER,
+            "08/30/2026,08/31/2026,PIZZA HUT,Food & Drink,Sale,-12.71,",
+          ].join("\n"),
+        },
+      ],
+    });
+    expect((await listAccounts(userId))[0].balanceCents).toBe(-5_978 - 1_271);
+  });
+
+  it("does not let a second user change the first user's live headline", async () => {
+    const owner = await makeUser();
+    const intruder = await makeUser();
+    await importFinanceCsvFiles({ userId: owner, files: [giftFile] });
+    const [account] = await listAccounts(owner);
+    await linkWithBalance(owner, account.id, 1_125_746, "2026-08-25");
+
+    await importFinanceCsvFiles({ userId: intruder, files: [giftFile] });
+
+    expect((await listAccounts(owner))[0].balanceCents).toBe(1_125_746);
+    expect((await listAccounts(intruder))[0].id).not.toBe(account.id);
   });
 });

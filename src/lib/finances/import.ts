@@ -2,12 +2,13 @@ import { createHash } from "node:crypto";
 import { and, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  bankAccountLinks,
   financeAccounts,
   financeStatementRates,
   financeStatements,
   financeTransactions,
 } from "@/db/schema";
-import { fromDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import {
   looksLikeCapitalOneCardStatement,
   parseCapitalOneCardStatement,
@@ -49,6 +50,7 @@ import {
   type ParsedAccount,
   type ParsedFinanceCsv,
   type ParsedStatement,
+  type ParsedTransaction,
 } from "./types";
 import {
   finalizeTransactionIngestion,
@@ -62,6 +64,11 @@ import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import type { FinanceAuditChange } from "./audit/types";
 import { financeAuditBatchId, writeFinanceAuditEvent } from "./audit/writes";
 import { monthKeyOf } from "./budget/envelope";
+import {
+  importedPostedHeadline,
+  insertedCentsOnOrAfter,
+  latestRunningBalance,
+} from "./importedPostedBalance";
 
 /**
  * Writing parsed CSV or statement rows into the register.
@@ -71,8 +78,10 @@ import { monthKeyOf } from "./budget/envelope";
  * 1. **Import inserts or skips transactions. It never updates them.** That is what makes
  *    the user-owned `category` and `notes` durable across re-imports without any field-level
  *    merge policy — an overlapping export simply cannot touch a row that already exists.
- *    The one exception is `closedAt` on an account: a 360 CD close-out sets it when it is
- *    still null, and never un-closes.
+ *    Account-adjacent exceptions: `closedAt` on a 360 CD close-out (set when still null,
+ *    never un-closed), and the live posted headline on a SimpleFIN-linked account — a file
+ *    ahead of the aggregator writes `bankAccountLinks.balanceCents` under the same 36-hour
+ *    scrape hold a browser snapshot uses, so income does not land without cash.
  * 2. **The database decides what is a duplicate**, via the partial unique index on
  *    `(user_id, external_source, external_id)`. `onConflictDoNothing` plus a count of what
  *    actually came back from `returning` means a double-submitted upload cannot duplicate
@@ -175,6 +184,82 @@ async function markClosedIfNeeded(
         isNull(financeAccounts.closedAt),
       ),
     );
+}
+
+/**
+ * Advance a lagged SimpleFIN headline from this file. No-op when the account is not
+ * linked, has never synced, or the file is older than the live snapshot.
+ */
+async function holdLinkedPostedHeadline(
+  tx: Executor,
+  userId: string,
+  accountId: string,
+  fileRows: readonly ParsedTransaction[],
+  inserted: readonly {
+    transactionDate: string;
+    postedDate: string | null;
+    amountCents: number;
+  }[],
+  capturedAt: Date,
+): Promise<FinanceAuditChange | null> {
+  const [link] = await tx
+    .select({
+      id: bankAccountLinks.id,
+      balanceCents: bankAccountLinks.balanceCents,
+      balanceAsOf: bankAccountLinks.balanceAsOf,
+    })
+    .from(bankAccountLinks)
+    .where(
+      and(
+        eq(bankAccountLinks.userId, userId),
+        eq(bankAccountLinks.accountId, accountId),
+      ),
+    )
+    .limit(1);
+  if (!link) return null;
+
+  const asOfDate = link.balanceAsOf ? toDateKey(link.balanceAsOf) : null;
+  const headline = importedPostedHeadline({
+    linked: { balanceCents: link.balanceCents, asOfDate },
+    running: latestRunningBalance(fileRows),
+    insertedCentsOnOrAfterAsOf:
+      asOfDate === null ? 0 : insertedCentsOnOrAfter(inserted, asOfDate),
+  });
+  if (!headline) return null;
+
+  const updated = await tx
+    .update(bankAccountLinks)
+    .set({
+      balanceCents: headline.cents,
+      balanceAsOf: capturedAt,
+      scrapeBalanceAsOf: capturedAt,
+      updatedAt: capturedAt,
+    })
+    .where(
+      and(
+        eq(bankAccountLinks.id, link.id),
+        eq(bankAccountLinks.userId, userId),
+        eq(bankAccountLinks.accountId, accountId),
+      ),
+    )
+    .returning({ id: bankAccountLinks.id });
+  if (updated.length === 0) return null;
+
+  return {
+    entityType: "bank_balance",
+    entityIdentity: link.id,
+    before: {
+      balanceCents: link.balanceCents,
+      balanceAsOf: link.balanceAsOf?.toISOString() ?? null,
+      browserAuthority: false,
+    },
+    after: {
+      balanceCents: headline.cents,
+      balanceAsOf: capturedAt.toISOString(),
+      browserAuthority: true,
+      source: headline.source,
+    },
+  };
 }
 
 export type ImportFile = { name: string; text?: string; bytes?: Uint8Array };
@@ -576,6 +661,11 @@ export async function importFinanceCsvFiles({
         }));
 
         let inserted = 0;
+        const insertedMoney: {
+          transactionDate: string;
+          postedDate: string | null;
+          amountCents: number;
+        }[] = [];
         const transactionChanges: FinanceAuditChange[] = [];
         for (let start = 0; start < values.length; start += INSERT_CHUNK_ROWS) {
           const chunk = values.slice(start, start + INSERT_CHUNK_ROWS);
@@ -593,8 +683,14 @@ export async function importFinanceCsvFiles({
               externalId: financeTransactions.externalId,
             });
           inserted += rows.length;
-          transactionChanges.push(
-            ...rows.map((row) => ({
+          for (const row of rows) {
+            const amountCents = numericStringToCents(row.amount) ?? 0;
+            insertedMoney.push({
+              transactionDate: row.transactionDate,
+              postedDate: row.postedDate,
+              amountCents,
+            });
+            transactionChanges.push({
               entityType: "transaction",
               entityIdentity: row.id,
               before: null,
@@ -602,14 +698,23 @@ export async function importFinanceCsvFiles({
                 accountId: row.accountId,
                 transactionDate: row.transactionDate,
                 postedDate: row.postedDate,
-                amountCents: numericStringToCents(row.amount) ?? 0,
+                amountCents,
                 pending: false,
                 externalSource: row.externalSource,
                 externalId: row.externalId,
               },
-            })),
-          );
+            });
+          }
         }
+
+        const headlineChange = await holdLinkedPostedHeadline(
+          tx,
+          userId,
+          resolved.id,
+          account.transactions,
+          insertedMoney,
+          new Date(),
+        );
 
         // A file import advances the same watermark a sync does, so it hands the same days
         // over from the browser capture — in this transaction, for the same reason (D3).
@@ -633,6 +738,7 @@ export async function importFinanceCsvFiles({
               ]
             : []),
           ...transactionChanges,
+          ...(headlineChange ? [headlineChange] : []),
           ...snapshotCounts.changes,
           ...handover.changes,
         ];
