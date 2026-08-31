@@ -1,3 +1,4 @@
+import { selectionMoveRoots } from "@/lib/grid/selection";
 import {
   offerComparison,
   supplyTotals,
@@ -78,6 +79,45 @@ export function itemIdsOfSelection(
     }
   }
   return ids;
+}
+
+export type SupplyDeleteTargets = {
+  itemIds: string[];
+  optionIds: string[];
+};
+
+/**
+ * Rows Delete should actually remove: selection roots in display order.
+ *
+ * An offer selected alongside its item rides with the item. An offer whose parent is
+ * not selected is a root of its own, so Delete can remove a comparison row without
+ * taking the item.
+ */
+export function supplyDeleteTargets(
+  selectedIds: ReadonlySet<string>,
+  items: readonly SupplyItemRow[],
+  orderedIds: readonly string[],
+): SupplyDeleteTargets {
+  const itemIdSet = new Set(items.map((item) => item.id));
+  const optionParent = new Map<string, string>();
+  for (const item of items) {
+    for (const option of item.options) {
+      optionParent.set(option.id, item.id);
+    }
+  }
+
+  const roots = selectionMoveRoots(selectedIds, orderedIds, (id) => {
+    if (itemIdSet.has(id)) return null;
+    return optionParent.get(id) ?? null;
+  });
+
+  const itemIds: string[] = [];
+  const optionIds: string[] = [];
+  for (const id of roots) {
+    if (itemIdSet.has(id)) itemIds.push(id);
+    else if (optionParent.has(id)) optionIds.push(id);
+  }
+  return { itemIds, optionIds };
 }
 
 /** The two rate columns as the discriminated value the cost math takes. */

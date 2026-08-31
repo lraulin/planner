@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SupplyItemRow, SupplyOptionRow } from "./queries";
 import {
   itemIdsOfSelection,
+  supplyDeleteTargets,
   supplyGroups,
   supplyItemRows,
   supplyRowTotals,
@@ -65,6 +66,43 @@ describe("itemIdsOfSelection", () => {
       "drink",
       "cat",
     ]);
+  });
+});
+
+describe("supplyDeleteTargets", () => {
+  const cat = item({
+    id: "cat",
+    options: [
+      option({ id: "walmart", itemId: "cat" }),
+      option({ id: "chewy", itemId: "cat" }),
+    ],
+  });
+  const drink = item({
+    id: "drink",
+    name: "Energy",
+    options: [option({ id: "amazon", itemId: "drink" })],
+  });
+  const items = [cat, drink];
+  const order = ["cat", "walmart", "chewy", "drink", "amazon"];
+
+  it("drops offers when their parent item is also selected", () => {
+    expect(
+      supplyDeleteTargets(new Set(["cat", "walmart", "chewy"]), items, order),
+    ).toEqual({ itemIds: ["cat"], optionIds: [] });
+  });
+
+  it("keeps offers whose parent is not selected", () => {
+    expect(supplyDeleteTargets(new Set(["walmart", "amazon"]), items, order)).toEqual({
+      itemIds: [],
+      optionIds: ["walmart", "amazon"],
+    });
+  });
+
+  it("deletes two item heads without their offers listed", () => {
+    expect(supplyDeleteTargets(new Set(["cat", "drink"]), items, order)).toEqual({
+      itemIds: ["cat", "drink"],
+      optionIds: [],
+    });
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import {
   createSupplyItemAction,
   createSupplyOptionAction,
@@ -15,22 +15,27 @@ import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar } from "@/components/grid/GridToolbar";
+import { rowMenuFor } from "@/components/grid/rowMenu";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useIsCompact } from "@/components/shell/useIsCompact";
+import { INSERT_AFTER } from "@/lib/commands/chords";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
+import { isTypingTarget } from "@/lib/keyboard";
 import { formatUsd } from "@/lib/finances/money";
 import type { BudgetEnvelopeCatalog } from "@/lib/finances/budget/queries";
 import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { SupplyItemRow } from "@/lib/finances/supplies/queries";
 import {
   itemIdsOfSelection,
+  supplyDeleteTargets,
   supplyRowTotals,
   supplyGroups,
   supplyItemRows,
+  type SupplyDeleteTargets,
   type SupplyGridRow,
 } from "@/lib/finances/supplies/rows";
 import type { GridRow } from "@/lib/tree/slice";
@@ -66,6 +71,48 @@ function viewDefaults(): GridDefaults {
  * from one envelope, print that envelope's assignment beside the estimate; that comparison is
  * the point of the page, and it is read-only — nothing here writes the budget.
  */
+function deleteCopy(
+  targets: SupplyDeleteTargets,
+  items: readonly SupplyItemRow[],
+): { title: string; message: string } {
+  const itemCount = targets.itemIds.length;
+  const offerCount = targets.optionIds.length;
+  const itemName =
+    items.find((item) => item.id === targets.itemIds[0])?.name ?? "this item";
+  const offer = items
+    .flatMap((item) => item.options)
+    .find((option) => option.id === targets.optionIds[0]);
+  const offerName = offer?.vendor || offer?.brand || "this offer";
+
+  if (itemCount > 0 && offerCount === 0) {
+    return itemCount === 1
+      ? {
+          title: "Delete this item?",
+          message: `"${itemName}" and every offer under it will be removed from the worksheet.`,
+        }
+      : {
+          title: `Delete ${itemCount} items?`,
+          message: `${itemCount} items and every offer under them will be removed from the worksheet.`,
+        };
+  }
+  if (itemCount === 0 && offerCount > 0) {
+    return offerCount === 1
+      ? {
+          title: "Delete this offer?",
+          message: `"${offerName}" will be removed. The item keeps its other offers.`,
+        }
+      : {
+          title: `Delete ${offerCount} offers?`,
+          message: `${offerCount} offers will be removed. Their items keep any remaining offers.`,
+        };
+  }
+  return {
+    title: `Delete ${itemCount} items and ${offerCount} offers?`,
+    message:
+      "Selected items (with every offer under them) and the extra selected offers will be removed from the worksheet.",
+  };
+}
+
 function fundingCatalog(catalog: BudgetEnvelopeCatalog): EnvelopeCatalog {
   return {
     groups: catalog.groups
@@ -98,11 +145,7 @@ export function SuppliesView({
   >(null);
   const [choosingMerge, setChoosingMerge] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<{
-    id: string;
-    label: string;
-    kind: "item" | "option";
-  } | null>(null);
+  const [deleting, setDeleting] = useState<SupplyDeleteTargets | null>(null);
   const [pending, startTransition] = useTransition();
 
   if (initialItems !== seenServerItems) {
@@ -178,8 +221,16 @@ export function SuppliesView({
     [gridRows],
   );
   const { order, onIdsChange } = useNavigableIds(rowIds);
-  const { selectedId, selectedIds, select, headerState, toggleSelectAll, selectOne } =
-    useMultiSelect(order, null);
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    headerState,
+    toggleSelectAll,
+    selectOne,
+    selectAll,
+    move,
+  } = useMultiSelect(order, null);
   const compact = useIsCompact();
   const selectedItemIds = useMemo(
     () => itemIdsOfSelection(selectedIds, items),
@@ -233,13 +284,30 @@ export function SuppliesView({
   }, [selectedItemIds, items, compact]);
 
   const addItem = useCallback(() => {
-    commit(() =>
-      createSupplyItemAction({
+    const groupLabel =
+      selectedItemIds[0] != null
+        ? (items.find((item) => item.id === selectedItemIds[0])?.groupLabel ?? "")
+        : "";
+    setError(null);
+    startTransition(async () => {
+      const result = await createSupplyItemAction({
         name: "New item",
         rate: { rateBasis: "units_per_day", unitsPerDayMilli: 1000 },
-      }),
-    );
-  }, [commit]);
+        ...(groupLabel !== "" ? { groupLabel } : {}),
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const next = await listSupplyItemsAction();
+      if (!next.ok) {
+        setError(next.error);
+        return;
+      }
+      setItems(next.data);
+      if (result.id) selectOne(result.id);
+    });
+  }, [items, selectedItemIds, selectOne]);
 
   /** Which item a row belongs to, so "Add offer" works from an offer row as well. */
   const itemIdOf = useCallback(
@@ -254,94 +322,128 @@ export function SuppliesView({
     [items],
   );
 
-  const rowMenu = useCallback(
-    (rowId: string | null): MenuItem[] => {
-      const itemId = itemIdOf(rowId);
-      const item = items.find((candidate) => candidate.id === itemId) ?? null;
-      const option = items
-        .flatMap((candidate) => candidate.options)
-        .find((candidate) => candidate.id === rowId);
-      const mergeDisabled =
-        selectedItemIds.length < 2 && !(compact && items.length >= 2);
-      return [
-        { label: "New item", icon: "new", onSelect: addItem },
-        {
-          label:
-            selectedItemIds.length >= 2
-              ? "Merge selected items…"
-              : "Select items to merge…",
-          disabled: mergeDisabled,
-          title: mergeDisabled ? "Select two different items to merge." : undefined,
-          onSelect: requestMerge,
-        },
-        {
-          label: "Add offer",
-          // Disabled with a reason rather than hidden — `components/navigation.md`.
-          disabled: itemId === null,
-          title:
-            itemId === null ? "Select an item or one of its offers first." : undefined,
-          onSelect: () => {
-            if (itemId) commit(() => createSupplyOptionAction({ itemId }));
-          },
-        },
-        "separator",
-        {
-          label: "Delete offer",
-          disabled: option === undefined,
-          title: option === undefined ? "Select an offer to delete." : undefined,
-          destructive: true,
-          onSelect: () => {
-            if (option)
-              setDeleting({
-                id: option.id,
-                kind: "option",
-                label: option.vendor || option.brand || "this offer",
-              });
-          },
-        },
-        {
-          label: "Delete item",
-          disabled: item === null,
-          title: item === null ? "Select an item to delete." : undefined,
-          destructive: true,
-          onSelect: () => {
-            if (item) setDeleting({ id: item.id, kind: "item", label: item.name });
-          },
-        },
-      ];
+  const requestDelete = useCallback(
+    (ids: readonly string[]) => {
+      const targets = supplyDeleteTargets(new Set(ids), items, order);
+      if (targets.itemIds.length + targets.optionIds.length === 0) return;
+      setDeleting(targets);
     },
-    [items, itemIdOf, addItem, commit, requestMerge, selectedItemIds, compact],
+    [items, order],
   );
 
-  const commandCapabilities: GridCommandCapabilities = useMemo(() => {
-    const canPick = compact && items.length >= 2;
-    const enough = selectedItemIds.length >= 2;
-    const mergeDisabled = !enough && !canPick;
-    const selectedItem = items.find((item) => item.id === selectedItemIds[0]);
-    return {
-      selection: {
-        id: selectedId,
-        count: selectedItemIds.length,
-        label: selectedItem?.name,
-        ids: selectedItemIds,
-      },
-      actions: {},
-      pageCommands: [
-        {
-          id: "supplies.merge",
-          label: enough ? "Merge selected items…" : "Select items to merge…",
-          group: "record",
-          menu: "item",
-          section: "Item",
-          icon: "convert",
-          rowMenu: true,
-          disabled: mergeDisabled,
-          title: mergeDisabled ? "Select two different items to merge." : undefined,
-          run: requestMerge,
+  const capabilitiesFor = useCallback(
+    (rowId: string | null, count: number): GridCommandCapabilities => {
+      const rawIds =
+        count > 1 ? order.filter((id) => selectedIds.has(id)) : rowId ? [rowId] : [];
+      const targets = supplyDeleteTargets(new Set(rawIds), items, order);
+      const ids = [...targets.itemIds, ...targets.optionIds];
+      const itemId = itemIdOf(rowId);
+      const selectedItem = items.find((item) => item.id === (ids[0] ?? rowId));
+      const canPick = compact && items.length >= 2;
+      const enough = selectedItemIds.length >= 2;
+      const mergeDisabled = !enough && !canPick;
+      return {
+        selection: {
+          id: rowId,
+          count: ids.length,
+          label: selectedItem?.name,
+          ids,
         },
-      ],
-    };
-  }, [compact, items, selectedId, selectedItemIds, requestMerge]);
+        actions: {
+          onDelete: requestDelete,
+          onSelectAll: selectAll,
+        },
+        pageCommands: [
+          {
+            id: "grid.create",
+            label: "New item",
+            group: "record",
+            menu: "new",
+            section: "New",
+            icon: "new",
+            toolbar: 10,
+            rowMenu: true,
+            bindings: INSERT_AFTER,
+            run: addItem,
+          },
+          {
+            id: "supplies.add-offer",
+            label: "Add offer",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "new",
+            rowMenu: true,
+            disabled: itemId === null,
+            title:
+              itemId === null
+                ? "Select an item or one of its offers first."
+                : undefined,
+            run: () => {
+              if (itemId) commit(() => createSupplyOptionAction({ itemId }));
+            },
+          },
+          {
+            id: "supplies.merge",
+            label: enough ? "Merge selected items…" : "Select items to merge…",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "convert",
+            rowMenu: true,
+            disabled: mergeDisabled,
+            title: mergeDisabled ? "Select two different items to merge." : undefined,
+            run: requestMerge,
+          },
+        ],
+      };
+    },
+    [
+      order,
+      selectedIds,
+      items,
+      itemIdOf,
+      compact,
+      selectedItemIds,
+      requestDelete,
+      selectAll,
+      addItem,
+      commit,
+      requestMerge,
+    ],
+  );
+
+  const commandCapabilities = useMemo(
+    () => capabilitiesFor(selectedId, selectedIds.size),
+    [capabilitiesFor, selectedId, selectedIds.size],
+  );
+
+  const rowMenu = useCallback(
+    (rowId: string | null): MenuItem[] => {
+      const count = rowId && selectedIds.has(rowId) ? selectedIds.size : rowId ? 1 : 0;
+      return rowMenuFor(capabilitiesFor(rowId, count));
+    },
+    [capabilitiesFor, selectedIds],
+  );
+
+  const pendingDeleteCopy = deleting ? deleteCopy(deleting, items) : null;
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (deleting !== null || isTypingTarget(event.target)) return;
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        move(1, event.shiftKey);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        move(-1, event.shiftKey);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [deleting, move]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -355,24 +457,14 @@ export function SuppliesView({
         views={views}
         commandCapabilities={commandCapabilities}
         right={
-          <>
-            <button
-              type="button"
-              disabled={pending}
-              className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0 md:py-1.5"
-              onClick={addItem}
-            >
-              New item
-            </button>
-            <button
-              type="button"
-              disabled={pending}
-              className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0 md:py-1.5"
-              onClick={() => setSuggesting(true)}
-            >
-              Suggest from Amazon
-            </button>
-          </>
+          <button
+            type="button"
+            disabled={pending}
+            className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0 md:py-1.5"
+            onClick={() => setSuggesting(true)}
+          >
+            Suggest from Amazon
+          </button>
         }
       />
 
@@ -500,24 +592,26 @@ export function SuppliesView({
 
       <ConfirmDialog
         open={deleting !== null}
-        title={deleting?.kind === "item" ? "Delete this item?" : "Delete this offer?"}
-        message={
-          deleting?.kind === "item"
-            ? `"${deleting.label}" and every offer under it will be removed from the worksheet.`
-            : `"${deleting?.label ?? ""}" will be removed. The item keeps its other offers.`
-        }
+        title={pendingDeleteCopy?.title ?? "Delete?"}
+        message={pendingDeleteCopy?.message ?? ""}
         confirmLabel="Delete"
         destructive
         onCancel={() => setDeleting(null)}
         onConfirm={() => {
-          const target = deleting;
+          const targets = deleting;
           setDeleting(null);
-          if (!target) return;
-          commit(() =>
-            target.kind === "item"
-              ? deleteSupplyItemAction(target.id)
-              : deleteSupplyOptionAction(target.id),
-          );
+          if (!targets) return;
+          commit(async () => {
+            for (const id of targets.itemIds) {
+              const result = await deleteSupplyItemAction(id);
+              if (!result.ok) return result;
+            }
+            for (const id of targets.optionIds) {
+              const result = await deleteSupplyOptionAction(id);
+              if (!result.ok) return result;
+            }
+            return { ok: true as const };
+          });
         }}
       />
     </div>
