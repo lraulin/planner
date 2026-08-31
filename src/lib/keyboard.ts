@@ -12,11 +12,21 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   // call) have no DOM globals, and `x instanceof HTMLElement` throws when the
   // constructor is missing even for `null`.
   if (target == null || typeof target !== "object") return false;
-  const el = target as { tagName?: unknown; isContentEditable?: unknown };
+  const el = target as {
+    tagName?: unknown;
+    isContentEditable?: unknown;
+    type?: unknown;
+  };
   if (typeof el.tagName !== "string") return false;
 
+  if (el.tagName === "INPUT") {
+    // Checkboxes and radios are inputs but not typing. Selecting via the gutter
+    // then pressing ⌫ used to no-op because every INPUT was treated as a field.
+    const type = typeof el.type === "string" ? el.type.toLowerCase() : "text";
+    return type !== "checkbox" && type !== "radio";
+  }
+
   return (
-    el.tagName === "INPUT" ||
     el.tagName === "SELECT" ||
     el.tagName === "TEXTAREA" ||
     el.isContentEditable === true

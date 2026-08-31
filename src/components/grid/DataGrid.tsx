@@ -515,6 +515,15 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const gridRef = useRef<HTMLDivElement>(null);
+  /**
+   * Hydration-only: the first paint must not `scrollIntoView` the focused row (Lighthouse
+   * records that as a layout shift). After this effect, a row that *mounts already focused*
+   * — a newly created item — is a user action and should scroll.
+   */
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    hydratedRef.current = true;
+  }, []);
   const handleWidth = HANDLE_WIDTH;
   // Handle is grid chrome, not a host column — Show Fields cannot hide it, and widths
   // never apply to it. Prepended on desktop only; compact rows have no gutter.
@@ -1214,17 +1223,15 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
            * below the last row, the "Nothing to show" panel, and group headers — none of which
            * name a record, which is exactly what a `null` row menu is for.
            *
-           * Guarding on the marker rather than stopping propagation in the row keeps both of the
-           * row's early exits honest: inside a cell editor the browser's own cut/copy/paste menu
-           * is the useful one, and ⌃-click on macOS arrives here as a secondary click that means
-           * multi-select.
+           * Guarding on the marker rather than stopping propagation in the row keeps the row's
+           * early exit honest: ⌃-click on macOS arrives here as a secondary click that means
+           * multi-select, not a menu.
            */
           onContextMenu={
             rowMenu &&
             ((event) => {
               const target = event.target as HTMLElement;
               if (target.closest("[data-node-row]")) return;
-              if (target.closest("input, select, textarea")) return;
               if (event.ctrlKey || event.metaKey) return;
               event.preventDefault();
               setMenu({ rowId: null, x: event.clientX, y: event.clientY });
@@ -1316,6 +1323,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                             : undefined,
                         )}
                         onContextMenu={rowMenu ? openRowMenu : undefined}
+                        allowInitialScroll={hydratedRef.current}
                         rowLabel={rowLabel}
                         rowExpansion={rowExpansion}
                       />
@@ -1390,6 +1398,12 @@ type DataRowProps<TCtx, TRow> = {
   onOpenDetail?: (id: string) => void;
   drag?: RowDragBinding;
   onContextMenu?: (id: string, x: number, y: number) => void;
+  /**
+   * False on the grid's first paint so a focused row below the fold does not shift the
+   * viewport. True afterwards, so a row that mounts already focused (a newly created
+   * item) scrolls into view.
+   */
+  allowInitialScroll?: boolean;
 } & RowMeta<TRow>;
 
 /** Drag bindings rebuild every render; only dragging/hint state should bust the row memo. */
@@ -1417,6 +1431,7 @@ const DataRow = memo(
     onOpenDetail,
     drag,
     onContextMenu,
+    allowInitialScroll = false,
     rowLabel,
     rowExpansion,
   }: DataRowProps<TCtx, TRow>) {
@@ -1424,7 +1439,9 @@ const DataRow = memo(
     // Hydrate must not scroll: `block: "nearest"` still moves the scroller when the
     // focused row is below the fold, and Lighthouse records that as a 0.1 shift of
     // whichever row ended up in view. Arrow keys and a later selection still scroll.
-    const skipInitialScroll = useRef(focused);
+    // Skip only that first paint — a row that mounts focused *after* hydration is a
+    // user-created row and should come into view.
+    const skipInitialScroll = useRef(focused && !allowInitialScroll);
 
     const label = rowLabelFor(row, rowLabel);
     const expanded = rowExpansionFor(row, rowExpansion);
@@ -1501,9 +1518,10 @@ const DataRow = memo(
         onContextMenu={
           onContextMenu &&
           ((event) => {
-            // Inside a cell's editor the browser's own cut/copy/paste menu is the useful one.
-            if ((event.target as HTMLElement).closest("input, select, textarea"))
-              return;
+            // Always-on cell inputs (Supplies, Register, Budget) cover most of the row.
+            // Yielding to the browser menu there made right-click look broken; cut/copy/paste
+            // still work from the keyboard. Click-to-edit grids get the same row menu while
+            // renaming — same as a right-click on the rest of the row.
             // On macOS, Ctrl+click is often synthesised as a secondary click and never reaches
             // `click` — only `contextmenu`. Treat Ctrl/⌘+click as multi-select, not the menu.
             if (event.ctrlKey || event.metaKey) {
@@ -1604,6 +1622,7 @@ const DataRow = memo(
       prev.onSelect === next.onSelect &&
       prev.onOpenDetail === next.onOpenDetail &&
       prev.onContextMenu === next.onContextMenu &&
+      prev.allowInitialScroll === next.allowInitialScroll &&
       prev.rowLabel === next.rowLabel &&
       prev.rowExpansion === next.rowExpansion &&
       dragBindingEqual(prev.drag, next.drag)
@@ -1653,7 +1672,9 @@ function RowHandle({
       }}
       onContextMenu={(event) => {
         // Same Ctrl/⌘+click → multi-select rule as the row body (macOS synthesises a
-        // contextmenu for Ctrl+click and skips the click event).
+        // contextmenu for Ctrl+click and skips the click event). Plain right-click
+        // bubbles to the row, which opens the app menu even when the target is the
+        // checkbox input.
         if (event.ctrlKey || event.metaKey) {
           event.preventDefault();
           event.stopPropagation();
