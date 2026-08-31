@@ -10,10 +10,12 @@ import {
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { Section, SelectField, TextArea } from "@/components/detail/fields";
+import { CategorySelect } from "@/components/finances/CategorySelect";
 import { formatUsd } from "@/lib/finances/money";
 import type { AutoCategoryMode } from "@/lib/finances/payees/autoCategory";
 import type { PayeeRow } from "@/lib/finances/payees/queries";
-import type { BudgetEnvelopeOption } from "@/lib/finances/budget/queries";
+import type { BudgetEnvelopeCatalog } from "@/lib/finances/budget/queries";
+import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
 
 const MODE_OPTIONS: { value: AutoCategoryMode; label: string }[] = [
   { value: "learn", label: "Learn from my choices" },
@@ -28,12 +30,12 @@ function claimLabel(payee: PayeeRow): string {
 
 export function PayeeDrawer({
   payee,
-  envelopes,
+  catalog,
   onClose,
   onChanged,
 }: {
   payee: PayeeRow | null;
-  envelopes: readonly BudgetEnvelopeOption[];
+  catalog: BudgetEnvelopeCatalog;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -44,7 +46,7 @@ export function PayeeDrawer({
     <PayeeForm
       key={payee.id}
       payee={payee}
-      envelopes={envelopes}
+      catalog={catalog}
       titleId={titleId}
       onClose={onClose}
       onChanged={onChanged}
@@ -52,15 +54,28 @@ export function PayeeDrawer({
   );
 }
 
+function pickerCatalog(catalog: BudgetEnvelopeCatalog): EnvelopeCatalog {
+  return {
+    groups: catalog.groups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      parentGroupId: group.parentGroupId,
+      sortKey: group.sortKey,
+      hidden: group.hidden,
+    })),
+    envelopes: catalog.envelopes,
+  };
+}
+
 function PayeeForm({
   payee,
-  envelopes,
+  catalog,
   titleId,
   onClose,
   onChanged,
 }: {
   payee: PayeeRow;
-  envelopes: readonly BudgetEnvelopeOption[];
+  catalog: BudgetEnvelopeCatalog;
   titleId: string;
   onClose: () => void;
   onChanged: () => void;
@@ -301,22 +316,25 @@ function PayeeForm({
                 }}
               />
               {autoMode !== "off" ? (
-                <SelectField
-                  label={autoMode === "fixed" ? "Fixed default" : "Learned Category"}
-                  value={defaultCategoryId}
-                  options={envelopes.map((envelope) => ({
-                    value: envelope.id,
-                    label: envelope.label,
-                  }))}
-                  allowEmpty
-                  emptyLabel="None"
-                  disabled={Boolean(payee.claim)}
-                  onChange={(value) => {
-                    setDefaultCategoryId(value);
-                    setDirty(true);
-                    setJustSaved(false);
-                  }}
-                />
+                <label className="flex flex-col gap-1 text-[0.75rem] text-ink-muted">
+                  {autoMode === "fixed" ? "Fixed default" : "Learned Category"}
+                  <CategorySelect
+                    catalog={pickerCatalog(catalog)}
+                    value={defaultCategoryId}
+                    onChange={(value) => {
+                      setDefaultCategoryId(value);
+                      setDirty(true);
+                      setJustSaved(false);
+                    }}
+                    allowClear
+                    placeholder="None"
+                    disabled={Boolean(payee.claim)}
+                    ariaLabel={
+                      autoMode === "fixed" ? "Fixed default" : "Learned Category"
+                    }
+                    className="min-h-tap rounded border border-rule bg-surface px-2 py-1 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
+                  />
+                </label>
               ) : null}
             </Section>
 

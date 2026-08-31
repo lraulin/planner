@@ -18,8 +18,7 @@ export default async function FinancesPayeesPage() {
   return (
     <AppShell active="finances">
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        {/* Payees keeps the flat list: its SelectField shows the full group path label. */}
-        <PayeesView initialPayees={payees} envelopes={catalog.envelopes} />
+        <PayeesView initialPayees={payees} catalog={catalog} />
       </Suspense>
     </AppShell>
   );

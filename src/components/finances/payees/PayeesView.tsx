@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import type { GridRow } from "@/lib/tree/slice";
-import type { BudgetEnvelopeOption } from "@/lib/finances/budget/queries";
+import type { BudgetEnvelopeCatalog } from "@/lib/finances/budget/queries";
 import type { PayeeRow } from "@/lib/finances/payees/queries";
 import {
   deletePayeeAction,
@@ -49,10 +49,10 @@ function deleteMessage(payee: PayeeRow): string {
 
 export function PayeesView({
   initialPayees,
-  envelopes,
+  catalog,
 }: {
   initialPayees: PayeeRow[];
-  envelopes: readonly BudgetEnvelopeOption[];
+  catalog: BudgetEnvelopeCatalog;
 }) {
   const compact = useIsCompact();
   const [rows, setRows] = useState(initialPayees);
@@ -371,7 +371,7 @@ export function PayeesView({
 
       <PayeeDrawer
         payee={openPayee}
-        envelopes={envelopes}
+        catalog={catalog}
         onClose={closeDrawer}
         onChanged={refresh}
       />
