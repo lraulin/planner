@@ -3,6 +3,7 @@
 import type { ColumnDef } from "@/components/grid/columns";
 import type { FinanceAuditEventSummary } from "@/lib/finances/audit/types";
 import { financeAuditActionLabel } from "@/lib/finances/audit/labels";
+import { activityOccurredDayKey } from "@/lib/finances/audit/occurredDay";
 import { formatUsd } from "@/lib/finances/money";
 
 export { financeAuditActionLabel };
@@ -55,7 +56,7 @@ export const activityColumns: ColumnDef<ActivityColumnCtx, FinanceAuditEventSumm
       width: "11rem",
       hideable: false,
       filterKind: "date",
-      filterValue: (row) => new Date(row.node.occurredAt).toISOString().slice(0, 10),
+      filterValue: (row) => activityOccurredDayKey(new Date(row.node.occurredAt)),
       sortValue: (row) => new Date(row.node.occurredAt).getTime(),
       compact: "meta",
       compactText: (row) => timeLabel(row.node.occurredAt),
