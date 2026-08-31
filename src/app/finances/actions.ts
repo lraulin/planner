@@ -233,7 +233,7 @@ async function registerContext(userId: string, rawQuery?: unknown) {
               userId,
               accounts.map((account) => ({
                 id: account.id,
-                scrapeBalanceAsOf: account.scrapeBalanceAsOf,
+                browserPendingAsOf: account.browserPendingAsOf,
               })),
             )
           ).supersededTransactionIds,

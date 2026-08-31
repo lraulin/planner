@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SCRAPE_BALANCE_HOLD_MS } from "@/lib/banksync/scrapeBalance";
+import { BROWSER_PENDING_AUTHORITY_MS } from "./browserPendingAuthority";
 import { selectWorkingPending } from "./workingPending";
 
 const NOW = Date.parse("2026-08-18T16:00:00Z");
@@ -17,7 +17,7 @@ describe("selectWorkingPending", () => {
     expect(
       selectWorkingPending(
         [row("chase", "api:simplefin", -5905)],
-        [{ id: "chase", scrapeBalanceAsOf: null }],
+        [{ id: "chase", browserPendingAsOf: null }],
         NOW,
       ),
     ).toEqual([row("chase", "api:simplefin", -5905)]);
@@ -31,8 +31,8 @@ describe("selectWorkingPending", () => {
         row("capone", "scrape:capitalone", -1691),
       ],
       [
-        { id: "chase", scrapeBalanceAsOf: new Date(NOW) },
-        { id: "capone", scrapeBalanceAsOf: null },
+        { id: "chase", browserPendingAsOf: new Date(NOW) },
+        { id: "capone", browserPendingAsOf: null },
       ],
       NOW,
     );
@@ -43,7 +43,7 @@ describe("selectWorkingPending", () => {
     expect(
       selectWorkingPending(
         [row("chase", "api:simplefin", -5905)],
-        [{ id: "chase", scrapeBalanceAsOf: new Date(NOW - 60_000) }],
+        [{ id: "chase", browserPendingAsOf: new Date(NOW - 60_000) }],
         NOW,
       ),
     ).toEqual([]);
@@ -56,11 +56,30 @@ describe("selectWorkingPending", () => {
         [
           {
             id: "chase",
-            scrapeBalanceAsOf: new Date(NOW - SCRAPE_BALANCE_HOLD_MS - 1),
+            browserPendingAsOf: new Date(NOW - BROWSER_PENDING_AUTHORITY_MS - 1),
           },
         ],
         NOW,
       ),
     ).toEqual([row("chase", "api:simplefin", -5905)]);
+  });
+
+  it("retains the reported $240.30 browser set independently of headline precedence", () => {
+    const browserRows = [
+      row("capone", "scrape:capitalone", -1271),
+      row("capone", "scrape:capitalone", -1948),
+      row("capone", "scrape:capitalone", -20811),
+    ];
+
+    const selected = selectWorkingPending(
+      [...browserRows, row("capone", "api:simplefin", -1271)],
+      [{ id: "capone", browserPendingAsOf: new Date(NOW) }],
+      NOW,
+    );
+
+    expect(selected).toEqual(browserRows);
+    expect(selected.reduce((sum, pending) => sum + pending.amountCents, 0)).toBe(
+      -24030,
+    );
   });
 });

@@ -1,18 +1,17 @@
 /**
  * Which pending rows the dashboard is allowed to add on top of the headline.
  *
- * A scrape is a snapshot of what the bank page currently shows. SimpleFIN's pending on
- * Chase can sit a day behind, so once a scrape is in play those SimpleFIN rows would
- * double-count. Prefer scrape rows while any exist on the account, or while the
- * headline hold from an empty scrape is still live.
+ * A browser capture is a complete snapshot of what the bank page currently shows.
+ * SimpleFIN's pending can sit a day behind, so prefer browser rows while that complete
+ * pending snapshot is authoritative. An empty browser snapshot is still authoritative.
  */
 
-import { SCRAPE_BALANCE_HOLD_MS } from "@/lib/banksync/scrapeBalance";
 import { isScrapeFeed } from "./bankSnapshot";
+import { hasBrowserPendingAuthority } from "./browserPendingAuthority";
 
 export type WorkingPendingAccount = {
   id: string;
-  scrapeBalanceAsOf: Date | null;
+  browserPendingAsOf: Date | null;
 };
 
 export type WorkingPendingRow = {
@@ -27,10 +26,8 @@ export function selectWorkingPending<T extends WorkingPendingRow>(
 ): T[] {
   const authoritative = new Set(
     accounts
-      .filter(
-        (account) =>
-          account.scrapeBalanceAsOf !== null &&
-          nowMs - account.scrapeBalanceAsOf.getTime() < SCRAPE_BALANCE_HOLD_MS,
+      .filter((account) =>
+        hasBrowserPendingAuthority(account.browserPendingAsOf, nowMs),
       )
       .map((account) => account.id),
   );

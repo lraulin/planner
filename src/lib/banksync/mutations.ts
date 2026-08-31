@@ -25,7 +25,7 @@ import type { FinanceAuditChange } from "@/lib/finances/audit/types";
 import { writeFinanceAuditEvent } from "@/lib/finances/audit/writes";
 import { monthKeyOf } from "@/lib/finances/budget/envelope";
 import { retireCoveredScrapeRowsForAccounts } from "@/lib/finances/feedHandoverWrite";
-import { shouldKeepScrapedBalance } from "./scrapeBalance";
+import { shouldKeepProvisionalBalance } from "./provisionalBalance";
 import type { BankInsert, BankUpdate } from "./syncPlan";
 
 async function requireConnection(userId: string, connectionId: string): Promise<void> {
@@ -214,7 +214,8 @@ export async function saveBalance(
         balanceCents: bankAccountLinks.balanceCents,
         availableCents: bankAccountLinks.availableCents,
         balanceAsOf: bankAccountLinks.balanceAsOf,
-        scrapeBalanceAsOf: bankAccountLinks.scrapeBalanceAsOf,
+        provisionalBalanceAsOf: bankAccountLinks.provisionalBalanceAsOf,
+        browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
         accountName: financeAccounts.name,
       })
       .from(bankAccountLinks)
@@ -236,15 +237,15 @@ export async function saveBalance(
       accountNames: [existing.accountName],
     };
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
-    const keepBrowser = shouldKeepScrapedBalance(existing, input, Date.now());
-    if (!keepBrowser) {
+    const keepProvisional = shouldKeepProvisionalBalance(existing, input, Date.now());
+    if (!keepProvisional) {
       const updated = await tx
         .update(bankAccountLinks)
         .set({
           balanceCents: input.balanceCents,
           availableCents: input.availableCents,
           balanceAsOf: input.asOf,
-          scrapeBalanceAsOf: null,
+          provisionalBalanceAsOf: null,
           updatedAt: new Date(),
         })
         .where(
@@ -257,7 +258,7 @@ export async function saveBalance(
       if (updated.length === 0) throw new Error("Link not found.");
     }
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
-    const changes: FinanceAuditChange[] = keepBrowser
+    const changes: FinanceAuditChange[] = keepProvisional
       ? []
       : [
           {
@@ -267,13 +268,16 @@ export async function saveBalance(
               balanceCents: existing.balanceCents,
               availableCents: existing.availableCents,
               balanceAsOf: existing.balanceAsOf?.toISOString() ?? null,
-              browserAuthority: existing.scrapeBalanceAsOf !== null,
+              provisionalBalanceAsOf:
+                existing.provisionalBalanceAsOf?.toISOString() ?? null,
+              browserPendingAsOf: existing.browserPendingAsOf?.toISOString() ?? null,
             },
             after: {
               balanceCents: input.balanceCents,
               availableCents: input.availableCents,
               balanceAsOf: input.asOf.toISOString(),
-              browserAuthority: false,
+              provisionalBalanceAsOf: null,
+              browserPendingAsOf: existing.browserPendingAsOf?.toISOString() ?? null,
             },
           },
         ];
@@ -281,13 +285,13 @@ export async function saveBalance(
       kind: "simplefin_sync",
       origin: input.auditOrigin ?? "SimpleFIN balance",
       batchId: input.auditBatchId,
-      summary: keepBrowser
-        ? `Kept the fresher browser balance for ${existing.accountName}.`
+      summary: keepProvisional
+        ? `Kept the fresher provisional balance for ${existing.accountName}.`
         : `Updated the SimpleFIN balance for ${existing.accountName}.`,
       scope,
-      warnings: keepBrowser
+      warnings: keepProvisional
         ? [
-            "A bank-page snapshot is still authoritative, so this older balance was not applied.",
+            "A newer provisional posted balance is still authoritative, so this older balance was not applied.",
           ]
         : [],
       sourceEvidence: {

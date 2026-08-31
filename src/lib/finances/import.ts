@@ -207,6 +207,8 @@ async function holdLinkedPostedHeadline(
       id: bankAccountLinks.id,
       balanceCents: bankAccountLinks.balanceCents,
       balanceAsOf: bankAccountLinks.balanceAsOf,
+      provisionalBalanceAsOf: bankAccountLinks.provisionalBalanceAsOf,
+      browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
     })
     .from(bankAccountLinks)
     .where(
@@ -232,7 +234,7 @@ async function holdLinkedPostedHeadline(
     .set({
       balanceCents: headline.cents,
       balanceAsOf: capturedAt,
-      scrapeBalanceAsOf: capturedAt,
+      provisionalBalanceAsOf: capturedAt,
       updatedAt: capturedAt,
     })
     .where(
@@ -251,12 +253,14 @@ async function holdLinkedPostedHeadline(
     before: {
       balanceCents: link.balanceCents,
       balanceAsOf: link.balanceAsOf?.toISOString() ?? null,
-      browserAuthority: false,
+      provisionalBalanceAsOf: link.provisionalBalanceAsOf?.toISOString() ?? null,
+      browserPendingAsOf: link.browserPendingAsOf?.toISOString() ?? null,
     },
     after: {
       balanceCents: headline.cents,
       balanceAsOf: capturedAt.toISOString(),
-      browserAuthority: true,
+      provisionalBalanceAsOf: capturedAt.toISOString(),
+      browserPendingAsOf: link.browserPendingAsOf?.toISOString() ?? null,
       source: headline.source,
     },
   };

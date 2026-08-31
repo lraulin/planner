@@ -1,6 +1,6 @@
 # Separate finance authority state
 
-**Status: active**
+**Status: frozen / complete** (2026-08-31)
 
 ## Spec relationships
 
@@ -99,25 +99,25 @@ Historical audit events remain immutable.
 
 ## Acceptance criteria
 
-- [ ] A browser snapshot followed by a same-balance SimpleFIN sync retains the three
+- [x] A browser snapshot followed by a same-balance SimpleFIN sync retains the three
       Capital One pending transactions and leaves Pizza, Eating Out, and Groceries
       unchanged by exactly $12.71, $19.48, and $208.11.
-- [ ] The sync clears `provisionalBalanceAsOf` without changing
+- [x] The sync clears `provisionalBalanceAsOf` without changing
       `browserPendingAsOf`.
-- [ ] Repeated browser snapshot, SimpleFIN sync, and checking CSV operations can run in any
+- [x] Repeated browser snapshot, SimpleFIN sync, and checking CSV operations can run in any
       order without pending authority or posted balances oscillating.
-- [ ] A CSV-only provisional balance does not suppress SimpleFIN pending transactions.
-- [ ] The checking CSV headline fix still advances a lagged SimpleFIN balance and an older
+- [x] A CSV-only provisional balance does not suppress SimpleFIN pending transactions.
+- [x] The checking CSV headline fix still advances a lagged SimpleFIN balance and an older
       SimpleFIN value cannot walk it back during the hold.
-- [ ] A complete empty browser snapshot remains authoritative until expiry; after expiry,
+- [x] A complete empty browser snapshot remains authoritative until expiry; after expiry,
       SimpleFIN pending resumes automatically.
-- [ ] The migration preserves provisional timestamps and backfills browser authority from
+- [x] The migration preserves provisional timestamps and backfills browser authority from
       the latest per-account bank-snapshot audit evidence without making old evidence
       fresh.
-- [ ] Authority-only snapshot changes appear explicitly in finance audit history.
-- [ ] Every database mutation remains scoped to `userId`, with a second user unable to
+- [x] Authority-only snapshot changes appear explicitly in finance audit history.
+- [x] Every database mutation remains scoped to `userId`, with a second user unable to
       read, change, or delete the first user's state.
-- [ ] Unit and integration suites, lint, typecheck, build, dev-server smoke, and relevant
+- [x] Unit and integration suites, lint, typecheck, build, dev-server smoke, and relevant
       end-to-end Budget verification pass.
 
 ## Implementation tasks
@@ -127,30 +127,50 @@ Historical audit events remain immutable.
 Record the root cause, corrected model, live repair, acceptance criteria, governing
 standards, and implementation references in this folder.
 
-### Task 2: Correct the schema and migration — pending
+### Task 2: Correct the schema and migration — done
 
 Rename the legacy field, add browser authority, generate the Drizzle SQL/snapshot/journal,
 and add the audit-based backfill. Read and exercise the migration against local Postgres.
 
-### Task 3: Separate path ownership and audit evidence — pending
+### Task 3: Separate path ownership and audit evidence — done
 
 Move the two freshness rules into concept-specific modules. Update snapshot, SimpleFIN,
 CSV, Budget, query, action, and dashboard consumers so each ingestion path mutates only its
 owned state and audit normalization exposes both facts.
 
-### Task 4: Add regressions — pending
+### Task 4: Add regressions — done
 
 Cover the exact $240.30 sequence, all meaningful path orderings, empty/expired browser
 snapshots, CSV compatibility, migration backfill, and cross-user isolation with pure and
 database tests.
 
-### Task 5: Verify and freeze — pending
+### Task 5: Verify and freeze — done
 
 Run local migration and all project gates, start the app and run `npm run smoke`, verify
 the Budget behavior end to end, update this spec to its as-built state, then freeze it.
 
 ## Changes from original plan
 
-| #   | Change   | Why                             |
-| --- | -------- | ------------------------------- |
-| —   | None yet | Implementation has not started. |
+| #   | Change | Why                           |
+| --- | ------ | ----------------------------- |
+| —   | None   | The spec was built as shaped. |
+
+## As-built map
+
+- `drizzle/0088_smooth_elektra.sql` renames the legacy column, adds browser authority,
+  and restores it from each account's latest `bank_snapshot` audit `occurred_at`.
+- `src/lib/banksync/provisionalBalance.ts` owns posted-balance precedence;
+  `src/lib/finances/browserPendingAuthority.ts` independently owns pending freshness.
+- Browser snapshot, SimpleFIN, and checking CSV writers update only their owned timestamps,
+  and normalized audit changes expose both names wherever balance authority is recorded.
+- Budget, Dashboard, bank-sync reconciliation, and the register's activity selection all
+  consume `browserPendingAsOf` through the shared browser-authority predicate.
+
+## Verification
+
+- Migration applied to local Postgres: four provisional timestamps survived; two browser
+  timestamps were restored and exactly matched their August 29 audit event times.
+- `npm test`: 3,858 unit and 994 integration tests passed against real Postgres.
+- `npm run lint`, `npm run typecheck`, and `npm run build` passed.
+- `npm run smoke` rendered all 62 routes; `/finances/budget` and
+  `/finances/dashboard` were inspected in Chrome with no application errors.

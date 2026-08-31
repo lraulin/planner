@@ -20,7 +20,7 @@ import { numericStringToCents } from "@/lib/finances/money";
 import type { ExistingRow } from "./syncPlan";
 import { bankRows } from "@/lib/finances/splitRows";
 import { isScrapeFeed } from "@/lib/finances/bankSnapshot";
-import { SCRAPE_BALANCE_HOLD_MS } from "./scrapeBalance";
+import { hasBrowserPendingAuthority } from "@/lib/finances/browserPendingAuthority";
 
 /** A connection as the settings page shows it. Deliberately without the access URL. */
 export type BankConnectionRow = {
@@ -183,7 +183,7 @@ export async function existingRowsInWindow(
       externalId: financeTransactions.externalId,
       externalSource: financeTransactions.externalSource,
       pending: financeTransactions.pending,
-      scrapeBalanceAsOf: bankAccountLinks.scrapeBalanceAsOf,
+      browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
     })
     .from(financeTransactions)
     .leftJoin(
@@ -231,8 +231,7 @@ export async function existingRowsInWindow(
       authoritativeBrowserPending:
         row.pending &&
         isScrapeFeed(row.externalSource ?? "") &&
-        row.scrapeBalanceAsOf !== null &&
-        Date.now() - row.scrapeBalanceAsOf.getTime() < SCRAPE_BALANCE_HOLD_MS,
+        hasBrowserPendingAuthority(row.browserPendingAsOf, Date.now()),
     });
     out.set(row.accountId, bucket);
   }

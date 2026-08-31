@@ -410,7 +410,13 @@ export async function applyBankBrowserSnapshot(
   return db.transaction(async (tx) => {
     const account = await resolveCardByLast4(tx, userId, snapshot.accountLast4);
     const [link] = await tx
-      .select({ id: bankAccountLinks.id })
+      .select({
+        id: bankAccountLinks.id,
+        balanceCents: bankAccountLinks.balanceCents,
+        balanceAsOf: bankAccountLinks.balanceAsOf,
+        provisionalBalanceAsOf: bankAccountLinks.provisionalBalanceAsOf,
+        browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
+      })
       .from(bankAccountLinks)
       .where(
         and(
@@ -538,7 +544,8 @@ export async function applyBankBrowserSnapshot(
       .set({
         balanceCents: snapshot.currentBalanceCents,
         balanceAsOf: snapshot.capturedAt,
-        scrapeBalanceAsOf: snapshot.capturedAt,
+        provisionalBalanceAsOf: snapshot.capturedAt,
+        browserPendingAsOf: snapshot.capturedAt,
         updatedAt: snapshot.capturedAt,
       })
       .where(
@@ -559,7 +566,30 @@ export async function applyBankBrowserSnapshot(
       tx,
       snapshot.capturedAt,
     );
-    const changes = auditChanges(beforeRows, afterRows);
+    const beforeBalance = {
+      balanceCents: link.balanceCents,
+      balanceAsOf: link.balanceAsOf?.toISOString() ?? null,
+      provisionalBalanceAsOf: link.provisionalBalanceAsOf?.toISOString() ?? null,
+      browserPendingAsOf: link.browserPendingAsOf?.toISOString() ?? null,
+    };
+    const afterBalance = {
+      balanceCents: snapshot.currentBalanceCents,
+      balanceAsOf: snapshot.capturedAt.toISOString(),
+      provisionalBalanceAsOf: snapshot.capturedAt.toISOString(),
+      browserPendingAsOf: snapshot.capturedAt.toISOString(),
+    };
+    const balanceChanges: FinanceAuditChange[] =
+      JSON.stringify(beforeBalance) === JSON.stringify(afterBalance)
+        ? []
+        : [
+            {
+              entityType: "bank_balance",
+              entityIdentity: link.id,
+              before: beforeBalance,
+              after: afterBalance,
+            },
+          ];
+    const changes = [...auditChanges(beforeRows, afterRows), ...balanceChanges];
     const summary =
       `Applied ${snapshot.source === "chase" ? "Chase" : "Capital One"} bank snapshot for ${account.name}: ` +
       `${plan.postedTransitions.length + plan.postedReplacements.length} posted transition${plan.postedTransitions.length + plan.postedReplacements.length === 1 ? "" : "s"}, ` +

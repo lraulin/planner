@@ -192,7 +192,7 @@ export async function listAccounts(
       accountId: bankAccountLinks.accountId,
       balanceCents: bankAccountLinks.balanceCents,
       balanceAsOf: bankAccountLinks.balanceAsOf,
-      scrapeBalanceAsOf: bankAccountLinks.scrapeBalanceAsOf,
+      browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
     })
     .from(bankAccountLinks)
     .where(eq(bankAccountLinks.userId, userId));
@@ -205,7 +205,7 @@ export async function listAccounts(
         {
           cents: row.balanceCents as number,
           asOf: row.balanceAsOf as Date,
-          scrapeBalanceAsOf: row.scrapeBalanceAsOf,
+          browserPendingAsOf: row.browserPendingAsOf,
         },
       ]),
   );
@@ -240,7 +240,7 @@ export async function listAccounts(
       // which is the same as asking whether the register is complete.
       balanceMismatchCents: synced || latest ? ledgerBalanceCents - balanceCents : 0,
       syncedBalanceAsOf: synced?.asOf ?? null,
-      scrapeBalanceAsOf: synced?.scrapeBalanceAsOf ?? null,
+      browserPendingAsOf: synced?.browserPendingAsOf ?? null,
       transactionCount: row.transactionCount,
     };
   });

@@ -1,6 +1,6 @@
 # References
 
-**Status: active**
+**Status: frozen / complete** (2026-08-31)
 
 ## Governing intent
 

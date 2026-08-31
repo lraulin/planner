@@ -3259,10 +3259,15 @@ export const bankAccountLinks = pgTable(
      */
     balanceAsOf: timestamp("balance_as_of", { withTimezone: true }),
     /**
-     * When a scrape last wrote `balanceCents`. SimpleFIN must not overwrite a fresher
-     * scrape with yesterday's posted number; null once the feed has caught up.
+     * When a browser snapshot or checking CSV last advanced `balanceCents`. SimpleFIN
+     * must not overwrite that provisional headline with yesterday's posted number; null
+     * once the feed has caught up.
      */
-    scrapeBalanceAsOf: timestamp("scrape_balance_as_of", { withTimezone: true }),
+    provisionalBalanceAsOf: timestamp("provisional_balance_as_of", {
+      withTimezone: true,
+    }),
+    /** When the latest complete browser pending snapshot was captured. */
+    browserPendingAsOf: timestamp("browser_pending_as_of", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -1,6 +1,6 @@
 # Shaping: separate finance authority state
 
-**Status: active**
+**Status: frozen / complete** (2026-08-31)
 
 ## Appetite
 

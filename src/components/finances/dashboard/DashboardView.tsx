@@ -9,7 +9,7 @@ import {
 } from "@/app/finances/actions";
 import { syncAction } from "@/app/settings/bankSyncActions";
 import type { BankConnectionRow } from "@/lib/banksync/queries";
-import { SCRAPE_BALANCE_HOLD_MS } from "@/lib/banksync/scrapeBalance";
+import { hasBrowserPendingAuthority } from "@/lib/finances/browserPendingAuthority";
 import { accountPoolBreakdown } from "@/lib/finances/accountPool";
 import { nextPayday, type BillCharge } from "@/lib/finances/available";
 import {
@@ -125,9 +125,8 @@ export function DashboardView({
     .filter(
       (account) =>
         account.kind === "credit_card" &&
-        account.scrapeBalanceAsOf !== null &&
-        loadedAtMs - new Date(account.scrapeBalanceAsOf).getTime() >=
-          SCRAPE_BALANCE_HOLD_MS,
+        account.browserPendingAsOf !== null &&
+        !hasBrowserPendingAuthority(new Date(account.browserPendingAsOf), loadedAtMs),
     )
     .map((account) => account.name);
 

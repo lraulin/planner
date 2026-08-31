@@ -4,7 +4,7 @@
  * to Assign rises, then account reconciliation swallows it.
  *
  * Same hold as a browser scrape: write the posted figure onto the link and keep it until
- * SimpleFIN reports the same cents or 36 hours pass (`scrapeBalance.ts`).
+ * SimpleFIN reports the same cents or 36 hours pass (`provisionalBalance.ts`).
  */
 
 export type LinkedPostedHeadline = {

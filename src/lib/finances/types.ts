@@ -209,10 +209,10 @@ export type FinanceAccountRow = {
   /** When the live balance was read, or null for an account with no bank connection. */
   syncedBalanceAsOf: Date | null;
   /**
-   * When a scrape last wrote the headline. The dashboard prefers scrape-pending over
-   * SimpleFIN pending while this hold is live, because SimpleFIN can sit a day behind.
+   * When the latest complete browser pending snapshot was captured. The dashboard prefers
+   * browser pending while this authority is fresh, because SimpleFIN can sit a day behind.
    */
-  scrapeBalanceAsOf: Date | null;
+  browserPendingAsOf: Date | null;
   transactionCount: number;
 };
 

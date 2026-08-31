@@ -1,9 +1,15 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financeTransactions, users } from "@/db/schema";
+import {
+  bankAccountLinks,
+  financeAccounts,
+  financeTransactions,
+  users,
+} from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { listAccounts } from "@/lib/finances/queries";
+import { loadSelectedWorkingPending } from "@/lib/finances/workingPendingQuery";
 import {
   applySync,
   deleteConnection,
@@ -512,6 +518,81 @@ describeDb("balance precedence in the register", () => {
 
     const [account] = await listAccounts(userId);
     expect(account.balanceCents).toBe(-41000);
+  });
+
+  it("clears a caught-up provisional balance without revoking browser pending authority", async () => {
+    const userId = await makeUser();
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const accountId = await makeAccount(userId, "2403");
+    const linkId = await linkAccount(userId, {
+      connectionId,
+      externalAccountId: "capital-one",
+      accountId,
+    });
+    const capturedAt = new Date();
+    await db
+      .update(bankAccountLinks)
+      .set({
+        balanceCents: -24_030,
+        provisionalBalanceAsOf: capturedAt,
+        browserPendingAsOf: capturedAt,
+      })
+      .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)));
+    await db.insert(financeTransactions).values([
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-31",
+        description: "Pizza Hut",
+        amount: "-12.71",
+        pending: true,
+        externalSource: "scrape:capitalone",
+      },
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-31",
+        description: "Potbelly",
+        amount: "-19.48",
+        pending: true,
+        externalSource: "scrape:capitalone",
+      },
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-31",
+        description: "Walmart",
+        amount: "-208.11",
+        pending: true,
+        externalSource: "scrape:capitalone",
+      },
+    ]);
+
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: -24_030,
+      availableCents: null,
+      asOf: new Date(),
+    });
+
+    const [link] = await db
+      .select({
+        provisionalBalanceAsOf: bankAccountLinks.provisionalBalanceAsOf,
+        browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
+      })
+      .from(bankAccountLinks)
+      .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)));
+    expect(link.provisionalBalanceAsOf).toBeNull();
+    expect(link.browserPendingAsOf).toEqual(capturedAt);
+    const selected = await loadSelectedWorkingPending(
+      userId,
+      [{ id: accountId, browserPendingAsOf: link.browserPendingAsOf }],
+      capturedAt.getTime(),
+    );
+    expect(selected.map((row) => row.amountCents)).toEqual([-1271, -1948, -20811]);
+    expect(selected.reduce((sum, row) => sum + row.amountCents, 0)).toBe(-24030);
   });
 });
 

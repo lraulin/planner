@@ -33,7 +33,7 @@ const MONTH = "2026-08-01";
 /**
  * The 36-hour scrape hold is measured from this instant. A hard-coded Aug 29 2026
  * capture expired on the evening of Aug 30: pending scrape rows dropped out of
- * envelope activity, then apply refreshed `scrapeBalanceAsOf` back into the window
+ * envelope activity, then apply refreshed `browserPendingAsOf` back into the window
  * and the same rows jumped back in. Pinning to now keeps the hold live for the
  * whole suite, which is the situation the "pending posts do not move checkpoints"
  * case is actually about.
@@ -142,7 +142,7 @@ describeDb("applyBankBrowserSnapshot", () => {
     });
     await db
       .update(bankAccountLinks)
-      .set({ scrapeBalanceAsOf: CAPTURED_AT })
+      .set({ browserPendingAsOf: CAPTURED_AT })
       .where(eq(bankAccountLinks.id, linkId));
 
     const rows = [...posted, ...pending].map(([date, description, amount], index) => ({
@@ -278,6 +278,30 @@ describeDb("applyBankBrowserSnapshot", () => {
     ).toHaveLength(2);
   });
 
+  it("records an authority-only transition when a later complete snapshot is identical", async () => {
+    const raw = snapshot();
+    await applyBankBrowserSnapshot(userId, raw);
+    const later = new Date(CAPTURED_AT.getTime() + 60_000);
+    const second = await applyBankBrowserSnapshot(
+      userId,
+      snapshot({ capturedAt: later.toISOString() }),
+    );
+
+    const event = await loadFinanceAuditEvent(userId, second.auditEventId);
+    expect(event?.changes).toEqual([
+      expect.objectContaining({
+        entityType: "bank_balance",
+        before: expect.objectContaining({
+          browserPendingAsOf: CAPTURED_AT.toISOString(),
+        }),
+        after: expect.objectContaining({
+          provisionalBalanceAsOf: later.toISOString(),
+          browserPendingAsOf: later.toISOString(),
+        }),
+      }),
+    ]);
+  });
+
   it("rolls the whole snapshot back when its audit evidence cannot be written", async () => {
     await db.execute(sql`
       create or replace function test_reject_bank_snapshot_audit()
@@ -346,14 +370,19 @@ describeDb("applyBankBrowserSnapshot", () => {
     expect(await listTransactions(userId)).toHaveLength(10);
 
     const ownerChanges = await db
-      .select({ id: financeAuditChanges.id })
+      .select({ entityType: financeAuditChanges.entityType })
       .from(financeAuditChanges)
       .where(eq(financeAuditChanges.eventId, applied.auditEventId));
     const intruderEvents = await db
       .select({ id: financeAuditEvents.id })
       .from(financeAuditEvents)
       .where(eq(financeAuditEvents.userId, intruder));
-    expect(ownerChanges).toHaveLength(10);
+    expect(
+      ownerChanges.filter((change) => change.entityType === "transaction"),
+    ).toHaveLength(10);
+    expect(
+      ownerChanges.filter((change) => change.entityType === "bank_balance"),
+    ).toHaveLength(1);
     expect(intruderEvents).toEqual([]);
   });
 });

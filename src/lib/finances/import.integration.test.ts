@@ -1,7 +1,12 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeBudgetCategories, financeTransactions, users } from "@/db/schema";
+import {
+  bankAccountLinks,
+  financeBudgetCategories,
+  financeTransactions,
+  users,
+} from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
@@ -1230,7 +1235,7 @@ describeDb("CSV import onto a lagged SimpleFIN headline", () => {
     const userId = await makeUser();
     await importFinanceCsvFiles({ userId, files: [giftFile] });
     const [account] = await listAccounts(userId);
-    await linkWithBalance(userId, account.id, 1_125_746, "2026-08-25");
+    const linkId = await linkWithBalance(userId, account.id, 1_125_746, "2026-08-25");
     expect((await listAccounts(userId))[0].balanceCents).toBe(1_125_746);
 
     const again = await importFinanceCsvFiles({ userId, files: [giftFile] });
@@ -1238,7 +1243,30 @@ describeDb("CSV import onto a lagged SimpleFIN headline", () => {
 
     const after = (await listAccounts(userId))[0];
     expect(after.balanceCents).toBe(1_625_746);
-    expect(after.scrapeBalanceAsOf).not.toBeNull();
+    const [link] = await db
+      .select({
+        provisionalBalanceAsOf: bankAccountLinks.provisionalBalanceAsOf,
+        browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
+      })
+      .from(bankAccountLinks)
+      .where(eq(bankAccountLinks.id, linkId));
+    expect(link.provisionalBalanceAsOf).not.toBeNull();
+    expect(link.browserPendingAsOf).toBeNull();
+    const audit = await loadFinanceAuditEvent(userId, again.auditBatchId!);
+    expect(
+      audit?.changes.find((change) => change.entityType === "bank_balance"),
+    ).toEqual(
+      expect.objectContaining({
+        before: expect.objectContaining({
+          provisionalBalanceAsOf: null,
+          browserPendingAsOf: null,
+        }),
+        after: expect.objectContaining({
+          provisionalBalanceAsOf: expect.any(String),
+          browserPendingAsOf: null,
+        }),
+      }),
+    );
   });
 
   it("does not let SimpleFIN walk that posted figure back on the next refresh", async () => {

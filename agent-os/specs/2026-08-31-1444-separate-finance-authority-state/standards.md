@@ -1,6 +1,6 @@
 # Standards
 
-**Status: active**
+**Status: frozen / complete** (2026-08-31)
 
 Standards were selected with `agent-os/standards/index.yml` and are pinned to repository
 commit `5ac7a20e7273d4efa20365d329f364c48f059f82`.

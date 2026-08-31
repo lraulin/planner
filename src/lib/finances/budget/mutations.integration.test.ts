@@ -603,7 +603,7 @@ describeDb("budget mutations", () => {
       .set({
         balanceCents: 0,
         balanceAsOf: new Date(),
-        scrapeBalanceAsOf: new Date(),
+        browserPendingAsOf: new Date(),
       })
       .where(eq(bankAccountLinks.id, linkId));
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
