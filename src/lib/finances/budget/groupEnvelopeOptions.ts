@@ -18,6 +18,11 @@ export type EnvelopePickerOption = {
   groupId: string | null;
   sortKey: string;
   hidden: boolean;
+  /**
+   * Extra closed-list suffix (Move money Available). Filter never matches this —
+   * `$12.34` must not hide Groceries when you type `12`.
+   */
+  detail?: string;
 };
 
 export type EnvelopePickerGroup = {
@@ -86,6 +91,8 @@ export type CategoryPickerEnvelope = {
   depth: number;
   /** Hidden from Budget by this envelope or an ancestor group. */
   hidden: boolean;
+  /** Open-list suffix only; never part of the filter or the closed field. */
+  detail?: string;
 };
 
 export type CategoryPickerCreate = {
@@ -129,12 +136,13 @@ export function commitCategoryPicker(
   draft: string,
   highlighted: CategoryPickerChoice | null,
   allowCreate: boolean,
+  allowClear = true,
 ):
   | { action: "clear" }
   | { action: "envelope"; id: string }
   | { action: "create"; envelopeKind: EnvelopeKind }
   | { action: "restore" } {
-  if (draft.trim() === "") return { action: "clear" };
+  if (draft.trim() === "") return { action: allowClear ? "clear" : "restore" };
   if (!highlighted) return { action: "restore" };
   if (highlighted.kind === "create") {
     return allowCreate
@@ -147,15 +155,18 @@ export function commitCategoryPicker(
 /**
  * Nested picker rows in Budget name order. Hidden envelopes and hidden-group
  * subtrees stay, marked `hidden` when this row or an ancestor is hidden from
- * Budget. Empty types stay so New {type}… is reachable. Filter is a
- * case-insensitive substring on envelope name, ancestor group names, and the type
- * label — not the `(hidden)` marker — and does not re-rank.
+ * Budget. Empty types stay so New {type}… is reachable unless `includeCreate`
+ * is false. Filter is a case-insensitive substring on envelope name, ancestor
+ * group names, and the type label — not the `(hidden)` marker and not
+ * `detail` — and does not re-rank.
  */
 export function categoryPickerSections(
   groups: readonly EnvelopePickerGroup[],
   envelopes: readonly EnvelopePickerOption[],
   query = "",
+  options: { includeCreate?: boolean } = {},
 ): CategoryPickerSection[] {
+  const includeCreate = options.includeCreate !== false;
   const needle = query.trim().toLowerCase();
   const groupById = new Map(groups.map((group) => [group.id, group]));
 
@@ -171,7 +182,8 @@ export function categoryPickerSections(
           matchesNeedle(name, needle),
         ),
     );
-    const showCreate = needle === "" || matchesNeedle(section.createLabel, needle);
+    const showCreate =
+      includeCreate && (needle === "" || matchesNeedle(section.createLabel, needle));
     const tree = walkType(section.kind, groups, matching, groupById);
     if (tree.length === 0 && !showCreate) continue;
 
@@ -255,13 +267,7 @@ function walkType(
       }
       const envelope = envelopeById.get(child.id);
       if (!envelope) continue;
-      rows.push({
-        kind: "envelope",
-        id: envelope.id,
-        label: envelope.name,
-        depth: depth + 1,
-        hidden: envelope.hidden || hidden,
-      });
+      rows.push(envelopeRow(envelope, depth + 1, hidden));
       count += 1;
     }
 
@@ -280,13 +286,54 @@ function walkType(
     }
     const envelope = envelopeById.get(root.id);
     if (!envelope) continue;
-    rows.push({
-      kind: "envelope",
-      id: envelope.id,
-      label: envelope.name,
-      depth: 0,
-      hidden: envelope.hidden,
-    });
+    rows.push(envelopeRow(envelope, 0, false));
   }
   return rows;
+}
+
+function envelopeRow(
+  envelope: EnvelopePickerOption,
+  depth: number,
+  ancestorHidden: boolean,
+): CategoryPickerEnvelope {
+  return {
+    kind: "envelope",
+    id: envelope.id,
+    label: envelope.name,
+    depth,
+    hidden: envelope.hidden || ancestorHidden,
+    ...(envelope.detail !== undefined ? { detail: envelope.detail } : {}),
+  };
+}
+
+/**
+ * Destination catalog: drop hidden envelopes and anything under a hidden group,
+ * same predicate as `nestedBudgetGridRows(..., { showHidden: false })`. Filing
+ * surfaces (Register, Payees) keep the full catalog.
+ */
+export function visibleEnvelopeCatalog(catalog: EnvelopeCatalog): EnvelopeCatalog {
+  const groupById = new Map(catalog.groups.map((group) => [group.id, group]));
+
+  function chainVisible(groupId: string | null): boolean {
+    const seen = new Set<string>();
+    let current = groupId ? groupById.get(groupId) : undefined;
+    while (current) {
+      if (seen.has(current.id)) throw new Error("Budget groups contain a cycle.");
+      seen.add(current.id);
+      if (current.hidden) return false;
+      current = current.parentGroupId
+        ? groupById.get(current.parentGroupId)
+        : undefined;
+    }
+    return true;
+  }
+
+  return {
+    groups: catalog.groups.filter(
+      (group) => !group.hidden && chainVisible(group.parentGroupId),
+    ),
+    envelopes: catalog.envelopes.filter(
+      (envelope) => !envelope.hidden && chainVisible(envelope.groupId),
+    ),
+  };
 }

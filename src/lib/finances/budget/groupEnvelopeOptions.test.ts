@@ -4,6 +4,7 @@ import {
   categoryPickerSections,
   commitCategoryPicker,
   defaultCategoryPickerChoice,
+  visibleEnvelopeCatalog,
   type EnvelopePickerGroup,
   type EnvelopePickerOption,
 } from "./groupEnvelopeOptions";
@@ -328,5 +329,72 @@ describe("commitCategoryPicker", () => {
         true,
       ),
     ).toEqual({ action: "create", envelopeKind: "bill" });
+  });
+
+  it("restores on an empty draft when the destination cannot uncategorise", () => {
+    expect(commitCategoryPicker("", null, true, false)).toEqual({
+      action: "restore",
+    });
+    expect(commitCategoryPicker("   ", null, true, false)).toEqual({
+      action: "restore",
+    });
+  });
+});
+
+describe("categoryPickerSections — includeCreate: false", () => {
+  it("omits New {type}… and drops a type that has no envelopes left", () => {
+    const sections = categoryPickerSections(
+      [],
+      [envelope("rent", "bill", null, "A")],
+      "",
+      { includeCreate: false },
+    );
+    expect(outline(sections)).toEqual([
+      { type: "Bills", rows: ["h0:Bills", "e0:rent"] },
+    ]);
+  });
+});
+
+describe("categoryPickerSections — detail is not a filter token", () => {
+  it("does not match Available-amount text on an envelope row", () => {
+    const envelopes: EnvelopePickerOption[] = [
+      { ...envelope("groceries", "spending", null, "A"), detail: "$12.34" },
+      envelope("rent", "bill", null, "A"),
+    ];
+    expect(outline(categoryPickerSections([], envelopes, "12.34"))).toEqual([]);
+    expect(outline(categoryPickerSections([], envelopes, "groc"))).toEqual([
+      {
+        type: "Regular spending",
+        rows: ["h0:Regular spending", "e0:groceries"],
+      },
+    ]);
+    const groc = categoryPickerSections([], envelopes, "groc")[0]?.rows.find(
+      (row) => row.kind === "envelope",
+    );
+    expect(groc).toMatchObject({ kind: "envelope", id: "groceries", detail: "$12.34" });
+  });
+});
+
+describe("visibleEnvelopeCatalog", () => {
+  it("drops hidden envelopes and anything under a hidden group", () => {
+    const catalog = visibleEnvelopeCatalog({
+      groups: [
+        group("visible", null, "A"),
+        group("hidden", null, "B", true),
+        group("nested", "hidden", "A"),
+      ],
+      envelopes: [
+        envelope("shown", "spending", "visible", "A"),
+        envelope("secret", "spending", "visible", "B", true),
+        envelope("buried", "spending", "nested", "A"),
+        envelope("direct", "spending", "hidden", "A"),
+        envelope("ungrouped", "spending", null, "C"),
+      ],
+    });
+    expect(catalog.groups.map((group) => group.id)).toEqual(["visible"]);
+    expect(catalog.envelopes.map((envelope) => envelope.id)).toEqual([
+      "shown",
+      "ungrouped",
+    ]);
   });
 });
