@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CommandGlyph } from "@/components/icons/commandIcons";
 import { formatBindings } from "@/lib/commands/bindings";
 import type { MenuSection } from "@/lib/commands/menus";
@@ -453,11 +454,32 @@ export function ContextMenu({
     window.addEventListener("resize", onClose);
     window.addEventListener("blur", onWindowBlur);
 
-    // Scroll closes the menu, but not the scroll the menu itself causes: right-clicking
-    // selects the row, and a partly-visible selected row scrolls into view on the very
-    // frame the menu opens. Listening from the next frame skips exactly that one.
+    /**
+     * A scroll *under* the menu closes it. A scroll *inside* it does not.
+     *
+     * The listener has to be capture-phase to see scrolls on the grid's own containers, and
+     * capture reaches this menu too — which is a bug once the menu scrolls itself. It always
+     * can: the popup is capped to the viewport height, and below `md` `⋯` is the whole menu
+     * bar and opens as an 85dvh sheet holding every command the view has. Dragging that sheet
+     * up dismissed it on the first pixel, so the commands past the fold were unreachable —
+     * which is exactly what the height cap exists to prevent.
+     */
+    function onScroll(event: Event) {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        (ref.current?.contains(target) || subRef.current?.contains(target))
+      ) {
+        return;
+      }
+      onClose();
+    }
+
+    // Listening from the next frame skips the scroll the menu itself causes: right-clicking
+    // selects the row, and a partly-visible selected row scrolls into view on the very frame
+    // the menu opens.
     const frame = requestAnimationFrame(() =>
-      document.addEventListener("scroll", onClose, true),
+      document.addEventListener("scroll", onScroll, true),
     );
 
     return () => {
@@ -465,7 +487,7 @@ export function ContextMenu({
       document.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("resize", onClose);
       window.removeEventListener("blur", onWindowBlur);
-      document.removeEventListener("scroll", onClose, true);
+      document.removeEventListener("scroll", onScroll, true);
     };
   }, [onClose]);
 
@@ -668,23 +690,19 @@ export function ContextMenu({
     </div>
   );
 
-  if (compact) {
-    return (
-      <>
-        {/* Tapping away closes it, the way the sheet's backdrop does everywhere else. The
-            `mousedown` listener above already covers this on desktop; touch needs something
-            to actually tap. */}
-        <div
-          aria-hidden
-          onClick={onClose}
-          className="fixed inset-0 z-40 bg-[color-mix(in_srgb,var(--ink)_28%,transparent)]"
-        />
-        {menu}
-      </>
-    );
-  }
-
-  return subItems === null ? (
+  const tree = compact ? (
+    <>
+      {/* Tapping away closes it, the way the sheet's backdrop does everywhere else. The
+          `mousedown` listener above already covers this on desktop; touch needs something
+          to actually tap. */}
+      <div
+        aria-hidden
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-[color-mix(in_srgb,var(--ink)_28%,transparent)]"
+      />
+      {menu}
+    </>
+  ) : subItems === null ? (
     menu
   ) : (
     <>
@@ -708,4 +726,15 @@ export function ContextMenu({
       </div>
     </>
   );
+
+  /*
+   * Portalled to the body, the same reason `CategorySelect` portals its list: `position: fixed`
+   * is not enough when an ancestor has made itself a containing block or a stacking context.
+   * Here it was the stacking context. The application menu bar is `relative z-50` so File stays
+   * clickable over the drawer scrim, and the page bar is `md:z-50` for the same reason — equal
+   * z-index, page bar later in the document, so it painted over any menu opened from the bar
+   * and the first two rows of File were unreadable behind the tabs. An overlay must not be
+   * subject to its trigger's stacking context; a portal is how it stops being.
+   */
+  return createPortal(tree, document.body);
 }
