@@ -198,6 +198,23 @@ describe("pruneSelection", () => {
     expect([...result.selectedIds]).toEqual([]);
     expect(result.focusId).toBeNull();
   });
+
+  it("does not recruit the neighbour into a leftover multi-selection", () => {
+    // The plausible mistake: focus vanished, pick the row above it, and add that
+    // row to the set so focus is always selected. Correct for a single-row
+    // vanish (the tests above). Wrong when b and d are still selected — deleting
+    // c then highlighted a, which the user never picked.
+    const result = pruneSelection(
+      ["a", "b", "d", "e"],
+      new Set(["b", "c", "d"]),
+      "c",
+      "c",
+      ORDER,
+    );
+    expect([...result.selectedIds]).toEqual(["b", "d"]);
+    expect(result.focusId).toBe("b");
+    expect(result.anchorId).toBe("b");
+  });
 });
 
 describe("selectOnly", () => {

@@ -317,28 +317,27 @@ export function pruneSelection(
 
   const visible = new Set(orderedIds);
   const next = new Set([...selectedIds].filter((id) => visible.has(id)));
-  let nextFocus = focusId && visible.has(focusId) ? focusId : null;
-  let nextAnchor = anchorId && visible.has(anchorId) ? anchorId : null;
-
-  if (nextFocus === null) {
-    nextFocus = neighborAfterRemoval(previousOrderedIds, orderedIds, focusId);
-  }
 
   if (next.size === 0) {
-    // Unknown vanished id (never on the previous list): first visible, same as
-    // the `?select=` landing before ancestors have expanded.
-    return selectOnly(nextFocus ?? orderedIds[0]);
+    // Whole selection vanished: land on the neighbour above (or below) the old
+    // focus. Unknown vanished id (never on the previous list): first visible,
+    // same as the `?select=` landing before ancestors have expanded.
+    const neighbour = neighborAfterRemoval(previousOrderedIds, orderedIds, focusId);
+    return selectOnly(neighbour ?? orderedIds[0]);
   }
 
-  if (nextFocus === null) {
-    nextFocus =
-      [...next].sort((a, b) => orderedIds.indexOf(a) - orderedIds.indexOf(b))[0] ??
-      null;
-  }
-  if (nextAnchor === null) nextAnchor = nextFocus;
-
-  // If focus was pruned out of the set entirely, put it back on the set.
-  if (nextFocus && !next.has(nextFocus)) next.add(nextFocus);
+  // Some of the selection remains. Focus stays if it is still selected; if it
+  // vanished, land on the nearest still-selected row. Do not recruit a
+  // neighbour that was never in the set — that is how deleting one of three
+  // grew the highlight onto an unrelated previous item.
+  const remaining = orderedIds.filter((id) => next.has(id));
+  const nextFocus =
+    focusId && next.has(focusId)
+      ? focusId
+      : (neighborAfterRemoval(previousOrderedIds, remaining, focusId) ??
+        remaining[0] ??
+        null);
+  const nextAnchor = anchorId && next.has(anchorId) ? anchorId : nextFocus;
 
   return { selectedIds: next, anchorId: nextAnchor, focusId: nextFocus };
 }
