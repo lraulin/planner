@@ -287,7 +287,7 @@ export function WishesGrid({
             label: "View in Outline",
             group: "record",
             menu: "item",
-            section: "Item",
+            section: "Go",
             icon: "go-to",
             rowMenu: true,
             keywords: "tree hierarchy locate find reveal",

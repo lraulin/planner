@@ -159,6 +159,150 @@ describe("grid command deck", () => {
     ]);
   });
 
+  it("folds Go, Move, Expand and Zoom on an Outline-shaped row menu", () => {
+    const commands = buildGridCommands({
+      createKinds: ["result_area", "goal", "dream", "project", "task"],
+      hierarchy: true,
+      setPriority: true,
+      conversionKinds: ["project", "task"],
+      outlineZoom: { zoomed: false },
+      selection: {
+        id: "task-1",
+        kind: "task",
+        hasTasks: true,
+        projectId: "p",
+        canMoveUp: true,
+        canMoveDown: true,
+        canIndent: true,
+        canOutdent: true,
+        canExpand: true,
+      },
+      actions: {
+        onCreate: () => {},
+        onOpen: () => {},
+        onRename: () => {},
+        onSelectAll: () => {},
+        onDelete: () => {},
+        onSetState: () => {},
+        onScheduleBlock: () => {},
+        onViewTasks: () => {},
+        onViewProject: () => {},
+        onViewInOutline: () => {},
+        onCopyAsText: () => {},
+        onAttachFromClipboard: () => {},
+        onCutRows: () => {},
+        onPasteRows: () => {},
+        onMoveUp: () => {},
+        onMoveDown: () => {},
+        onIndent: () => {},
+        onOutdent: () => {},
+        onExpand: () => {},
+        onCollapse: () => {},
+        onExpandAll: () => {},
+        onCollapseAll: () => {},
+        onChooseExpandThroughLevel: () => {},
+        onSetPriority: () => {},
+        onConvert: () => {},
+        onZoomIn: () => {},
+        onZoomOut: () => {},
+        onClearZoom: () => {},
+        onZoomToItem: () => {},
+      },
+      pageCommands: [
+        {
+          id: "record.move-to",
+          label: "Move to…",
+          menu: "organize",
+          section: "Move",
+          icon: "indent",
+          rowMenu: true,
+          run: () => {},
+        },
+      ],
+    });
+
+    expect(
+      rowMenuSections(commands).map((section) => [
+        section.label,
+        section.submenu === true,
+      ]),
+    ).toEqual([
+      ["Item", false],
+      ["Go", true],
+      ["Convert to", true],
+      ["New", false],
+      ["Insert row", true],
+      ["Move", true],
+      ["State", true],
+      ["Expand", true],
+      ["Priority", false],
+      ["Zoom", true],
+      ["Danger", false],
+    ]);
+
+    const itemMenu = buildMenus(commands).find((menu) => menu.id === "item");
+    const organizeMenu = buildMenus(commands).find((menu) => menu.id === "organize");
+    expect(itemMenu?.sections.find((section) => section.label === "Go")?.submenu).toBe(
+      true,
+    );
+    expect(
+      organizeMenu?.sections.find((section) => section.label === "Move")?.submenu,
+    ).toBe(true);
+
+    const selectAll = commands.find((entry) => entry.id === "record.select-all");
+    expect(selectAll).toMatchObject({ menu: "item", section: "Item" });
+    expect(selectAll?.rowMenu).toBeUndefined();
+    expect(
+      rowMenuSections(commands)
+        .flatMap((section) => section.commands)
+        .map((entry) => entry.id),
+    ).not.toContain("record.select-all");
+    expect(
+      itemMenu?.sections
+        .find((section) => section.label === "Item")
+        ?.commands.map((entry) => entry.id),
+    ).toContain("record.select-all");
+  });
+
+  it("greys Zoom out and Clear zoom until the outline is zoomed", () => {
+    const actions = {
+      onZoomIn: () => {},
+      onZoomOut: () => {},
+      onClearZoom: () => {},
+      onZoomToItem: () => {},
+    };
+    const unzoomed = buildGridCommands({
+      outlineZoom: { zoomed: false },
+      selection: { id: "task-1" },
+      actions,
+    });
+    expect(unzoomed.find((entry) => entry.id === "outline.zoom-out")).toMatchObject({
+      disabled: true,
+      title: "Not zoomed in",
+      rowMenu: true,
+    });
+    expect(unzoomed.find((entry) => entry.id === "outline.zoom-clear")).toMatchObject({
+      disabled: true,
+      title: "Not zoomed in",
+      rowMenu: true,
+    });
+    expect(
+      unzoomed.find((entry) => entry.id === "outline.zoom-to-item")?.disabled,
+    ).toBeFalsy();
+
+    const zoomed = buildGridCommands({
+      outlineZoom: { zoomed: true },
+      selection: { id: "task-1" },
+      actions,
+    });
+    expect(
+      zoomed.find((entry) => entry.id === "outline.zoom-out")?.disabled,
+    ).toBeFalsy();
+    expect(
+      zoomed.find((entry) => entry.id === "outline.zoom-clear")?.disabled,
+    ).toBeFalsy();
+  });
+
   it("leaves the blank-area menu something it can actually do", () => {
     // Right-clicking below the last row builds this same menu with no selection. Every item verb
     // is correctly greyed there, so without a creation row it would be a menu of dead entries.
@@ -256,6 +400,21 @@ describe("grid command deck", () => {
 
       expect(state?.submenu).toBe(true);
       expect(state?.commands).toHaveLength(9);
+    });
+
+    it("files the jumps under Go, not Item", () => {
+      const commands = build({ id: "n", projectId: "p", hasTasks: true });
+      for (const id of [
+        "record.view-tasks",
+        "record.view-project",
+        "record.view-in-outline",
+      ]) {
+        expect(find(commands, id)).toMatchObject({
+          menu: "item",
+          section: "Go",
+          rowMenu: true,
+        });
+      }
     });
 
     it("explains a cross-navigation that has nowhere to go", () => {

@@ -378,9 +378,18 @@ view and not the next. The single length condition is a floor of **two** — a f
 is a hover you have to perform to learn there was nothing behind it.
 
 Fold the families where the _name_ is the useful thing and the members are a value picker: which
-kind, which letter, which state, which level. Do **not** fold the verbs someone opened the menu
-for. `Item`, `Move` and `Danger` stay flat, because burying `Delete` one hover deep is hiding it
-rather than organizing it.
+kind, which letter, which state, which level. `Move` is that shape once it is five verbs
+(Move up / down, Indent, Outdent, Move to…) — the name is the useful thing, the way `Convert
+to` was once it had five kinds. `Go` is the nest for View tasks / View project / View in
+Outline, split out of Item so those jumps fold without collapsing the Item menu itself.
+
+Do **not** fold the verbs someone opened the menu for. `Item` and `Danger` stay flat, because
+burying `Delete` one hover deep is hiding it rather than organizing it.
+
+A non-nested section with exactly one command skips its heading on the row menu, the menu bar
+and `⋯` (`New`, `Set priority…`, `Delete` already name themselves). The Commands panel keeps
+every heading — it is the tree left open. Nested families already render as one row and never
+got a heading.
 
 ### Right-click reaches more than rows
 

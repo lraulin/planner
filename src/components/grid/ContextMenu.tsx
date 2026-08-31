@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { CommandGlyph } from "@/components/icons/commandIcons";
 import { formatBindings } from "@/lib/commands/bindings";
-import type { MenuSection } from "@/lib/commands/menus";
+import { sectionShowsHeading, type MenuSection } from "@/lib/commands/menus";
 import type { CommandIcon } from "@/lib/commands/icons";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 
@@ -91,8 +91,10 @@ function isNavigable(item: MenuItem): item is Selectable | Submenu {
  * command bar from labelling the same command differently — the labels, the shortcuts and the
  * disabled reasons all arrive from the one `Command`.
  *
- * An unlabelled section leads without a heading; the rest get one. A section the menu tree marked
- * `submenu` becomes a *single row* instead, opening onto its commands.
+ * An unlabelled section leads without a heading. A nested family becomes a *single row*
+ * instead, opening onto its commands. A non-nested section with exactly one command skips
+ * the heading — the command already names itself (`New`, `Delete`). The Commands panel
+ * does not go through here, so it still prints every heading.
  *
  * **Consecutive submenu rows are not separated from each other.** A run of them already reads as
  * one block — they are single rows of the same shape — and ruling between every pair produced a
@@ -126,7 +128,7 @@ export function menuItemsFor(sections: readonly MenuSection[]): MenuItem[] {
       continue;
     }
 
-    if (section.label !== null) items.push({ heading: section.label });
+    if (sectionShowsHeading(section)) items.push({ heading: section.label as string });
     for (const command of section.commands) items.push(commandItem(command));
   }
 

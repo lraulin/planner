@@ -44,7 +44,7 @@ export const MENU_SECTIONS: Record<CommandMenu, readonly string[]> = {
     "Account",
   ],
   new: ["New", "Insert row"],
-  item: ["Item", "Convert to", "Danger"],
+  item: ["Item", "Go", "Convert to", "Danger"],
   // `Rank` and `State` are the Day grid's; `Move` is shared with the Outline's tree moves. They are
   // listed here rather than left to first-appearance order so the Day's Organize menu reads the same
   // way the Outline's does — moves, then ranking, then state.
@@ -63,9 +63,11 @@ export const MENU_SECTIONS: Record<CommandMenu, readonly string[]> = {
  * menu whose shape moves between views is one you re-read every time.
  *
  * These are the families where the *name* is the useful thing and the members are a
- * value-picker: which kind, which letter, which state, which level. `Item`, `Move` and `Danger`
- * are deliberately absent — those are the verbs you came for, and burying `Delete` one hover
- * deep would be hiding it rather than organizing it.
+ * value-picker: which kind, which letter, which state, which level. `Move` joins them because
+ * its five verbs dominated the row menu the way Convert to's five kinds used to. `Go` is the
+ * nest for View tasks / View project / View in Outline, split out of Item so those jumps fold
+ * without collapsing the verbs someone opened the menu for. `Item` and `Danger` stay absent —
+ * burying `Delete` one hover deep would be hiding it rather than organizing it.
  */
 export const NESTED_SECTIONS: ReadonlySet<string> = new Set([
   "Insert row",
@@ -73,8 +75,10 @@ export const NESTED_SECTIONS: ReadonlySet<string> = new Set([
   // exactly the "the name is the useful thing" shape this set is for.
   "Days",
   "Convert to",
+  "Go",
   "Rank",
   "State",
+  "Move",
   "Expand",
   "Priority",
   "Zoom",
@@ -161,6 +165,20 @@ function section(label: string, commands: Command[]): MenuSection {
   return NESTED_SECTIONS.has(label) && commands.length > 1
     ? { label, commands, submenu: true }
     : { label, commands };
+}
+
+/**
+ * Whether `menuItemsFor` (row menu, menu bar, `⋯`) prints this section's name as a heading.
+ *
+ * Nested families already occupy one row and do not get a heading. A non-nested section with
+ * a single command (`New`, `Set priority…`, `Delete`) already names itself, so the heading is
+ * a wasted row. The Commands panel does not consult this — it is the tree left open, and it
+ * keeps every heading.
+ */
+export function sectionShowsHeading(section: MenuSection): boolean {
+  return (
+    section.label !== null && section.submenu !== true && section.commands.length > 1
+  );
 }
 
 /**

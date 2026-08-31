@@ -572,7 +572,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         },
         conversionKinds: NODE_KINDS,
         setPriority: true,
-        outlineZoom: true,
+        outlineZoom: { zoomed: zoom !== null },
         selection: {
           id,
           count,

@@ -6,6 +6,7 @@ import {
   NESTED_SECTIONS,
   overflowMenus,
   rowMenuSections,
+  sectionShowsHeading,
   toolbarCommands,
   toolbarSegments,
 } from "./menus";
@@ -117,25 +118,61 @@ describe("nested sections", () => {
   });
 
   it("leaves the verb families flat", () => {
-    // `Item`, `Move` and `Danger` are what you opened the menu for. Burying Delete one hover
-    // deep is hiding it, not organizing it.
+    // `Item` and `Danger` are what you opened the menu for. Burying Delete one hover deep
+    // is hiding it, not organizing it. `Move` used to sit with them; five movement verbs
+    // dominate the row the way Convert to's kinds used to, so it nests now.
     const [item] = buildMenus([
       command("open", { menu: "item", section: "Item" }),
       command("rename", { menu: "item", section: "Item" }),
+      command("delete", { menu: "item", section: "Danger", destructive: true }),
+      command("delete-many", { menu: "item", section: "Danger", destructive: true }),
     ]);
 
-    expect(item.sections[0].submenu).toBeUndefined();
+    expect(
+      item.sections.map((section) => [section.label, section.submenu === true]),
+    ).toEqual([
+      ["Item", false],
+      ["Danger", false],
+    ]);
+  });
+
+  it("nests Move on Organize and Go on Item once each family has two members", () => {
+    const menus = buildMenus([
+      command("up", { menu: "organize", section: "Move" }),
+      command("down", { menu: "organize", section: "Move" }),
+      command("tasks", { menu: "item", section: "Go" }),
+      command("project", { menu: "item", section: "Go" }),
+    ]);
+    const organize = menus.find((menu) => menu.id === "organize");
+    const item = menus.find((menu) => menu.id === "item");
+
+    expect(organize?.sections[0]).toMatchObject({ label: "Move", submenu: true });
+    expect(item?.sections[0]).toMatchObject({ label: "Go", submenu: true });
   });
 
   it("does not nest a section holding a single command", () => {
     // A fly-out onto one row is a hover you have to perform to learn there was nothing behind
-    // it — and it happens for real, on a grid with one conversion target.
-    const [item] = buildMenus([
-      command("only", { menu: "item", section: "Convert to" }),
+    // it — and it happens for real, on a grid with one conversion target, or a host with a
+    // single Go or Move verb.
+    const menus = buildMenus([
+      command("only-convert", { menu: "item", section: "Convert to" }),
+      command("only-go", { menu: "item", section: "Go" }),
+      command("only-move", { menu: "organize", section: "Move" }),
     ]);
 
-    expect(item.sections[0].submenu).toBeUndefined();
-    expect(item.sections[0].commands).toHaveLength(1);
+    expect(
+      menus.flatMap((menu) =>
+        menu.sections.map((section) => [
+          section.label,
+          section.submenu === true,
+          section.commands.length,
+        ]),
+      ),
+    ).toEqual([
+      ["Go", false, 1],
+      ["Convert to", false, 1],
+      ["Move", false, 1],
+    ]);
   });
 
   it("never nests the leading unlabelled section", () => {
@@ -240,6 +277,44 @@ describe("toolbarSegments", () => {
   it("is empty rather than one empty segment when nothing is promoted", () => {
     // The command row renders `null` on this; a single empty segment would draw a stray divider.
     expect(toolbarSegments([command("menu-only")])).toEqual([]);
+  });
+});
+
+describe("sectionShowsHeading", () => {
+  it("skips the heading on a one-command un-nested section", () => {
+    // Height, not taxonomy: `New` and `Delete` already name themselves. Nested families
+    // already occupy one row and never got a heading.
+    expect(
+      sectionShowsHeading({
+        label: "New",
+        commands: [command("grid.create", { menu: "new", section: "New" })],
+      }),
+    ).toBe(false);
+    expect(
+      sectionShowsHeading({
+        label: "Item",
+        commands: [
+          command("open", { menu: "item", section: "Item" }),
+          command("rename", { menu: "item", section: "Item" }),
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      sectionShowsHeading({
+        label: "Move",
+        commands: [
+          command("up", { menu: "organize", section: "Move" }),
+          command("down", { menu: "organize", section: "Move" }),
+        ],
+        submenu: true,
+      }),
+    ).toBe(false);
+    expect(
+      sectionShowsHeading({
+        label: null,
+        commands: [command("bare", { menu: "tools" })],
+      }),
+    ).toBe(false);
   });
 });
 

@@ -159,7 +159,12 @@ export type GridCommandCapabilities = {
   /** Host can set one priority across the whole selection — see `onSetPriority`. */
   setPriority?: boolean;
   conversionKinds?: readonly NodeKind[];
-  outlineZoom?: boolean;
+  /**
+   * Outline zoom commands. `true` enables them and treats the view as not zoomed; pass
+   * `{ zoomed }` when the host knows the current root so Zoom out / Clear zoom can grey
+   * themselves with a reason rather than vanish.
+   */
+  outlineZoom?: boolean | { zoomed: boolean };
   selection?: GridSelectionCapability;
   actions: GridCommandActions;
   pageCommands?: readonly GridPageCommand[];
@@ -380,7 +385,6 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         menu: "item",
         section: "Item",
         icon: "select-all",
-        rowMenu: true,
         bindings: SELECT_ALL,
         keywords: "every row checkbox",
         run: actions.onSelectAll,
@@ -465,7 +469,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         label: "View tasks…",
         group: "record",
         menu: "item",
-        section: "Item",
+        section: "Go",
         icon: "go-to",
         rowMenu: true,
         // Achieve's Ctrl+T.
@@ -490,7 +494,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         label: "View project…",
         group: "record",
         menu: "item",
-        section: "Item",
+        section: "Go",
         icon: "go-to",
         rowMenu: true,
         // Achieve's Ctrl+Shift+J.
@@ -514,7 +518,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         label: "View in Outline",
         group: "record",
         menu: "item",
-        section: "Item",
+        section: "Go",
         icon: "go-to",
         rowMenu: true,
         keywords: "tree hierarchy locate find reveal",
@@ -771,6 +775,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           menu: "organize",
           section: "Expand",
           icon: "expand",
+          rowMenu: true,
           bindings: EXPAND_ALL,
           run: actions.onExpandAll,
         }),
@@ -785,6 +790,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           menu: "organize",
           section: "Expand",
           icon: "collapse",
+          rowMenu: true,
           bindings: COLLAPSE_ALL,
           run: actions.onCollapseAll,
         }),
@@ -799,6 +805,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           menu: "organize",
           section: "Expand",
           icon: "levels",
+          rowMenu: true,
           run: actions.onChooseExpandThroughLevel,
         }),
       );
@@ -812,6 +819,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
             menu: "organize",
             section: "Expand",
             icon: "levels",
+            rowMenu: true,
             run: () => actions.onExpandThroughLevel?.(level),
           }),
         );
@@ -866,6 +874,11 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
   }
 
   if (capabilities.outlineZoom) {
+    const zoomed =
+      typeof capabilities.outlineZoom === "object"
+        ? capabilities.outlineZoom.zoomed
+        : false;
+    const notZoomed = zoomed ? undefined : "Not zoomed in";
     if (actions.onZoomIn) {
       out.push(
         command({
@@ -891,6 +904,9 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           menu: "organize",
           section: "Zoom",
           icon: "zoom-out",
+          rowMenu: true,
+          disabled: !zoomed,
+          title: notZoomed,
           run: actions.onZoomOut,
         }),
       );
@@ -904,6 +920,9 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           menu: "organize",
           section: "Zoom",
           icon: "zoom-clear",
+          rowMenu: true,
+          disabled: !zoomed,
+          title: notZoomed,
           run: actions.onClearZoom,
         }),
       );
@@ -917,6 +936,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           menu: "organize",
           section: "Zoom",
           icon: "zoom-to",
+          rowMenu: true,
           run: actions.onZoomToItem,
         }),
       );
