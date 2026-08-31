@@ -125,8 +125,19 @@ export type SessionSummary = {
   durationMinutes: number | null;
   /** Short labels for list rows, e.g. "Bench Press 3×5 @ 185 lb". */
   exerciseLabels: string[];
+  /** Any set still unchecked — resume this row instead of copying it. */
+  isIncomplete: boolean;
   createdAt: Date;
   updatedAt: Date;
+};
+
+export type RepeatableTitle = {
+  /** Stored casing of the latest session with this name. */
+  title: string;
+  lastPerformedAt: Date;
+  sessionId: string;
+  exerciseCount: number;
+  isIncomplete: boolean;
 };
 
 export type SessionDetail = {

@@ -149,6 +149,7 @@ export function normaliseSetInput(set: SetInput): {
     durationSeconds,
     weight: weight === null ? null : String(weight),
     unit: bodyweight ? "bw" : unit,
-    completed: set.completed !== false,
+    // Omitted must not mean done — that was the “copied workout looks finished” bug.
+    completed: set.completed === true,
   };
 }

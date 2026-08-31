@@ -3,6 +3,7 @@ import {
   formatSetMeasureToken,
   formatSetRepsToken,
   formatSetsLabel,
+  normaliseSetInput,
   parseReps,
   parseWeight,
 } from "./format";
@@ -270,5 +271,17 @@ describe("formatSetsLabel — timed sets", () => {
     });
     expect(formatSetsLabel([set(10, 20), set(10, 20)])).toBe("2×10 + 20s BW");
     expect(formatSetsLabel([set(10, null), set(10, 20)])).toBe("10, 10 + 20s BW");
+  });
+});
+
+describe("normaliseSetInput — completed", () => {
+  it("defaults omitted flags to not done, so a missing field cannot resurrect inference", () => {
+    expect(normaliseSetInput({ reps: 5, weight: 185 }).completed).toBe(false);
+    expect(
+      normaliseSetInput({ reps: 5, weight: 185, completed: false }).completed,
+    ).toBe(false);
+    expect(normaliseSetInput({ reps: 5, weight: 185, completed: true }).completed).toBe(
+      true,
+    );
   });
 });

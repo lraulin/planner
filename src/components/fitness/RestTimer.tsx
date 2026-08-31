@@ -94,8 +94,11 @@ function notifyRestDone() {
  */
 export function RestTimer({
   onRegisterStart,
+  cue,
 }: {
   onRegisterStart?: (start: (seconds?: number) => void) => void;
+  /** “Resting for Bench — set 2”. Progress cue, never a complete-set signal. */
+  cue?: string | null;
 }) {
   const [durationSec, setDurationSec] = useState(loadPreferredRest);
   const [endsAt, setEndsAt] = useState<number | null>(null);
@@ -219,7 +222,7 @@ export function RestTimer({
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
-            Rest
+            {running && cue ? cue : "Rest"}
           </div>
           <div
             className={`font-mono text-2xl tabular-nums ${

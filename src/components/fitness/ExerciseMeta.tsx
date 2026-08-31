@@ -53,15 +53,18 @@ export function ExerciseNotes({
 export function LastSessionHint({
   exerciseId,
   excludeSessionId,
+  sessionTitle,
   onCopy,
 }: {
   exerciseId: string;
   excludeSessionId: string | null;
+  sessionTitle?: string | null;
   onCopy: (sets: WorkoutSetView[]) => void;
 }) {
   const [fetched, setFetched] = useState<{
     exerciseId: string;
     excludeSessionId: string | null;
+    sessionTitle: string | null;
     entry: ExerciseHistoryEntry | null;
   } | null>(null);
 
@@ -69,23 +72,26 @@ export function LastSessionHint({
     if (!exerciseId) return;
     let cancelled = false;
     const exclude = excludeSessionId;
-    void loadLatestForExerciseAction(exerciseId, exclude).then((result) => {
+    const title = sessionTitle ?? null;
+    void loadLatestForExerciseAction(exerciseId, exclude, title).then((result) => {
       if (cancelled || !result.ok) return;
       setFetched({
         exerciseId,
         excludeSessionId: exclude,
+        sessionTitle: title,
         entry: (result.data as ExerciseHistoryEntry | null) ?? null,
       });
     });
     return () => {
       cancelled = true;
     };
-  }, [exerciseId, excludeSessionId]);
+  }, [exerciseId, excludeSessionId, sessionTitle]);
 
   const latest =
     fetched &&
     fetched.exerciseId === exerciseId &&
-    fetched.excludeSessionId === excludeSessionId
+    fetched.excludeSessionId === excludeSessionId &&
+    fetched.sessionTitle === (sessionTitle ?? null)
       ? fetched.entry
       : null;
 

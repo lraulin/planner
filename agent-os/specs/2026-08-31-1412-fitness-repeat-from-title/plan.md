@@ -1,6 +1,6 @@
 # Repeat last titled workout
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-31)  
 Spec folder: `agent-os/specs/2026-08-31-1412-fitness-repeat-from-title/`
 
 ## Spec relationships
@@ -57,26 +57,27 @@ History stays every actual session. The plan for a title _is_ the latest session
 
 ## Acceptance criteria
 
-- [ ] Starting “Push” copies the latest Push session’s structure and numbers into a **new** session with every set `completed=false`. The source row is unchanged.
-- [ ] If the latest Push still has an unchecked set, Start Push / title combobox / Start last **opens that session** instead of cloning it.
-- [ ] A copied workout at minute zero cannot be mistaken for a finished one: no checks, current set is set 1, progress is `0 / N`.
-- [ ] Checking a set is the only thing that marks it done; uncheck works; rest-timer end does not complete.
-- [ ] Completing a set auto-advances to the next current set (round-major inside a group) and starts rest except after the session’s last set / after a group member that is not the end of the round.
-- [ ] Title combobox lists used titles; picking one on an empty draft copies; picking one on a draft with work only sets the title.
-- [ ] Sessions home shows Start last, title cards with days-ago, and empty workout. History rows have Start again.
-- [ ] Last-time hint prefers same title + same exercise; copy lands unchecked.
-- [ ] Empty-title sessions are not title cards. Cross-user: a second user cannot read, copy, or start another user’s session by title or id.
-- [ ] Logic in `src/lib/fitness/**` with unit + integration tests; no React component tests. `npm run test:unit` and integration (Postgres up). After `src/app/fitness/**` changes: dev server + `npm run smoke`.
-- [ ] Phone: 44px complete control, 16px inputs (do not override the global rule), current set obvious in one second.
+- [x] Starting “Push” copies the latest Push session’s structure and numbers into a **new** session with every set `completed=false`. The source row is unchanged.
+- [x] If the latest Push still has an unchecked set, Start Push / title combobox / Start last **opens that session** instead of cloning it.
+- [x] A copied workout at minute zero cannot be mistaken for a finished one: no checks, current set is set 1, progress is `0 / N`.
+- [x] Checking a set is the only thing that marks it done; uncheck works; rest-timer end does not complete.
+- [x] Completing a set auto-advances to the next current set (round-major inside a group) and starts rest except after the session’s last set / after a group member that is not the end of the round.
+- [x] Title combobox lists used titles; picking one on an empty draft copies; picking one on a draft with work only sets the title.
+- [x] Sessions home shows Start last, title cards with days-ago, and empty workout. History rows have Start again.
+- [x] Last-time hint prefers same title + same exercise; copy lands unchecked.
+- [x] Empty-title sessions are not title cards. Cross-user: a second user cannot read, copy, or start another user’s session by title or id.
+- [x] Logic in `src/lib/fitness/**` with unit + integration tests; no React component tests. `npm run test:unit` and integration (Postgres up). After `src/app/fitness/**` changes: dev server + `npm run smoke`.
+- [x] Phone: 44px complete control, 16px inputs (do not override the global rule), current set obvious in one second.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                          | Why                                                                                |
+| --- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 1   | `SessionSummary.isIncomplete` from the sets `listSessions` already loads        | Start last and per-row Start again need resume-vs-copy without a second round trip |
+| 2   | `fitnessLogPath` takes `{ from, exercise }` instead of a positional exercise id | Copy is a second query param; the catalog Log seed stays `?exercise=`              |
 
 ## Task 1: Save Spec Documentation
 

@@ -18,11 +18,27 @@ export function fitnessExercisesPath(): string {
   return "/fitness/exercises";
 }
 
-export function fitnessLogPath(exerciseId?: string | null): string {
-  if (exerciseId) {
-    return `/fitness/log?exercise=${encodeURIComponent(exerciseId)}`;
+export function fitnessLogPath(
+  options?: {
+    from?: string | null;
+    exercise?: string | null;
+  } | null,
+): string {
+  const from = options?.from?.trim();
+  const exercise = options?.exercise?.trim();
+  if (from) {
+    return `/fitness/log?from=${encodeURIComponent(from)}`;
+  }
+  if (exercise) {
+    return `/fitness/log?exercise=${encodeURIComponent(exercise)}`;
   }
   return "/fitness/log";
+}
+
+export function startAgainPath(sessionId: string, isIncomplete: boolean): string {
+  return isIncomplete
+    ? fitnessSessionPath(sessionId)
+    : fitnessLogPath({ from: sessionId });
 }
 
 export function fitnessSessionPath(sessionId: string): string {

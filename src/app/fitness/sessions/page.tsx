@@ -1,5 +1,9 @@
 import { getCurrentUserId } from "@/lib/auth";
-import { listExercises, listSessions } from "@/lib/fitness/queries";
+import {
+  listExercises,
+  listRepeatableTitles,
+  listSessions,
+} from "@/lib/fitness/queries";
 import { FitnessView } from "@/components/fitness/FitnessView";
 
 export const dynamic = "force-dynamic";
@@ -7,9 +11,10 @@ export const dynamic = "force-dynamic";
 /** The Sessions page: workout history. */
 export default async function FitnessSessionsPage() {
   const userId = await getCurrentUserId();
-  const [sessions, exercises] = await Promise.all([
+  const [sessions, exercises, titles] = await Promise.all([
     listSessions(userId),
     listExercises(userId),
+    listRepeatableTitles(userId),
   ]);
 
   return (
@@ -20,6 +25,7 @@ export default async function FitnessSessionsPage() {
       openLog={false}
       seedExerciseId={null}
       initialSessionDetail={null}
+      repeatableTitles={titles}
       openExerciseId={null}
     />
   );

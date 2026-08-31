@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  draftFromDetail,
+  draftHasWork,
   draftToSessionInput,
+  emptyBilateralSet,
   emptyDraftBlock,
+  planDraftFromDetail,
   setFromPrevious,
   setsFromHistory,
+  type DraftSet,
   type SessionDraft,
 } from "./sessionDraft";
+import type { SessionDetail } from "./types";
+
+function dSet(over: Partial<DraftSet> = {}): DraftSet {
+  return { ...emptyBilateralSet("lb"), ...over };
+}
 
 const catalog = [
   { id: "ex-bench", name: "Bench Press" },
@@ -30,16 +40,7 @@ function baseDraft(overrides: Partial<SessionDraft> = {}): SessionDraft {
         barWeight: 45,
         unilateral: false,
         notes: "",
-        sets: [
-          {
-            reps: "5",
-            repsLeft: "",
-            repsRight: "",
-            duration: "",
-            weight: "185",
-            unit: "lb",
-          },
-        ],
+        sets: [dSet({ reps: "5", weight: "185" })],
       },
     ],
     ...overrides,
@@ -67,9 +68,31 @@ describe("draftToSessionInput", () => {
         durationSeconds: null,
         weight: 185,
         unit: "lb",
-        completed: true,
+        completed: false,
       },
     ]);
+  });
+
+  it("writes completed from the draft flag, not from filled numbers", () => {
+    const unchecked = draftToSessionInput(baseDraft(), catalog);
+    expect(unchecked?.exercises[0].sets[0].completed).toBe(false);
+
+    const checked = draftToSessionInput(
+      baseDraft({
+        exercises: [
+          {
+            ...baseDraft().exercises[0],
+            sets: [dSet({ reps: "5", weight: "185", completed: true })],
+          },
+        ],
+      }),
+      catalog,
+    );
+    expect(checked?.exercises[0].sets[0]).toMatchObject({
+      reps: 5,
+      weight: 185,
+      completed: true,
+    });
   });
 
   it("maps unilateral dumbbell L/R", () => {
@@ -86,16 +109,7 @@ describe("draftToSessionInput", () => {
             barWeight: 45,
             unilateral: true,
             notes: "",
-            sets: [
-              {
-                reps: "",
-                repsLeft: "8",
-                repsRight: "6",
-                duration: "",
-                weight: "50",
-                unit: "lb",
-              },
-            ],
+            sets: [dSet({ repsLeft: "8", repsRight: "6", weight: "50" })],
           },
         ],
       }),
@@ -108,7 +122,7 @@ describe("draftToSessionInput", () => {
       durationSeconds: null,
       weight: 50,
       unit: "lb",
-      completed: true,
+      completed: false,
     });
   });
 
@@ -153,22 +167,17 @@ describe("setsFromHistory / setFromPrevious", () => {
         duration: "",
         weight: "40",
         unit: "lb",
+        completed: false,
       },
     ]);
   });
 
-  it("copies previous set fields", () => {
-    const prev = {
-      reps: "5",
-      repsLeft: "",
-      repsRight: "",
-      duration: "",
-      weight: "185",
-      unit: "lb",
-    };
-    expect(setFromPrevious(prev, { equipment: "barbell", unilateral: false })).toEqual(
-      prev,
-    );
+  it("copies previous set fields as a plan, never as already done", () => {
+    const prev = dSet({ reps: "5", weight: "185", completed: true });
+    expect(setFromPrevious(prev, { equipment: "barbell", unilateral: false })).toEqual({
+      ...prev,
+      completed: false,
+    });
   });
 });
 
@@ -202,16 +211,7 @@ describe("draftToSessionInput — timed exercises", () => {
   it("maps a bodyweight hold to a duration with no reps", () => {
     const input = draftToSessionInput(
       timedDraft({
-        sets: [
-          {
-            reps: "",
-            repsLeft: "",
-            repsRight: "",
-            duration: "45",
-            weight: "",
-            unit: "bw",
-          },
-        ],
+        sets: [dSet({ duration: "45", unit: "bw" })],
       }),
       timedCatalog,
     );
@@ -223,7 +223,7 @@ describe("draftToSessionInput — timed exercises", () => {
         durationSeconds: 45,
         weight: null,
         unit: "bw",
-        completed: true,
+        completed: false,
       },
     ]);
   });
@@ -231,16 +231,7 @@ describe("draftToSessionInput — timed exercises", () => {
   it("accepts m:ss as well as bare seconds", () => {
     const input = draftToSessionInput(
       timedDraft({
-        sets: [
-          {
-            reps: "",
-            repsLeft: "",
-            repsRight: "",
-            duration: "1:30",
-            weight: "",
-            unit: "bw",
-          },
-        ],
+        sets: [dSet({ duration: "1:30", unit: "bw" })],
       }),
       timedCatalog,
     );
@@ -253,16 +244,7 @@ describe("draftToSessionInput — timed exercises", () => {
         exerciseId: "ex-carry",
         exerciseName: "Farmer's Carry",
         equipment: "dumbbell",
-        sets: [
-          {
-            reps: "",
-            repsLeft: "",
-            repsRight: "",
-            duration: "60",
-            weight: "50",
-            unit: "lb",
-          },
-        ],
+        sets: [dSet({ duration: "60", weight: "50" })],
       }),
       timedCatalog,
     );
@@ -273,7 +255,7 @@ describe("draftToSessionInput — timed exercises", () => {
       durationSeconds: 60,
       weight: 50,
       unit: "lb",
-      completed: true,
+      completed: false,
     });
   });
 
@@ -285,16 +267,7 @@ describe("draftToSessionInput — timed exercises", () => {
           exerciseId: "ex-carry",
           exerciseName: "Farmer's Carry",
           equipment: "dumbbell",
-          sets: [
-            {
-              reps: "",
-              repsLeft: "",
-              repsRight: "",
-              duration: "",
-              weight: "50",
-              unit: "lb",
-            },
-          ],
+          sets: [dSet({ weight: "50" })],
         }),
         timedCatalog,
       ),
@@ -303,14 +276,8 @@ describe("draftToSessionInput — timed exercises", () => {
 
   it("carries reps and hold together, and keeps a set whose hold is blank", () => {
     // The finisher case: hold only on the last set is why no per-set toggle is needed.
-    const set = (reps: string, duration: string) => ({
-      reps,
-      repsLeft: "",
-      repsRight: "",
-      duration,
-      weight: "",
-      unit: "bw",
-    });
+    const set = (reps: string, duration: string) =>
+      dSet({ reps, duration, unit: "bw" });
     const input = draftToSessionInput(
       timedDraft({
         exerciseId: "ex-pushup",
@@ -328,7 +295,7 @@ describe("draftToSessionInput — timed exercises", () => {
         durationSeconds: null,
         weight: null,
         unit: "bw",
-        completed: true,
+        completed: false,
       },
       {
         reps: 10,
@@ -337,7 +304,7 @@ describe("draftToSessionInput — timed exercises", () => {
         durationSeconds: 20,
         weight: null,
         unit: "bw",
-        completed: true,
+        completed: false,
       },
     ]);
   });
@@ -347,16 +314,7 @@ describe("draftToSessionInput — timed exercises", () => {
     const input = draftToSessionInput(
       timedDraft({
         measure: "reps",
-        sets: [
-          {
-            reps: "12",
-            repsLeft: "",
-            repsRight: "",
-            duration: "45",
-            weight: "",
-            unit: "bw",
-          },
-        ],
+        sets: [dSet({ reps: "12", duration: "45", unit: "bw" })],
       }),
       timedCatalog,
     );
@@ -367,16 +325,7 @@ describe("draftToSessionInput — timed exercises", () => {
   it("rejects an unparseable hold rather than writing a bad number", () => {
     const input = draftToSessionInput(
       timedDraft({
-        sets: [
-          {
-            reps: "",
-            repsLeft: "",
-            repsRight: "",
-            duration: "1:90",
-            weight: "",
-            unit: "bw",
-          },
-        ],
+        sets: [dSet({ duration: "1:90", unit: "bw" })],
       }),
       timedCatalog,
     );
@@ -451,14 +400,7 @@ describe("draftToSessionInput — groups", () => {
   }
 
   function reps(...values: string[]): SessionDraft["exercises"][number]["sets"] {
-    return values.map((r) => ({
-      reps: r,
-      repsLeft: "",
-      repsRight: "",
-      duration: "",
-      weight: r === "" ? "" : "50",
-      unit: "lb",
-    }));
+    return values.map((r) => dSet({ reps: r, weight: r === "" ? "" : "50" }));
   }
 
   it("points both members at the group and carries its label and rest", () => {
@@ -543,11 +485,38 @@ describe("draftToSessionInput — groups", () => {
     );
 
     expect(input?.exercises[0].sets.map((s) => s.completed)).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    expect(input?.exercises[0].sets.map((s) => s.reps)).toEqual([10, null, 8]);
+  });
+
+  it("keeps a filled unchecked interior round as a plan, not a sat-out", () => {
+    const input = draftToSessionInput(
+      baseDraft({
+        groups: [{ id: "g1", label: "Circuit", rest: "" }],
+        exercises: [
+          block({
+            exerciseId: "ex-press",
+            groupId: "g1",
+            sets: [
+              dSet({ reps: "10", weight: "50", completed: true }),
+              dSet({ reps: "8", weight: "50", completed: false }),
+              dSet({ reps: "6", weight: "50", completed: true }),
+            ],
+          }),
+        ],
+      }),
+      groupCatalog,
+    );
+
+    expect(input?.exercises[0].sets.map((s) => s.completed)).toEqual([
       true,
       false,
       true,
     ]);
-    expect(input?.exercises[0].sets.map((s) => s.reps)).toEqual([10, null, 8]);
+    expect(input?.exercises[0].sets.map((s) => s.reps)).toEqual([10, 8, 6]);
   });
 
   it("still trims the blank rounds at the end of a grouped member", () => {
@@ -586,5 +555,106 @@ describe("draftToSessionInput — groups", () => {
     );
 
     expect(input?.groups?.[0].restSeconds).toBeNull();
+  });
+});
+
+describe("draftFromDetail / planDraftFromDetail", () => {
+  const detail: SessionDetail = {
+    id: "sess-1",
+    performedAt: new Date("2026-08-20T18:00:00Z"),
+    title: "Push",
+    notes: "felt strong",
+    durationMinutes: 45,
+    createdAt: new Date("2026-08-20T18:00:00Z"),
+    updatedAt: new Date("2026-08-20T18:00:00Z"),
+    groups: [{ id: "g1", label: "Superset", restSeconds: 90 }],
+    exercises: [
+      {
+        id: "se-1",
+        exerciseId: "ex-bench",
+        exerciseName: "Bench Press",
+        equipment: "barbell",
+        measure: "reps",
+        barWeight: 45,
+        unilateral: false,
+        sortKey: "a",
+        notes: "paused",
+        groupId: "g1",
+        sets: [
+          {
+            id: "set-1",
+            setIndex: 1,
+            reps: 5,
+            repsLeft: null,
+            repsRight: null,
+            durationSeconds: null,
+            weight: 185,
+            unit: "lb",
+            completed: true,
+          },
+          {
+            id: "set-2",
+            setIndex: 2,
+            reps: 5,
+            repsLeft: null,
+            repsRight: null,
+            durationSeconds: null,
+            weight: 185,
+            unit: "lb",
+            completed: false,
+          },
+        ],
+      },
+    ],
+  };
+
+  it("preserves stored completion flags when reopening", () => {
+    const draft = draftFromDetail(detail, []);
+    expect(draft.notes).toBe("felt strong");
+    expect(draft.durationMinutes).toBe("45");
+    expect(draft.exercises[0].notes).toBe("paused");
+    expect(draft.exercises[0].sets.map((s) => s.completed)).toEqual([true, false]);
+  });
+
+  it("copies a plan with nothing checked and no session notes", () => {
+    const draft = planDraftFromDetail(detail);
+    expect(draft.title).toBe("Push");
+    expect(draft.notes).toBe("");
+    expect(draft.durationMinutes).toBe("");
+    expect(draft.exercises[0].notes).toBe("paused");
+    expect(draft.exercises[0].sets.map((s) => s.completed)).toEqual([false, false]);
+    expect(draft.exercises[0].sets[0].weight).toBe("185");
+    expect(draft.groups[0].id).not.toBe("g1");
+    expect(draft.exercises[0].groupId).toBe(draft.groups[0].id);
+    expect(draft.exercises[0].key).not.toBe("se-1");
+  });
+});
+
+describe("draftHasWork", () => {
+  it("is false for the default empty block", () => {
+    expect(
+      draftHasWork({
+        performedAt: "2026-08-31T10:00",
+        title: "",
+        notes: "",
+        durationMinutes: "",
+        groups: [],
+        exercises: [emptyDraftBlock()],
+      }),
+    ).toBe(false);
+  });
+
+  it("is true once an exercise is chosen", () => {
+    const empty = emptyDraftBlock();
+    expect(
+      draftHasWork({
+        performedAt: "2026-08-31T10:00",
+        title: "",
+        notes: "",
+        durationMinutes: "",
+        groups: [],
+        exercises: [{ ...empty, exerciseId: "ex-bench", exerciseName: "Bench" }],
+      }),
+    ).toBe(true);
   });
 });

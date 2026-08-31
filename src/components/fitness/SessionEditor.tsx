@@ -1,9 +1,18 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { loadLatestForExerciseAction } from "@/app/fitness/actions";
 import { Drawer } from "@/components/detail/Drawer";
 import { useAutosave, type SaveStatus } from "@/components/notes/useAutosave";
+import {
+  currentSetCue,
+  currentSetTarget,
+  restAfterComplete,
+  sessionSetProgress,
+  setRowRole,
+} from "@/lib/fitness/currentSet";
 import { parseDurationSeconds } from "@/lib/fitness/duration";
+import { formatSetsLabel } from "@/lib/fitness/format";
 import { formatEquipmentBadge, usesPlateCalculator } from "@/lib/fitness/equipment";
 import {
   addMember,
@@ -23,11 +32,15 @@ import { addRound, extendMemberTo, removeRound } from "@/lib/fitness/rounds";
 import { setColumns } from "@/lib/fitness/setColumns";
 import {
   draftBlockFromCatalog,
+  draftFromDetail,
+  draftHasWork,
   draftToSessionInput,
   emptyDraftBlock,
   emptySetForExercise,
+  planDraftFromDetail,
   setFromPrevious,
   setsFromHistory,
+  toLocalDateTimeInput,
   type DraftExercise,
   type DraftGroup,
   type DraftSet,
@@ -36,6 +49,7 @@ import {
 import { groupSessionItems } from "@/lib/fitness/sessionGroups";
 import type {
   ExerciseSummary,
+  RepeatableTitle,
   SessionDetail,
   SessionInput,
   WorkoutSetView,
@@ -46,57 +60,7 @@ import { ExerciseNotes, LastSessionHint } from "./ExerciseMeta";
 import { ExercisePicker } from "./ExercisePicker";
 import { RestTimer } from "./RestTimer";
 import { SetHeader, SetRow } from "./SetRow";
-
-function draftFromDetail(
-  detail: SessionDetail,
-  catalog: ExerciseSummary[],
-): SessionDraft {
-  return {
-    performedAt: toLocalInput(detail.performedAt),
-    title: detail.title,
-    notes: detail.notes,
-    durationMinutes:
-      detail.durationMinutes == null ? "" : String(detail.durationMinutes),
-    groups: detail.groups.map((g) => ({
-      id: g.id,
-      label: g.label,
-      rest: g.restSeconds == null ? "" : String(g.restSeconds),
-    })),
-    exercises: detail.exercises.map((ex) => {
-      const cat = catalog.find((c) => c.id === ex.exerciseId);
-      const equipment = cat?.equipment ?? ex.equipment;
-      const measure = cat?.measure ?? ex.measure;
-      const unilateral = cat?.unilateral ?? ex.unilateral;
-      const barWeight = cat?.barWeight ?? ex.barWeight;
-      return {
-        key: ex.id,
-        groupId: ex.groupId,
-        exerciseId: ex.exerciseId,
-        exerciseName: ex.exerciseName,
-        equipment,
-        measure,
-        barWeight,
-        unilateral,
-        notes: ex.notes,
-        sets: ex.sets.map((s) => ({
-          reps: s.reps == null ? "" : String(s.reps),
-          repsLeft: s.repsLeft == null ? "" : String(s.repsLeft),
-          repsRight: s.repsRight == null ? "" : String(s.repsRight),
-          duration: s.durationSeconds == null ? "" : String(s.durationSeconds),
-          weight: s.weight == null ? "" : String(s.weight),
-          unit:
-            equipment === "bodyweight" ? "bw" : s.unit === "bw" ? "lb" : s.unit || "lb",
-        })),
-      };
-    }),
-  };
-}
-
-function toLocalInput(date: Date): string {
-  const d = new Date(date);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+import { TitlePicker } from "./TitlePicker";
 
 /**
  * Strength session drawer. Select catalog exercises (configure elsewhere);
@@ -107,7 +71,10 @@ export function SessionEditor({
   onClose,
   exercises: catalogProp,
   existing,
+  copyFrom,
   seedExerciseId,
+  titles,
+  onRepeatTitle,
   onCreate,
   onUpdate,
   onPersisted,
@@ -117,7 +84,11 @@ export function SessionEditor({
   onClose: () => void;
   exercises: ExerciseSummary[];
   existing: SessionDetail | null;
+  /** Complete source session to copy as an unchecked plan. */
+  copyFrom?: SessionDetail | null;
   seedExerciseId: string | null;
+  titles?: readonly RepeatableTitle[];
+  onRepeatTitle?: (sessionId: string, isIncomplete: boolean) => void;
   onCreate: (
     input: SessionInput,
   ) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
@@ -139,11 +110,12 @@ export function SessionEditor({
 
   const initial = useMemo(() => {
     if (existing) return draftFromDetail(existing, catalogProp);
+    if (copyFrom) return planDraftFromDetail(copyFrom);
     const seed = seedExerciseId
       ? catalogProp.find((e) => e.id === seedExerciseId)
       : null;
     return {
-      performedAt: toLocalInput(new Date()),
+      performedAt: toLocalDateTimeInput(new Date()),
       title: "",
       notes: "",
       durationMinutes: "",
@@ -151,7 +123,7 @@ export function SessionEditor({
       exercises: [seed ? draftBlockFromCatalog(seed) : emptyDraftBlock()],
     } satisfies SessionDraft;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [existing?.id, seedExerciseId, open]);
+  }, [existing?.id, copyFrom?.id, seedExerciseId, open]);
 
   const [performedAt, setPerformedAt] = useState(initial.performedAt);
   const [title, setTitle] = useState(initial.title);
@@ -189,6 +161,57 @@ export function SessionEditor({
   const registerRestStart = useCallback((start: (seconds?: number) => void) => {
     restStartRef.current = start;
   }, []);
+  const [restCue, setRestCue] = useState<string | null>(null);
+
+  const currentTarget = useMemo(
+    () => currentSetTarget(blocks, grouping.groups),
+    [blocks, grouping.groups],
+  );
+  const liveCue = useMemo(
+    () => currentSetCue(blocks, grouping.groups),
+    [blocks, grouping.groups],
+  );
+  const progress = useMemo(() => sessionSetProgress(blocks), [blocks]);
+  const reviewingHistory = existing !== null && currentTarget === null;
+  const currentExerciseId = liveCue
+    ? (blocks[liveCue.target.blockIndex]?.exerciseId ?? "")
+    : "";
+  const [fetchedLast, setFetchedLast] = useState<{
+    exerciseId: string;
+    label: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!currentExerciseId) return;
+    let cancelled = false;
+    const exerciseId = currentExerciseId;
+    void loadLatestForExerciseAction(exerciseId, sessionId, title.trim() || null).then(
+      (result) => {
+        if (cancelled || !result.ok) return;
+        const entry = result.data as { sets: WorkoutSetView[] } | null;
+        setFetchedLast({
+          exerciseId,
+          label: entry?.sets.length ? formatSetsLabel(entry.sets) : null,
+        });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [currentExerciseId, sessionId, title]);
+
+  const stickyLast =
+    currentExerciseId && fetchedLast?.exerciseId === currentExerciseId
+      ? fetchedLast.label
+      : null;
+
+  useEffect(() => {
+    if (!open || !currentTarget) return;
+    const el = document.querySelector(
+      `[data-set-target="${currentTarget.blockIndex}-${currentTarget.setIndex}"]`,
+    );
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [open, currentTarget]);
 
   const idCatalog = useMemo(
     () => catalog.map((e) => ({ id: e.id, name: e.name })),
@@ -383,7 +406,49 @@ export function SessionEditor({
     setRunningHold(null);
   }
 
+  function toggleComplete(blockIndex: number, setIndex: number, completed: boolean) {
+    const nextExercises = grouping.exercises.map((b, i) => {
+      if (i !== blockIndex) return b;
+      return {
+        ...b,
+        sets: b.sets.map((s, j) => (j === setIndex ? { ...s, completed } : s)),
+      };
+    });
+    const next = pruneGroups({
+      groups: grouping.groups,
+      exercises: nextExercises,
+    });
+    setGrouping(next);
+    queueSave({
+      performedAt,
+      title,
+      notes,
+      durationMinutes,
+      groups: next.groups,
+      exercises: next.exercises,
+    });
+    if (!completed) return;
+    const cue = restAfterComplete(next.exercises, next.groups, {
+      blockIndex,
+      setIndex,
+    });
+    if (!cue) {
+      setRestCue(null);
+      return;
+    }
+    setRestCue(`Resting for ${cue.exerciseName} — set ${cue.setNumber}`);
+    const block = next.exercises[blockIndex];
+    const group = block.groupId
+      ? next.groups.find((g) => g.id === block.groupId)
+      : null;
+    restStartRef.current?.(parseDurationSeconds(group?.rest) ?? undefined);
+  }
+
   function updateSet(blockIndex: number, setIndex: number, patch: Partial<DraftSet>) {
+    if (typeof patch.completed === "boolean") {
+      toggleComplete(blockIndex, setIndex, patch.completed);
+      return;
+    }
     setBlocksAndSave((current) =>
       current.map((b, i) => {
         if (i !== blockIndex) return b;
@@ -393,6 +458,15 @@ export function SessionEditor({
         };
       }),
     );
+  }
+
+  function selectRepeatableTitle(entry: RepeatableTitle) {
+    const draft = buildDraft();
+    if (!draftHasWork(draft) && onRepeatTitle) {
+      onRepeatTitle(entry.sessionId, entry.isIncomplete);
+      return;
+    }
+    patchMeta({ title: entry.title });
   }
 
   function removeSet(blockIndex: number, setIndex: number) {
@@ -511,6 +585,30 @@ export function SessionEditor({
             </button>
           </header>
 
+          {liveCue && !reviewingHistory ? (
+            <div className="flex-none border-b border-rule bg-shell/90 px-4 py-2">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="min-w-0 truncate text-sm font-semibold text-ink">
+                  {liveCue.exerciseName} — Set {liveCue.setNumber} of {liveCue.setCount}
+                </p>
+                <p className="shrink-0 font-mono text-[0.75rem] text-ink-muted">
+                  {progress.done} / {progress.total}
+                </p>
+              </div>
+              {stickyLast ? (
+                <p className="mt-0.5 font-mono text-[0.75rem] text-ink-faint">
+                  Last time: {stickyLast}
+                </p>
+              ) : null}
+            </div>
+          ) : progress.total > 0 ? (
+            <div className="flex-none border-b border-rule bg-shell/90 px-4 py-2">
+              <p className="font-mono text-[0.75rem] text-ink-muted">
+                {progress.done} / {progress.total} sets
+              </p>
+            </div>
+          ) : null}
+
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
@@ -536,12 +634,11 @@ export function SessionEditor({
 
             <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
               Title
-              <input
-                type="text"
+              <TitlePicker
+                titles={titles ?? []}
                 value={title}
-                placeholder="Push, Upper, …"
-                onChange={(e) => patchMeta({ title: e.target.value })}
-                className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink normal-case tracking-normal"
+                onChange={(next) => patchMeta({ title: next })}
+                onSelectTitle={selectRepeatableTitle}
               />
             </label>
 
@@ -593,6 +690,8 @@ export function SessionEditor({
                     }
                     onStartHold={startHold}
                     onStopHold={stopHold}
+                    currentTarget={currentTarget}
+                    sessionTitle={title}
                   />
                 );
               }
@@ -632,6 +731,9 @@ export function SessionEditor({
                   onRemoveSet={(si) => removeSet(bi, si)}
                   onAddSet={() => addSet(bi)}
                   onCopyLast={(sets) => copyLastSets(bi, sets)}
+                  currentTarget={currentTarget}
+                  blockIndex={bi}
+                  sessionTitle={title}
                   onUpdateNotes={(notes) =>
                     setBlocksAndSave((current) =>
                       current.map((b, i) => (i === bi ? { ...b, notes } : b)),
@@ -660,7 +762,7 @@ export function SessionEditor({
             </label>
           </div>
 
-          <RestTimer onRegisterStart={registerRestStart} />
+          <RestTimer onRegisterStart={registerRestStart} cue={restCue} />
         </div>
       </Drawer>
 
@@ -698,6 +800,9 @@ function ExerciseBlock({
   onAddSet,
   onCopyLast,
   onUpdateNotes,
+  currentTarget,
+  blockIndex,
+  sessionTitle,
 }: {
   letter: string;
   block: DraftExercise;
@@ -722,6 +827,9 @@ function ExerciseBlock({
   onAddSet: () => void;
   onCopyLast: (sets: WorkoutSetView[]) => void;
   onUpdateNotes: (notes: string) => void;
+  currentTarget: { blockIndex: number; setIndex: number } | null;
+  blockIndex: number;
+  sessionTitle: string;
 }) {
   const showPlates = usesPlateCalculator(block.equipment);
   const columns = useMemo(
@@ -798,6 +906,7 @@ function ExerciseBlock({
             <LastSessionHint
               exerciseId={block.exerciseId}
               excludeSessionId={sessionId}
+              sessionTitle={sessionTitle}
               onCopy={onCopyLast}
             />
           </>
@@ -818,6 +927,8 @@ function ExerciseBlock({
                 index={si}
                 set={set}
                 columns={columns}
+                role={setRowRole(currentTarget, blockIndex, si, set.completed)}
+                targetKey={`${blockIndex}-${si}`}
                 showPlates={showPlates}
                 barWeight={block.barWeight}
                 holdStartedAt={runningHoldSetIndex === si ? runningHoldStartedAt : null}

@@ -713,7 +713,12 @@ flavor; optional palette thinning).
   notification permission on first Start and fires a "Rest done" banner. Denied or a
   missing API keeps the beep. Out: wake lock, service worker, hold-timer notify, and a
   shared notify helper.
-- **Medium-term:** Deeper Goal / Result Area progress surfaces; routines/templates.
+- **✅ Repeat last titled workout.** `specs/2026-08-31-1412-fitness-repeat-from-title`.
+  The medium-term routines/templates line, delivered as do-again-from-history rather than a
+  template library: start the latest session with that title (resume if it is still
+  incomplete, otherwise copy into a new live session with nothing checked). Prefill is a
+  plan; only an explicit tap marks a set done. Goal / Result Area fitness surfaces stay later.
+- **Medium-term:** Deeper Goal / Result Area progress surfaces.
 - **Long-term:** Optional **Apple Health** (or similar) import — read-only first; cardio.
 
 ### Life history

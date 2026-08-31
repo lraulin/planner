@@ -17,6 +17,7 @@ import type { Command } from "@/lib/commands/registry";
 import { INSERT_AFTER } from "@/lib/commands/chords";
 import { formatEquipmentBadge } from "@/lib/fitness/equipment";
 import { formatMeasureTag } from "@/lib/fitness/measure";
+import { formatDaysAgo } from "@/lib/fitness/daysAgo";
 import {
   fitnessExerciseEditPath,
   fitnessExerciseNewPath,
@@ -24,9 +25,11 @@ import {
   fitnessLogPath,
   fitnessSessionPath,
   fitnessSessionsPath,
+  startAgainPath,
 } from "@/lib/fitness/routes";
 import type {
   ExerciseSummary,
+  RepeatableTitle,
   SessionDetail,
   SessionInput,
   SessionSummary,
@@ -57,6 +60,8 @@ export function FitnessView({
   openLog,
   seedExerciseId,
   initialSessionDetail,
+  copyFrom,
+  repeatableTitles,
   openExerciseId,
 }: {
   mode: Mode;
@@ -65,6 +70,8 @@ export function FitnessView({
   openLog: boolean;
   seedExerciseId: string | null;
   initialSessionDetail: SessionDetail | null;
+  copyFrom?: SessionDetail | null;
+  repeatableTitles: RepeatableTitle[];
   /** null = closed; `"new"` or exercise id = open catalog editor */
   openExerciseId: string | null;
 }) {
@@ -72,12 +79,14 @@ export function FitnessView({
   const [error, setError] = useState<string | null>(null);
   const editorOpen = openLog || initialSessionDetail !== null;
   const editing = initialSessionDetail;
-  const seed = initialSessionDetail ? null : seedExerciseId;
+  const seed = initialSessionDetail || copyFrom ? null : seedExerciseId;
   const editorInstanceKey = initialSessionDetail
     ? initialSessionDetail.id
-    : openLog
-      ? `new-${seedExerciseId ?? "blank"}`
-      : "closed";
+    : copyFrom
+      ? `copy-${copyFrom.id}`
+      : openLog
+        ? `new-${seedExerciseId ?? "blank"}`
+        : "closed";
 
   const [pendingDelete, setPendingDelete] = useState<SessionSummary | null>(null);
   const [pendingDeleteExercise, setPendingDeleteExercise] =
@@ -97,10 +106,20 @@ export function FitnessView({
   const openNewLog = useCallback(
     (exerciseId: string | null = null) => {
       setError(null);
-      router.push(fitnessLogPath(exerciseId));
+      router.push(fitnessLogPath({ exercise: exerciseId }));
     },
     [router],
   );
+
+  const startAgain = useCallback(
+    (sessionId: string, isIncomplete: boolean) => {
+      setError(null);
+      router.push(startAgainPath(sessionId, isIncomplete));
+    },
+    [router],
+  );
+
+  const latestSession = sessions[0] ?? null;
 
   const openExisting = useCallback(
     (sessionId: string) => {
@@ -237,6 +256,26 @@ export function FitnessView({
         run: () => openNewLog(null),
       },
       {
+        id: "fitness.start-last-session",
+        label: "Start last session",
+        group: "record",
+        menu: "new",
+        section: "New",
+        icon: "new",
+        keywords: "repeat copy last workout push pull",
+        disabled: latestSession == null,
+        title:
+          latestSession == null
+            ? "No sessions to repeat"
+            : latestSession.isIncomplete
+              ? "Resume the latest workout"
+              : "Copy the latest workout, nothing checked",
+        run: () => {
+          if (!latestSession) return;
+          startAgain(latestSession.id, latestSession.isIncomplete);
+        },
+      },
+      {
         id: "fitness.new-exercise",
         label: "New exercise",
         group: "record",
@@ -249,7 +288,7 @@ export function FitnessView({
         run: openNewExercise,
       },
     ],
-    [mode, openNewLog, openNewExercise],
+    [mode, openNewLog, openNewExercise, latestSession, startAgain],
   );
 
   useRegisterCommands(commands);
@@ -276,46 +315,109 @@ export function FitnessView({
               onAction={() => openNewLog(null)}
             />
           ) : (
-            <ul className="divide-y divide-rule">
-              {sessions.map((session) => (
-                <li
-                  key={session.id}
-                  className="flex items-start gap-3 px-4 py-3 hover:bg-shell/50"
-                >
+            <div>
+              <div className="space-y-3 border-b border-rule px-4 py-3">
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="min-w-0 flex-1 text-left"
-                    onClick={() => openExisting(session.id)}
+                    disabled={latestSession == null}
+                    title={latestSession == null ? "No sessions to repeat" : undefined}
+                    onClick={() => {
+                      if (!latestSession) return;
+                      startAgain(latestSession.id, latestSession.isIncomplete);
+                    }}
+                    className="min-h-tap rounded bg-ink px-3 py-1.5 text-[0.8125rem] font-medium text-surface disabled:opacity-50"
                   >
-                    <div className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="text-[0.875rem] font-medium text-ink">
-                        {session.title || "Workout"}
-                      </span>
-                      <span className="font-mono text-[0.75rem] text-ink-faint">
-                        {formatWhen(session.performedAt)}
-                      </span>
-                    </div>
-                    <ul className="mt-1 space-y-0.5">
-                      {session.exerciseLabels.map((label) => (
-                        <li
-                          key={label}
-                          className="font-mono text-[0.8125rem] text-ink-muted"
+                    Start last
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openNewLog(null)}
+                    className="min-h-tap rounded border border-rule px-3 py-1.5 text-[0.8125rem] font-medium text-ink"
+                  >
+                    Empty workout
+                  </button>
+                </div>
+                {repeatableTitles.length > 0 ? (
+                  <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {repeatableTitles.map((entry) => (
+                      <li key={entry.sessionId}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            startAgain(entry.sessionId, entry.isIncomplete)
+                          }
+                          className="flex min-h-tap w-full flex-col items-start rounded border border-rule bg-surface px-3 py-2 text-left hover:bg-shell/50"
                         >
-                          {label}
-                        </li>
-                      ))}
-                    </ul>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPendingDelete(session)}
-                    className="shrink-0 text-[0.75rem] text-ink-faint hover:text-priority-a"
+                          <span className="text-[0.875rem] font-medium text-ink">
+                            {entry.title}
+                          </span>
+                          <span className="font-mono text-[0.75rem] text-ink-faint">
+                            {formatDaysAgo(entry.lastPerformedAt)}
+                            {" · "}
+                            {entry.exerciseCount}{" "}
+                            {entry.exerciseCount === 1 ? "lift" : "lifts"}
+                            {entry.isIncomplete ? " · in progress" : ""}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+              <ul className="divide-y divide-rule">
+                {sessions.map((session) => (
+                  <li
+                    key={session.id}
+                    className="flex items-start gap-3 px-4 py-3 hover:bg-shell/50"
                   >
-                    Delete
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => openExisting(session.id)}
+                    >
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <span className="text-[0.875rem] font-medium text-ink">
+                          {session.title || "Workout"}
+                        </span>
+                        <span className="font-mono text-[0.75rem] text-ink-faint">
+                          {formatWhen(session.performedAt)}
+                        </span>
+                        {session.isIncomplete ? (
+                          <span className="text-[0.75rem] text-ink-muted">
+                            in progress
+                          </span>
+                        ) : null}
+                      </div>
+                      <ul className="mt-1 space-y-0.5">
+                        {session.exerciseLabels.map((label) => (
+                          <li
+                            key={label}
+                            className="font-mono text-[0.8125rem] text-ink-muted"
+                          >
+                            {label}
+                          </li>
+                        ))}
+                      </ul>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startAgain(session.id, session.isIncomplete)}
+                      className="min-h-tap shrink-0 text-[0.75rem] font-medium text-ink-muted hover:text-ink"
+                    >
+                      Start again
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(session)}
+                      className="min-h-tap shrink-0 text-[0.75rem] text-ink-faint hover:text-priority-a"
+                    >
+                      Delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )
         ) : exercises.length === 0 ? (
           <EmptyState
@@ -375,7 +477,10 @@ export function FitnessView({
         onClose={closeSessionEditor}
         exercises={exercises}
         existing={editing}
+        copyFrom={copyFrom ?? null}
         seedExerciseId={seed}
+        titles={repeatableTitles}
+        onRepeatTitle={startAgain}
         onCreate={handleCreate}
         onUpdate={handleUpdate}
         onPersisted={handlePersisted}

@@ -27,11 +27,14 @@ export function SetHeader({ columns }: { columns: SetColumn[] }) {
   );
 }
 
+export type SetRowRole = "upcoming" | "current" | "done";
+
 export function SetRow({
   index,
   indexLabel,
   set,
   columns,
+  role = "upcoming",
   showPlates,
   barWeight,
   holdStartedAt,
@@ -39,12 +42,14 @@ export function SetRow({
   onStopHold,
   onChange,
   onRemove,
+  targetKey,
 }: {
   index: number;
   /** Overrides the ordinal in the gutter — "A1" for a group member. */
   indexLabel?: string;
   set: DraftSet;
   columns: SetColumn[];
+  role?: SetRowRole;
   showPlates: boolean;
   barWeight: number;
   /** Non-null while this row's stopwatch is running. */
@@ -53,6 +58,8 @@ export function SetRow({
   onStopHold: () => void;
   onChange: (patch: Partial<DraftSet>) => void;
   onRemove: () => void;
+  /** `blockIndex-setIndex` so the editor can scroll the current set into view. */
+  targetKey?: string;
 }) {
   const unit = set.unit || "lb";
   // The widest rows squeeze the number fields, exactly as the hand-written grids did.
@@ -164,6 +171,25 @@ export function SetRow({
           </select>
         );
 
+      case "done":
+        return (
+          <button
+            type="button"
+            title={set.completed ? "Mark not done" : "Complete set"}
+            aria-pressed={set.completed}
+            onClick={() => onChange({ completed: !set.completed })}
+            className={`flex min-h-tap min-w-tap items-center justify-center rounded border text-[0.875rem] ${
+              set.completed
+                ? "border-swipe-done bg-swipe-done/15 text-swipe-done"
+                : role === "current"
+                  ? "border-ink text-ink"
+                  : "border-rule text-ink-faint"
+            }`}
+          >
+            {set.completed ? "✓" : ""}
+          </button>
+        );
+
       case "delete":
         return (
           <button
@@ -179,7 +205,16 @@ export function SetRow({
   }
 
   return (
-    <div className="space-y-0.5">
+    <div
+      data-set-target={targetKey}
+      className={`space-y-0.5 rounded px-0.5 py-0.5 ${
+        role === "upcoming"
+          ? "opacity-55"
+          : role === "current"
+            ? "bg-select/70 ring-1 ring-select-edge"
+            : ""
+      }`}
+    >
       <div
         className="grid items-center gap-1"
         style={{ gridTemplateColumns: gridTemplate(columns) }}

@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { formatEquipmentBadge, usesPlateCalculator } from "@/lib/fitness/equipment";
+import { setRowRole, type SetTarget } from "@/lib/fitness/currentSet";
 import { holdStartedAt, type RunningHold } from "@/lib/fitness/hold";
 import { formatMeasureTag } from "@/lib/fitness/measure";
 import { roundRows } from "@/lib/fitness/rounds";
@@ -50,6 +51,8 @@ export function ExerciseGroupBlock({
   onUpdateNotes,
   onStartHold,
   onStopHold,
+  currentTarget,
+  sessionTitle,
 }: {
   letter: string;
   group: DraftGroup;
@@ -76,6 +79,8 @@ export function ExerciseGroupBlock({
   onUpdateNotes: (blockIndex: number, notes: string) => void;
   onStartHold: (blockKey: string, setIndex: number) => void;
   onStopHold: () => void;
+  currentTarget: SetTarget | null;
+  sessionTitle: string;
 }) {
   const blocks = useMemo(() => members.map((m) => m.member), [members]);
 
@@ -192,6 +197,7 @@ export function ExerciseGroupBlock({
                     <LastSessionHint
                       exerciseId={block.exerciseId}
                       excludeSessionId={sessionId}
+                      sessionTitle={sessionTitle}
                       onCopy={(sets) => onCopyLast(entry.index, sets)}
                     />
                   </div>
@@ -265,6 +271,13 @@ export function ExerciseGroupBlock({
                       indexLabel={entry.label}
                       set={row.set}
                       columns={columns}
+                      role={setRowRole(
+                        currentTarget,
+                        entry.index,
+                        round,
+                        row.set.completed,
+                      )}
+                      targetKey={`${entry.index}-${round}`}
                       showPlates={usesPlateCalculator(entry.member.equipment)}
                       barWeight={entry.member.barWeight}
                       holdStartedAt={holdStartedAt(

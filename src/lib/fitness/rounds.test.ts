@@ -3,7 +3,15 @@ import { addRound, extendMemberTo, removeRound, roundRows } from "./rounds";
 import { emptyDraftBlock, type DraftExercise, type DraftSet } from "./sessionDraft";
 
 function set(reps: string, weight = "100"): DraftSet {
-  return { reps, repsLeft: "", repsRight: "", duration: "", weight, unit: "lb" };
+  return {
+    reps,
+    repsLeft: "",
+    repsRight: "",
+    duration: "",
+    weight,
+    unit: "lb",
+    completed: false,
+  };
 }
 
 function member(name: string, reps: string[]): DraftExercise {

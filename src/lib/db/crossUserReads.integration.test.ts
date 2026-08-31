@@ -91,9 +91,12 @@ import { createExercise, createSession } from "@/lib/fitness/mutations";
 import {
   getExercise,
   getSessionDetail,
+  latestSessionByTitle,
   listExercises,
+  listRepeatableTitles,
   listSessions,
   loadExerciseHistory,
+  loadLatestForExercise,
 } from "@/lib/fitness/queries";
 import { createDailyItem, saveJournal } from "@/lib/day/mutations";
 import {
@@ -679,6 +682,14 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listSessions(intruder)).toEqual([]);
     expect(await getSessionDetail(intruder, owner.sessionId)).toBeNull();
     expect(await loadExerciseHistory(intruder, owner.exerciseId)).toEqual([]);
+    expect(await listRepeatableTitles(intruder)).toEqual([]);
+    expect(await latestSessionByTitle(intruder, "Owner session")).toBeNull();
+    expect(await loadLatestForExercise(intruder, owner.exerciseId)).toBeNull();
+    expect(
+      await loadLatestForExercise(intruder, owner.exerciseId, {
+        sessionTitle: "Owner session",
+      }),
+    ).toBeNull();
   });
 
   it("the day list and its journal", async () => {

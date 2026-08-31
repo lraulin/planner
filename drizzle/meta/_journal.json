@@ -624,6 +624,13 @@
       "when": 1788203021640,
       "tag": "0088_smooth_elektra",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1788204385076,
+      "tag": "0089_perpetual_prima",
+      "breakpoints": true
     }
   ]
 }

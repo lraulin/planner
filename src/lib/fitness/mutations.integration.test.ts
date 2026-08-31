@@ -58,14 +58,14 @@ describeDb("fitness sessions", () => {
         {
           exerciseName: "Bench Press",
           sets: [
-            { reps: 5, weight: 185 },
-            { reps: 5, weight: 185 },
-            { reps: 5, weight: 185 },
+            { reps: 5, weight: 185, completed: true },
+            { reps: 5, weight: 185, completed: true },
+            { reps: 5, weight: 185, completed: true },
           ],
         },
         {
           exerciseName: "OHP",
-          sets: [{ reps: 8, weight: 95 }],
+          sets: [{ reps: 8, weight: 95, completed: true }],
         },
       ],
     });
@@ -104,8 +104,8 @@ describeDb("fitness sessions", () => {
         {
           exerciseId,
           sets: [
-            { repsLeft: 8, repsRight: 6, weight: 50, unit: "lb" },
-            { repsLeft: 8, repsRight: 7, weight: 50, unit: "lb" },
+            { repsLeft: 8, repsRight: 6, weight: 50, unit: "lb", completed: true },
+            { repsLeft: 8, repsRight: 7, weight: 50, unit: "lb", completed: true },
           ],
         },
       ],
@@ -235,8 +235,8 @@ describeDb("fitness sessions", () => {
         {
           exerciseId,
           sets: [
-            { reps: 8, weight: null, unit: "bw" },
-            { reps: 6, weight: 0, unit: "bw" },
+            { reps: 8, weight: null, unit: "bw", completed: true },
+            { reps: 6, weight: 0, unit: "bw", completed: true },
           ],
         },
       ],
@@ -300,8 +300,8 @@ describeDb("fitness sessions", () => {
         {
           exerciseId,
           sets: [
-            { durationSeconds: 45, unit: "bw" },
-            { durationSeconds: 45, unit: "bw" },
+            { durationSeconds: 45, unit: "bw", completed: true },
+            { durationSeconds: 45, unit: "bw", completed: true },
           ],
         },
       ],
@@ -329,7 +329,10 @@ describeDb("fitness sessions", () => {
     const sessionId = await createSession(userId, {
       performedAt: new Date(),
       exercises: [
-        { exerciseId, sets: [{ durationSeconds: 90, weight: 50, unit: "lb" }] },
+        {
+          exerciseId,
+          sets: [{ durationSeconds: 90, weight: 50, unit: "lb", completed: true }],
+        },
       ],
     });
 
@@ -350,8 +353,8 @@ describeDb("fitness sessions", () => {
         {
           exerciseId,
           sets: [
-            { reps: 10, unit: "bw" },
-            { reps: 10, durationSeconds: 20, unit: "bw" },
+            { reps: 10, unit: "bw", completed: true },
+            { reps: 10, durationSeconds: 20, unit: "bw", completed: true },
           ],
         },
       ],
@@ -590,9 +593,9 @@ describeDb("fitness sessions", () => {
           exerciseName: "Goblet Squat",
           groupIndex: 0,
           sets: [
-            { reps: 12, weight: 50 },
+            { reps: 12, weight: 50, completed: true },
             { completed: false },
-            { reps: 10, weight: 50 },
+            { reps: 10, weight: 50, completed: true },
           ],
         },
         {

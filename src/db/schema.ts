@@ -1520,7 +1520,7 @@ export const workoutSets = pgTable(
     durationSeconds: integer("duration_seconds"),
     weight: numeric("weight", { precision: 10, scale: 2 }),
     unit: text("unit").notNull().default("lb"),
-    completed: boolean("completed").notNull().default(true),
+    completed: boolean("completed").notNull().default(false),
   },
   (table) => [
     index("workout_sets_session_exercise_idx").on(

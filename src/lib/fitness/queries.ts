@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   exercises,
@@ -11,9 +11,11 @@ import { DEFAULT_BAR_WEIGHT_LB } from "./bars";
 import { normaliseEquipment } from "./equipment";
 import { normaliseMeasure } from "./measure";
 import { formatSetsLabel } from "./format";
+import { isRepeatableTitle, normalisedTitle, titlesMatch } from "./titleMatch";
 import type {
   ExerciseHistoryEntry,
   ExerciseSummary,
+  RepeatableTitle,
   SessionDetail,
   SessionSummary,
   WorkoutSetView,
@@ -148,12 +150,16 @@ export async function listSessions(userId: string): Promise<SessionSummary[]> {
   }
 
   const labelsBySession = new Map<string, string[]>();
+  const incompleteBySession = new Map<string, boolean>();
   for (const se of seRows) {
     const sets = setsBySe.get(se.id) ?? [];
     const label = `${se.exerciseName} ${formatSetsLabel(sets)}`;
     const list = labelsBySession.get(se.sessionId) ?? [];
     list.push(label);
     labelsBySession.set(se.sessionId, list);
+    if (sets.some((s) => !s.completed)) {
+      incompleteBySession.set(se.sessionId, true);
+    }
   }
 
   return sessions.map((s) => ({
@@ -163,6 +169,7 @@ export async function listSessions(userId: string): Promise<SessionSummary[]> {
     notes: s.notes,
     durationMinutes: s.durationMinutes,
     exerciseLabels: labelsBySession.get(s.id) ?? [],
+    isIncomplete: incompleteBySession.get(s.id) === true,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
   }));
@@ -322,12 +329,115 @@ export async function loadExerciseHistory(
 export async function loadLatestForExercise(
   userId: string,
   exerciseId: string,
-  options?: { excludeSessionId?: string | null },
+  options?: { excludeSessionId?: string | null; sessionTitle?: string | null },
 ): Promise<ExerciseHistoryEntry | null> {
   const history = await loadExerciseHistory(userId, exerciseId);
   const exclude = options?.excludeSessionId;
-  if (exclude) {
-    return history.find((entry) => entry.sessionId !== exclude) ?? null;
+  const eligible = exclude
+    ? history.filter((entry) => entry.sessionId !== exclude)
+    : history;
+  const title = options?.sessionTitle?.trim();
+  if (title) {
+    const sameTitle = eligible.find((entry) => titlesMatch(entry.sessionTitle, title));
+    if (sameTitle) return sameTitle;
   }
-  return history[0] ?? null;
+  return eligible[0] ?? null;
+}
+
+export async function latestSessionByTitle(
+  userId: string,
+  title: string,
+): Promise<SessionDetail | null> {
+  const key = normalisedTitle(title);
+  if (!key) return null;
+
+  const [row] = await db
+    .select({ id: workoutSessions.id })
+    .from(workoutSessions)
+    .where(
+      and(
+        eq(workoutSessions.userId, userId),
+        sql`lower(trim(${workoutSessions.title})) = ${key}`,
+      ),
+    )
+    .orderBy(desc(workoutSessions.performedAt))
+    .limit(1);
+
+  if (!row) return null;
+  return getSessionDetail(userId, row.id);
+}
+
+export async function listRepeatableTitles(userId: string): Promise<RepeatableTitle[]> {
+  const sessions = await db
+    .select({
+      id: workoutSessions.id,
+      title: workoutSessions.title,
+      performedAt: workoutSessions.performedAt,
+    })
+    .from(workoutSessions)
+    .where(eq(workoutSessions.userId, userId))
+    .orderBy(desc(workoutSessions.performedAt));
+
+  const latestByTitle = new Map<string, (typeof sessions)[number]>();
+  for (const session of sessions) {
+    if (!isRepeatableTitle(session.title)) continue;
+    const key = normalisedTitle(session.title);
+    if (!latestByTitle.has(key)) latestByTitle.set(key, session);
+  }
+
+  const latest = [...latestByTitle.values()];
+  if (latest.length === 0) return [];
+
+  const sessionIds = latest.map((s) => s.id);
+  const seRows = await db
+    .select({
+      id: workoutSessionExercises.id,
+      sessionId: workoutSessionExercises.sessionId,
+    })
+    .from(workoutSessionExercises)
+    .where(
+      and(
+        eq(workoutSessionExercises.userId, userId),
+        inArray(workoutSessionExercises.sessionId, sessionIds),
+      ),
+    );
+
+  const seIds = seRows.map((r) => r.id);
+  const setRows =
+    seIds.length === 0
+      ? []
+      : await db
+          .select({
+            sessionExerciseId: workoutSets.sessionExerciseId,
+            completed: workoutSets.completed,
+          })
+          .from(workoutSets)
+          .where(
+            and(
+              eq(workoutSets.userId, userId),
+              inArray(workoutSets.sessionExerciseId, seIds),
+            ),
+          );
+
+  const exerciseCount = new Map<string, number>();
+  const seSession = new Map<string, string>();
+  for (const se of seRows) {
+    exerciseCount.set(se.sessionId, (exerciseCount.get(se.sessionId) ?? 0) + 1);
+    seSession.set(se.id, se.sessionId);
+  }
+
+  const incomplete = new Set<string>();
+  for (const set of setRows) {
+    if (set.completed) continue;
+    const sessionId = seSession.get(set.sessionExerciseId);
+    if (sessionId) incomplete.add(sessionId);
+  }
+
+  return latest.map((session) => ({
+    title: session.title,
+    lastPerformedAt: session.performedAt,
+    sessionId: session.id,
+    exerciseCount: exerciseCount.get(session.id) ?? 0,
+    isIncomplete: incomplete.has(session.id),
+  }));
 }

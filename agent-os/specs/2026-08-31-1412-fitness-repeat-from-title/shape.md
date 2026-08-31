@@ -1,6 +1,6 @@
 # Repeat last titled workout — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-31)
 
 ## Scope
 

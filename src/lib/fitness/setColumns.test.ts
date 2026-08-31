@@ -13,13 +13,13 @@ describe("setColumns — the four shapes that existed before measure", () => {
   it("bodyweight reps: index, reps, delete", () => {
     expect(
       keys({ measure: "reps", equipment: "bodyweight", unilateral: false }),
-    ).toEqual(["index", "reps", "delete"]);
+    ).toEqual(["index", "reps", "done", "delete"]);
   });
 
   it("bodyweight unilateral reps: L and R, no weight", () => {
     expect(
       keys({ measure: "reps", equipment: "bodyweight", unilateral: true }),
-    ).toEqual(["index", "repsLeft", "repsRight", "delete"]);
+    ).toEqual(["index", "repsLeft", "repsRight", "done", "delete"]);
   });
 
   it("barbell reps: reps, weight, unit", () => {
@@ -28,6 +28,7 @@ describe("setColumns — the four shapes that existed before measure", () => {
       "reps",
       "weight",
       "unit",
+      "done",
       "delete",
     ]);
   });
@@ -39,6 +40,7 @@ describe("setColumns — the four shapes that existed before measure", () => {
       "repsRight",
       "weight",
       "unit",
+      "done",
       "delete",
     ]);
   });
@@ -49,23 +51,23 @@ describe("setColumns — the four shapes that existed before measure", () => {
       gridTemplate(
         setColumns({ measure: "reps", equipment: "bodyweight", unilateral: false }),
       ),
-    ).toBe("2rem 1fr 2rem");
+    ).toBe("2rem 1fr 2.75rem 2rem");
     expect(
       gridTemplate(
         setColumns({ measure: "reps", equipment: "bodyweight", unilateral: true }),
       ),
-    ).toBe("2rem 1fr 1fr 2rem");
+    ).toBe("2rem 1fr 1fr 2.75rem 2rem");
     expect(
       gridTemplate(
         setColumns({ measure: "reps", equipment: "barbell", unilateral: false }),
       ),
-    ).toBe("2rem minmax(3rem,1fr) minmax(7rem,1.4fr) 3.5rem 2rem");
+    ).toBe("2rem minmax(3rem,1fr) minmax(7rem,1.4fr) 3.5rem 2.75rem 2rem");
     expect(
       gridTemplate(
         setColumns({ measure: "reps", equipment: "dumbbell", unilateral: true }),
       ),
     ).toBe(
-      "2rem minmax(2.5rem,0.7fr) minmax(2.5rem,0.7fr) minmax(6.5rem,1.3fr) 3.5rem 2rem",
+      "2rem minmax(2.5rem,0.7fr) minmax(2.5rem,0.7fr) minmax(6.5rem,1.3fr) 3.5rem 2.75rem 2rem",
     );
   });
 });
@@ -74,23 +76,23 @@ describe("setColumns — timed shapes", () => {
   it("a bodyweight hold drops reps for a duration", () => {
     expect(
       keys({ measure: "time", equipment: "bodyweight", unilateral: false }),
-    ).toEqual(["index", "duration", "delete"]);
+    ).toEqual(["index", "duration", "done", "delete"]);
   });
 
   it("a loaded carry keeps its weight beside the duration", () => {
     // The whole reason measure is not an equipment kind.
     expect(keys({ measure: "time", equipment: "dumbbell", unilateral: false })).toEqual(
-      ["index", "duration", "weight", "unit", "delete"],
+      ["index", "duration", "weight", "unit", "done", "delete"],
     );
   });
 
   it("reps + hold shows both, in the order they are performed", () => {
     expect(
       keys({ measure: "reps_and_time", equipment: "bodyweight", unilateral: false }),
-    ).toEqual(["index", "reps", "duration", "delete"]);
+    ).toEqual(["index", "reps", "duration", "done", "delete"]);
     expect(
       keys({ measure: "reps_and_time", equipment: "barbell", unilateral: false }),
-    ).toEqual(["index", "reps", "duration", "weight", "unit", "delete"]);
+    ).toEqual(["index", "reps", "duration", "weight", "unit", "done", "delete"]);
   });
 
   it("names the duration column for what it is in context", () => {
@@ -105,7 +107,7 @@ describe("setColumns — timed shapes", () => {
   it("ignores unilateral for the duration — a side plank is two sets", () => {
     expect(
       keys({ measure: "time", equipment: "bodyweight", unilateral: true }),
-    ).toEqual(["index", "duration", "delete"]);
+    ).toEqual(["index", "duration", "done", "delete"]);
   });
 
   it("still pairs L/R reps with a hold when the exercise does both", () => {
@@ -118,6 +120,7 @@ describe("setColumns — timed shapes", () => {
       "duration",
       "weight",
       "unit",
+      "done",
       "delete",
     ]);
   });
@@ -131,6 +134,6 @@ describe("setColumns — timed shapes", () => {
           unilateral: false,
         }),
       ),
-    ).toBe("2rem minmax(3rem,1fr) 1fr 2rem");
+    ).toBe("2rem minmax(3rem,1fr) 1fr 2.75rem 2rem");
   });
 });

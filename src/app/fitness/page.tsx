@@ -28,7 +28,7 @@ export default async function FitnessPage({
     redirect(fitnessSessionPath(params.session));
   }
   if (params.log === "1" || params.log === "true") {
-    redirect(fitnessLogPath(params.exercise ?? null));
+    redirect(fitnessLogPath({ exercise: params.exercise ?? null }));
   }
 
   await moduleEntryRedirect("fitness");

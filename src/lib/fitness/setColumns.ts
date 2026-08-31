@@ -17,6 +17,7 @@ export type SetColumnKey =
   | "duration"
   | "weight"
   | "unit"
+  | "done"
   | "delete";
 
 export type SetColumn = {
@@ -34,6 +35,7 @@ export type SetShape = {
 };
 
 const INDEX: SetColumn = { key: "index", label: "#", width: "2rem" };
+const DONE: SetColumn = { key: "done", label: "", width: "2.75rem" };
 const DELETE: SetColumn = { key: "delete", label: "", width: "2rem" };
 const UNIT: SetColumn = { key: "unit", label: "Unit", width: "3.5rem" };
 
@@ -82,7 +84,7 @@ export function setColumns(shape: SetShape): SetColumn[] {
     columns.push(UNIT);
   }
 
-  columns.push(DELETE);
+  columns.push(DONE, DELETE);
   return columns;
 }
 

@@ -7,6 +7,7 @@ import type {
   ExerciseEquipment,
   ExerciseMeasure,
   ExerciseSummary,
+  SessionDetail,
   SessionInput,
   WorkoutSetView,
 } from "./types";
@@ -24,6 +25,8 @@ export type DraftSet = {
   duration: string;
   weight: string;
   unit: string;
+  /** Explicit tap. Prefill is a plan, not a completed set. */
+  completed: boolean;
 };
 
 /**
@@ -64,11 +67,27 @@ export type SessionDraft = {
 };
 
 export function emptyBilateralSet(unit = "lb"): DraftSet {
-  return { reps: "", repsLeft: "", repsRight: "", duration: "", weight: "", unit };
+  return {
+    reps: "",
+    repsLeft: "",
+    repsRight: "",
+    duration: "",
+    weight: "",
+    unit,
+    completed: false,
+  };
 }
 
 export function emptyUnilateralSet(unit = "lb"): DraftSet {
-  return { reps: "", repsLeft: "", repsRight: "", duration: "", weight: "", unit };
+  return {
+    reps: "",
+    repsLeft: "",
+    repsRight: "",
+    duration: "",
+    weight: "",
+    unit,
+    completed: false,
+  };
 }
 
 export function emptySetForExercise(block: {
@@ -93,6 +112,7 @@ export function setFromPrevious(
     duration: previous.duration,
     weight: previous.weight,
     unit: previous.unit || (block.equipment === "bodyweight" ? "bw" : "lb"),
+    completed: false,
   };
 }
 
@@ -142,6 +162,7 @@ export function setsFromHistory(
         duration: duration(s),
         weight: weight(s),
         unit: block.equipment === "bodyweight" ? "bw" : s.unit || "lb",
+        completed: false,
       };
     }
     return {
@@ -156,6 +177,7 @@ export function setsFromHistory(
           : isBodyweightUnit(s.unit)
             ? "lb"
             : s.unit || "lb",
+      completed: false,
     };
   });
 }
@@ -228,7 +250,7 @@ export function draftToSessionInput(
 
       // Each axis decides its own fields; nesting them produced a dozen near-copies.
       const sets = block.sets
-        .map((s, i) => ({
+        .map((s) => ({
           reps: tracksReps(measure) && !unilateral ? num(s.reps) : null,
           repsLeft: tracksReps(measure) && unilateral ? num(s.repsLeft) : null,
           repsRight: tracksReps(measure) && unilateral ? num(s.repsRight) : null,
@@ -237,7 +259,7 @@ export function draftToSessionInput(
             : null,
           weight: bodyweight ? null : num(s.weight),
           unit: bodyweight ? "bw" : s.unit || "lb",
-          completed: filled[i],
+          completed: s.completed === true,
         }))
         .filter((_, i) => keep[i]);
 
@@ -312,6 +334,107 @@ export function emptyDraftBlock(): DraftExercise {
     notes: "",
     sets: [emptyBilateralSet("lb")],
   };
+}
+
+export function toLocalDateTimeInput(date: Date): string {
+  const d = new Date(date);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Reopen an existing session: keep stored completion flags. */
+export function draftFromDetail(
+  detail: SessionDetail,
+  catalog: ExerciseSummary[],
+): SessionDraft {
+  return {
+    performedAt: toLocalDateTimeInput(detail.performedAt),
+    title: detail.title,
+    notes: detail.notes,
+    durationMinutes:
+      detail.durationMinutes == null ? "" : String(detail.durationMinutes),
+    groups: detail.groups.map((g) => ({
+      id: g.id,
+      label: g.label,
+      rest: g.restSeconds == null ? "" : String(g.restSeconds),
+    })),
+    exercises: detail.exercises.map((ex) => {
+      const cat = catalog.find((c) => c.id === ex.exerciseId);
+      const equipment = cat?.equipment ?? ex.equipment;
+      const measure = cat?.measure ?? ex.measure;
+      const unilateral = cat?.unilateral ?? ex.unilateral;
+      const barWeight = cat?.barWeight ?? ex.barWeight;
+      return {
+        key: ex.id,
+        groupId: ex.groupId,
+        exerciseId: ex.exerciseId,
+        exerciseName: ex.exerciseName,
+        equipment,
+        measure,
+        barWeight,
+        unilateral,
+        notes: ex.notes,
+        sets: ex.sets.map((s) => ({
+          reps: s.reps == null ? "" : String(s.reps),
+          repsLeft: s.repsLeft == null ? "" : String(s.repsLeft),
+          repsRight: s.repsRight == null ? "" : String(s.repsRight),
+          duration: s.durationSeconds == null ? "" : String(s.durationSeconds),
+          weight: s.weight == null ? "" : String(s.weight),
+          unit:
+            equipment === "bodyweight" ? "bw" : s.unit === "bw" ? "lb" : s.unit || "lb",
+          completed: s.completed === true,
+        })),
+      };
+    }),
+  };
+}
+
+/**
+ * Copy last time into a new live session: same plan, new identity, nothing checked.
+ * Session notes and duration stay with the source day.
+ */
+export function planDraftFromDetail(detail: SessionDetail): SessionDraft {
+  const groupIds = new Map(detail.groups.map((g) => [g.id, crypto.randomUUID()]));
+  const source = draftFromDetail(detail, []);
+  return {
+    performedAt: toLocalDateTimeInput(new Date()),
+    title: source.title,
+    notes: "",
+    durationMinutes: "",
+    groups: source.groups.map((g) => ({
+      ...g,
+      id: groupIds.get(g.id) ?? crypto.randomUUID(),
+    })),
+    exercises: source.exercises.map((ex) => ({
+      ...ex,
+      key: crypto.randomUUID(),
+      groupId: ex.groupId ? (groupIds.get(ex.groupId) ?? null) : null,
+      sets: ex.sets.map((s) => ({ ...s, completed: false })),
+    })),
+  };
+}
+
+/**
+ * True when the draft is more than the default empty block. Picking a title on an
+ * empty draft copies last time; picking one after work has started only sets the string.
+ */
+export function draftHasWork(draft: SessionDraft): boolean {
+  if (draft.notes.trim() !== "" || draft.durationMinutes.trim() !== "") return true;
+  if (draft.groups.length > 0) return true;
+  if (draft.exercises.length !== 1) return true;
+  const block = draft.exercises[0];
+  if (block.exerciseId.trim() !== "" || block.exerciseName.trim() !== "") return true;
+  if (block.notes.trim() !== "") return true;
+  if (block.sets.length !== 1) return true;
+  const set = block.sets[0];
+  return (
+    set.completed ||
+    set.reps.trim() !== "" ||
+    set.repsLeft.trim() !== "" ||
+    set.repsRight.trim() !== "" ||
+    set.duration.trim() !== "" ||
+    set.weight.trim() !== ""
+  );
 }
 
 export { usesWeight, DEFAULT_BAR_WEIGHT_LB };

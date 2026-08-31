@@ -1,0 +1,1 @@
+ALTER TABLE "workout_sets" ALTER COLUMN "completed" SET DEFAULT false;
