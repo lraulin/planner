@@ -100,13 +100,32 @@ function isPlausibleBareHostname(hostname: string): boolean {
  * Drop trailing punctuation that is usually prose, not part of the URL
  * (e.g. `https://x.com/a).` → `https://x.com/a`). Keeps peeling while the shorter
  * form still normalizes as http(s).
+ *
+ * `)` and `]` are only prose when they are *unbalanced* — Wikipedia paths like
+ * `/wiki/Plan_(drawing)` and similar brackets in a query must stay attached.
  */
 function peelTrailingPunctuation(raw: string): string {
   let trimmed = raw;
-  while (/[.,;:!?)]$/u.test(trimmed)) {
+  while (trimmed.length > 0) {
+    const last = trimmed[trimmed.length - 1];
+    const isSentencePunct = /[.,;:!?]$/u.test(last);
+    const isUnbalancedClose =
+      (last === ")" && closerCount(trimmed, "(", ")") > 0) ||
+      (last === "]" && closerCount(trimmed, "[", "]") > 0);
+    if (!isSentencePunct && !isUnbalancedClose) break;
     const without = trimmed.slice(0, -1);
     if (!normalizeHttpUrl(without)) break;
     trimmed = without;
   }
   return normalizeHttpUrl(trimmed) ? trimmed : "";
+}
+
+/** How many extra closing marks vs opens. Positive means the last closer is wrapping prose. */
+function closerCount(text: string, open: string, close: string): number {
+  let extra = 0;
+  for (const ch of text) {
+    if (ch === open) extra -= 1;
+    else if (ch === close) extra += 1;
+  }
+  return extra;
 }

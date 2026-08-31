@@ -34,6 +34,29 @@ describe("extractHttpUrls", () => {
     expect(matches[0].raw).toBe("https://example.com/a");
   });
 
+  it("keeps a closing parenthesis that is part of the path", () => {
+    // Wikipedia and many other sites put (disambiguators) in the path. Peeling every
+    // trailing `)` because the shorter form still "looks like a URL" would attach the
+    // wrong href and rewrite the name off a 404.
+    const text = "See https://en.wikipedia.org/wiki/Plan_(drawing)";
+    const matches = extractHttpUrls(text);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].raw).toBe("https://en.wikipedia.org/wiki/Plan_(drawing)");
+    expect(matches[0].normalized).toBe("https://en.wikipedia.org/wiki/Plan_(drawing)");
+  });
+
+  it("still peels a wrapping parenthesis that is not in the path", () => {
+    const matches = extractHttpUrls("(https://example.com/a)");
+    expect(matches).toHaveLength(1);
+    expect(matches[0].raw).toBe("https://example.com/a");
+  });
+
+  it("peels a markdown-wrap closing bracket that is not in the path", () => {
+    const matches = extractHttpUrls("[https://example.com/a]");
+    expect(matches).toHaveLength(1);
+    expect(matches[0].raw).toBe("https://example.com/a");
+  });
+
   it("accepts www hosts via https normalize", () => {
     const matches = extractHttpUrls("www.example.com/path");
     expect(matches).toHaveLength(1);
