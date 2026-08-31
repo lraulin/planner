@@ -30,6 +30,15 @@ if (!dbReachable) warnDatabaseSkipped("bank snapshot apply");
 
 const createdUserIds: string[] = [];
 const MONTH = "2026-08-01";
+/**
+ * The 36-hour scrape hold is measured from this instant. A hard-coded Aug 29 2026
+ * capture expired on the evening of Aug 30: pending scrape rows dropped out of
+ * envelope activity, then apply refreshed `scrapeBalanceAsOf` back into the window
+ * and the same rows jumped back in. Pinning to now keeps the hold live for the
+ * whole suite, which is the situation the "pending posts do not move checkpoints"
+ * case is actually about.
+ */
+const CAPTURED_AT = new Date();
 
 const posted = [
   ["Aug 27, 2026", "CVS", "$22.84"],
@@ -51,7 +60,7 @@ function snapshot(overrides: Partial<BankBrowserSnapshotV1> = {}): string {
   const body: BankBrowserSnapshotV1 = {
     version: 1,
     source: "chase",
-    capturedAt: "2026-08-29T12:42:00.000-04:00",
+    capturedAt: CAPTURED_AT.toISOString(),
     accountLast4: "9910",
     balanceKind: "posted_only",
     currentBalance: "$370.80",
@@ -133,7 +142,7 @@ describeDb("applyBankBrowserSnapshot", () => {
     });
     await db
       .update(bankAccountLinks)
-      .set({ scrapeBalanceAsOf: new Date("2026-08-29T12:00:00Z") })
+      .set({ scrapeBalanceAsOf: CAPTURED_AT })
       .where(eq(bankAccountLinks.id, linkId));
 
     const rows = [...posted, ...pending].map(([date, description, amount], index) => ({
