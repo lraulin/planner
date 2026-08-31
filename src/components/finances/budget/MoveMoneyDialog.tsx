@@ -1,10 +1,21 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { ModalShell } from "@/components/detail/ModalShell";
+import { CategorySelect } from "@/components/finances/CategorySelect";
 import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
+import type { BudgetGroupRow } from "@/lib/finances/budget/queries";
 import type { BudgetRow } from "@/lib/finances/budget/rows";
+import {
+  categoryPickerChoices,
+  categoryPickerSections,
+  defaultCategoryPickerChoice,
+  visibleEnvelopeCatalog,
+  type EnvelopeCatalog,
+  type EnvelopePickerGroup,
+  type EnvelopePickerOption,
+} from "@/lib/finances/budget/groupEnvelopeOptions";
 
 /**
  * Rule 3, as a dialog: take money out of one envelope and put it in another.
@@ -13,19 +24,62 @@ import type { BudgetRow } from "@/lib/finances/budget/rows";
  * holds would fix one problem by making a second, and the server clamps it again — this is
  * the affordance, not the rule.
  */
+function pickerGroups(groups: readonly BudgetGroupRow[]): EnvelopePickerGroup[] {
+  return groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    parentGroupId: group.parentGroupId,
+    sortKey: group.sortKey,
+    hidden: group.hidden,
+  }));
+}
+
+function pickerEnvelopes(rows: readonly BudgetRow[]): EnvelopePickerOption[] {
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.name,
+    name: row.name,
+    kind: row.kind,
+    groupId: row.groupId,
+    sortKey: row.sortKey,
+    hidden: row.hidden,
+    detail: formatUsd(row.balanceCents),
+  }));
+}
+
+function firstEnvelopeId(catalog: EnvelopeCatalog): string {
+  const sections = categoryPickerSections(catalog.groups, catalog.envelopes, "", {
+    includeCreate: false,
+  });
+  const choices = categoryPickerChoices(sections);
+  const index = defaultCategoryPickerChoice(choices);
+  const choice = index >= 0 ? choices[index] : undefined;
+  return choice?.kind === "envelope" ? choice.id : "";
+}
+
 export function MoveMoneyDialog({
   from,
   targets,
+  groups,
   onCancel,
   onMove,
 }: {
   from: BudgetRow;
   targets: readonly BudgetRow[];
+  groups: readonly BudgetGroupRow[];
   onCancel: () => void;
   onMove: (toId: string, cents: number) => void;
 }) {
   const headingId = useId();
-  const [toId, setToId] = useState(targets[0]?.id ?? "");
+  const catalog = useMemo(
+    () =>
+      visibleEnvelopeCatalog({
+        groups: pickerGroups(groups),
+        envelopes: pickerEnvelopes(targets),
+      }),
+    [groups, targets],
+  );
+  const [toId, setToId] = useState(() => firstEnvelopeId(catalog));
   const [amount, setAmount] = useState((from.balanceCents / 100).toFixed(2));
 
   const cents = parseAmountEntryCents(amount);
@@ -65,17 +119,17 @@ export function MoveMoneyDialog({
 
         <label className="flex flex-col gap-1 text-[0.8125rem] text-ink-muted">
           To
-          <select
-            value={toId}
-            onChange={(event) => setToId(event.target.value)}
+          <CategorySelect
+            catalog={catalog}
+            value={toId || null}
+            onChange={(id) => {
+              if (id) setToId(id);
+            }}
+            allowClear={false}
+            placeholder="To"
+            ariaLabel="Move money to"
             className="rounded border border-rule bg-surface px-2 py-1 text-base text-ink md:text-[0.8125rem]"
-          >
-            {targets.map((target) => (
-              <option key={target.id} value={target.id}>
-                {target.name} ({formatUsd(target.balanceCents)})
-              </option>
-            ))}
-          </select>
+          />
         </label>
 
         <div className="flex justify-end gap-2 pt-1">

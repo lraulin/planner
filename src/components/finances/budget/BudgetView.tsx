@@ -1839,6 +1839,7 @@ export function BudgetView({
         <MoveMoneyDialog
           from={move.from}
           targets={move.targets}
+          groups={data.groups}
           onCancel={() => setMove(null)}
           onMove={(toId, cents) => {
             const target = move.targets.find((row) => row.id === toId);
@@ -1884,23 +1885,8 @@ export function BudgetView({
         <AssignDialog
           readyToAssignCents={month.readyToAssignCents}
           options={assignPlans}
-          envelopes={[
-            ...sections.envelopes.map((row) => ({
-              id: row.id,
-              name: row.name,
-              section: "Regular spending" as const,
-            })),
-            ...sections.bills.map((row) => ({
-              id: row.id,
-              name: row.name,
-              section: "Bills" as const,
-            })),
-            ...sections.savings.map((row) => ({
-              id: row.id,
-              name: row.name,
-              section: "Savings" as const,
-            })),
-          ]}
+          envelopes={[...sections.envelopes, ...sections.bills, ...sections.savings]}
+          groups={data.groups}
           pending={pending}
           onCancel={() => setAssigning(false)}
           onPickOption={(option) => {

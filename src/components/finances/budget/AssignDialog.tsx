@@ -2,7 +2,19 @@
 
 import { useId, useMemo, useState } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
+import { CategorySelect } from "@/components/finances/CategorySelect";
 import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
+import type { BudgetGroupRow } from "@/lib/finances/budget/queries";
+import type { BudgetRow } from "@/lib/finances/budget/rows";
+import {
+  categoryPickerChoices,
+  categoryPickerSections,
+  defaultCategoryPickerChoice,
+  visibleEnvelopeCatalog,
+  type EnvelopeCatalog,
+  type EnvelopePickerGroup,
+  type EnvelopePickerOption,
+} from "@/lib/finances/budget/groupEnvelopeOptions";
 import {
   ASSIGN_OPTION_LABELS,
   type AssignLine,
@@ -10,16 +22,43 @@ import {
   type AssignResult,
 } from "@/lib/finances/budget/assign/types";
 
-type EnvelopeOption = {
-  id: string;
-  name: string;
-  section: "Bills" | "Regular spending" | "Savings";
-};
+function pickerGroups(groups: readonly BudgetGroupRow[]): EnvelopePickerGroup[] {
+  return groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    parentGroupId: group.parentGroupId,
+    sortKey: group.sortKey,
+    hidden: group.hidden,
+  }));
+}
+
+function pickerEnvelopes(rows: readonly BudgetRow[]): EnvelopePickerOption[] {
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.name,
+    name: row.name,
+    kind: row.kind,
+    groupId: row.groupId,
+    sortKey: row.sortKey,
+    hidden: row.hidden,
+  }));
+}
+
+function firstEnvelopeId(catalog: EnvelopeCatalog): string {
+  const sections = categoryPickerSections(catalog.groups, catalog.envelopes, "", {
+    includeCreate: false,
+  });
+  const choices = categoryPickerChoices(sections);
+  const index = defaultCategoryPickerChoice(choices);
+  const choice = index >= 0 ? choices[index] : undefined;
+  return choice?.kind === "envelope" ? choice.id : "";
+}
 
 export function AssignDialog({
   readyToAssignCents,
   options,
   envelopes,
+  groups,
   pending,
   onCancel,
   onPickOption,
@@ -27,7 +66,8 @@ export function AssignDialog({
 }: {
   readyToAssignCents: number;
   options: readonly { option: AssignOption; result: AssignResult }[];
-  envelopes: readonly EnvelopeOption[];
+  envelopes: readonly BudgetRow[];
+  groups: readonly BudgetGroupRow[];
   pending: boolean;
   onCancel: () => void;
   onPickOption: (option: AssignOption) => void;
@@ -38,17 +78,15 @@ export function AssignDialog({
   const [amount, setAmount] = useState(() =>
     formatUsd(Math.max(0, readyToAssignCents)).replace("$", ""),
   );
-  const [target, setTarget] = useState(envelopes[0]?.id ?? "");
-
-  const grouped = useMemo(() => {
-    const groups: Record<EnvelopeOption["section"], EnvelopeOption[]> = {
-      "Regular spending": [],
-      Bills: [],
-      Savings: [],
-    };
-    for (const envelope of envelopes) groups[envelope.section].push(envelope);
-    return groups;
-  }, [envelopes]);
+  const catalog = useMemo(
+    () =>
+      visibleEnvelopeCatalog({
+        groups: pickerGroups(groups),
+        envelopes: pickerEnvelopes(envelopes),
+      }),
+    [groups, envelopes],
+  );
+  const [target, setTarget] = useState(() => firstEnvelopeId(catalog));
 
   return (
     <ModalShell open onClose={onCancel} labelledBy={titleId} width="max-w-md">
@@ -128,23 +166,17 @@ export function AssignDialog({
             </label>
             <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
               To
-              <select
-                value={target}
-                onChange={(event) => setTarget(event.target.value)}
+              <CategorySelect
+                catalog={catalog}
+                value={target || null}
+                onChange={(id) => {
+                  if (id) setTarget(id);
+                }}
+                allowClear={false}
+                placeholder="To"
+                ariaLabel="Assign to"
                 className="min-h-tap rounded border border-rule bg-surface px-2 py-1.5 text-base font-normal normal-case tracking-normal text-ink md:min-h-0 md:text-[0.8125rem]"
-              >
-                {(["Regular spending", "Bills", "Savings"] as const).map((section) =>
-                  grouped[section].length === 0 ? null : (
-                    <optgroup key={section} label={section}>
-                      {grouped[section].map((envelope) => (
-                        <option key={envelope.id} value={envelope.id}>
-                          {envelope.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ),
-                )}
-              </select>
+              />
             </label>
             <div className="mt-2 flex justify-end gap-2">
               <button
