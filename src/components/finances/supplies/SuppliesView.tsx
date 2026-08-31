@@ -23,6 +23,8 @@ import { useIsCompact } from "@/components/shell/useIsCompact";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { formatUsd } from "@/lib/finances/money";
+import type { BudgetEnvelopeCatalog } from "@/lib/finances/budget/queries";
+import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { SupplyItemRow } from "@/lib/finances/supplies/queries";
 import {
   itemIdsOfSelection,
@@ -64,12 +66,27 @@ function viewDefaults(): GridDefaults {
  * from one envelope, print that envelope's assignment beside the estimate; that comparison is
  * the point of the page, and it is read-only — nothing here writes the budget.
  */
+function fundingCatalog(catalog: BudgetEnvelopeCatalog): EnvelopeCatalog {
+  return {
+    groups: catalog.groups
+      .filter((group) => group.kind !== "income")
+      .map((group) => ({
+        id: group.id,
+        name: group.name,
+        parentGroupId: group.parentGroupId,
+        sortKey: group.sortKey,
+        hidden: group.hidden,
+      })),
+    envelopes: catalog.envelopes.filter((envelope) => envelope.kind !== "income"),
+  };
+}
+
 export function SuppliesView({
   initialItems,
-  envelopes,
+  catalog,
 }: {
   initialItems: SupplyItemRow[];
-  envelopes: { id: string; name: string }[];
+  catalog: BudgetEnvelopeCatalog;
 }) {
   const [items, setItems] = useState(initialItems);
   const [seenServerItems, setSeenServerItems] = useState(initialItems);
@@ -197,14 +214,14 @@ export function SuppliesView({
 
   const ctx: SuppliesColumnCtx = useMemo(
     () => ({
-      envelopes,
+      catalog: fundingCatalog(catalog),
       pending,
       onPatchItem: (itemId, edit) => commit(() => updateSupplyItemAction(itemId, edit)),
       onPatchOption: (optionId, edit) =>
         commit(() => updateSupplyOptionAction(optionId, edit)),
       onSetInUse: (optionId) => commit(() => setSupplyOptionInUseAction(optionId)),
     }),
-    [envelopes, pending, commit],
+    [catalog, pending, commit],
   );
 
   const requestMerge = useCallback(() => {

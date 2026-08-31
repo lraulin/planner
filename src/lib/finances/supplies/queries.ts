@@ -127,22 +127,6 @@ export async function listSupplyItems(userId: string): Promise<SupplyItemRow[]> 
   }));
 }
 
-/** Envelopes an item may be pointed at, for the read-only "funded from" picker. */
-export async function listSupplyEnvelopes(
-  userId: string,
-): Promise<{ id: string; name: string }[]> {
-  return db
-    .select({ id: financeBudgetCategories.id, name: financeBudgetCategories.name })
-    .from(financeBudgetCategories)
-    .where(
-      and(
-        eq(financeBudgetCategories.userId, userId),
-        ne(financeBudgetCategories.kind, "income"),
-      ),
-    )
-    .orderBy(asc(financeBudgetCategories.name));
-}
-
 export type AmazonRepeatPurchase = {
   asin: string;
   productName: string;

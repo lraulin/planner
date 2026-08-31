@@ -1,6 +1,8 @@
 "use client";
 
 import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
+import { CategorySelect } from "@/components/finances/CategorySelect";
+import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
 import { evalArithmetic } from "@/lib/arithmetic";
 import { formatUsd } from "@/lib/finances/money";
 import {
@@ -36,8 +38,8 @@ export type SuppliesColumnCtx = {
   onPatchItem: (itemId: string, edit: SupplyItemEdit) => void;
   onPatchOption: (optionId: string, edit: SupplyOptionEdit) => void;
   onSetInUse: (optionId: string) => void;
-  /** Envelopes the "funded from" picker offers. */
-  envelopes: readonly { id: string; name: string }[];
+  /** Non-income envelopes the "funded from" picker offers, including hidden. */
+  catalog: EnvelopeCatalog;
   pending: boolean;
 };
 
@@ -530,22 +532,16 @@ export function suppliesColumns(): ColumnDef<SuppliesColumnCtx, SupplyGridRow>[]
         if (row.node.kind !== "item") return null;
         const { item } = row.node;
         return (
-          <select
-            value={item.envelopeId ?? ""}
-            aria-label={`Envelope funding ${item.name}`}
+          <CategorySelect
+            catalog={ctx.catalog}
+            value={item.envelopeId}
+            onChange={(envelopeId) => ctx.onPatchItem(item.id, { envelopeId })}
+            allowClear
+            placeholder="—"
             disabled={ctx.pending}
+            ariaLabel={`Envelope funding ${item.name}`}
             className="w-full min-w-0 rounded border border-transparent bg-transparent px-1 text-[0.8125rem] text-ink hover:border-rule"
-            onChange={(event) =>
-              ctx.onPatchItem(item.id, { envelopeId: event.target.value || null })
-            }
-          >
-            <option value="">—</option>
-            {ctx.envelopes.map((envelope) => (
-              <option key={envelope.id} value={envelope.id}>
-                {envelope.name}
-              </option>
-            ))}
-          </select>
+          />
         );
       },
       compactText: (row) =>

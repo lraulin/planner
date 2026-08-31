@@ -2,7 +2,8 @@ import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { AppShell } from "@/components/shell/AppShell";
 import { SuppliesView } from "@/components/finances/supplies/SuppliesView";
-import { listSupplyEnvelopes, listSupplyItems } from "@/lib/finances/supplies/queries";
+import { listBudgetEnvelopeOptions } from "@/lib/finances/budget/queries";
+import { listSupplyItems } from "@/lib/finances/supplies/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +19,15 @@ export const dynamic = "force-dynamic";
  */
 export default async function FinancesSuppliesPage() {
   const userId = await getCurrentUserId();
-  const [items, envelopes] = await Promise.all([
+  const [items, catalog] = await Promise.all([
     listSupplyItems(userId),
-    listSupplyEnvelopes(userId),
+    listBudgetEnvelopeOptions(userId),
   ]);
 
   return (
     <AppShell active="finances">
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <SuppliesView initialItems={items} envelopes={envelopes} />
+        <SuppliesView initialItems={items} catalog={catalog} />
       </Suspense>
     </AppShell>
   );
