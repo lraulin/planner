@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPageOrder, placePage } from "./pageOrder";
+import { applyPageOrder, movePage, placePage } from "./pageOrder";
 import type { PageEntry } from "./pages";
 
 function pages(...ids: string[]): PageEntry[] {
@@ -134,5 +134,39 @@ describe("placePage", () => {
     // Dropping on its own slot is a no-op.
     expect(placePage(["a", "b", "c"], "b", 1)).toEqual(["a", "b", "c"]);
     expect(placePage(["a", "b", "c"], "b", 2)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("movePage", () => {
+  it("moves an id one slot in each direction", () => {
+    expect(movePage(["a", "b", "c"], "b", "left")).toEqual(["b", "a", "c"]);
+    expect(movePage(["a", "b", "c"], "b", "right")).toEqual(["a", "c", "b"]);
+    expect(movePage(["a", "b", "c"], "a", "right")).toEqual(["b", "a", "c"]);
+    expect(movePage(["a", "b", "c"], "c", "left")).toEqual(["a", "c", "b"]);
+  });
+
+  it("walks an id across the list one step at a time", () => {
+    let ids = ["a", "b", "c", "d"];
+    ids = movePage(ids, "d", "left");
+    expect(ids).toEqual(["a", "b", "d", "c"]);
+    ids = movePage(ids, "d", "left");
+    expect(ids).toEqual(["a", "d", "b", "c"]);
+    ids = movePage(ids, "d", "left");
+    expect(ids).toEqual(["d", "a", "b", "c"]);
+  });
+
+  it("stops at the ends rather than wrapping", () => {
+    expect(movePage(["a", "b", "c"], "a", "left")).toEqual(["a", "b", "c"]);
+    expect(movePage(["a", "b", "c"], "c", "right")).toEqual(["a", "b", "c"]);
+  });
+
+  it("leaves the list alone for an id it does not contain", () => {
+    expect(movePage(["a", "b"], "gone", "left")).toEqual(["a", "b"]);
+    expect(movePage(["a", "b"], "gone", "right")).toEqual(["a", "b"]);
+  });
+
+  it("is a no-op on a single-page list", () => {
+    expect(movePage(["a"], "a", "left")).toEqual(["a"]);
+    expect(movePage(["a"], "a", "right")).toEqual(["a"]);
   });
 });

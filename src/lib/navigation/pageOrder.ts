@@ -71,3 +71,25 @@ export function placePage(
   index = Math.max(0, Math.min(index, without.length));
   return [...without.slice(0, index), id, ...without.slice(index)];
 }
+
+/**
+ * Move `id` one slot toward the start or the end of the list.
+ *
+ * The keyboard and button path into the same reorder the drag does, for the phone (where there
+ * is no HTML5 drag) and for anyone arranging from the keyboard. Expressed in `placePage`'s drop
+ * slots rather than as a swap so the two paths cannot drift apart about what an index means:
+ * a slot is measured against the list *including* the moving id, so one step right is `+2`.
+ *
+ * A no-op at either end, and for an id the list does not contain.
+ */
+export function movePage(
+  ids: readonly string[],
+  id: string,
+  direction: "left" | "right",
+): string[] {
+  const from = ids.indexOf(id);
+  if (from < 0) return [...ids];
+  if (direction === "left" && from === 0) return [...ids];
+  if (direction === "right" && from === ids.length - 1) return [...ids];
+  return placePage(ids, id, direction === "left" ? from - 1 : from + 2);
+}
