@@ -282,7 +282,13 @@ export function PageBar({ active }: { active: ModuleId | null }) {
           );
         })}
 
-        <div className="ml-auto flex flex-none items-center gap-1 pl-2">
+        {/*
+         * Pinned to the right edge rather than merely last: the bar scrolls horizontally, and
+         * below `md` these buttons are the *only* way to move a tab. Seven tabs pushed them off
+         * the phone's screen, so the mode was enterable and not usable. `sticky` keeps them in
+         * place while the tabs scroll under them, which needs its own opaque background.
+         */}
+        <div className="sticky right-0 ml-auto flex flex-none items-center gap-1 border-l border-rule bg-surface pl-2">
           <ArrangeButton
             label="←"
             title="Move the selected page left"
