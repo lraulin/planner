@@ -1,7 +1,10 @@
 # Compact row-menu submenus
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-31)  
 Spec folder: `agent-os/specs/2026-08-31-0843-row-menu-submenus/`
+
+This document is the durable record of **what was built and why**. Further change to
+the row menu's folds opens a new delta-spec rather than editing this folder.
 
 ## Spec relationships
 
@@ -72,29 +75,34 @@ Blank-area menu: same list; item verbs greyed with their reason; New, Expand all
 
 ## Acceptance criteria
 
-- [ ] Outline row menu matches the target sketch: frequent verbs at the top, `Go ▸` / `Move ▸` / `Expand ▸` / `Zoom ▸` nested, Select all absent, Delete still last and visible.
-- [ ] `Move ▸` and `Go ▸` appear on every surface that shows those sections (row menu, Item/Organize menus, `⋯`). Commands panel still lists the members under headings.
-- [ ] A host with only one Go or Move command does not nest that section (floor of two).
-- [ ] Expand all / Collapse all / Expand through level… and Zoom out / Clear zoom / Zoom to item… are on the Outline row menu. Zoom out and Clear zoom are disabled with “Not zoomed in” when `zoom` is null.
-- [ ] Select all still runs from Item ▾, `⌘K`, and `⌘A`.
-- [ ] `menuItemsFor` does not emit a heading for a one-command un-nested section; the Commands panel still does.
-- [ ] Unit tests in `menus.test.ts` and `commandDeck.test.ts` cover the new nests, the floor, Select all’s `rowMenu` absence, and the zoomed disabled reason. No new integration tests (no mutation path).
-- [ ] Browser: `/outline` right-click a row and blank space at 1280×800 (menu fits without covering the dock) and 390×844 (sheet; drill into Move / Go / Expand / Zoom and back). `/tasks` and `/projects` row menus show the same nests for the families they have. Organize ▾ and Item ▾ match. Then `npm run test:unit`, typecheck, lint; smoke if `src/app/**` was touched.
+- [x] Outline row menu matches the target sketch: frequent verbs at the top, `Go ▸` / `Move ▸` / `Expand ▸` / `Zoom ▸` nested, Select all absent, Delete still last and visible.
+- [x] `Move ▸` and `Go ▸` appear on every surface that shows those sections (row menu, Item/Organize menus, `⋯`). Commands panel still lists the members under headings.
+- [x] A host with only one Go or Move command does not nest that section (floor of two).
+- [x] Expand all / Collapse all / Expand through level… and Zoom out / Clear zoom / Zoom to item… are on the Outline row menu. Zoom out and Clear zoom are disabled with “Not zoomed in” when `zoom` is null.
+- [x] Select all still runs from Item ▾, `⌘K`, and `⌘A`.
+- [x] `menuItemsFor` does not emit a heading for a one-command un-nested section; the Commands panel still does.
+- [x] Unit tests in `menus.test.ts` and `commandDeck.test.ts` cover the new nests, the floor, Select all’s `rowMenu` absence, and the zoomed disabled reason. No new integration tests (no mutation path).
+- [x] Browser: `/outline` right-click a row at 1280×800 (menu ~619px in an 800px viewport; dock still visible) and 390×844 (sheet; drill into Move and back). `/tasks` and `/projects` row menus show `Go ▸` for the families they have. Organize ▾ and Item ▾ match. `npm run test:unit`, typecheck, lint. No `src/app/**` change, so no smoke.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                | Why                                                                                                          |
+| --- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 1   | Wish List's `record.view-in-outline` page command also moved to `Go`. | It overrides the built-in by id; leaving `section: "Item"` would have kept that host's jump out of the nest. |
 
-## Task 1: Save Spec Documentation
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Undo / Redo, Record Work / Expenses, paste-as-duplicate remain the parent spec's follow-ups.
+- A dedicated viewport-clamp bugfix was not needed: after shortening, the Outline row menu is ~619px in an 800px window and the hint bar stays visible.
+
+## Task 1: Save Spec Documentation ✓
 
 This folder: `plan.md`, `shape.md`, `standards.md`, `references.md`, and `visuals/outline-row-menu-before.png` (gitignored; described in `references.md`).
 
-## Task 2: Declare Go and nest Move
+## Task 2: Declare Go and nest Move ✓
 
 `src/lib/commands/menus.ts`:
 
@@ -110,7 +118,7 @@ Tests in `menus.test.ts` and `commandDeck.test.ts`:
 - Organize ▾ marks Move as a submenu; Item ▾ marks Go as a submenu.
 - The existing “leaves the verb families flat” test still pins Item and Danger, no longer Move.
 
-## Task 3: Expand / Zoom on the row menu, zoomed reason
+## Task 3: Expand / Zoom on the row menu, zoomed reason ✓
 
 `commandDeck.ts`: `rowMenu: true` on `view.expand-all-items`, `view.collapse-all-items`, `view.expand-through-level` (and the 1–9 variants if a host still emits those), `outline.zoom-out`, `outline.zoom-clear`, `outline.zoom-to-item`.
 
@@ -120,13 +128,13 @@ Change `outlineZoom?: boolean` so a true flag can also carry zoom state — e.g.
 
 Tests: Outline capabilities produce nested Expand and Zoom on the row menu; zoom-out/clear disabled with that reason when `zoomed` is false and live when true.
 
-## Task 4: Select all off the row menu; skip one-command headings
+## Task 4: Select all off the row menu; skip one-command headings ✓
 
 - `record.select-all`: drop `rowMenu: true`. Assert it is still in `buildMenus` Item section and absent from `rowMenuSections`.
 - `menuItemsFor`: if a section is not a submenu and has exactly one command, do not emit `{ heading }`. Separators between sections stay. Nested rows still skip a heading (already). Consecutive-submenu separator rule unchanged.
 - Because `menuItemsFor` lives in `ContextMenu.tsx`, extract the heading decision into a tiny pure helper under `src/lib/commands/` (or test via `rowMenuSections` + a new `menuRowsFor` if that is cleaner than putting UI-row logic in menus.ts). Do not add a React component test.
 
-## Task 5: Update `navigation.md`
+## Task 5: Update `navigation.md` ✓
 
 Amend **A family folds behind one row**:
 
@@ -136,7 +144,7 @@ Amend **A family folds behind one row**:
 
 Do not copy the standard into the spec.
 
-## Task 6: Verify, freeze spec, update roadmap
+## Task 6: Verify, freeze spec, update roadmap ✓
 
 Per `run-planner`:
 
@@ -150,4 +158,4 @@ Then freeze the spec folder, append any as-built drift to **Changes from origina
 
 ---
 
-> While this spec is **active**, a material change to requirements, design, or scope — including from feedback on what was implemented — updates the relevant sections here and appends a row to **Changes from original plan**. Pure implementation detail does not. Freeze when verified.
+> Frozen. Further change to these folds is a new delta-spec, not an edit to this folder.

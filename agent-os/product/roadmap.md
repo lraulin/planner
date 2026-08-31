@@ -352,6 +352,15 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   the row menu is finally the bottom sheet that standard has always described. Follow-ups:
   paste-as-duplicate, and Undo/Redo, which is now the largest missing safety net in the app.
 
+  **Compact row-menu submenus.** `specs/2026-08-31-0843-row-menu-submenus`. The Outline menu
+  had grown past the viewport: Item's twelve verbs and Move's five sat inline, and Expand /
+  Priority / Zoom each spent a heading on one command. Frequent verbs stay at the top;
+  `Move ▸` and a new `Go ▸` (View tasks / View project / View in Outline) nest on every
+  surface that shows them; Expand and Zoom siblings join the row menu so those families
+  actually fold; Select all leaves the row menu; a one-command un-nested section skips its
+  heading (`New`, `Set priority…`, `Delete`). Commands panel still lists the members under
+  headings. Supersedes only the “Move stays flat” clause of the parent spec.
+
 - **✅ Views across all modules.** `specs/2026-08-05-1059-views-across-modules`. Saved views
   stopped being a feature of three grids and became one of the app: **Outline, Projects, Goals,
   Tasks, Wish List, Notes and the Task Chooser** all create, update, rename and delete named
