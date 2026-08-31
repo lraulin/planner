@@ -58,10 +58,13 @@ Hidden means two different jobs:
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                                                                                                           | Why                                                                                                                                         |
-| --- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Task 2 (lib variants) shipped overnight 2026-08-30; Tasks 4–6 (the four surfaces) still open.                    | The catalog filter, `includeCreate: false`, `allowClear: false`, and `detail` not being a filter token are the invariants the UI will call. |
-| 2   | Task 3: `CategorySelect` now accepts optional `onCreate`, `allowClear`, `placeholder`, and renders `row.detail`. | Register call sites unchanged.                                                                                                              |
+| #   | Change                                                                                                                      | Why                                                                                                                                         |
+| --- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Task 2 (lib variants) shipped overnight 2026-08-30.                                                                         | The catalog filter, `includeCreate: false`, `allowClear: false`, and `detail` not being a filter token are the invariants the UI will call. |
+| 2   | Task 3: `CategorySelect` now accepts optional `onCreate`, `allowClear`, `placeholder`, and renders `row.detail`.            | Register call sites unchanged.                                                                                                              |
+| 3   | Task 4: Move money To and Assign Manual To use the typeahead (no create, no clear, hidden omitted; Available only on Move). |                                                                                                                                             |
+| 4   | Task 5: Payees learned/fixed Category is the typeahead (Income and hidden stay, clearable to None, no New…).                |                                                                                                                                             |
+| 5   | Task 6: Supplies Funded from is the typeahead (no Income, hidden stay, clearable to —, `listSupplyEnvelopes` deleted).      | Freeze still needs a Register spot-check and a 390×844 pass.                                                                                |
 
 ## Task 1: Save Spec Documentation
 
