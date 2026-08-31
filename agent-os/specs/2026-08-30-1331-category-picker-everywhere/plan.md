@@ -58,9 +58,10 @@ Hidden means two different jobs:
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                                                                                        | Why                                                                                                                                                                                       |
-| --- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Task 2 (lib variants) shipped overnight 2026-08-30; Tasks 3–6 (the four surfaces) still open. | The catalog filter, `includeCreate: false`, `allowClear: false`, and `detail` not being a filter token are the invariants the UI will call. Wiring `CategorySelect` is a separate commit. |
+| #   | Change                                                                                                           | Why                                                                                                                                         |
+| --- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Task 2 (lib variants) shipped overnight 2026-08-30; Tasks 4–6 (the four surfaces) still open.                    | The catalog filter, `includeCreate: false`, `allowClear: false`, and `detail` not being a filter token are the invariants the UI will call. |
+| 2   | Task 3: `CategorySelect` now accepts optional `onCreate`, `allowClear`, `placeholder`, and renders `row.detail`. | Register call sites unchanged.                                                                                                              |
 
 ## Task 1: Save Spec Documentation
 

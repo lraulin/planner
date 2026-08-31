@@ -33,6 +33,8 @@ export function CategorySelect({
   value,
   onChange,
   onCreate,
+  allowClear = true,
+  placeholder = "Categorize",
   disabled = false,
   ariaLabel,
   className,
@@ -40,7 +42,11 @@ export function CategorySelect({
   catalog: EnvelopeCatalog;
   value: string | null;
   onChange: (categoryId: string | null) => void;
-  onCreate: (kind: EnvelopeKind) => void;
+  /** Omit to hide New {type}… — destinations are not a create surface. */
+  onCreate?: (kind: EnvelopeKind) => void;
+  /** False on Move / Assign: empty draft restores the previous destination. */
+  allowClear?: boolean;
+  placeholder?: string;
   disabled?: boolean;
   ariaLabel: string;
   className?: string;
@@ -76,9 +82,14 @@ export function CategorySelect({
   const sections = useMemo(
     () =>
       open
-        ? categoryPickerSections(catalog.groups, catalog.envelopes, typed ? draft : "")
+        ? categoryPickerSections(
+            catalog.groups,
+            catalog.envelopes,
+            typed ? draft : "",
+            { includeCreate: onCreate !== undefined },
+          )
         : [],
-    [open, catalog, draft, typed],
+    [open, catalog, draft, typed, onCreate],
   );
   const choices = useMemo(() => categoryPickerChoices(sections), [sections]);
 
@@ -159,7 +170,12 @@ export function CategorySelect({
    * or a blur will write.
    */
   function commit(allowCreate: boolean) {
-    const result = commitCategoryPicker(draft, highlighted, allowCreate);
+    const result = commitCategoryPicker(
+      draft,
+      highlighted,
+      allowCreate && onCreate !== undefined,
+      allowClear,
+    );
     close();
     switch (result.action) {
       case "clear":
@@ -169,7 +185,7 @@ export function CategorySelect({
         if (result.id !== value) onChange(result.id);
         return;
       case "create":
-        onCreate(result.envelopeKind);
+        onCreate?.(result.envelopeKind);
         return;
       case "restore":
         return;
@@ -197,7 +213,7 @@ export function CategorySelect({
         }
         aria-label={ariaLabel}
         disabled={disabled}
-        placeholder="Categorize"
+        placeholder={placeholder}
         value={open ? draft : selectedName}
         onFocus={openPicker}
         onClick={openPicker}
@@ -316,7 +332,7 @@ export function CategorySelect({
                       onClick={() => {
                         if (row.kind === "create") {
                           close();
-                          onCreate(row.envelopeKind);
+                          onCreate?.(row.envelopeKind);
                           return;
                         }
                         close();
@@ -332,6 +348,11 @@ export function CategorySelect({
                       <span className="min-w-0 truncate">{row.label}</span>
                       {row.kind === "envelope" && row.hidden ? (
                         <span className="shrink-0 text-ink-faint"> (hidden)</span>
+                      ) : null}
+                      {row.kind === "envelope" && row.detail ? (
+                        <span className="ml-auto shrink-0 pl-3 tabular-nums text-ink-muted">
+                          {row.detail}
+                        </span>
                       ) : null}
                     </button>
                   );
