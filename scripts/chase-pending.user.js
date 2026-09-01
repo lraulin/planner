@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Planner: copy Chase bank snapshot
 // @namespace    planner
-// @version      2.3
+// @version      2.4
 // @description  Copy Chase current-cycle posted and pending activity for Planner.
 // @match        https://secure.chase.com/*
 // @match        https://*.chase.com/*
@@ -29,6 +29,24 @@
    * not slightly-stale data, so the script refuses rather than letting Planner apply it.
    */
   const REQUIRED_PERIOD = /activity since last statement/i;
+  /** Chase's own identifier for that selection — steadier than the string it displays. */
+  const REQUIRED_PERIOD_VALUE = "SINCE_LAST_STATEMENT";
+  /**
+   * Chase's assertion that the activity list is whole.
+   *
+   * This is the counterpart to Capital One's "Posted Transactions Since Your Last
+   * Statement" heading, and it is what makes an absent pending section readable. Chase
+   * renders pending charges as a **separate tile** and renders nothing at all — no empty
+   * state, no "no pending charges" text — when there are none, so absence is the only
+   * signal there is. Absence alone would be indistinguishable from a tile that has not
+   * loaded yet, and capturing zero pending while charges are held would delete real
+   * pending money. Read together with a rendered activity table, this end-of-list sentinel
+   * says the view has settled, and only then does "no pending tile" mean "no pending".
+   *
+   * Written without the apostrophe on purpose: the page may use either a straight or a
+   * curly one.
+   */
+  const ACTIVITY_LIST_COMPLETE = /reached the end of your account activity/i;
   /** Anything the period dropdown is known to offer — how its control is recognised. */
   const PERIOD_OPTION =
     /since last statement|statement period|last \d+\s*(?:days|months)|year to date|all transactions/i;
@@ -71,23 +89,73 @@
     }
   }
 
+  /** The label an option carries, whether as text or as the attribute a web component uses. */
+  function optionLabel(option) {
+    return clean(option.getAttribute?.("label") ?? option.textContent);
+  }
+
+  /** Does this control offer the activity periods — i.e. is it the one we are looking for? */
+  function offersPeriods(node) {
+    const options = [...(node.options ?? node.querySelectorAll("[label], option"))].map(
+      optionLabel,
+    );
+    if (options.length === 0) return PERIOD_OPTION.test(clean(node.textContent));
+    return options.some((text) => PERIOD_OPTION.test(text));
+  }
+
   /**
-   * What the activity period dropdown currently says, or null when no such control was
-   * found. Null fails closed: an assertion nobody made is not an assertion.
+   * The activity period control, or null when no such control was found.
+   *
+   * Chase renders this as `<mds-select>`, a custom element whose visible button lives in a
+   * shadow root — so the document-level `[role='combobox']` / `button[aria-haspopup]`
+   * queries this used to rely on can never see it. Its options are light-DOM children whose
+   * labels are **attributes rather than text**, which is also why searching the page's text
+   * for them finds nothing. The stable id is tried first and a generic scan backs it up, so
+   * a renamed id degrades to the slower path instead of breaking the capture.
    */
-  function periodSelection() {
-    for (const select of document.querySelectorAll("select")) {
-      const options = [...select.options].map((option) => clean(option.textContent));
-      if (!options.some((text) => PERIOD_OPTION.test(text))) continue;
-      return clean(select.selectedOptions[0]?.textContent ?? "");
-    }
+  function periodControl() {
+    const named = document.querySelector("#ACTIVITY-header-selector-label");
+    // The id still has to earn it. A control that does not offer periods is not this one,
+    // whatever it is called, and falling through beats reading the wrong selection.
+    if (named && offersPeriods(named)) return named;
     for (const node of document.querySelectorAll(
-      "[role='combobox'], button[aria-haspopup='listbox'], button[aria-haspopup='menu']",
+      "select, mds-select, [role='combobox'], button[aria-haspopup='listbox'], button[aria-haspopup='menu']",
     )) {
-      const text = clean(node.textContent);
-      if (PERIOD_OPTION.test(text)) return text;
+      if (offersPeriods(node)) return node;
     }
     return null;
+  }
+
+  /**
+   * What period the activity list is showing: the control's machine value where it has one,
+   * and the label it displays. Null for both fails closed — an assertion nobody made is not
+   * an assertion.
+   *
+   * The value is what the completeness check prefers. `SINCE_LAST_STATEMENT` is Chase's own
+   * identifier for this selection and cannot drift with wording or locale, which a displayed
+   * string can.
+   */
+  function periodSelection() {
+    const control = periodControl();
+    if (!control) return { value: null, label: null };
+
+    if (control.options && control.selectedOptions) {
+      return {
+        value: clean(control.value),
+        label: clean(control.selectedOptions[0]?.textContent ?? ""),
+      };
+    }
+
+    const selected =
+      control.querySelector?.("[selected='true']") ??
+      control.querySelector?.("[selected]");
+    const shadowButton = control.shadowRoot?.querySelector("button, [role='combobox']");
+    return {
+      value: typeof control.value === "string" ? clean(control.value) : null,
+      label: selected
+        ? optionLabel(selected)
+        : clean(shadowButton?.textContent ?? control.textContent),
+    };
   }
 
   function currentBalance() {
@@ -214,14 +282,23 @@
    */
   function assess(postedTable, pendingTable, postedRows, pendingRows, period) {
     const text = pageText();
+    // Chase says the activity list is whole, and the table it is talking about is rendered.
+    const activityListComplete =
+      Boolean(postedTable) && ACTIVITY_LIST_COMPLETE.test(text);
     return {
-      period,
-      wholeCycle: REQUIRED_PERIOD.test(period ?? ""),
+      period: period.label,
+      periodValue: period.value,
+      activityListComplete,
+      wholeCycle:
+        period.value === REQUIRED_PERIOD_VALUE ||
+        REQUIRED_PERIOD.test(period.label ?? ""),
       postedKnown:
         Boolean(postedTable) ||
         /no (?:recent |current )?(?:activity|transactions)/i.test(text),
       pendingKnown:
-        Boolean(pendingTable) || /no pending (?:charges|transactions)/i.test(text),
+        Boolean(pendingTable) ||
+        /no pending (?:charges|transactions)/i.test(text) ||
+        activityListComplete,
       postedFailed: postedRows.failed,
       pendingFailed: pendingRows.failed,
       more: [...document.querySelectorAll("button, a")].some(
@@ -268,7 +345,11 @@
     if (found.filtered) reasons.push("an activity filter is switched on");
     if (found.more) reasons.push("the activity list has more rows to load");
     if (!found.postedKnown) reasons.push("the posted activity table has not rendered");
-    if (!found.pendingKnown) reasons.push("the pending section has not rendered");
+    if (!found.pendingKnown) {
+      reasons.push(
+        "there is no pending section and the activity list has not reported itself complete, so an empty pending set cannot be told apart from one still loading",
+      );
+    }
     if (found.postedFailed > 0) {
       reasons.push(`${found.postedFailed} posted row(s) could not be read`);
     }
