@@ -8,6 +8,7 @@
  */
 
 import { emptyDraftBlock, type DraftExercise, type DraftGroup } from "./sessionDraft";
+import { groupSessionItems } from "./sessionGroups";
 
 export type Grouping = {
   groups: DraftGroup[];
@@ -149,4 +150,32 @@ export function withMembers(
     if (updated[j]) exercises[target] = updated[j];
   });
   return { groups: draft.groups, exercises };
+}
+
+/**
+ * Move one top-level item — a straight exercise, or a whole group with every member —
+ * one place up (`-1`) or down (`1`). Out of range is a no-op.
+ *
+ * Whole items, never single members: a group's run travels together, so contiguity holds
+ * by construction. Order is the only thing that changes, and `sortKey` is regenerated from
+ * array position on the next save, so the new order is what next week's copy starts from.
+ */
+export function moveItem(
+  draft: Grouping,
+  itemIndex: number,
+  direction: -1 | 1,
+): Grouping {
+  const items = groupSessionItems(draft.exercises, draft.groups);
+  const to = itemIndex + direction;
+  if (itemIndex < 0 || itemIndex >= items.length || to < 0 || to >= items.length) {
+    return draft;
+  }
+
+  const runs = items.map((item) =>
+    item.kind === "exercise" ? [item.member] : item.members.map((m) => m.member),
+  );
+  const reordered = [...runs];
+  [reordered[itemIndex], reordered[to]] = [reordered[to], reordered[itemIndex]];
+
+  return { groups: draft.groups, exercises: reordered.flat() };
 }

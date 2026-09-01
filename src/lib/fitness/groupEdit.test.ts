@@ -6,12 +6,14 @@ import {
   patchGroup,
   pruneGroups,
   removeGroup,
+  moveItem,
   removeMember,
   ungroup,
   withMembers,
   type Grouping,
 } from "./groupEdit";
 import { emptyDraftBlock, type DraftExercise } from "./sessionDraft";
+import { groupSessionItems } from "./sessionGroups";
 
 function block(name: string, groupId: string | null = null): DraftExercise {
   return { ...emptyDraftBlock(), key: name, exerciseName: name, groupId };
@@ -220,5 +222,69 @@ describe("withMembers", () => {
   it("does nothing for a group with no members", () => {
     const before = draft([block("Squat")], ["g1"]);
     expect(withMembers(before, "g1", (m) => m)).toBe(before);
+  });
+});
+
+describe("moveItem", () => {
+  /** "Squat | g1:Press g1:Row | Curl" — a group between two lone lifts. */
+  function session(): Grouping {
+    return draft([
+      block("Squat"),
+      block("Press", "g1"),
+      block("Row", "g1"),
+      block("Curl"),
+    ]);
+  }
+
+  it("moves a straight exercise down past the item after it", () => {
+    // Squat is item 0; the group is item 1.
+    expect(shape(moveItem(session(), 0, 1))).toBe("g1:Press g1:Row Squat Curl");
+  });
+
+  it("moves a straight exercise up past the item before it", () => {
+    // Curl is item 2, the group item 1.
+    expect(shape(moveItem(session(), 2, -1))).toBe("Squat Curl g1:Press g1:Row");
+  });
+
+  it("carries every member of a group and leaves it contiguous", () => {
+    const up = moveItem(session(), 1, -1);
+    expect(shape(up)).toBe("g1:Press g1:Row Squat Curl");
+    expect(contiguous(up)).toBe(true);
+
+    const down = moveItem(session(), 1, 1);
+    expect(shape(down)).toBe("Squat Curl g1:Press g1:Row");
+    expect(contiguous(down)).toBe(true);
+  });
+
+  it("swaps two groups without interleaving their members", () => {
+    const two = draft([
+      block("Press", "g1"),
+      block("Row", "g1"),
+      block("Dip", "g2"),
+      block("Curl", "g2"),
+    ]);
+    const moved = moveItem(two, 0, 1);
+    expect(shape(moved)).toBe("g2:Dip g2:Curl g1:Press g1:Row");
+    expect(contiguous(moved)).toBe(true);
+  });
+
+  it("is a no-op at both ends and off the end of the item list", () => {
+    const d = session();
+    expect(moveItem(d, 0, -1)).toBe(d);
+    expect(moveItem(d, 2, 1)).toBe(d);
+    expect(moveItem(d, 5, -1)).toBe(d);
+    expect(moveItem(d, -1, 1)).toBe(d);
+  });
+
+  it("re-letters: the moved item takes the letter of the place it landed in", () => {
+    const letters = (d: Grouping) =>
+      groupSessionItems(d.exercises, d.groups).map((i) => i.letter);
+    expect(letters(session())).toEqual(["A", "B", "C"]);
+    // Curl was C; after moving up it is B and the group is C.
+    const moved = moveItem(session(), 2, -1);
+    const items = groupSessionItems(moved.exercises, moved.groups);
+    expect(items.map((i) => i.letter)).toEqual(["A", "B", "C"]);
+    expect(items[1]).toMatchObject({ kind: "exercise", letter: "B" });
+    expect(items[2]).toMatchObject({ kind: "group", letter: "C" });
   });
 });
