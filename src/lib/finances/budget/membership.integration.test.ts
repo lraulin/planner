@@ -40,6 +40,14 @@ afterAll(async () => {
 const TODAY = "2026-08-22";
 const MONTH = "2026-08-01";
 
+/**
+ * Pin the fold to the fixture clock. `loadBudget` otherwise reads the server's today, and
+ * these August fixtures start failing on the 1st of September.
+ */
+function load(userId: string, month: string = MONTH) {
+  return loadBudget(userId, month, db, { todayKey: TODAY });
+}
+
 async function addAccount(
   userId: string,
   values: {
@@ -110,7 +118,7 @@ describeDb("account membership rebase", () => {
     await addTx(userId, investId, "2026-08-05", "10.00");
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
 
-    const before = await loadBudget(userId, MONTH);
+    const before = await load(userId);
     const position = await openingPositionFor(userId, MONTH, [investId]);
     expect(position).toBe(25_000);
 
@@ -119,7 +127,7 @@ describeDb("account membership rebase", () => {
     expect(receipt.transitions[0]?.positionCents).toBe(25_000);
     expect(receipt.after.openingCents).toBe(before.settings.openingCents + 25_000);
 
-    const after = await loadBudget(userId, MONTH);
+    const after = await load(userId);
     identityHolds(after);
     expect(after.settings.openingCents).toBe(before.settings.openingCents + 25_000);
   });
@@ -134,7 +142,7 @@ describeDb("account membership rebase", () => {
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
 
     await rebaseAccountMembership(userId, investId, false);
-    const included = await loadBudget(userId, MONTH);
+    const included = await load(userId);
     const receipt = await rebaseAccountMembership(userId, investId, true);
     expect(receipt.transitions).toHaveLength(1);
     expect(receipt.after.openingCents).toBe(included.settings.openingCents - 10_000);
@@ -165,7 +173,7 @@ describeDb("account membership rebase", () => {
     });
     await addTx(userId, investId, "2026-07-01", "80.00");
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
-    const before = (await loadBudget(userId, MONTH)).settings.openingCents;
+    const before = (await load(userId)).settings.openingCents;
 
     await updateAccount(userId, investId, { kind: "savings" });
     const [row] = await db
@@ -173,26 +181,24 @@ describeDb("account membership rebase", () => {
       .from(financeAccounts)
       .where(eq(financeAccounts.id, investId));
     expect(row).toMatchObject({ kind: "savings", offBudget: false });
-    expect((await loadBudget(userId, MONTH)).settings.openingCents).toBe(
-      before + 8_000,
-    );
+    expect((await load(userId)).settings.openingCents).toBe(before + 8_000);
   });
 
   it("does not rebase when a core account is closed", async () => {
     const checkingId = await addAccount(userId, { name: "Checking", kind: "checking" });
     await addTx(userId, checkingId, "2026-07-01", "50.00");
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
-    const opening = (await loadBudget(userId, MONTH)).settings.openingCents;
+    const opening = (await load(userId)).settings.openingCents;
     await updateAccount(userId, checkingId, { closedOn: "2026-08-20" });
-    expect((await loadBudget(userId, MONTH)).settings.openingCents).toBe(opening);
-    identityHolds(await loadBudget(userId, MONTH));
+    expect((await load(userId)).settings.openingCents).toBe(opening);
+    identityHolds(await load(userId));
   });
 
   it("includes a new on-budget account created after setup, once", async () => {
     const checkingId = await addAccount(userId, { name: "Checking", kind: "checking" });
     await addTx(userId, checkingId, "2026-07-01", "20.00");
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
-    const opening = (await loadBudget(userId, MONTH)).settings.openingCents;
+    const opening = (await load(userId)).settings.openingCents;
 
     const savingsId = await addAccount(userId, {
       name: "New savings",
@@ -201,10 +207,8 @@ describeDb("account membership rebase", () => {
     await addTx(userId, savingsId, "2026-06-01", "300.00");
     const first = await includeNewOnBudgetAccount(userId, savingsId);
     expect(first.transitions).toHaveLength(1);
-    expect((await loadBudget(userId, MONTH)).settings.openingCents).toBe(
-      opening + 30_000,
-    );
-    identityHolds(await loadBudget(userId, MONTH));
+    expect((await load(userId)).settings.openingCents).toBe(opening + 30_000);
+    identityHolds(await load(userId));
   });
 });
 
@@ -270,14 +274,12 @@ describeDb("single-pool cutover", () => {
       .from(financeAccounts)
       .where(eq(financeAccounts.id, savingsId));
     expect(stillOff[0]?.offBudget).toBe(true);
-    expect((await loadBudget(ownerId, MONTH)).settings.openingCents).toBe(
-      dry.before.openingCents,
-    );
+    expect((await load(ownerId)).settings.openingCents).toBe(dry.before.openingCents);
 
     const applied = await applySinglePoolCutover(ownerId);
     expect(applied.transitions).toHaveLength(1);
     expect(applied.after.openingCents).toBe(applied.before.openingCents + 20_000);
-    identityHolds(await loadBudget(ownerId, MONTH));
+    identityHolds(await load(ownerId));
 
     const [row] = await db
       .select({ offBudget: financeAccounts.offBudget })

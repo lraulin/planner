@@ -71,6 +71,14 @@ afterAll(async () => {
 const TODAY = "2026-08-22";
 const MONTH = "2026-08-01";
 
+/**
+ * Pin the fold to the fixture clock. `loadBudget` otherwise reads the server's today, and
+ * these August fixtures start failing on the 1st of September.
+ */
+function load(userId: string, month: string = MONTH) {
+  return loadBudget(userId, month, db, { todayKey: TODAY });
+}
+
 /** Checking, a card, on-budget savings, and an off-budget investment. */
 async function seedAccounts(userId: string) {
   const [checking] = await db
@@ -190,7 +198,7 @@ describeDb("budget mutations", () => {
     expect(result.openingCents).toBe(130_000);
     expect(result.categoryCount).toBe(5);
 
-    const data = await loadBudget(userId, MONTH);
+    const data = await load(userId);
     expect(data.configured).toBe(true);
     expect(findMonth(data.months, MONTH)?.readyToAssignCents).toBe(130_000);
   });
@@ -206,7 +214,7 @@ describeDb("budget mutations", () => {
   it("keeps an envelope's section through a rename and a section round-trip", async () => {
     await seedAccounts(userId);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
-    const before = await loadBudget(userId, MONTH);
+    const before = await load(userId);
     const kinds = Object.fromEntries(
       before.categories.map((category) => [category.name, category.kind]),
     );
@@ -220,7 +228,7 @@ describeDb("budget mutations", () => {
     const savings = before.categories.find((category) => category.name === "Savings")!;
     await updateBudgetCategory(userId, savings.id, { kind: "spending" });
     await updateBudgetCategory(userId, savings.id, { kind: "savings" });
-    const after = await loadBudget(userId, MONTH);
+    const after = await load(userId);
     expect(after.categories.find((row) => row.id === savings.id)?.kind).toBe("savings");
     expect(findMonth(after.months, MONTH)?.readyToAssignCents).toBe(ready);
   });
@@ -241,7 +249,7 @@ describeDb("budget mutations", () => {
       "before",
     );
 
-    const data = await loadBudget(userId, MONTH);
+    const data = await load(userId);
     const hulu = data.categories.find((row) => row.id === second)!;
     const netflix = data.categories.find((row) => row.id === first)!;
     expect(hulu.kind).toBe("bill");
@@ -285,8 +293,7 @@ describeDb("budget mutations", () => {
       kind: "bill",
     });
     expect(
-      (await loadBudget(userId, MONTH)).categories.find((row) => row.id === netflix)
-        ?.groupId,
+      (await load(userId)).categories.find((row) => row.id === netflix)?.groupId,
     ).toBe(billsGroup);
   });
 
@@ -307,15 +314,11 @@ describeDb("budget mutations", () => {
     // dead-ending. It evicts to the section root instead.
     await updateBudgetCategory(userId, netflix, { kind: "spending" });
 
-    const moved = (await loadBudget(userId, MONTH)).categories.find(
-      (row) => row.id === netflix,
-    )!;
+    const moved = (await load(userId)).categories.find((row) => row.id === netflix)!;
     expect(moved.kind).toBe("spending");
     expect(moved.groupId).toBeNull();
     // And the group survives, empty, so it can be filled again or deleted.
-    expect(
-      (await loadBudget(userId, MONTH)).groups.some((row) => row.id === billsGroup),
-    ).toBe(true);
+    expect((await load(userId)).groups.some((row) => row.id === billsGroup)).toBe(true);
   });
 
   it("seeds the minimal preset with no groups at all", async () => {
@@ -327,7 +330,7 @@ describeDb("budget mutations", () => {
     });
     expect(result.categoryCount).toBe(5);
 
-    const data = await loadBudget(userId, MONTH);
+    const data = await load(userId);
     // A group named for the section it is in says nothing the section heading does not.
     expect(data.groups).toEqual([]);
     expect(data.categories.every((row) => row.groupId === null)).toBe(true);
@@ -342,7 +345,7 @@ describeDb("budget mutations", () => {
 
     const id = await createBudgetCategory(userId, { name: "Netflix", kind: "bill" });
 
-    const created = (await loadBudget(userId, MONTH)).categories.find(
+    const created = (await load(userId)).categories.find(
       (category) => category.id === id,
     )!;
     expect(created.kind).toBe("bill");
@@ -366,14 +369,14 @@ describeDb("budget mutations", () => {
     const id = await createBudgetCategory(userId, { name: "Internet" });
 
     await updateBudgetCategory(userId, id, { kind: "bill" });
-    const asBill = (await loadBudget(userId, MONTH)).categories.find(
+    const asBill = (await load(userId)).categories.find(
       (category) => category.id === id,
     )!;
     expect(asBill.kind).toBe("bill");
     expect(asBill.bill?.cadenceMonths).toBe(1);
 
     await updateBudgetCategory(userId, id, { kind: "spending" });
-    const asSpending = (await loadBudget(userId, MONTH)).categories.find(
+    const asSpending = (await load(userId)).categories.find(
       (category) => category.id === id,
     )!;
     expect(asSpending.kind).toBe("spending");
@@ -393,7 +396,7 @@ describeDb("budget mutations", () => {
 
     await updateBudgetCategory(userId, id, { name: "Hulu+", kind: "bill" });
 
-    const after = (await loadBudget(userId, MONTH)).categories.find(
+    const after = (await load(userId)).categories.find(
       (category) => category.id === id,
     )!;
     expect(after.name).toBe("Hulu+");
@@ -503,7 +506,7 @@ describeDb("budget mutations", () => {
       byDescription.get("TO BROKERAGE")!,
       ids.get("Discretionary")!,
     );
-    const data = await loadBudget(userId, MONTH);
+    const data = await load(userId);
     const august = findMonth(data.months, MONTH)!;
 
     expect(august.totalIncomeCents).toBe(200_000);
@@ -557,7 +560,7 @@ describeDb("budget mutations", () => {
     ]);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
 
-    expect((await loadBudget(userId, MONTH)).uncategorizedCount).toBe(0);
+    expect((await load(userId)).uncategorizedCount).toBe(0);
   });
 
   it("names a future-dated uncategorized row as the term, not as reconciliation", async () => {
@@ -675,7 +678,7 @@ describeDb("budget mutations", () => {
       derivedFlow: "spend",
     });
 
-    const data = await loadBudget(userId, MONTH);
+    const data = await load(userId);
     const august = findMonth(data.months, MONTH)!;
     expect(categoryMonth(august, discretionaryId).activityCents).toBe(-27_663);
     expect(data.uncategorizedCount).toBe(1);
@@ -869,7 +872,7 @@ describeDb("budget mutations", () => {
       amountCents: 30_000,
     });
 
-    let august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
+    let august = findMonth((await load(userId)).months, MONTH)!;
     expect(categoryMonth(august, food.id).balanceCents).toBe(-15_000);
     expect(august.readyToAssignCents).toBe(50_000);
 
@@ -884,7 +887,7 @@ describeDb("budget mutations", () => {
       "Covered $150.00 of Recurring spend from Discretionary",
     );
 
-    august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
+    august = findMonth((await load(userId)).months, MONTH)!;
     expect(categoryMonth(august, food.id).balanceCents).toBe(0);
     expect(categoryMonth(august, fun.id).balanceCents).toBe(15_000);
     // A move between envelopes changes nothing outside them.
@@ -911,7 +914,7 @@ describeDb("budget mutations", () => {
       amountCents: 999_999,
     });
 
-    const budget = await loadBudget(userId, MONTH);
+    const budget = await load(userId);
     const august = findMonth(budget.months, MONTH)!;
     expect(categoryMonth(august, ids.get("Bills")!).assignedCents).toBe(10_000);
     expect(august.readyToAssignCents).toBe(0);
@@ -940,7 +943,7 @@ describeDb("budget mutations", () => {
       category: bills,
       amountCents: 20_000,
     });
-    const data = await loadBudget(userId, MONTH);
+    const data = await load(userId);
     const august = findMonth(data.months, MONTH)!;
     const september = findMonth(data.months, "2026-09-01")!;
     expect(august.assignedInFutureMonthsCents).toBe(20_000);
@@ -957,7 +960,7 @@ describeDb("budget mutations", () => {
     ).rejects.toThrow();
     expect(
       categoryMonth(
-        findMonth((await loadBudget(userId, "2026-09-01")).months, "2026-09-01")!,
+        findMonth((await load(userId, "2026-09-01")).months, "2026-09-01")!,
         bills.id,
       ).assignedCents,
     ).toBe(20_000);
@@ -983,7 +986,7 @@ describeDb("budget mutations", () => {
       category: bills,
       amountCents: 40_000,
     });
-    const over = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
+    const over = findMonth((await load(userId)).months, MONTH)!;
     expect(over.readyToAssignCents).toBe(-30_000);
 
     const result = await performBudgetOperation(userId, {
@@ -995,7 +998,7 @@ describeDb("budget mutations", () => {
     expect(result.applied).toBe(true);
     expect(result.note).toContain("Unassigned $150.00 from Bills to Ready to Assign");
 
-    const budget = await loadBudget(userId, MONTH);
+    const budget = await load(userId);
     const august = findMonth(budget.months, MONTH)!;
     expect(categoryMonth(august, bills.id).assignedCents).toBe(25_000);
     expect(august.readyToAssignCents).toBe(-15_000);
@@ -1033,7 +1036,7 @@ describeDb("budget mutations", () => {
       amountCents: 8_000,
     });
 
-    const data = await loadBudget(userId, MONTH);
+    const data = await load(userId);
     expect(categoryMonth(findMonth(data.months, MONTH)!, bills.id).assignedCents).toBe(
       0,
     );
@@ -1072,10 +1075,8 @@ describeDb("budget mutations", () => {
       }),
     ).rejects.toThrow();
     expect(
-      categoryMonth(
-        findMonth((await loadBudget(userId, MONTH)).months, MONTH)!,
-        bills.id,
-      ).assignedCents,
+      categoryMonth(findMonth((await load(userId)).months, MONTH)!, bills.id)
+        .assignedCents,
     ).toBe(40_000);
   });
 
@@ -1317,11 +1318,11 @@ describeDb("budget mutations", () => {
       );
     await setTransactionBudgetCategory(userId, steam.id, ids.get("Discretionary")!);
 
-    let august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
+    let august = findMonth((await load(userId)).months, MONTH)!;
     expect(categoryMonth(august, ids.get("Discretionary")!).activityCents).toBe(-4_000);
 
     await updateAccount(userId, cardId, { kind: "investment", offBudget: true });
-    august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
+    august = findMonth((await load(userId)).months, MONTH)!;
     expect(categoryMonth(august, ids.get("Discretionary")!).activityCents).toBe(0);
   });
 
@@ -1345,13 +1346,18 @@ describeDb("budget mutations", () => {
       amountCents: 12_000,
     });
 
-    const result = await applyBudgetTemplates(userId, { month: MONTH, force: false });
+    // Apply and since both read the server clock, so this has to be the real current
+    // month — a hardcoded August would start a target that has not begun yet.
+    const result = await applyBudgetTemplates(userId, {
+      month: CURRENT_MONTH,
+      force: false,
+    });
     expect(result.applied).toBe(1);
 
-    const data = await loadBudget(userId, MONTH);
-    const cell = categoryMonth(findMonth(data.months, MONTH)!, bills);
+    const data = await loadBudget(userId, CURRENT_MONTH);
+    const cell = categoryMonth(findMonth(data.months, CURRENT_MONTH)!, bills);
     expect(cell.assignedCents).toBe(12_000);
-    expect(data.goals[`${MONTH}|${bills}`]).toBe(12_000);
+    expect(data.goals[`${CURRENT_MONTH}|${bills}`]).toBe(12_000);
   });
 
   it("round-trips a weekly target and keeps it from a second user", async () => {
@@ -1366,9 +1372,7 @@ describeDb("budget mutations", () => {
 
     await saveEnvelopeTarget(userId, groceries, weekly);
 
-    const stored = (await loadBudget(userId, MONTH)).categories.find(
-      (row) => row.id === groceries,
-    );
+    const stored = (await load(userId)).categories.find((row) => row.id === groceries);
     // The server stamps the day the target started; the client never supplies it.
     const since = localDateKey(new Date());
     expect(stored?.target).toEqual({ ...weekly, since });
@@ -1376,9 +1380,7 @@ describeDb("budget mutations", () => {
     // A second user must fail to read it, change it, or clear it.
     const intruderId = await makeUser();
     expect(
-      (await loadBudget(intruderId, MONTH)).categories.find(
-        (row) => row.id === groceries,
-      ),
+      (await load(intruderId)).categories.find((row) => row.id === groceries),
     ).toBeUndefined();
     await expect(
       saveEnvelopeTarget(intruderId, groceries, {
@@ -1391,9 +1393,7 @@ describeDb("budget mutations", () => {
       /does not exist/,
     );
 
-    const after = (await loadBudget(userId, MONTH)).categories.find(
-      (row) => row.id === groceries,
-    );
+    const after = (await load(userId)).categories.find((row) => row.id === groceries);
     expect(after?.target).toEqual({ ...weekly, since });
   });
 
@@ -1407,8 +1407,8 @@ describeDb("budget mutations", () => {
       amountCents,
     });
     const readBack = async () =>
-      (await loadBudget(userId, MONTH)).categories.find((row) => row.id === groceries)
-        ?.target as { since?: string } | null | undefined;
+      (await load(userId)).categories.find((row) => row.id === groceries)?.target as
+        { since?: string } | null | undefined;
 
     await saveEnvelopeTarget(userId, groceries, target(18_000));
     const since = (await readBack())?.since;
@@ -1456,17 +1456,17 @@ describeDb("budget mutations", () => {
     });
 
     const result = await assignBudget(userId, {
-      month: MONTH,
+      month: CURRENT_MONTH,
       option: "underfunded",
     });
     expect(result.applied).toBe(1);
 
-    const data = await loadBudget(userId, MONTH);
-    const month = findMonth(data.months, MONTH)!;
+    const data = await loadBudget(userId, CURRENT_MONTH);
+    const month = findMonth(data.months, CURRENT_MONTH)!;
     expect(month.readyToAssignCents).toBe(0);
     expect(categoryMonth(month, bills).assignedCents).toBe(5_000);
     expect(categoryMonth(month, fun).assignedCents).toBe(0);
-    expect(data.goals[`${MONTH}|${bills}`]).toBe(40_000);
+    expect(data.goals[`${CURRENT_MONTH}|${bills}`]).toBe(40_000);
   });
 
   it("nests and reorders groups and envelopes without changing their money", async () => {
@@ -1481,7 +1481,7 @@ describeDb("budget mutations", () => {
       name: "Income",
       kind: "income",
     });
-    const before = await loadBudget(userId, MONTH);
+    const before = await load(userId);
     const billsEnvelope = before.categories.find(
       (category) => category.name === "Bills",
     )!;
@@ -1502,7 +1502,7 @@ describeDb("budget mutations", () => {
       utilitiesId,
     );
 
-    const nested = await loadBudget(userId, MONTH);
+    const nested = await load(userId);
     expect(
       nested.groups.find((group) => group.id === billsGroupId)?.parentGroupId,
     ).toBe(spendingId);
@@ -1543,7 +1543,7 @@ describeDb("budget mutations", () => {
     );
     await deleteCategoryGroup(userId, utilitiesId);
     await deleteCategoryGroup(userId, billsGroupId);
-    const flattened = await loadBudget(userId, MONTH);
+    const flattened = await load(userId);
     expect(flattened.groups.some((row) => row.id === billsGroupId)).toBe(false);
 
     const discretionary = flattened.categories.find(
@@ -1555,7 +1555,7 @@ describeDb("budget mutations", () => {
       { kind: "category", id: discretionary.id },
       "before",
     );
-    const reordered = await loadBudget(userId, MONTH);
+    const reordered = await load(userId);
     // The drop still writes a key before Discretionary. The grid itself sorts by name, so
     // this is the mutation's effect, not what the page shows.
     const billsRow = reordered.categories.find(
@@ -1629,7 +1629,7 @@ describeDb("budget mutations — cross-user isolation", () => {
     });
     await applyBudgetTemplates(ownerId, { month: MONTH, force: true });
 
-    const data = await loadBudget(intruderId, MONTH);
+    const data = await load(intruderId);
     expect(data.configured).toBe(false);
     expect(data.groups).toEqual([]);
     expect(data.categories).toEqual([]);
@@ -1759,7 +1759,7 @@ describeDb("budget mutations — cross-user isolation", () => {
   });
 
   it("leaves the owner's data untouched after every attempt", async () => {
-    const before = await loadBudget(ownerId, MONTH);
+    const before = await load(ownerId);
     const ids = await envelopes(ownerId);
 
     await expect(
@@ -1771,7 +1771,7 @@ describeDb("budget mutations — cross-user isolation", () => {
       }),
     ).rejects.toThrow();
 
-    const after = await loadBudget(ownerId, MONTH);
+    const after = await load(ownerId);
     expect(after.categories.map((row) => row.id).sort()).toEqual(
       [...ids.values()].sort(),
     );

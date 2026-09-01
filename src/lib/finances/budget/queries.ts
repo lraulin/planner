@@ -384,9 +384,9 @@ export async function loadBudget(
   userId: string,
   requestedMonth: MonthKey | null,
   executor: FinanceExecutor = db,
-  options: { includeMovementEvents?: boolean } = {},
+  options: { includeMovementEvents?: boolean; todayKey?: string } = {},
 ): Promise<BudgetData> {
-  const todayKey = localDateKey(new Date());
+  const todayKey = options.todayKey ?? localDateKey(new Date());
   const currentMonth = monthKeyOf(todayKey);
 
   const [stored, groups, categoryRows, accounts] = await Promise.all([
