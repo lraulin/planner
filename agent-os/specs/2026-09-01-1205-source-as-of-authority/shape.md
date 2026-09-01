@@ -1,6 +1,6 @@
 # Source currency — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete**
 
 ## Scope
 

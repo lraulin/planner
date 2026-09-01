@@ -1,6 +1,6 @@
 # Source currency: every ingestion path carries an as-of, and the freshest one wins
 
-**Status: active**
+**Status: frozen / complete**
 Spec folder: `agent-os/specs/2026-09-01-1205-source-as-of-authority/`
 
 ## Spec relationships
@@ -145,52 +145,62 @@ Following `2026-08-31-1444` D4:
 
 ## Acceptance criteria
 
-- [ ] A snapshot at T followed by a sync reporting `balance-date` T−2d leaves the
+- [x] A snapshot at T followed by a sync reporting `balance-date` T−2d leaves the
       snapshot's headline and pending set in force **indefinitely**, not for 36 hours.
-- [ ] The same snapshot followed by a sync at T+1h hands both over **immediately**, not
+- [x] The same snapshot followed by a sync at T+1h hands both over **immediately**, not
       after 36 hours.
-- [ ] Re-pasting a snapshot captured before the last sync imports rows per the watermark
+- [x] Re-pasting a snapshot captured before the last sync imports rows per the watermark
       and leaves the headline and pending set unchanged.
-- [ ] A CSV whose newest data day predates the stored stamp imports its rows and does not
+- [x] A CSV whose newest data day predates the stored stamp imports its rows and does not
       move the headline.
-- [ ] A sync response with no `balance-date` never overwrites a dated stamp.
-- [ ] `balanceAsOf` never decreases across a sequence of mixed writes in any order.
-- [ ] A second user cannot read, change, or delete another user's `finance_account_source_state`
+- [x] A sync response with no `balance-date` never overwrites a dated stamp.
+- [x] `balanceAsOf` never decreases across a sequence of mixed writes in any order.
+- [x] A second user cannot read, change, or delete another user's `finance_account_source_state`
       rows.
-- [ ] `feedHandoverWrite.integration.test.ts`, `syncPlan.test.ts` and the bank-snapshot
-      integration tests pass unchanged — ownership and handover do not move.
-- [ ] Unit, integration, lint, typecheck and `npm run smoke` all pass.
+- [x] `feedHandoverWrite.integration.test.ts` and `syncPlan.test.ts` pass **unchanged** —
+      ownership and handover do not move. `bankSnapshotApply.integration.test.ts` needed
+      three edits and none of them is an ownership change: its seed writes a browser stamp
+      through `recordSourceState` instead of the dropped column, one audit assertion names
+      `balanceSource`/`balanceAsOf` instead of the dropped ones, and a case was added for
+      re-pasting an older clipboard. Every ownership, transition and split assertion in it
+      is untouched.
+- [x] Unit, integration, lint, typecheck and `npm run smoke` all pass.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                         | Why                                                                                                                                                                                                                                                                                                                                             |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Added `bank_account_links.balance_source`**, naming which source produced the derived headline.                                              | D2 says "a tie keeps the incumbent", but with three source rows and no record of which one holds the headline, "the incumbent" is not a thing the code can name — the winner would fall out of row order. The column makes the tie rule decidable, and makes the audit legible ("headline now from browser").                                   |
+| 2   | **A source cannot walk its own row back either.** `recordSourceState` applies the same strictly-newer comparison to the row it is overwriting. | D4 was written about one source outranking another, but the same defect exists within a source: re-pasting an older clipboard rewrote the browser stamp with an older instant, and since it was still the only browser row it kept the headline — at the wrong figure. Found by the acceptance test for re-pasting.                             |
+| 3   | **A day-only stamp materializes on the link as UTC noon of that day** rather than as null.                                                     | The derived `balanceAsOf` is a `timestamptz` and a file only knows a day, so a file-sourced headline would have shown no date at all. UTC noon is the encoding `dates.md` requires, and `toDateKey` reads the file's day back on every machine.                                                                                                 |
+| 4   | **`importedPostedHeadline` reports a figure older than the feed's instead of refusing**, and carries the day it is true as of.                 | Folding its date comparison into the shared rule (Task 5) means it no longer has an opinion on freshness at all. Two integration tests changed premise as a result: a file that already reported 08/31 now holds the headline against an 08/25 sync from the moment the account is linked, so the "lag" those tests opened can no longer occur. |
+| 5   | **`insertedCentsOnOrAfter` deleted**, folded into `importedPostedHeadline`.                                                                    | The delta branch now has to report the newest day it added as well as the total, and computing the two in separate passes over the same rows was the only reason the helper existed.                                                                                                                                                            |
+| 6   | **Receipt wording is source-neutral** ("a more current figure is already in force") rather than naming the winning source.                     | With change 2, the source that outranks a stale write is sometimes the _same_ source at a newer stamp, which made the source-naming wording read as nonsense.                                                                                                                                                                                   |
 
 ## Tasks
 
 - [x] **Task 1 — Save spec documentation.** This folder: `plan.md`, `shape.md`,
       `standards.md`, `references.md`.
-- [ ] **Task 2 — The pure rule.** `src/lib/finances/sourceAuthority.ts` and its test, ahead
+- [x] **Task 2 — The pure rule.** `src/lib/finances/sourceAuthority.ts` and its test, ahead
       of any schema change.
-- [ ] **Task 3 — Schema and backfill.** `finance_account_source_state` in
+- [x] **Task 3 — Schema and backfill.** `finance_account_source_state` in
       `src/db/schema.ts`, generated migration (`npm run db:generate`), D5's backfill.
-- [ ] **Task 4 — The shared writer.** `src/lib/finances/sourceStateWrite.ts` (upsert one
+- [x] **Task 4 — The shared writer.** `src/lib/finances/sourceStateWrite.ts` (upsert one
       source's stamp, recompute the derived headline) with its integration test.
-- [ ] **Task 5 — Move the three writers onto it.** `saveBalance`, `bankSnapshotApply`,
+- [x] **Task 5 — Move the three writers onto it.** `saveBalance`, `bankSnapshotApply`,
       `import`; `balanceAsOf()` returns `Date | null`; `importedPostedBalance.ts` sheds its
       own date comparison into the shared rule.
-- [ ] **Task 6 — Re-key pending.** `workingPending.ts`, `workingPendingQuery.ts`,
+- [x] **Task 6 — Re-key pending.** `workingPending.ts`, `workingPendingQuery.ts`,
       `banksync/queries.ts` `authoritativeBrowserPending`, `finances/queries.ts`
       `listAccounts`.
-- [ ] **Task 7 — Delete the superseded modules.** `provisionalBalance.ts`,
+- [x] **Task 7 — Delete the superseded modules.** `provisionalBalance.ts`,
       `browserPendingAuthority.ts`, their tests and remaining readers.
-- [ ] **Task 8 — Out-of-order coverage.** The integration cases in the acceptance criteria,
+- [x] **Task 8 — Out-of-order coverage.** The integration cases in the acceptance criteria,
       including the cross-user case.
-- [ ] **Task 9 — Verify, freeze, update the roadmap.** Confirm acceptance criteria, complete
+- [x] **Task 9 — Verify, freeze, update the roadmap.** Confirm acceptance criteria, complete
       **Changes from original plan**, mark **Status: frozen / complete**, update
       `agent-os/product/roadmap.md`.
 

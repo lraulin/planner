@@ -853,7 +853,8 @@ dollar is in is working against the point.
   Capital One browser helpers now capture the complete current-cycle posted and
   pending view plus the posted-only headline, so a pending charge posting cannot
   disappear from Budget activity. Posted transitions preserve user filing and splits
-  when safe; browser pending is authoritative for 36 hours before SimpleFIN resumes.
+  when safe; browser pending is authoritative while its capture is more current than the
+  feed's own `balance-date` (the flat 36-hour window was replaced 2026-09-01, below).
   `/finances/activity` is the canonical append-only explanation trail for bank
   snapshots, sync/import, register, account, and Budget money changes. It also replaces
   the capped per-month Budget movement notes after migrating their legacy text.
@@ -869,6 +870,16 @@ dollar is in is working against the point.
   overtakes in the same commit, carrying the envelope, notes and splits forward. A bill
   envelope's payee claim files only that bill's own charge, so a $22.84 CVS trip stops
   spending a $5.00 membership envelope. The register gained a **Source** column.
+  ✅ Source currency shipped 2026-09-01 —
+  `agent-os/specs/2026-09-01-1205-source-as-of-authority/`. Which figure an account shows
+  is now a function of **when each source's data was true**, not of how long ago it was
+  written. SimpleFIN, a browser capture and a file import each keep their own row in
+  `finance_account_source_state` with the instant (or calendar day) it was true, and the
+  headline is derived from whichever is freshest — so a capture stays in force indefinitely
+  while the feed lags, a later `balance-date` takes it back immediately rather than in 36
+  hours, and re-pasting an old clipboard or backfilling from an old export imports the rows
+  without touching the balance. Pending authority follows the same comparison. A sync that
+  reports no `balance-date` now reports none, instead of claiming the read time.
   ✅ Commitments shipped 2026-08-16 —
   `agent-os/specs/2026-08-16-1938-commitments/`. **This closes the envelopes MVP
   item**, under a name chosen because "envelope" promises the every-dollar-gets-a-
@@ -1260,8 +1271,9 @@ period)` so money already spent stops being held twice and only going over bites
   `specs/2026-08-15-1315-live-bank-sync` — SimpleFIN setup-token paste, linked to
   existing accounts, replaceable pending set, no forced refresh. The pending-only
   Capital One and Chase scrapes were superseded 2026-08-29 by complete, fail-closed
-  current-cycle bank snapshots with a 36-hour authority window and audit receipts —
-  `specs/2026-08-29-0845-bank-snapshots-finance-audit`.
+  current-cycle bank snapshots with audit receipts —
+  `specs/2026-08-29-0845-bank-snapshots-finance-audit` — whose 36-hour authority window
+  was itself replaced by per-source as-of stamps on 2026-09-01.
 
 ---
 
