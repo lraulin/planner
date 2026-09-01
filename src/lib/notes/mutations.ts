@@ -29,6 +29,25 @@ async function requireNote(tx: Executor, userId: string, noteId: string) {
   return note;
 }
 
+/**
+ * Open a parent so a newly nested child is actually on screen. Same rule as outline
+ * `expandParent`: Collapse All stamps the flag onto leaves, so a first child would
+ * otherwise hide under a parent that had no expander when it was collapsed.
+ */
+async function expandParent(
+  tx: Executor,
+  userId: string,
+  parentId: string | null,
+): Promise<void> {
+  if (parentId === null) return;
+  await tx
+    .update(notes)
+    .set({ collapsed: false, updatedAt: new Date() })
+    .where(
+      and(eq(notes.id, parentId), eq(notes.userId, userId), eq(notes.collapsed, true)),
+    );
+}
+
 /** Sibling sort keys under `parentId`, in order. */
 async function siblingKeys(
   tx: Executor,
@@ -178,7 +197,10 @@ export async function createNoteOnce(params: {
       .values(row)
       .onConflictDoNothing()
       .returning({ id: notes.id });
-    if (created) return { id: created.id, created: true };
+    if (created) {
+      await expandParent(tx, userId, parentId);
+      return { id: created.id, created: true };
+    }
     if (!external) throw new Error("Note could not be created.");
     const [existing] = await tx
       .select({ id: notes.id })
@@ -286,6 +308,8 @@ export async function moveNote(params: {
       .update(notes)
       .set({ parentId, sortKey, updatedAt: new Date() })
       .where(and(eq(notes.id, noteId), eq(notes.userId, userId)));
+
+    await expandParent(tx, userId, parentId);
   });
 }
 

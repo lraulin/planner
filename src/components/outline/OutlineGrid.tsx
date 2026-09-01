@@ -441,12 +441,16 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
   const addChildOfKind = useCallback(
     (parentId: string, kind: NodeKind) => {
+      // Open now so existing children (and the naming editor) are not sitting under a
+      // closed twisty while the insert round-trips. The mutation persists the same expand.
+      const parent = byId.get(parentId);
+      if (parent?.collapsed) patch(parentId, { collapsed: false });
       apply(
         () => createNodeAction({ parentId, kind, position: { at: "last" } }),
         startNaming,
       );
     },
-    [apply, startNaming],
+    [apply, startNaming, byId, patch],
   );
 
   /**

@@ -350,6 +350,42 @@ describeDb("collapsing notes", () => {
     ]);
   });
 
+  it("creating a child expands a collapsed parent so the child is visible", async () => {
+    const parent = await createNote({ userId, values: { title: "Parent" } });
+    await createNote({ userId, parentId: parent, values: { title: "Existing" } });
+    await setNoteCollapsed(userId, parent, true);
+
+    await createNote({ userId, parentId: parent, values: { title: "New" } });
+
+    const notes = await loadNotes(userId);
+    expect(notes.find((n) => n.id === parent)?.collapsed).toBe(false);
+    expect(notes.find((n) => n.title === "New")?.hidden).toBe(false);
+  });
+
+  it("creating a first child expands a leaf stamped collapsed by Collapse All", async () => {
+    const parent = await createNote({ userId, values: { title: "Parent" } });
+    await setAllNotesCollapsed(userId, true);
+
+    await createNote({ userId, parentId: parent, values: { title: "First" } });
+
+    const notes = await loadNotes(userId);
+    expect(notes.find((n) => n.id === parent)?.collapsed).toBe(false);
+    expect(notes.find((n) => n.title === "First")?.hidden).toBe(false);
+  });
+
+  it("indenting under a collapsed sibling expands it", async () => {
+    const first = await createNote({ userId, values: { title: "First" } });
+    await createNote({ userId, parentId: first, values: { title: "Already" } });
+    const second = await createNote({ userId, values: { title: "Second" } });
+    await setNoteCollapsed(userId, first, true);
+
+    await indentNote(userId, second);
+
+    const notes = await loadNotes(userId);
+    expect(notes.find((n) => n.id === first)?.collapsed).toBe(false);
+    expect(notes.find((n) => n.title === "Second")?.hidden).toBe(false);
+  });
+
   it("collapses everything at once", async () => {
     const parent = await createNote({ userId, values: { title: "Parent" } });
     await createNote({ userId, parentId: parent, values: { title: "Child" } });
@@ -398,6 +434,29 @@ describeDb("user isolation", () => {
 
     const [note] = await loadNotes(owner);
     expect(note.collapsed).toBe(false);
+  });
+
+  it("does not let creating a child expand another user's collapsed parent", async () => {
+    const parent = await createNote({
+      userId: owner,
+      values: { title: "Owner parent" },
+    });
+    await createNote({
+      userId: owner,
+      parentId: parent,
+      values: { title: "Owner child" },
+    });
+    await setNoteCollapsed(owner, parent, true);
+
+    const mine = await createNote({ userId: intruder, values: { title: "Mine" } });
+    await setNoteCollapsed(intruder, mine, true);
+    await createNote({
+      userId: intruder,
+      parentId: mine,
+      values: { title: "Intruder child" },
+    });
+
+    expect((await loadNotes(owner)).find((n) => n.id === parent)?.collapsed).toBe(true);
   });
 
   it("does not let a bulk collapse reach another user's notes", async () => {

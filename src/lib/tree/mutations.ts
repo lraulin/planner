@@ -76,6 +76,28 @@ async function requireNode(tx: Executor, userId: string, nodeId: string) {
   return node;
 }
 
+/**
+ * Open a parent so a newly nested child is actually on screen. Collapse is stored on the
+ * row, and Collapse All stamps the flag onto leaves too, so a first child under a
+ * previously-empty row would otherwise appear and immediately hide.
+ *
+ * No-op when `parentId` is null or the parent is already expanded — the `collapsed = true`
+ * predicate keeps `updatedAt` still when there is nothing to change.
+ */
+async function expandParent(
+  tx: Executor,
+  userId: string,
+  parentId: string | null,
+): Promise<void> {
+  if (parentId === null) return;
+  await tx
+    .update(nodes)
+    .set({ collapsed: false, updatedAt: new Date() })
+    .where(
+      and(eq(nodes.id, parentId), eq(nodes.userId, userId), eq(nodes.collapsed, true)),
+    );
+}
+
 /** Sibling sort keys under `parentId`, in order. */
 async function siblingKeys(
   tx: Executor,
@@ -267,6 +289,8 @@ export async function createNodeOnce(
     } else if (type === "goal") {
       await tx.insert(goalDetails).values({ nodeId: created.id, isDream });
     }
+
+    await expandParent(tx, userId, parentId);
 
     return { id: created.id, created: true };
   });
@@ -1557,6 +1581,10 @@ export async function moveNode(params: {
       .update(nodes)
       .set({ parentId, sortKey, updatedAt: new Date() })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+
+    // Same reason create expands: indent, paste-as-child, and drop-inside would otherwise
+    // file the row under a closed parent and read as the node vanishing.
+    await expandParent(tx, userId, parentId);
 
     // Priority follows the move, so neither group is left with a gap or a collision.
     await applyPriorityAssignments(

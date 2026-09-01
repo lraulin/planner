@@ -869,6 +869,111 @@ describeDb("tree mutations", () => {
       ]);
     });
 
+    it("creating a child expands a collapsed parent so the child is visible", async () => {
+      const area = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Work",
+      });
+      await createNode({ userId, parentId: area, type: "project", name: "Existing" });
+      await setCollapsed(userId, area, true);
+
+      const child = await createNode({
+        userId,
+        parentId: area,
+        type: "project",
+        name: "New",
+      });
+
+      const outline = await loadOutline(userId);
+      expect(outline.find((n) => n.id === area)?.collapsed).toBe(false);
+      expect(outline.find((n) => n.id === child)?.hidden).toBe(false);
+    });
+
+    it("creating a first child expands a leaf stamped collapsed by Collapse All", async () => {
+      // Collapse All writes the flag onto every row, including leaves that have no
+      // expander. Adding the first child would otherwise hide it under a parent that
+      // only became collapsible because of this insert.
+      const area = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Work",
+      });
+      await setAllCollapsed(userId, true);
+
+      const child = await createNode({
+        userId,
+        parentId: area,
+        type: "project",
+        name: "First",
+      });
+
+      const outline = await loadOutline(userId);
+      expect(outline.find((n) => n.id === area)?.collapsed).toBe(false);
+      expect(outline.find((n) => n.id === child)?.hidden).toBe(false);
+    });
+
+    it("indenting under a collapsed sibling expands it", async () => {
+      const area = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Work",
+      });
+      const one = await createNode({
+        userId,
+        parentId: area,
+        type: "project",
+        name: "One",
+      });
+      await createNode({ userId, parentId: one, type: "task", name: "Already" });
+      const two = await createNode({
+        userId,
+        parentId: area,
+        type: "project",
+        name: "Two",
+      });
+      await setCollapsed(userId, one, true);
+
+      await indentNode(userId, two);
+
+      const outline = await loadOutline(userId);
+      expect(outline.find((n) => n.id === one)?.collapsed).toBe(false);
+      expect(outline.find((n) => n.id === two)?.hidden).toBe(false);
+    });
+
+    it("creating a child does not expand another user's collapsed parent", async () => {
+      const other = await makeUser();
+      const theirs = await createNode({
+        userId: other,
+        parentId: null,
+        type: "result_area",
+        name: "Theirs",
+      });
+      await createNode({
+        userId: other,
+        parentId: theirs,
+        type: "project",
+        name: "TP",
+      });
+      await setCollapsed(other, theirs, true);
+
+      const mine = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Mine",
+      });
+      await setCollapsed(userId, mine, true);
+      await createNode({ userId, parentId: mine, type: "project", name: "MP" });
+
+      expect((await loadOutline(other)).find((n) => n.id === theirs)?.collapsed).toBe(
+        true,
+      );
+    });
+
     it("setAllCollapsed does not touch another user's tree", async () => {
       const other = await makeUser();
       const area = await createNode({

@@ -493,6 +493,10 @@ export function NotesGrid({
               }
             : { parentId: null, position: { at: "last" as const } };
 
+      if (where === "child" && selected?.collapsed) {
+        patch(selected.id, { collapsed: false });
+      }
+
       setError(null);
       startTransition(async () => {
         const result = await createNoteAction(params);
@@ -509,7 +513,7 @@ export function NotesGrid({
         }
       });
     },
-    [selected, setUrlNoteId, selectOne],
+    [selected, setUrlNoteId, selectOne, patch],
   );
 
   const columnCtx: NotesColumnCtx = useMemo(
