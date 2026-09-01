@@ -231,10 +231,7 @@ async function registerContext(userId: string, rawQuery?: unknown) {
           (
             await loadWorkingPendingSelection(
               userId,
-              accounts.map((account) => ({
-                id: account.id,
-                browserPendingAsOf: account.browserPendingAsOf,
-              })),
+              accounts,
             )
           ).supersededTransactionIds,
         )

@@ -23,12 +23,7 @@ export async function captureFinanceMoneyCheckpoint(
   at: Date = new Date(),
 ): Promise<FinanceMoneyCheckpoint> {
   const accounts = await listAccounts(userId, executor);
-  const pending = await loadWorkingPendingSelection(
-    userId,
-    accounts,
-    at.getTime(),
-    executor,
-  );
+  const pending = await loadWorkingPendingSelection(userId, accounts, executor);
   const wantedAccounts = scope.accountIds ? new Set(scope.accountIds) : null;
 
   const accountCheckpoints = accounts

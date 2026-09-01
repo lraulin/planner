@@ -120,9 +120,10 @@ export function DashboardView({
   ).length;
   const { position, payday, stale } = analysis;
   const openAccounts = accounts.filter((account) => account.closedAt === null);
-  // Only a capture that still holds rows out of the money is worth asking about. Expiry
-  // alone never clears, so keying the ask to the timestamp nagged forever on a card whose
-  // pending SimpleFIN already reports — including a card with no pending activity at all.
+  // Only a capture the feed has overtaken *and* whose rows are still being held out of the
+  // money is worth asking about. A capture is never un-recorded, so keying the ask to the
+  // timestamp nagged forever on a card whose pending SimpleFIN already reports — including
+  // a card with no pending activity at all.
   const withheldIds = new Set(withheldBrowserPendingAccountIds);
   const staleSnapshotAccountNames = accounts
     .filter((account) => withheldIds.has(account.id))

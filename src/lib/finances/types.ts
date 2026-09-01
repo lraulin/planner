@@ -1,4 +1,5 @@
 import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
+import type { SourceStamp } from "./sourceAuthority";
 
 /**
  * Which feed a row came from. A string union rather than a database enum because adding a
@@ -209,10 +210,12 @@ export type FinanceAccountRow = {
   /** When the live balance was read, or null for an account with no bank connection. */
   syncedBalanceAsOf: Date | null;
   /**
-   * When the latest complete browser pending snapshot was captured. The dashboard prefers
-   * browser pending while this authority is fresh, because SimpleFIN can sit a day behind.
+   * When the latest complete browser capture was taken, and when the feed's own figure was
+   * true. The dashboard prefers browser pending while the capture is the more current of
+   * the two, because SimpleFIN can sit a day behind — see `sourceAuthority.ts`.
    */
-  browserPendingAsOf: Date | null;
+  browserAsOf: SourceStamp | null;
+  feedAsOf: SourceStamp | null;
   transactionCount: number;
 };
 

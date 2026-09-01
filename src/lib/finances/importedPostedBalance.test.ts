@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   importedPostedHeadline,
-  insertedCentsOnOrAfter,
   latestRunningBalance,
   postedActivityDate,
   type RunningBalanceRow,
@@ -113,59 +112,34 @@ describe("latestRunningBalance", () => {
   });
 });
 
-describe("insertedCentsOnOrAfter", () => {
-  it("counts a Chase purchase by posting day, not purchase day", () => {
-    expect(
-      insertedCentsOnOrAfter(
-        [
-          {
-            transactionDate: "2026-08-28",
-            postedDate: "2026-08-31",
-            amountCents: -1_059,
-          },
-          {
-            transactionDate: "2026-08-20",
-            postedDate: "2026-08-21",
-            amountCents: -500,
-          },
-        ],
-        "2026-08-30",
-      ),
-    ).toBe(-1_059);
-  });
-});
-
 describe("importedPostedHeadline", () => {
   const synced = { balanceCents: 1_125_746, asOfDate: "2026-08-25" };
 
-  it("writes the file's running balance when it is as new as the live snapshot", () => {
+  it("reports the file's running balance as of the file's newest data day", () => {
     expect(
       importedPostedHeadline({
         linked: synced,
         running: { asOfDate: "2026-08-31", cents: 1_625_746 },
-        insertedCentsOnOrAfterAsOf: 500_000,
+        inserted: [],
       }),
-    ).toEqual({ cents: 1_625_746, source: "running-balance" });
+    ).toEqual({
+      cents: 1_625_746,
+      asOfDay: "2026-08-31",
+      source: "running-balance",
+    });
   });
 
-  it("still writes the running balance when every row was already in the register", () => {
-    expect(
-      importedPostedHeadline({
-        linked: synced,
-        running: { asOfDate: "2026-08-31", cents: 1_625_746 },
-        insertedCentsOnOrAfterAsOf: 0,
-      }),
-    ).toEqual({ cents: 1_625_746, source: "running-balance" });
-  });
-
-  it("does not rewind the live snapshot from an older statement running balance", () => {
+  it("reports a running balance older than the live snapshot rather than refusing", () => {
+    // The refusal used to live here as a second, weaker copy of the freshness comparison.
+    // The file genuinely reported this figure for 2026-07-31; `sourceAuthority.ts` is what
+    // decides it does not outrank a newer source, and it decides that for all three paths.
     expect(
       importedPostedHeadline({
         linked: synced,
         running: { asOfDate: "2026-07-31", cents: 47_145 },
-        insertedCentsOnOrAfterAsOf: 0,
+        inserted: [],
       }),
-    ).toBeNull();
+    ).toEqual({ cents: 47_145, asOfDay: "2026-07-31", source: "running-balance" });
   });
 
   it("adds newly imported posted amounts when the file has no running balance", () => {
@@ -173,37 +147,90 @@ describe("importedPostedHeadline", () => {
       importedPostedHeadline({
         linked: { balanceCents: -5_978, asOfDate: "2026-08-16" },
         running: null,
-        insertedCentsOnOrAfterAsOf: -37_968,
+        inserted: [
+          { transactionDate: "2026-08-17", postedDate: null, amountCents: -37_968 },
+        ],
       }),
-    ).toEqual({ cents: -43_946, source: "inserted-delta" });
+    ).toEqual({ cents: -43_946, asOfDay: "2026-08-17", source: "inserted-delta" });
   });
 
-  it("does not invent a headline for an account SimpleFIN has never synced", () => {
+  it("dates the delta by the newest posting day it added, not by purchase day", () => {
     expect(
       importedPostedHeadline({
-        linked: { balanceCents: null, asOfDate: null },
-        running: { asOfDate: "2026-08-31", cents: 1_625_746 },
-        insertedCentsOnOrAfterAsOf: 500_000,
+        linked: { balanceCents: -5_978, asOfDate: "2026-08-16" },
+        running: null,
+        inserted: [
+          {
+            transactionDate: "2026-08-17",
+            postedDate: "2026-08-20",
+            amountCents: -1_000,
+          },
+          {
+            transactionDate: "2026-08-18",
+            postedDate: "2026-08-19",
+            amountCents: -2_000,
+          },
+        ],
+      }),
+    ).toEqual({ cents: -8_978, asOfDay: "2026-08-20", source: "inserted-delta" });
+  });
+
+  it("ignores rows the feed's own snapshot already covers", () => {
+    expect(
+      importedPostedHeadline({
+        linked: synced,
+        running: null,
+        inserted: [
+          { transactionDate: "2026-08-20", postedDate: null, amountCents: -500 },
+        ],
       }),
     ).toBeNull();
   });
 
-  it("leaves an unlinked account on its statement or ledger headline", () => {
+  it("cannot derive a delta for an account SimpleFIN has never synced", () => {
+    // Without the feed's figure there is nothing to add the new rows to.
+    expect(
+      importedPostedHeadline({
+        linked: { balanceCents: null, asOfDate: null },
+        running: null,
+        inserted: [
+          { transactionDate: "2026-08-31", postedDate: null, amountCents: -500 },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("still reports a running balance for an account with no bank link", () => {
+    // Source rows are keyed on the account, so a file records what it saw with or without
+    // a link; whether there is a headline to move is the writer's problem, not this rule's.
     expect(
       importedPostedHeadline({
         linked: null,
         running: { asOfDate: "2026-08-31", cents: 1_625_746 },
-        insertedCentsOnOrAfterAsOf: 500_000,
+        inserted: [],
       }),
+    ).toEqual({
+      cents: 1_625_746,
+      asOfDay: "2026-08-31",
+      source: "running-balance",
+    });
+  });
+
+  it("reports nothing when a file with no running balance adds nothing new", () => {
+    expect(
+      importedPostedHeadline({ linked: synced, running: null, inserted: [] }),
     ).toBeNull();
   });
 
-  it("does not write when the file already agrees with SimpleFIN", () => {
+  it("reports nothing when the new rows cancel out", () => {
     expect(
       importedPostedHeadline({
         linked: synced,
-        running: { asOfDate: "2026-08-31", cents: 1_125_746 },
-        insertedCentsOnOrAfterAsOf: 500_000,
+        running: null,
+        inserted: [
+          { transactionDate: "2026-08-31", postedDate: null, amountCents: 500 },
+          { transactionDate: "2026-08-31", postedDate: null, amountCents: -500 },
+        ],
       }),
     ).toBeNull();
   });

@@ -60,14 +60,15 @@ import { defaultOffBudget } from "./accountKind";
 import { includeNewOnBudgetAccount } from "./budget/membership";
 import { bankRows } from "./splitRows";
 import { retireCoveredScrapeRows } from "./feedHandoverWrite";
+import { recordSourceState } from "./sourceStateWrite";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import type { FinanceAuditChange } from "./audit/types";
 import { financeAuditBatchId, writeFinanceAuditEvent } from "./audit/writes";
 import { monthKeyOf } from "./budget/envelope";
 import {
   importedPostedHeadline,
-  insertedCentsOnOrAfter,
   latestRunningBalance,
+  type PostedActivityRow,
 } from "./importedPostedBalance";
 
 /**
@@ -187,28 +188,23 @@ async function markClosedIfNeeded(
 }
 
 /**
- * Advance a lagged SimpleFIN headline from this file. No-op when the account is not
- * linked, has never synced, or the file is older than the live snapshot.
+ * Record what this file says the account's posted balance is, as of its own newest data day.
+ *
+ * The file writes only its own stamp. A CSV whose newest data day predates the stored
+ * stamp still imports every row — backfill from an old export is legitimate and the feed
+ * watermark already decides ownership — and simply does not move the headline (D4).
  */
-async function holdLinkedPostedHeadline(
+async function recordImportedPostedHeadline(
   tx: Executor,
   userId: string,
   accountId: string,
   fileRows: readonly ParsedTransaction[],
-  inserted: readonly {
-    transactionDate: string;
-    postedDate: string | null;
-    amountCents: number;
-  }[],
-  capturedAt: Date,
-): Promise<FinanceAuditChange | null> {
+  inserted: readonly PostedActivityRow[],
+): Promise<{ changes: FinanceAuditChange[]; withheld: boolean }> {
   const [link] = await tx
     .select({
-      id: bankAccountLinks.id,
       balanceCents: bankAccountLinks.balanceCents,
       balanceAsOf: bankAccountLinks.balanceAsOf,
-      provisionalBalanceAsOf: bankAccountLinks.provisionalBalanceAsOf,
-      browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
     })
     .from(bankAccountLinks)
     .where(
@@ -218,51 +214,31 @@ async function holdLinkedPostedHeadline(
       ),
     )
     .limit(1);
-  if (!link) return null;
 
-  const asOfDate = link.balanceAsOf ? toDateKey(link.balanceAsOf) : null;
   const headline = importedPostedHeadline({
-    linked: { balanceCents: link.balanceCents, asOfDate },
+    linked: link
+      ? {
+          balanceCents: link.balanceCents,
+          asOfDate: link.balanceAsOf ? toDateKey(link.balanceAsOf) : null,
+        }
+      : null,
     running: latestRunningBalance(fileRows),
-    insertedCentsOnOrAfterAsOf:
-      asOfDate === null ? 0 : insertedCentsOnOrAfter(inserted, asOfDate),
+    inserted,
   });
-  if (!headline) return null;
+  if (!headline) return { changes: [], withheld: false };
 
-  const updated = await tx
-    .update(bankAccountLinks)
-    .set({
-      balanceCents: headline.cents,
-      balanceAsOf: capturedAt,
-      provisionalBalanceAsOf: capturedAt,
-      updatedAt: capturedAt,
-    })
-    .where(
-      and(
-        eq(bankAccountLinks.id, link.id),
-        eq(bankAccountLinks.userId, userId),
-        eq(bankAccountLinks.accountId, accountId),
-      ),
-    )
-    .returning({ id: bankAccountLinks.id });
-  if (updated.length === 0) return null;
-
+  const authority = await recordSourceState(tx, userId, accountId, {
+    source: "file",
+    balanceCents: headline.cents,
+    availableCents: null,
+    // Files carry no instant, only the day their newest data is from.
+    asOf: null,
+    asOfDay: headline.asOfDay,
+  });
   return {
-    entityType: "bank_balance",
-    entityIdentity: link.id,
-    before: {
-      balanceCents: link.balanceCents,
-      balanceAsOf: link.balanceAsOf?.toISOString() ?? null,
-      provisionalBalanceAsOf: link.provisionalBalanceAsOf?.toISOString() ?? null,
-      browserPendingAsOf: link.browserPendingAsOf?.toISOString() ?? null,
-    },
-    after: {
-      balanceCents: headline.cents,
-      balanceAsOf: capturedAt.toISOString(),
-      provisionalBalanceAsOf: capturedAt.toISOString(),
-      browserPendingAsOf: link.browserPendingAsOf?.toISOString() ?? null,
-      source: headline.source,
-    },
+    changes: authority.changes,
+    // No link means no headline to move, which is not something a receipt should report.
+    withheld: !authority.headlineMoved && authority.headlineSource !== null,
   };
 }
 
@@ -711,18 +687,23 @@ export async function importFinanceCsvFiles({
           }
         }
 
-        const headlineChange = await holdLinkedPostedHeadline(
+        const headline = await recordImportedPostedHeadline(
           tx,
           userId,
           resolved.id,
           account.transactions,
           insertedMoney,
-          new Date(),
         );
 
         // A file import advances the same watermark a sync does, so it hands the same days
         // over from the browser capture — in this transaction, for the same reason (D3).
         const handover = await retireCoveredScrapeRows(tx, userId, resolved.id);
+
+        const headlineWarnings = headline.withheld
+          ? [
+              `${account.externalKey}: a more current figure is already in force, so this file's rows were imported but the balance was left alone.`,
+            ]
+          : [];
 
         const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
         const changes: FinanceAuditChange[] = [
@@ -742,7 +723,7 @@ export async function importFinanceCsvFiles({
               ]
             : []),
           ...transactionChanges,
-          ...(headlineChange ? [headlineChange] : []),
+          ...headline.changes,
           ...snapshotCounts.changes,
           ...handover.changes,
         ];
@@ -758,7 +739,11 @@ export async function importFinanceCsvFiles({
               ? `; retired ${handover.retired} browser row${handover.retired === 1 ? "" : "s"} this file now covers.`
               : "."),
           scope,
-          warnings: [...errors.map((error) => error.message), ...handover.warnings],
+          warnings: [
+            ...errors.map((error) => error.message),
+            ...handover.warnings,
+            ...headlineWarnings,
+          ],
           sourceEvidence: importEvidence(file, feed),
           beforeCheckpoint,
           afterCheckpoint,
@@ -773,7 +758,7 @@ export async function importFinanceCsvFiles({
           skipped: skipCount + (values.length - inserted),
           statementsCreated: snapshotCounts.created,
           statementsSkipped: snapshotCounts.skipped,
-          handoverWarnings: handover.warnings,
+          handoverWarnings: [...handover.warnings, ...headlineWarnings],
           auditBatchId: audit.batchId,
         };
       });

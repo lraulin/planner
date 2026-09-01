@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { BROWSER_PENDING_AUTHORITY_MS } from "./browserPendingAuthority";
+import type { SourceStamp } from "./sourceAuthority";
 import {
   selectWorkingPending,
   withheldBrowserPendingAccountIds,
 } from "./workingPending";
 
-const NOW = Date.parse("2026-08-18T16:00:00Z");
+const at = (iso: string): SourceStamp => ({ asOf: new Date(iso), asOfDay: null });
+
+/** The feed's stamp on a card synced this morning; captures below are compared against it. */
+const FEED = at("2026-08-18T09:00:00Z");
 
 function row(
   accountId: string,
@@ -16,17 +19,16 @@ function row(
 }
 
 describe("selectWorkingPending", () => {
-  it("keeps SimpleFIN pending when no scrape has landed", () => {
+  it("keeps SimpleFIN pending when no capture has landed", () => {
     expect(
       selectWorkingPending(
         [row("chase", "api:simplefin", -5905)],
-        [{ id: "chase", browserPendingAsOf: null }],
-        NOW,
+        [{ id: "chase", browserAsOf: null, feedAsOf: FEED }],
       ),
     ).toEqual([row("chase", "api:simplefin", -5905)]);
   });
 
-  it("uses only browser pending while that account's snapshot is authoritative", () => {
+  it("uses only browser pending on the account whose capture is the more current", () => {
     const selected = selectWorkingPending(
       [
         row("chase", "api:simplefin", -5905),
@@ -34,37 +36,62 @@ describe("selectWorkingPending", () => {
         row("capone", "scrape:capitalone", -1691),
       ],
       [
-        { id: "chase", browserPendingAsOf: new Date(NOW) },
-        { id: "capone", browserPendingAsOf: null },
+        { id: "chase", browserAsOf: at("2026-08-18T16:00:00Z"), feedAsOf: FEED },
+        { id: "capone", browserAsOf: null, feedAsOf: FEED },
       ],
-      NOW,
     );
     expect(selected).toEqual([row("chase", "scrape:chase", -2284)]);
   });
 
-  it("treats an empty scrape inside the hold as no pending", () => {
+  it("treats an empty capture as no pending while it is the more current", () => {
     expect(
       selectWorkingPending(
         [row("chase", "api:simplefin", -5905)],
-        [{ id: "chase", browserPendingAsOf: new Date(NOW - 60_000) }],
-        NOW,
+        [{ id: "chase", browserAsOf: at("2026-08-18T16:00:00Z"), feedAsOf: FEED }],
       ),
     ).toEqual([]);
   });
 
-  it("excludes stale browser pending and resumes SimpleFIN after expiry", () => {
+  it("keeps a two-day-old capture authoritative while the feed is further behind", () => {
+    // The regression: under the flat 36-hour window this capture had expired and its rows
+    // silently stopped counting, even though nothing fresher had arrived to replace them.
     expect(
       selectWorkingPending(
         [row("chase", "api:simplefin", -5905), row("chase", "scrape:chase", -2284)],
         [
           {
             id: "chase",
-            browserPendingAsOf: new Date(NOW - BROWSER_PENDING_AUTHORITY_MS - 1),
+            browserAsOf: at("2026-08-16T16:00:00Z"),
+            feedAsOf: at("2026-08-14T09:00:00Z"),
           },
         ],
-        NOW,
+      ),
+    ).toEqual([row("chase", "scrape:chase", -2284)]);
+  });
+
+  it("hands pending back the moment the feed reports later", () => {
+    // And the other direction: an hour after the capture, not 36 hours after.
+    expect(
+      selectWorkingPending(
+        [row("chase", "api:simplefin", -5905), row("chase", "scrape:chase", -2284)],
+        [
+          {
+            id: "chase",
+            browserAsOf: at("2026-08-18T08:00:00Z"),
+            feedAsOf: at("2026-08-18T09:00:00Z"),
+          },
+        ],
       ),
     ).toEqual([row("chase", "api:simplefin", -5905)]);
+  });
+
+  it("gives an unsynced account's pending to the capture", () => {
+    expect(
+      selectWorkingPending(
+        [row("capone", "scrape:capitalone", -1691)],
+        [{ id: "capone", browserAsOf: at("2026-08-18T16:00:00Z"), feedAsOf: null }],
+      ),
+    ).toEqual([row("capone", "scrape:capitalone", -1691)]);
   });
 
   it("retains the reported $240.30 browser set independently of headline precedence", () => {
@@ -76,8 +103,7 @@ describe("selectWorkingPending", () => {
 
     const selected = selectWorkingPending(
       [...browserRows, row("capone", "api:simplefin", -1271)],
-      [{ id: "capone", browserPendingAsOf: new Date(NOW) }],
-      NOW,
+      [{ id: "capone", browserAsOf: at("2026-08-18T16:00:00Z"), feedAsOf: FEED }],
     );
 
     expect(selected).toEqual(browserRows);
@@ -88,48 +114,42 @@ describe("selectWorkingPending", () => {
 });
 
 describe("withheldBrowserPendingAccountIds", () => {
-  const EXPIRED = new Date(NOW - BROWSER_PENDING_AUTHORITY_MS - 1);
+  /** A capture the feed has since overtaken. */
+  const superseded = { browserAsOf: at("2026-08-18T08:00:00Z"), feedAsOf: FEED };
 
-  it("reports an expired capture whose rows are excluded from the money", () => {
+  it("reports a superseded capture whose rows are excluded from the money", () => {
     expect(
       withheldBrowserPendingAccountIds(
         [row("chase", "api:simplefin", -5905), row("chase", "scrape:chase", -2284)],
-        [{ id: "chase", browserPendingAsOf: EXPIRED }],
-        NOW,
+        [{ id: "chase", ...superseded }],
       ),
     ).toEqual(["chase"]);
   });
 
-  it("stays silent when an expired capture holds nothing back", () => {
+  it("stays silent when a superseded capture holds nothing back", () => {
     // The reported case: the card has no pending activity at all, so SimpleFIN already
     // reports everything a fresh capture could and the ask has no effect.
     expect(
-      withheldBrowserPendingAccountIds(
-        [],
-        [{ id: "chase", browserPendingAsOf: EXPIRED }],
-        NOW,
-      ),
+      withheldBrowserPendingAccountIds([], [{ id: "chase", ...superseded }]),
     ).toEqual([]);
     expect(
       withheldBrowserPendingAccountIds(
         [row("chase", "api:simplefin", -5905)],
-        [{ id: "chase", browserPendingAsOf: EXPIRED }],
-        NOW,
+        [{ id: "chase", ...superseded }],
       ),
     ).toEqual([]);
   });
 
-  it("stays silent while the capture is still authoritative", () => {
+  it("stays silent while the capture is still the more current", () => {
     expect(
       withheldBrowserPendingAccountIds(
         [row("chase", "scrape:chase", -2284)],
-        [{ id: "chase", browserPendingAsOf: new Date(NOW - 60_000) }],
-        NOW,
+        [{ id: "chase", browserAsOf: at("2026-08-18T16:00:00Z"), feedAsOf: FEED }],
       ),
     ).toEqual([]);
   });
 
-  it("names each expired card once and leaves never-captured cards alone", () => {
+  it("names each superseded card once and leaves never-captured cards alone", () => {
     expect(
       withheldBrowserPendingAccountIds(
         [
@@ -138,10 +158,9 @@ describe("withheldBrowserPendingAccountIds", () => {
           row("chase", "api:simplefin", -5905),
         ],
         [
-          { id: "capone", browserPendingAsOf: EXPIRED },
-          { id: "chase", browserPendingAsOf: null },
+          { id: "capone", ...superseded },
+          { id: "chase", browserAsOf: null, feedAsOf: FEED },
         ],
-        NOW,
       ),
     ).toEqual(["capone"]);
   });

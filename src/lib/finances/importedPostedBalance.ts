@@ -3,8 +3,10 @@
  * posted number, so new CSV rows would otherwise show up as income without cash — Ready
  * to Assign rises, then account reconciliation swallows it.
  *
- * Same hold as a browser scrape: write the posted figure onto the link and keep it until
- * SimpleFIN reports the same cents or 36 hours pass (`provisionalBalance.ts`).
+ * What this module answers is **what posted figure the file implies and what day it was
+ * true**. Whether that figure outranks the other sources is not its business: it reports
+ * the file's own stamp and `sourceAuthority.ts` ranks it. Its previous
+ * `running.asOfDate >= asOfDate` gate was a second, weaker copy of that comparison.
  */
 
 export type LinkedPostedHeadline = {
@@ -15,13 +17,19 @@ export type LinkedPostedHeadline = {
 
 export type ImportedPostedHeadline = {
   cents: number;
+  /** The newest data day the figure is true as of. Files carry no instant. */
+  asOfDay: string;
   source: "running-balance" | "inserted-delta";
 };
 
-export type RunningBalanceRow = {
+/** A row dated on both axes, carrying its signed amount. */
+export type PostedActivityRow = {
   transactionDate: string;
   postedDate: string | null;
   amountCents: number;
+};
+
+export type RunningBalanceRow = PostedActivityRow & {
   balanceAfterCents: number | null;
 };
 
@@ -68,43 +76,44 @@ export function latestRunningBalance(
   return { asOfDate: latestDate, cents: heads[0].balanceAfterCents };
 }
 
-/** Newly inserted posted amounts the aggregator has not yet folded into its snapshot. */
-export function insertedCentsOnOrAfter(
-  rows: readonly {
-    transactionDate: string;
-    postedDate: string | null;
-    amountCents: number;
-  }[],
-  asOfDate: string,
-): number {
-  let total = 0;
-  for (const row of rows) {
-    if (postedActivityDate(row) >= asOfDate) total += row.amountCents;
-  }
-  return total;
-}
-
 /**
- * The posted headline a file import should write onto a SimpleFIN-linked account, or
- * null when the live snapshot is already the authority (unlinked, never synced, or the
- * file is older than the snapshot).
+ * The posted figure this file reports, and the day it is true as of.
+ *
+ * Two ways a file can say what the bank's balance is:
+ *
+ * - A **running-balance** column states it outright, as of the file's newest data day.
+ * - Otherwise the file only implies it: take the feed's last posted figure and add the
+ *   rows this import inserted on or after the feed's own as-of day, which the feed has
+ *   not folded in yet. That derivation needs the feed's figure, so it is only available on
+ *   a linked, synced account — and it is true as of the newest day it added.
+ *
+ * Null when the file says nothing new. Whether the result outranks the other sources is
+ * decided by `sourceAuthority.ts`, not here.
  */
 export function importedPostedHeadline(input: {
   linked: LinkedPostedHeadline | null;
   running: { asOfDate: string; cents: number } | null;
-  insertedCentsOnOrAfterAsOf: number;
+  inserted: readonly PostedActivityRow[];
 }): ImportedPostedHeadline | null {
+  if (input.running !== null) {
+    return {
+      cents: input.running.cents,
+      asOfDay: input.running.asOfDate,
+      source: "running-balance",
+    };
+  }
   if (input.linked === null) return null;
   const { balanceCents, asOfDate } = input.linked;
   if (balanceCents === null || asOfDate === null) return null;
 
-  if (input.running !== null && input.running.asOfDate >= asOfDate) {
-    if (input.running.cents === balanceCents) return null;
-    return { cents: input.running.cents, source: "running-balance" };
-  }
-  if (input.insertedCentsOnOrAfterAsOf === 0) return null;
-  return {
-    cents: balanceCents + input.insertedCentsOnOrAfterAsOf,
-    source: "inserted-delta",
-  };
+  const added = input.inserted.filter((row) => postedActivityDate(row) >= asOfDate);
+  if (added.length === 0) return null;
+  const cents = added.reduce((total, row) => total + row.amountCents, balanceCents);
+  if (cents === balanceCents) return null;
+  const asOfDay = added.reduce(
+    (latest, row) =>
+      postedActivityDate(row) > latest ? postedActivityDate(row) : latest,
+    asOfDate,
+  );
+  return { cents, asOfDay, source: "inserted-delta" };
 }

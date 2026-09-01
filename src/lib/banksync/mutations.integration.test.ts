@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { listAccounts } from "@/lib/finances/queries";
+import { recordSourceState } from "@/lib/finances/sourceStateWrite";
 import { loadSelectedWorkingPending } from "@/lib/finances/workingPendingQuery";
 import {
   applySync,
@@ -520,7 +521,7 @@ describeDb("balance precedence in the register", () => {
     expect(account.balanceCents).toBe(-41000);
   });
 
-  it("clears a caught-up provisional balance without revoking browser pending authority", async () => {
+  it("keeps the capture's pending set when a sync arrives with an older balance-date", async () => {
     const userId = await makeUser();
     const connectionId = await saveConnection(userId, {
       accessUrl: "https://a:b@x.test",
@@ -531,15 +532,14 @@ describeDb("balance precedence in the register", () => {
       externalAccountId: "capital-one",
       accountId,
     });
-    const capturedAt = new Date();
-    await db
-      .update(bankAccountLinks)
-      .set({
-        balanceCents: -24_030,
-        provisionalBalanceAsOf: capturedAt,
-        browserPendingAsOf: capturedAt,
-      })
-      .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)));
+    const capturedAt = new Date("2026-08-31T18:00:00Z");
+    await recordSourceState(db, userId, accountId, {
+      source: "browser",
+      balanceCents: -24_030,
+      availableCents: null,
+      asOf: capturedAt,
+      asOfDay: null,
+    });
     await db.insert(financeTransactions).values([
       {
         userId,
@@ -570,29 +570,118 @@ describeDb("balance precedence in the register", () => {
       },
     ]);
 
+    // The feed's own balance-date is two days behind the capture, so it must not take the
+    // headline or the pending set — indefinitely, not for 36 hours.
     await saveBalance(userId, {
       linkId,
-      balanceCents: -24_030,
+      balanceCents: -12_710,
       availableCents: null,
-      asOf: new Date(),
+      asOf: new Date("2026-08-29T09:00:00Z"),
     });
 
     const [link] = await db
       .select({
-        provisionalBalanceAsOf: bankAccountLinks.provisionalBalanceAsOf,
-        browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
+        balanceCents: bankAccountLinks.balanceCents,
+        balanceAsOf: bankAccountLinks.balanceAsOf,
+        balanceSource: bankAccountLinks.balanceSource,
       })
       .from(bankAccountLinks)
       .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)));
-    expect(link.provisionalBalanceAsOf).toBeNull();
-    expect(link.browserPendingAsOf).toEqual(capturedAt);
-    const selected = await loadSelectedWorkingPending(
-      userId,
-      [{ id: accountId, browserPendingAsOf: link.browserPendingAsOf }],
-      capturedAt.getTime(),
-    );
+    expect(link.balanceCents).toBe(-24_030);
+    expect(link.balanceAsOf).toEqual(capturedAt);
+    expect(link.balanceSource).toBe("browser");
+
+    const selected = await loadSelectedWorkingPending(userId, [
+      {
+        id: accountId,
+        browserAsOf: { asOf: capturedAt, asOfDay: null },
+        feedAsOf: { asOf: new Date("2026-08-29T09:00:00Z"), asOfDay: null },
+      },
+    ]);
     expect(selected.map((row) => row.amountCents)).toEqual([-1271, -1948, -20811]);
     expect(selected.reduce((sum, row) => sum + row.amountCents, 0)).toBe(-24030);
+  });
+
+  it("hands the headline back the moment the feed reports later than the capture", async () => {
+    const userId = await makeUser();
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const accountId = await makeAccount(userId, "2404");
+    const linkId = await linkAccount(userId, {
+      connectionId,
+      externalAccountId: "capital-one-b",
+      accountId,
+    });
+    await recordSourceState(db, userId, accountId, {
+      source: "browser",
+      balanceCents: -24_030,
+      availableCents: null,
+      asOf: new Date("2026-08-31T18:00:00Z"),
+      asOfDay: null,
+    });
+
+    const syncedAt = new Date("2026-08-31T19:00:00Z");
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: -25_000,
+      availableCents: null,
+      asOf: syncedAt,
+    });
+
+    const [link] = await db
+      .select({
+        balanceCents: bankAccountLinks.balanceCents,
+        balanceAsOf: bankAccountLinks.balanceAsOf,
+        balanceSource: bankAccountLinks.balanceSource,
+      })
+      .from(bankAccountLinks)
+      .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)));
+    expect(link.balanceCents).toBe(-25_000);
+    expect(link.balanceAsOf).toEqual(syncedAt);
+    expect(link.balanceSource).toBe("feed");
+  });
+
+  it("never lets an undated sync response displace a dated source", async () => {
+    const userId = await makeUser();
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const accountId = await makeAccount(userId, "2405");
+    const linkId = await linkAccount(userId, {
+      connectionId,
+      externalAccountId: "capital-one-c",
+      accountId,
+    });
+    const capturedAt = new Date("2026-08-31T18:00:00Z");
+    await recordSourceState(db, userId, accountId, {
+      source: "browser",
+      balanceCents: -24_030,
+      availableCents: null,
+      asOf: capturedAt,
+      asOfDay: null,
+    });
+
+    // SimpleFIN returned no `balance-date`. Stamping it "now" is what used to make a stale
+    // figure look like the most current thing on the account.
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: -1,
+      availableCents: null,
+      asOf: null,
+    });
+
+    const [link] = await db
+      .select({
+        balanceCents: bankAccountLinks.balanceCents,
+        balanceAsOf: bankAccountLinks.balanceAsOf,
+        balanceSource: bankAccountLinks.balanceSource,
+      })
+      .from(bankAccountLinks)
+      .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)));
+    expect(link.balanceCents).toBe(-24_030);
+    expect(link.balanceAsOf).toEqual(capturedAt);
+    expect(link.balanceSource).toBe("browser");
   });
 });
 

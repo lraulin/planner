@@ -631,6 +631,20 @@
       "when": 1788204385076,
       "tag": "0089_perpetual_prima",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1788284551614,
+      "tag": "0090_robust_hulk",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1788284572408,
+      "tag": "0091_outstanding_mandarin",
+      "breakpoints": true
     }
   ]
 }

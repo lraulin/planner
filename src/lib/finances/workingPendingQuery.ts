@@ -20,10 +20,9 @@ import {
 export async function loadSelectedWorkingPending(
   userId: string,
   accounts: readonly WorkingPendingAccount[],
-  nowMs: number = Date.now(),
   executor: FinanceExecutor = db,
 ): Promise<PendingRow[]> {
-  return (await loadWorkingPendingSelection(userId, accounts, nowMs, executor)).rows;
+  return (await loadWorkingPendingSelection(userId, accounts, executor)).rows;
 }
 
 export type WorkingPendingSelection = {
@@ -47,7 +46,6 @@ export type WorkingPendingSelection = {
 export async function loadWorkingPendingSelection(
   userId: string,
   accounts: readonly WorkingPendingAccount[],
-  nowMs: number = Date.now(),
   executor: FinanceExecutor = db,
 ): Promise<WorkingPendingSelection> {
   const pendingRows = await executor
@@ -71,7 +69,7 @@ export async function loadWorkingPendingSelection(
     amountCents: numericStringToCents(row.amount) ?? 0,
     source: row.source ?? "",
   }));
-  const selected = selectWorkingPending(candidates, accounts, nowMs);
+  const selected = selectWorkingPending(candidates, accounts);
   const selectedIds = new Set(selected.map((row) => row.id));
 
   return {
@@ -85,7 +83,6 @@ export async function loadWorkingPendingSelection(
     withheldBrowserPendingAccountIds: withheldBrowserPendingAccountIds(
       candidates,
       accounts,
-      nowMs,
     ),
   };
 }

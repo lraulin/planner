@@ -350,11 +350,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
         and(eq(financePayees.userId, userId), eq(financePayees.notACommitment, true)),
       ),
   ]);
-  const pendingSelection = await loadWorkingPendingSelection(
-    userId,
-    accounts,
-    loadedAtMs,
-  );
+  const pendingSelection = await loadWorkingPendingSelection(userId, accounts);
 
   // One index, built once, and the only route from a bank string to a bill envelope. Resolving
   // per panel is how a merchant ends up folded into a bill on one surface and not another.

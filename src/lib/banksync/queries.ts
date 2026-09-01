@@ -20,7 +20,8 @@ import { numericStringToCents } from "@/lib/finances/money";
 import type { ExistingRow } from "./syncPlan";
 import { bankRows } from "@/lib/finances/splitRows";
 import { isScrapeFeed } from "@/lib/finances/bankSnapshot";
-import { hasBrowserPendingAuthority } from "@/lib/finances/browserPendingAuthority";
+import { browserOwnsPending } from "@/lib/finances/sourceAuthority";
+import { loadAccountSourceStamps } from "@/lib/finances/sourceStateWrite";
 
 /** A connection as the settings page shows it. Deliberately without the access URL. */
 export type BankConnectionRow = {
@@ -183,16 +184,8 @@ export async function existingRowsInWindow(
       externalId: financeTransactions.externalId,
       externalSource: financeTransactions.externalSource,
       pending: financeTransactions.pending,
-      browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
     })
     .from(financeTransactions)
-    .leftJoin(
-      bankAccountLinks,
-      and(
-        eq(bankAccountLinks.userId, userId),
-        eq(bankAccountLinks.accountId, financeTransactions.accountId),
-      ),
-    )
     .where(
       and(
         eq(financeTransactions.userId, userId),
@@ -216,6 +209,8 @@ export async function existingRowsInWindow(
       ),
     );
 
+  const stamps = await loadAccountSourceStamps(db, userId, accountIds);
+
   for (const row of rows) {
     const bucket = out.get(row.accountId) ?? [];
     bucket.push({
@@ -231,7 +226,10 @@ export async function existingRowsInWindow(
       authoritativeBrowserPending:
         row.pending &&
         isScrapeFeed(row.externalSource ?? "") &&
-        hasBrowserPendingAuthority(row.browserPendingAsOf, Date.now()),
+        browserOwnsPending(
+          stamps.get(row.accountId)?.browser ?? null,
+          stamps.get(row.accountId)?.feed ?? null,
+        ),
     });
     out.set(row.accountId, bucket);
   }

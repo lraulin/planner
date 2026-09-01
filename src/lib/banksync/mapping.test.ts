@@ -150,18 +150,14 @@ describe("balances", () => {
   });
 
   it("stamps the balance with the provider's own date, not the read time", () => {
-    const requestedAt = new Date("2026-08-16T09:00:00Z");
     // A day-old figure labelled "now" is the lie this feature exists to stop telling.
-    expect(balanceAsOf(checking, requestedAt).toISOString()).toBe(
-      "2026-08-12T00:00:00.000Z",
-    );
+    expect(balanceAsOf(checking)?.toISOString()).toBe("2026-08-12T00:00:00.000Z");
   });
 
-  it("falls back to the read time when the provider gives no balance date", () => {
-    const requestedAt = new Date("2026-08-16T09:00:00Z");
-    expect(
-      balanceAsOf({ ...checking, "balance-date": null }, requestedAt).toISOString(),
-    ).toBe(requestedAt.toISOString());
+  it("reports no stamp at all when the provider gives no balance date", () => {
+    // Not the read time: an undated response must never outrank a dated source, and a
+    // fallback here is exactly what let a stale figure look current.
+    expect(balanceAsOf({ ...checking, "balance-date": null })).toBeNull();
   });
 });
 

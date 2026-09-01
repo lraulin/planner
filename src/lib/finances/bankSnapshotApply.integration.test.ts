@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { recordSourceState } from "./sourceStateWrite";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -140,10 +141,15 @@ describeDb("applyBankBrowserSnapshot", () => {
       availableCents: null,
       asOf: new Date("2026-08-28T12:00:00Z"),
     });
-    await db
-      .update(bankAccountLinks)
-      .set({ browserPendingAsOf: CAPTURED_AT })
-      .where(eq(bankAccountLinks.id, linkId));
+    // An earlier capture, so the pre-existing pending rows below are already browser-owned
+    // before the snapshot under test lands — and that snapshot still advances the stamp.
+    await recordSourceState(db, userId, accountId, {
+      source: "browser",
+      balanceCents: null,
+      availableCents: null,
+      asOf: new Date(CAPTURED_AT.getTime() - 60_000),
+      asOfDay: null,
+    });
 
     const rows = [...posted, ...pending].map(([date, description, amount], index) => ({
       userId,
@@ -287,19 +293,45 @@ describeDb("applyBankBrowserSnapshot", () => {
       snapshot({ capturedAt: later.toISOString() }),
     );
 
+    // No money moved and no row changed — but the account's pending set is now current as
+    // of a later instant, which is a fact the audit has to carry (D5 of 2026-08-31-1444).
     const event = await loadFinanceAuditEvent(userId, second.auditEventId);
     expect(event?.changes).toEqual([
       expect.objectContaining({
         entityType: "bank_balance",
         before: expect.objectContaining({
-          browserPendingAsOf: CAPTURED_AT.toISOString(),
+          balanceSource: "browser",
+          balanceAsOf: CAPTURED_AT.toISOString(),
         }),
         after: expect.objectContaining({
-          provisionalBalanceAsOf: later.toISOString(),
-          browserPendingAsOf: later.toISOString(),
+          balanceSource: "browser",
+          balanceAsOf: later.toISOString(),
         }),
       }),
     ]);
+  });
+
+  it("leaves the headline and the pending set alone when an older clipboard is re-pasted", async () => {
+    await applyBankBrowserSnapshot(userId, snapshot());
+    const earlier = new Date(CAPTURED_AT.getTime() - 60 * 60 * 1000);
+    const second = await applyBankBrowserSnapshot(
+      userId,
+      snapshot({ capturedAt: earlier.toISOString() }),
+    );
+
+    const [link] = await db
+      .select({
+        balanceAsOf: bankAccountLinks.balanceAsOf,
+        balanceSource: bankAccountLinks.balanceSource,
+      })
+      .from(bankAccountLinks)
+      .where(eq(bankAccountLinks.accountId, accountId));
+    expect(link.balanceAsOf).toEqual(CAPTURED_AT);
+    expect(link.balanceSource).toBe("browser");
+    const event = await loadFinanceAuditEvent(userId, second.auditEventId);
+    expect(
+      event?.changes.filter((change) => change.entityType === "bank_balance"),
+    ).toEqual([]);
   });
 
   it("rolls the whole snapshot back when its audit evidence cannot be written", async () => {

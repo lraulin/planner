@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -1236,7 +1237,9 @@ describeDb("CSV import onto a lagged SimpleFIN headline", () => {
     await importFinanceCsvFiles({ userId, files: [giftFile] });
     const [account] = await listAccounts(userId);
     const linkId = await linkWithBalance(userId, account.id, 1_125_746, "2026-08-25");
-    expect((await listAccounts(userId))[0].balanceCents).toBe(1_125_746);
+    // The first import already recorded 08/31 for the file, so the 08/25 sync never takes
+    // the headline in the first place — the lag this test was written for cannot open.
+    expect((await listAccounts(userId))[0].balanceCents).toBe(1_625_746);
 
     const again = await importFinanceCsvFiles({ userId, files: [giftFile] });
     expect(again.created).toBe(0);
@@ -1245,28 +1248,20 @@ describeDb("CSV import onto a lagged SimpleFIN headline", () => {
     expect(after.balanceCents).toBe(1_625_746);
     const [link] = await db
       .select({
-        provisionalBalanceAsOf: bankAccountLinks.provisionalBalanceAsOf,
-        browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
+        balanceAsOf: bankAccountLinks.balanceAsOf,
+        balanceSource: bankAccountLinks.balanceSource,
       })
       .from(bankAccountLinks)
       .where(eq(bankAccountLinks.id, linkId));
-    expect(link.provisionalBalanceAsOf).not.toBeNull();
-    expect(link.browserPendingAsOf).toBeNull();
+    // The file's own newest data day, not the import instant: 08/31 in this CSV.
+    expect(link.balanceSource).toBe("file");
+    expect(toDateKey(link.balanceAsOf!)).toBe("2026-08-31");
+    // Nothing moved, so nothing is audited as having moved: the file re-reported the same
+    // figure for the same day and the derived headline was already it.
     const audit = await loadFinanceAuditEvent(userId, again.auditBatchId!);
     expect(
       audit?.changes.find((change) => change.entityType === "bank_balance"),
-    ).toEqual(
-      expect.objectContaining({
-        before: expect.objectContaining({
-          provisionalBalanceAsOf: null,
-          browserPendingAsOf: null,
-        }),
-        after: expect.objectContaining({
-          provisionalBalanceAsOf: expect.any(String),
-          browserPendingAsOf: null,
-        }),
-      }),
-    );
+    ).toBeUndefined();
   });
 
   it("does not let SimpleFIN walk that posted figure back on the next refresh", async () => {
@@ -1278,13 +1273,24 @@ describeDb("CSV import onto a lagged SimpleFIN headline", () => {
     await importFinanceCsvFiles({ userId, files: [giftFile] });
     expect((await listAccounts(userId))[0].balanceCents).toBe(1_625_746);
 
+    // A refresh whose balance-date is still 08/25 cannot walk the file's 08/31 figure back,
+    // however long ago the file landed — the flat 36-hour hold this replaces would have.
     await saveBalance(userId, {
       linkId,
       balanceCents: 1_125_746,
       availableCents: null,
-      asOf: new Date(),
+      asOf: new Date("2026-08-25T12:00:00.000Z"),
     });
     expect((await listAccounts(userId))[0].balanceCents).toBe(1_625_746);
+
+    // And a genuinely later balance-date takes it back immediately.
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: 1_625_800,
+      availableCents: null,
+      asOf: new Date("2026-09-02T12:00:00.000Z"),
+    });
+    expect((await listAccounts(userId))[0].balanceCents).toBe(1_625_800);
   });
 
   it("does not rewind the live headline from an older statement running balance", async () => {
@@ -1338,7 +1344,7 @@ describeDb("CSV import onto a lagged SimpleFIN headline", () => {
 
     await importFinanceCsvFiles({ userId: intruder, files: [giftFile] });
 
-    expect((await listAccounts(owner))[0].balanceCents).toBe(1_125_746);
+    expect((await listAccounts(owner))[0].balanceCents).toBe(1_625_746);
     expect((await listAccounts(intruder))[0].id).not.toBe(account.id);
   });
 });

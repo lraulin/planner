@@ -22,10 +22,10 @@ import {
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { captureFinanceMoneyCheckpoint } from "@/lib/finances/audit/checkpoints";
 import type { FinanceAuditChange } from "@/lib/finances/audit/types";
+import { recordSourceState } from "@/lib/finances/sourceStateWrite";
 import { writeFinanceAuditEvent } from "@/lib/finances/audit/writes";
 import { monthKeyOf } from "@/lib/finances/budget/envelope";
 import { retireCoveredScrapeRowsForAccounts } from "@/lib/finances/feedHandoverWrite";
-import { shouldKeepProvisionalBalance } from "./provisionalBalance";
 import type { BankInsert, BankUpdate } from "./syncPlan";
 
 async function requireConnection(userId: string, connectionId: string): Promise<void> {
@@ -194,14 +194,22 @@ export async function setReauthRequired(
     );
 }
 
-/** Balance snapshot for one link, already in module sign. */
+/**
+ * Record what SimpleFIN reported for one link, in module sign.
+ *
+ * The headline is not written here. This source writes its own stamp and
+ * `recordSourceState` re-derives the account's headline from every source, so a response
+ * whose `balance-date` is older than a browser capture updates the feed row and moves
+ * nothing else — no "do not regress" check, because regressing is not representable.
+ */
 export async function saveBalance(
   userId: string,
   input: {
     linkId: string;
     balanceCents: number | null;
     availableCents: number | null;
-    asOf: Date;
+    /** The provider's `balance-date`, or null when it reports none. Never the read time. */
+    asOf: Date | null;
     auditBatchId?: string;
     auditOrigin?: string;
   },
@@ -211,11 +219,6 @@ export async function saveBalance(
       .select({
         id: bankAccountLinks.id,
         accountId: bankAccountLinks.accountId,
-        balanceCents: bankAccountLinks.balanceCents,
-        availableCents: bankAccountLinks.availableCents,
-        balanceAsOf: bankAccountLinks.balanceAsOf,
-        provisionalBalanceAsOf: bankAccountLinks.provisionalBalanceAsOf,
-        browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
         accountName: financeAccounts.name,
       })
       .from(bankAccountLinks)
@@ -237,70 +240,35 @@ export async function saveBalance(
       accountNames: [existing.accountName],
     };
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
-    const keepProvisional = shouldKeepProvisionalBalance(existing, input, Date.now());
-    if (!keepProvisional) {
-      const updated = await tx
-        .update(bankAccountLinks)
-        .set({
-          balanceCents: input.balanceCents,
-          availableCents: input.availableCents,
-          balanceAsOf: input.asOf,
-          provisionalBalanceAsOf: null,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(bankAccountLinks.id, input.linkId),
-            eq(bankAccountLinks.userId, userId),
-          ),
-        )
-        .returning({ id: bankAccountLinks.id });
-      if (updated.length === 0) throw new Error("Link not found.");
-    }
+    const authority = await recordSourceState(tx, userId, existing.accountId, {
+      source: "feed",
+      balanceCents: input.balanceCents,
+      availableCents: input.availableCents,
+      asOf: input.asOf,
+      asOfDay: null,
+    });
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
-    const changes: FinanceAuditChange[] = keepProvisional
-      ? []
-      : [
-          {
-            entityType: "bank_balance",
-            entityIdentity: existing.id,
-            before: {
-              balanceCents: existing.balanceCents,
-              availableCents: existing.availableCents,
-              balanceAsOf: existing.balanceAsOf?.toISOString() ?? null,
-              provisionalBalanceAsOf:
-                existing.provisionalBalanceAsOf?.toISOString() ?? null,
-              browserPendingAsOf: existing.browserPendingAsOf?.toISOString() ?? null,
-            },
-            after: {
-              balanceCents: input.balanceCents,
-              availableCents: input.availableCents,
-              balanceAsOf: input.asOf.toISOString(),
-              provisionalBalanceAsOf: null,
-              browserPendingAsOf: existing.browserPendingAsOf?.toISOString() ?? null,
-            },
-          },
-        ];
+
     const audit = await writeFinanceAuditEvent(tx, userId, {
       kind: "simplefin_sync",
       origin: input.auditOrigin ?? "SimpleFIN balance",
       batchId: input.auditBatchId,
-      summary: keepProvisional
-        ? `Kept the fresher provisional balance for ${existing.accountName}.`
-        : `Updated the SimpleFIN balance for ${existing.accountName}.`,
+      summary: authority.headlineMoved
+        ? `Updated the SimpleFIN balance for ${existing.accountName}.`
+        : `Recorded the SimpleFIN balance for ${existing.accountName}; a more current figure is already in force.`,
       scope,
-      warnings: keepProvisional
-        ? [
-            "A newer provisional posted balance is still authoritative, so this older balance was not applied.",
-          ]
-        : [],
+      warnings: authority.headlineMoved
+        ? []
+        : [
+            "A more current figure is already in force, so this older balance was recorded but not shown.",
+          ],
       sourceEvidence: {
         linkId: existing.id,
-        providerBalanceAsOf: input.asOf.toISOString(),
+        providerBalanceAsOf: input.asOf?.toISOString() ?? null,
       },
       beforeCheckpoint,
       afterCheckpoint,
-      changes,
+      changes: authority.changes,
     });
     return { auditEventId: audit.eventId, auditBatchId: audit.batchId };
   });

@@ -112,10 +112,16 @@ export function availableCentsOf(account: SimpleFinAccount): number | null {
   return amountToCents(available);
 }
 
-/** When the balance was true according to the provider, falling back to the read time. */
-export function balanceAsOf(account: SimpleFinAccount, requestedAt: Date): Date {
+/**
+ * When the balance was true according to the provider, or **null when it will not say**.
+ *
+ * There is deliberately no fallback to the read time. Stamping an undated response "now"
+ * is the lie that lets a stale figure outrank a fresher browser capture or file import —
+ * the whole defect `sourceAuthority.ts` exists to make unrepresentable.
+ */
+export function balanceAsOf(account: SimpleFinAccount): Date | null {
   const reported = epochToDateKey(account["balance-date"]);
-  if (!reported || !account["balance-date"]) return requestedAt;
+  if (!reported || !account["balance-date"]) return null;
   return new Date(account["balance-date"] * 1000);
 }
 

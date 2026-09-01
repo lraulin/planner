@@ -1,9 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { recordSourceState } from "../sourceStateWrite";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
-  bankAccountLinks,
   financeBudgetAllocations,
   financeBudgetCategories,
   financeTransactions,
@@ -596,19 +596,25 @@ describeDb("budget mutations", () => {
     const connectionId = await saveConnection(userId, {
       accessUrl: "https://test:test@example.invalid/simplefin",
     });
-    const linkId = await linkAccount(userId, {
+    await linkAccount(userId, {
       connectionId,
       externalAccountId: `pending-${crypto.randomUUID()}`,
       accountId: cardId,
     });
-    await db
-      .update(bankAccountLinks)
-      .set({
-        balanceCents: 0,
-        balanceAsOf: new Date(),
-        browserPendingAsOf: new Date(),
-      })
-      .where(eq(bankAccountLinks.id, linkId));
+    await recordSourceState(db, userId, cardId, {
+      source: "feed",
+      balanceCents: 0,
+      availableCents: null,
+      asOf: new Date(Date.now() - 60_000),
+      asOfDay: null,
+    });
+    await recordSourceState(db, userId, cardId, {
+      source: "browser",
+      balanceCents: 0,
+      availableCents: null,
+      asOf: new Date(),
+      asOfDay: null,
+    });
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
     const ids = await envelopes(userId);
     const discretionaryId = ids.get("Discretionary")!;

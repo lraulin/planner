@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { loadAccountSourceStamps } from "./sourceStateWrite";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -192,7 +193,6 @@ export async function listAccounts(
       accountId: bankAccountLinks.accountId,
       balanceCents: bankAccountLinks.balanceCents,
       balanceAsOf: bankAccountLinks.balanceAsOf,
-      browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
     })
     .from(bankAccountLinks)
     .where(eq(bankAccountLinks.userId, userId));
@@ -202,13 +202,12 @@ export async function listAccounts(
       .filter((row) => row.balanceCents !== null && row.balanceAsOf !== null)
       .map((row) => [
         row.accountId,
-        {
-          cents: row.balanceCents as number,
-          asOf: row.balanceAsOf as Date,
-          browserPendingAsOf: row.browserPendingAsOf,
-        },
+        { cents: row.balanceCents as number, asOf: row.balanceAsOf as Date },
       ]),
   );
+  // Per-source currency, not the derived headline: pending authority is decided by ranking
+  // the browser's stamp against the feed's, and the headline may be either of them.
+  const stampsByAccount = await loadAccountSourceStamps(executor, userId);
 
   return rows.map((row) => {
     const ledgerBalanceCents = numericStringToCents(row.balance) ?? 0;
@@ -240,7 +239,8 @@ export async function listAccounts(
       // which is the same as asking whether the register is complete.
       balanceMismatchCents: synced || latest ? ledgerBalanceCents - balanceCents : 0,
       syncedBalanceAsOf: synced?.asOf ?? null,
-      browserPendingAsOf: synced?.browserPendingAsOf ?? null,
+      browserAsOf: stampsByAccount.get(row.id)?.browser ?? null,
+      feedAsOf: stampsByAccount.get(row.id)?.feed ?? null,
       transactionCount: row.transactionCount,
     };
   });

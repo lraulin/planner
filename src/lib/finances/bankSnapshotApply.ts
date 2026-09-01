@@ -24,6 +24,7 @@ import {
   type ExistingBankSnapshotRow,
 } from "./bankSnapshotReconcile";
 import { feedWatermarkForAccount } from "./feedWatermark";
+import { recordSourceState } from "./sourceStateWrite";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import type { FinanceExecutor } from "./dbExecutor";
 import { centsToNumericString, numericStringToCents } from "./money";
@@ -410,13 +411,7 @@ export async function applyBankBrowserSnapshot(
   return db.transaction(async (tx) => {
     const account = await resolveCardByLast4(tx, userId, snapshot.accountLast4);
     const [link] = await tx
-      .select({
-        id: bankAccountLinks.id,
-        balanceCents: bankAccountLinks.balanceCents,
-        balanceAsOf: bankAccountLinks.balanceAsOf,
-        provisionalBalanceAsOf: bankAccountLinks.provisionalBalanceAsOf,
-        browserPendingAsOf: bankAccountLinks.browserPendingAsOf,
-      })
+      .select({ id: bankAccountLinks.id })
       .from(bankAccountLinks)
       .where(
         and(
@@ -539,22 +534,16 @@ export async function applyBankBrowserSnapshot(
         );
     }
 
-    await tx
-      .update(bankAccountLinks)
-      .set({
-        balanceCents: snapshot.currentBalanceCents,
-        balanceAsOf: snapshot.capturedAt,
-        provisionalBalanceAsOf: snapshot.capturedAt,
-        browserPendingAsOf: snapshot.capturedAt,
-        updatedAt: snapshot.capturedAt,
-      })
-      .where(
-        and(
-          eq(bankAccountLinks.userId, userId),
-          eq(bankAccountLinks.accountId, account.id),
-          eq(bankAccountLinks.id, link.id),
-        ),
-      );
+    // The capture writes its own stamp only. Re-pasting a clipboard captured before the
+    // last sync therefore imports its rows per the watermark and leaves the headline and
+    // the pending set exactly where they were.
+    const authority = await recordSourceState(tx, userId, account.id, {
+      source: "browser",
+      balanceCents: snapshot.currentBalanceCents,
+      availableCents: null,
+      asOf: snapshot.capturedAt,
+      asOfDay: null,
+    });
 
     await reclassifyInsideTransaction(tx, userId);
     await autoFileNewRows(tx, userId, newIds);
@@ -566,44 +555,29 @@ export async function applyBankBrowserSnapshot(
       tx,
       snapshot.capturedAt,
     );
-    const beforeBalance = {
-      balanceCents: link.balanceCents,
-      balanceAsOf: link.balanceAsOf?.toISOString() ?? null,
-      provisionalBalanceAsOf: link.provisionalBalanceAsOf?.toISOString() ?? null,
-      browserPendingAsOf: link.browserPendingAsOf?.toISOString() ?? null,
-    };
-    const afterBalance = {
-      balanceCents: snapshot.currentBalanceCents,
-      balanceAsOf: snapshot.capturedAt.toISOString(),
-      provisionalBalanceAsOf: snapshot.capturedAt.toISOString(),
-      browserPendingAsOf: snapshot.capturedAt.toISOString(),
-    };
-    const balanceChanges: FinanceAuditChange[] =
-      JSON.stringify(beforeBalance) === JSON.stringify(afterBalance)
-        ? []
-        : [
-            {
-              entityType: "bank_balance",
-              entityIdentity: link.id,
-              before: beforeBalance,
-              after: afterBalance,
-            },
-          ];
-    const changes = [...auditChanges(beforeRows, afterRows), ...balanceChanges];
+    const changes = [...auditChanges(beforeRows, afterRows), ...authority.changes];
     const summary =
       `Applied ${snapshot.source === "chase" ? "Chase" : "Capital One"} bank snapshot for ${account.name}: ` +
       `${plan.postedTransitions.length + plan.postedReplacements.length} posted transition${plan.postedTransitions.length + plan.postedReplacements.length === 1 ? "" : "s"}, ` +
       `${plan.postedInserts.length} new posted, ${snapshot.pending.length} pending` +
       (plan.postedCoveredByFeed > 0
         ? `; ${plan.postedCoveredByFeed} already covered by the bank feed through ${watermark}.`
-        : ".");
+        : ".") +
+      (authority.headlineMoved
+        ? ""
+        : " A more current figure is already in force, so the headline was left alone.");
     const audit = await writeFinanceAuditEvent(tx, userId, {
       kind: "bank_snapshot",
       origin: snapshot.source === "chase" ? "Chase browser" : "Capital One browser",
       occurredAt: snapshot.capturedAt,
       summary,
       scope,
-      warnings: plan.warnings,
+      warnings: authority.headlineMoved
+        ? plan.warnings
+        : [
+            ...plan.warnings,
+            "This capture predates a more current source, so its rows were applied but the balance and pending set were not.",
+          ],
       sourceEvidence: {
         format: "planner-bank-snapshot-v1",
         feedWatermark: watermark,

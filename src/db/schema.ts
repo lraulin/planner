@@ -3231,6 +3231,12 @@ export const bankConnections = pgTable(
  *
  * Balances are stored in module sign — positive is money you have — which is already
  * SimpleFIN's own convention, so no conversion happens on the way in.
+ *
+ * `balanceCents`, `availableCents`, `balanceAsOf` and `balanceSource` are a **derived cache
+ * with exactly one writer** — `recomputeAccountBalanceAuthority`. Every source writes its
+ * own `finance_account_source_state` row and the headline is recomputed from all of them,
+ * which is what makes a stale write unable to regress the headline rather than merely
+ * guarded against doing so. Nothing else may set these four columns.
  */
 export const bankAccountLinks = pgTable(
   "bank_account_links",
@@ -3254,20 +3260,17 @@ export const bankAccountLinks = pgTable(
     /** Balance net pending, where the provider supplies one. */
     availableCents: integer("available_cents"),
     /**
-     * When the balance was true according to the provider — its `balance-date`, not the
-     * time we asked. A stale figure stamped "now" is worse than no figure.
+     * When the headline was true according to whichever source produced it. Derived from
+     * `finance_account_source_state`; a stale figure stamped "now" is worse than no figure.
      */
     balanceAsOf: timestamp("balance_as_of", { withTimezone: true }),
     /**
-     * When a browser snapshot or checking CSV last advanced `balanceCents`. SimpleFIN
-     * must not overwrite that provisional headline with yesterday's posted number; null
-     * once the feed has caught up.
+     * Which source the three derived columns above came from (`feed` | `browser` | `file`),
+     * or null before anything has reported. This is what makes "a tie keeps the incumbent"
+     * a decidable rule rather than a preference — without it, a same-day file and a capture
+     * would swap the headline back and forth depending on row order.
      */
-    provisionalBalanceAsOf: timestamp("provisional_balance_as_of", {
-      withTimezone: true,
-    }),
-    /** When the latest complete browser pending snapshot was captured. */
-    browserPendingAsOf: timestamp("browser_pending_as_of", { withTimezone: true }),
+    balanceSource: text("balance_source"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -3280,6 +3283,54 @@ export const bankAccountLinks = pgTable(
     // sync it and the rows would interleave under different provider ids.
     uniqueIndex("bank_account_links_account_uq").on(table.userId, table.accountId),
     index("bank_account_links_connection_idx").on(table.userId, table.connectionId),
+  ],
+);
+
+/**
+ * What each source last reported for one account, and when that was true.
+ *
+ * Three sources write the same account — SimpleFIN, a browser bank snapshot, and a
+ * CSV/statement import — and Lee's workflow alternates them deliberately, so any of them
+ * can arrive at any time in any order. The missing concept was **per-source currency**:
+ * two workarounds stood in for it (`provisional_balance_as_of`, a 36-hour pending window),
+ * which is the `clean-code.md` signal to correct the model rather than patch it.
+ *
+ * **Keyed on `account_id`, not `link_id`.** Accounts are the durable identity, links come
+ * and go, and a file import must be able to record what it saw without a bank link.
+ *
+ * `as_of` is an instant, `as_of_day` a bare `YYYY-MM-DD` for a file that only knows a day.
+ * **Both null means the source will not say** — never "now". See `sourceAuthority.ts`.
+ */
+export const financeAccountSourceState = pgTable(
+  "finance_account_source_state",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => financeAccounts.id, { onDelete: "cascade" }),
+    /** `feed` | `browser` | `file`. Text, not an enum — see the `finance_account_kind` note. */
+    source: text("source").notNull(),
+    /** What this source last reported, module sign. */
+    balanceCents: integer("balance_cents"),
+    /** Balance net pending, where this source supplies one. */
+    availableCents: integer("available_cents"),
+    /** The instant the figure was true, or null when this source reports no time. */
+    asOf: timestamp("as_of", { withTimezone: true }),
+    /** The calendar day the figure was true, for a source that only knows days. */
+    asOfDay: text("as_of_day"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_account_source_state_uq").on(
+      table.userId,
+      table.accountId,
+      table.source,
+    ),
+    index("finance_account_source_state_account_idx").on(table.userId, table.accountId),
   ],
 );
 

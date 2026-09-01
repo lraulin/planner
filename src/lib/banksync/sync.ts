@@ -158,7 +158,6 @@ async function syncOne(
     // Balances come from the same response — no second call, and nothing metered.
     let balancesUpdated = 0;
     const linkByExternal = new Map(links.map((link) => [link.externalAccountId, link]));
-    const requestedAt = new Date();
     for (const account of set.accounts ?? []) {
       const link = linkByExternal.get(account.id);
       if (!link) continue;
@@ -166,8 +165,9 @@ async function syncOne(
         linkId: link.id,
         balanceCents: balanceCentsOf(account),
         availableCents: availableCentsOf(account),
-        // The provider's own balance-date, not the time we asked — see D7b.
-        asOf: balanceAsOf(account, requestedAt),
+        // The provider's own balance-date, not the time we asked — see D7b. Null when it
+        // reports none, which never displaces a dated source.
+        asOf: balanceAsOf(account),
         auditBatchId,
         auditOrigin: label,
       });

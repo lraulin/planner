@@ -398,12 +398,7 @@ export async function loadBudget(
   const categories = parsedCategories(categoryRows);
 
   const settings = parseBudget(stored);
-  const pending = await loadWorkingPendingSelection(
-    userId,
-    accounts,
-    Date.now(),
-    executor,
-  );
+  const pending = await loadWorkingPendingSelection(userId, accounts, executor);
   const poolCents = accountPoolCents(accounts, pending.rows);
 
   const empty: BudgetData = {
@@ -552,12 +547,7 @@ export async function openingPositionFor(
   );
   if (accounts.length === 0) return 0;
 
-  const pending = await loadWorkingPendingSelection(
-    userId,
-    allAccounts,
-    Date.now(),
-    executor,
-  );
+  const pending = await loadWorkingPendingSelection(userId, allAccounts, executor);
   const known = new Set(accounts.map((account) => account.id));
 
   const rows = await executor
