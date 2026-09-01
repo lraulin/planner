@@ -5,16 +5,42 @@
  */
 
 import type { DraftExercise, DraftGroup } from "./sessionDraft";
-import { groupSessionItems } from "./sessionGroups";
+import { groupSessionItems, type SessionItem } from "./sessionGroups";
 
 export type SetTarget = {
   blockIndex: number;
   setIndex: number;
 };
 
-export function sameSetTarget(a: SetTarget | null, b: SetTarget | null): boolean {
-  if (a == null || b == null) return a === b;
-  return a.blockIndex === b.blockIndex && a.setIndex === b.setIndex;
+type Item = SessionItem<DraftExercise, DraftGroup>;
+
+/**
+ * The first incomplete set within one top-level item — a straight exercise, or a whole
+ * group read round-major. Null when the item is finished.
+ */
+function firstIncompleteInItem(item: Item): SetTarget | null {
+  if (item.kind === "exercise") {
+    const setIndex = item.member.sets.findIndex((s) => !s.completed);
+    return setIndex >= 0 ? { blockIndex: item.index, setIndex } : null;
+  }
+  for (let round = 0; round < item.rounds; round += 1) {
+    for (const member of item.members) {
+      const set = member.member.sets[round];
+      if (set && !set.completed) return { blockIndex: member.index, setIndex: round };
+    }
+  }
+  return null;
+}
+
+function itemContainingKey(items: readonly Item[], key: string): Item | null {
+  for (const item of items) {
+    if (item.kind === "exercise") {
+      if (item.member.key === key) return item;
+      continue;
+    }
+    if (item.members.some((m) => m.member.key === key)) return item;
+  }
+  return null;
 }
 
 export function setRowRole(
@@ -30,25 +56,29 @@ export function setRowRole(
   return "upcoming";
 }
 
+/**
+ * Where the lifter is. The **active** item wins — the block last touched, keyed by
+ * `DraftExercise.key` so it survives a reorder or a removal — because the bench being
+ * taken is no reason to be dragged back to exercise A. With nothing active, or when the
+ * active item is finished or gone, this is the first incomplete set in session order,
+ * exactly as before.
+ */
 export function currentSetTarget(
   exercises: readonly DraftExercise[],
   groups: readonly DraftGroup[],
+  activeKey: string | null = null,
 ): SetTarget | null {
   const items = groupSessionItems(exercises, groups);
+
+  if (activeKey) {
+    const active = itemContainingKey(items, activeKey);
+    const inActive = active ? firstIncompleteInItem(active) : null;
+    if (inActive) return inActive;
+  }
+
   for (const item of items) {
-    if (item.kind === "exercise") {
-      const setIndex = item.member.sets.findIndex((s) => !s.completed);
-      if (setIndex >= 0) return { blockIndex: item.index, setIndex };
-      continue;
-    }
-    for (let round = 0; round < item.rounds; round += 1) {
-      for (const member of item.members) {
-        const set = member.member.sets[round];
-        if (set && !set.completed) {
-          return { blockIndex: member.index, setIndex: round };
-        }
-      }
-    }
+    const target = firstIncompleteInItem(item);
+    if (target) return target;
   }
   return null;
 }
@@ -71,13 +101,14 @@ export function sessionSetProgress(exercises: readonly DraftExercise[]): {
 export function currentSetCue(
   exercises: readonly DraftExercise[],
   groups: readonly DraftGroup[],
+  activeKey: string | null = null,
 ): {
   exerciseName: string;
   setNumber: number;
   setCount: number;
   target: SetTarget;
 } | null {
-  const target = currentSetTarget(exercises, groups);
+  const target = currentSetTarget(exercises, groups, activeKey);
   if (!target) return null;
   const block = exercises[target.blockIndex];
   if (!block) return null;
@@ -98,8 +129,9 @@ export function restAfterComplete(
   exercises: readonly DraftExercise[],
   groups: readonly DraftGroup[],
   justCompleted: SetTarget,
+  activeKey: string | null = null,
 ): { exerciseName: string; setNumber: number } | null {
-  const next = currentSetTarget(exercises, groups);
+  const next = currentSetTarget(exercises, groups, activeKey);
   if (!next) return null;
 
   const completed = exercises[justCompleted.blockIndex];

@@ -198,3 +198,132 @@ describe("currentSetCue", () => {
     });
   });
 });
+
+describe("currentSetTarget with an active exercise", () => {
+  /** A, B, C untouched — the ordinary shape of a repeated workout. */
+  function threeLifts(): DraftExercise[] {
+    return [
+      block({ key: "a", exerciseName: "Bench", sets: [set(), set()] }),
+      block({ key: "b", exerciseName: "Row", sets: [set(), set()] }),
+      block({ key: "c", exerciseName: "Squat", sets: [set(), set()] }),
+    ];
+  }
+
+  it("points at the active exercise even though earlier ones are untouched", () => {
+    expect(currentSetTarget(threeLifts(), [], "c")).toEqual({
+      blockIndex: 2,
+      setIndex: 0,
+    });
+  });
+
+  it("falls back to session order once the active exercise is finished", () => {
+    const exercises = threeLifts();
+    exercises[2].sets = [set({ completed: true }), set({ completed: true })];
+    expect(currentSetTarget(exercises, [], "c")).toEqual({
+      blockIndex: 0,
+      setIndex: 0,
+    });
+  });
+
+  it("falls back when the active key is gone — removed or never there", () => {
+    expect(currentSetTarget(threeLifts(), [], "deleted")).toEqual({
+      blockIndex: 0,
+      setIndex: 0,
+    });
+  });
+
+  it("survives a reorder: the key follows the block, an index would not", () => {
+    const exercises = threeLifts();
+    const moved = [exercises[2], exercises[0], exercises[1]];
+    expect(currentSetTarget(moved, [], "c")).toEqual({ blockIndex: 0, setIndex: 0 });
+  });
+
+  it("an active member makes the whole group active, still round-major", () => {
+    const exercises = [
+      block({ key: "bench", exerciseName: "Bench", sets: [set(), set()] }),
+      block({
+        key: "press",
+        exerciseName: "Press",
+        groupId: "g1",
+        sets: [set({ completed: true }), set()],
+      }),
+      block({
+        key: "row",
+        exerciseName: "Row",
+        groupId: "g1",
+        sets: [set(), set()],
+      }),
+    ];
+    // Active on A1 of the group, but round 1 of A2 is what comes next.
+    expect(currentSetTarget(exercises, groups, "press")).toEqual({
+      blockIndex: 2,
+      setIndex: 0,
+    });
+  });
+
+  it("with no active key reproduces the session-order answer exactly", () => {
+    const exercises = threeLifts();
+    expect(currentSetTarget(exercises, [], null)).toEqual(
+      currentSetTarget(exercises, []),
+    );
+  });
+
+  it("cues the active lift, not the first one", () => {
+    expect(currentSetCue(threeLifts(), [], "b")).toEqual({
+      exerciseName: "Row",
+      setNumber: 1,
+      setCount: 2,
+      target: { blockIndex: 1, setIndex: 0 },
+    });
+  });
+});
+
+describe("restAfterComplete with an active exercise", () => {
+  it("rests for the active lift's next set, not for exercise A", () => {
+    const exercises = [
+      block({ key: "a", exerciseName: "Bench", sets: [set(), set()] }),
+      block({
+        key: "c",
+        exerciseName: "Squat",
+        sets: [set({ completed: true }), set()],
+      }),
+    ];
+    expect(
+      restAfterComplete(exercises, [], { blockIndex: 1, setIndex: 0 }, "c"),
+    ).toEqual({ exerciseName: "Squat", setNumber: 2 });
+  });
+
+  it("still holds rest mid-round when the active block is in a group", () => {
+    const exercises = [
+      block({
+        key: "press",
+        exerciseName: "Press",
+        groupId: "g1",
+        sets: [set({ completed: true }), set()],
+      }),
+      block({
+        key: "row",
+        exerciseName: "Row",
+        groupId: "g1",
+        sets: [set(), set()],
+      }),
+    ];
+    expect(
+      restAfterComplete(exercises, groups, { blockIndex: 0, setIndex: 0 }, "press"),
+    ).toBeNull();
+  });
+
+  it("rests for whatever comes next once the active lift is finished", () => {
+    const exercises = [
+      block({ key: "a", exerciseName: "Bench", sets: [set(), set()] }),
+      block({
+        key: "c",
+        exerciseName: "Squat",
+        sets: [set({ completed: true }), set({ completed: true })],
+      }),
+    ];
+    expect(
+      restAfterComplete(exercises, [], { blockIndex: 1, setIndex: 1 }, "c"),
+    ).toEqual({ exerciseName: "Bench", setNumber: 1 });
+  });
+});
