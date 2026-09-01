@@ -10,6 +10,7 @@ import {
   restAfterComplete,
   sessionSetProgress,
   setRowRole,
+  type SetTarget,
 } from "@/lib/fitness/currentSet";
 import { parseDurationSeconds } from "@/lib/fitness/duration";
 import { formatSetsLabel } from "@/lib/fitness/format";
@@ -18,6 +19,7 @@ import {
   addMember,
   joinWithNext,
   joinWithPrevious,
+  moveItem,
   patchGroup,
   pruneGroups,
   removeGroup,
@@ -57,6 +59,7 @@ import type {
 import { ExerciseEditor } from "./ExerciseEditor";
 import { ExerciseGroupBlock } from "./ExerciseGroupBlock";
 import { ExerciseNotes, LastSessionHint } from "./ExerciseMeta";
+import { MoveButtons } from "./MoveButtons";
 import { ExercisePicker } from "./ExercisePicker";
 import { RestTimer } from "./RestTimer";
 import { SetHeader, SetRow } from "./SetRow";
@@ -154,6 +157,29 @@ export function SessionEditor({
   const [runningHold, setRunningHold] = useState<RunningHold | null>(null);
 
   /**
+   * Which exercise the lifter is actually on, keyed by block key rather than index so it
+   * survives a reorder or a removal. Set by touching a set, never persisted — closing the
+   * drawer and coming back starts from the first incomplete set again.
+   */
+  const [activeBlockKey, setActiveBlockKey] = useState<string | null>(null);
+
+  /**
+   * Scrolling is an action, not a reaction: it fires on opening the drawer and on advancing
+   * after a check, and nowhere else. As a reaction to the derived current set it re-fired on
+   * every keystroke — typing into exercise C yanked the drawer back to exercise A.
+   */
+  const pendingScrollRef = useRef<SetTarget | null | undefined>(undefined);
+  if (pendingScrollRef.current === undefined) {
+    // One-time init: the drawer is remounted per open, so mount is the open.
+    pendingScrollRef.current = currentSetTarget(initial.exercises, initial.groups);
+  }
+  const [scrollTick, setScrollTick] = useState(0);
+  const requestScroll = useCallback((target: SetTarget | null) => {
+    pendingScrollRef.current = target;
+    setScrollTick((tick) => tick + 1);
+  }, []);
+
+  /**
    * `RestTimer` has always offered this hook and nothing ever took it. Finishing a round is
    * the moment it was meant for.
    */
@@ -164,14 +190,19 @@ export function SessionEditor({
   const [restCue, setRestCue] = useState<string | null>(null);
 
   const currentTarget = useMemo(
-    () => currentSetTarget(blocks, grouping.groups),
-    [blocks, grouping.groups],
+    () => currentSetTarget(blocks, grouping.groups, activeBlockKey),
+    [blocks, grouping.groups, activeBlockKey],
   );
   const liveCue = useMemo(
-    () => currentSetCue(blocks, grouping.groups),
-    [blocks, grouping.groups],
+    () => currentSetCue(blocks, grouping.groups, activeBlockKey),
+    [blocks, grouping.groups, activeBlockKey],
   );
   const progress = useMemo(() => sessionSetProgress(blocks), [blocks]);
+  /** Top-level items: what the A/B/C letters name, and what a reorder moves. */
+  const sessionItems = useMemo(
+    () => groupSessionItems(blocks, grouping.groups),
+    [blocks, grouping.groups],
+  );
   const reviewingHistory = existing !== null && currentTarget === null;
   const currentExerciseId = liveCue
     ? (blocks[liveCue.target.blockIndex]?.exerciseId ?? "")
@@ -206,12 +237,14 @@ export function SessionEditor({
       : null;
 
   useEffect(() => {
-    if (!open || !currentTarget) return;
+    const target = pendingScrollRef.current;
+    if (!open || !target) return;
+    pendingScrollRef.current = null;
     const el = document.querySelector(
-      `[data-set-target="${currentTarget.blockIndex}-${currentTarget.setIndex}"]`,
+      `[data-set-target="${target.blockIndex}-${target.setIndex}"]`,
     );
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [open, currentTarget]);
+  }, [open, scrollTick]);
 
   const idCatalog = useMemo(
     () => catalog.map((e) => ({ id: e.id, name: e.name })),
@@ -262,6 +295,12 @@ export function SessionEditor({
     },
     [idCatalog, schedule],
   );
+
+  /** Touching a set is what makes its block the active one — nothing else does. */
+  function markActive(blockIndex: number) {
+    const key = grouping.exercises[blockIndex]?.key;
+    if (key) setActiveBlockKey(key);
+  }
 
   function patchMeta(partial: Partial<SessionDraft>) {
     if (partial.performedAt !== undefined) setPerformedAt(partial.performedAt);
@@ -396,6 +435,7 @@ export function SessionEditor({
   }
 
   function startHold(blockKey: string, setIndex: number) {
+    setActiveBlockKey(blockKey);
     // Starting a second hold records the first rather than dropping it on the floor.
     if (runningHold) commitHold(runningHold);
     setRunningHold(beginHold(blockKey, setIndex));
@@ -407,6 +447,8 @@ export function SessionEditor({
   }
 
   function toggleComplete(blockIndex: number, setIndex: number, completed: boolean) {
+    const activeKey = grouping.exercises[blockIndex]?.key ?? null;
+    setActiveBlockKey(activeKey);
     const nextExercises = grouping.exercises.map((b, i) => {
       if (i !== blockIndex) return b;
       return {
@@ -428,10 +470,13 @@ export function SessionEditor({
       exercises: next.exercises,
     });
     if (!completed) return;
-    const cue = restAfterComplete(next.exercises, next.groups, {
-      blockIndex,
-      setIndex,
-    });
+    requestScroll(currentSetTarget(next.exercises, next.groups, activeKey));
+    const cue = restAfterComplete(
+      next.exercises,
+      next.groups,
+      { blockIndex, setIndex },
+      activeKey,
+    );
     if (!cue) {
       setRestCue(null);
       return;
@@ -449,6 +494,7 @@ export function SessionEditor({
       toggleComplete(blockIndex, setIndex, patch.completed);
       return;
     }
+    markActive(blockIndex);
     setBlocksAndSave((current) =>
       current.map((b, i) => {
         if (i !== blockIndex) return b;
@@ -483,6 +529,7 @@ export function SessionEditor({
   }
 
   function addSet(blockIndex: number) {
+    markActive(blockIndex);
     setBlocksAndSave((current) =>
       current.map((b, i) => {
         if (i !== blockIndex) return b;
@@ -496,6 +543,7 @@ export function SessionEditor({
   }
 
   function copyLastSets(blockIndex: number, historySets: WorkoutSetView[]) {
+    markActive(blockIndex);
     setBlocksAndSave((current) =>
       current.map((b, i) => {
         if (i !== blockIndex) return b;
@@ -642,7 +690,14 @@ export function SessionEditor({
               />
             </label>
 
-            {groupSessionItems(blocks, grouping.groups).map((item) => {
+            {sessionItems.map((item, itemIndex) => {
+              const canMoveUp = itemIndex > 0;
+              const canMoveDown = itemIndex < sessionItems.length - 1;
+              const onMoveUp = () =>
+                setGroupingAndSave((c) => moveItem(c, itemIndex, -1));
+              const onMoveDown = () =>
+                setGroupingAndSave((c) => moveItem(c, itemIndex, 1));
+
               if (item.kind === "group") {
                 return (
                   <ExerciseGroupBlock
@@ -692,6 +747,10 @@ export function SessionEditor({
                     onStopHold={stopHold}
                     currentTarget={currentTarget}
                     sessionTitle={title}
+                    canMoveUp={canMoveUp}
+                    canMoveDown={canMoveDown}
+                    onMoveUp={onMoveUp}
+                    onMoveDown={onMoveDown}
                   />
                 );
               }
@@ -739,6 +798,10 @@ export function SessionEditor({
                       current.map((b, i) => (i === bi ? { ...b, notes } : b)),
                     )
                   }
+                  canMoveUp={canMoveUp}
+                  canMoveDown={canMoveDown}
+                  onMoveUp={onMoveUp}
+                  onMoveDown={onMoveDown}
                 />
               );
             })}
@@ -803,6 +866,10 @@ function ExerciseBlock({
   currentTarget,
   blockIndex,
   sessionTitle,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
 }: {
   letter: string;
   block: DraftExercise;
@@ -830,6 +897,10 @@ function ExerciseBlock({
   currentTarget: { blockIndex: number; setIndex: number } | null;
   blockIndex: number;
   sessionTitle: string;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const showPlates = usesPlateCalculator(block.equipment);
   const columns = useMemo(
@@ -858,6 +929,12 @@ function ExerciseBlock({
         <span className="pb-1.5 font-mono text-[0.8125rem] font-semibold text-ink-muted">
           {letter}
         </span>
+        <MoveButtons
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
             Exercise

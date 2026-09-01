@@ -12,6 +12,7 @@ import type { SessionItemMember } from "@/lib/fitness/sessionGroups";
 import type { ExerciseSummary, WorkoutSetView } from "@/lib/fitness/types";
 import { ExerciseNotes, LastSessionHint } from "./ExerciseMeta";
 import { ExercisePicker } from "./ExercisePicker";
+import { MoveButtons } from "./MoveButtons";
 import { SetHeader, SetRow } from "./SetRow";
 
 const LABEL_PRESETS = ["Superset", "Circuit", "Drop set", "Giant set"];
@@ -53,6 +54,10 @@ export function ExerciseGroupBlock({
   onStopHold,
   currentTarget,
   sessionTitle,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
 }: {
   letter: string;
   group: DraftGroup;
@@ -81,6 +86,11 @@ export function ExerciseGroupBlock({
   onStopHold: () => void;
   currentTarget: SetTarget | null;
   sessionTitle: string;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  /** Moves the whole group — every member travels, so the run stays contiguous. */
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const blocks = useMemo(() => members.map((m) => m.member), [members]);
 
@@ -115,6 +125,12 @@ export function ExerciseGroupBlock({
         <span className="pb-1.5 font-mono text-[0.8125rem] font-semibold text-ink-muted">
           {letter}
         </span>
+        <MoveButtons
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+        />
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
           Group
           <input
