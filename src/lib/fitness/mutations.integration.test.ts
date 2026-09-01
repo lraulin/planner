@@ -740,4 +740,102 @@ describeDb("fitness sessions", () => {
     expect(detail.groups[0].label).toBe("Private Superset");
     expect(detail.exercises.every((e) => e.groupId === detail.groups[0].id)).toBe(true);
   });
+  it("saves a reordered exercise array in its new order, without a reorder mutation", async () => {
+    const sessionId = await createSession(userId, {
+      performedAt: new Date("2026-09-01T18:00:00Z"),
+      title: "Push",
+      groups: [{ label: "Superset", restSeconds: 60 }],
+      exercises: [
+        { exerciseName: "Bench Press", sets: [{ reps: 5, weight: 185 }] },
+        {
+          exerciseName: "Incline Fly",
+          groupIndex: 0,
+          sets: [{ reps: 12, weight: 30 }],
+        },
+        { exerciseName: "Pushdown", groupIndex: 0, sets: [{ reps: 12, weight: 40 }] },
+        { exerciseName: "Lateral Raise", sets: [{ reps: 15, weight: 20 }] },
+      ],
+    });
+
+    const before = (await getSessionDetail(userId, sessionId))!;
+    expect(before.exercises.map((e) => e.exerciseName)).toEqual([
+      "Bench Press",
+      "Incline Fly",
+      "Pushdown",
+      "Lateral Raise",
+    ]);
+
+    // What `moveItem` produces: the lone Lateral Raise moved above the whole superset.
+    const byName = new Map(before.exercises.map((e) => [e.exerciseName, e]));
+    const reordered = ["Bench Press", "Lateral Raise", "Incline Fly", "Pushdown"].map(
+      (name) => byName.get(name)!,
+    );
+
+    await replaceSession(userId, sessionId, {
+      performedAt: before.performedAt,
+      title: before.title,
+      groups: before.groups.map((g) => ({
+        label: g.label,
+        restSeconds: g.restSeconds,
+      })),
+      exercises: reordered.map((e) => ({
+        exerciseId: e.exerciseId,
+        groupIndex:
+          e.groupId === null
+            ? null
+            : before.groups.findIndex((g) => g.id === e.groupId),
+        sets: e.sets,
+      })),
+    });
+
+    // Reload reads by sortKey, so the new order is what next week's copy starts from.
+    const after = (await getSessionDetail(userId, sessionId))!;
+    expect(after.exercises.map((e) => e.exerciseName)).toEqual([
+      "Bench Press",
+      "Lateral Raise",
+      "Incline Fly",
+      "Pushdown",
+    ]);
+    const items = groupSessionItems(after.exercises, after.groups);
+    expect(
+      items.map((item) =>
+        item.kind === "exercise"
+          ? `${item.letter} ${item.member.exerciseName}`
+          : `${item.letter} [${item.members.map((m) => m.member.exerciseName).join(" + ")}]`,
+      ),
+    ).toEqual(["A Bench Press", "B Lateral Raise", "C [Incline Fly + Pushdown]"]);
+  });
+
+  it("isolates a second user from reordering the first user's session", async () => {
+    const owner = userId;
+    const intruder = await makeUser();
+    const sessionId = await createSession(owner, {
+      performedAt: new Date("2026-09-01T18:00:00Z"),
+      title: "Pull",
+      exercises: [
+        { exerciseName: "Private Row", sets: [{ reps: 8, weight: 135 }] },
+        { exerciseName: "Private Curl", sets: [{ reps: 12, weight: 30 }] },
+      ],
+    });
+
+    expect(await getSessionDetail(intruder, sessionId)).toBeNull();
+
+    const before = (await getSessionDetail(owner, sessionId))!;
+    await expect(
+      replaceSession(intruder, sessionId, {
+        performedAt: before.performedAt,
+        title: before.title,
+        exercises: [...before.exercises].reverse().map((e) => ({
+          exerciseId: e.exerciseId,
+          sets: e.sets,
+        })),
+      }),
+    ).rejects.toThrow();
+
+    const after = (await getSessionDetail(owner, sessionId))!;
+    expect(after.exercises.map((e) => e.exerciseName)).toEqual([
+      "Private Row",
+      "Private Curl",
+    ]);
+  });
 });
