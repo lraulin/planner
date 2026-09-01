@@ -11,7 +11,11 @@ import type { FinanceExecutor } from "./dbExecutor";
 import { financeTransactions } from "@/db/schema";
 import { numericStringToCents } from "./money";
 import type { PendingRow } from "./workingBalance";
-import { selectWorkingPending, type WorkingPendingAccount } from "./workingPending";
+import {
+  selectWorkingPending,
+  withheldBrowserPendingAccountIds,
+  type WorkingPendingAccount,
+} from "./workingPending";
 
 export async function loadSelectedWorkingPending(
   userId: string,
@@ -27,6 +31,8 @@ export type WorkingPendingSelection = {
   rows: PendingRow[];
   /** Stale feed rows kept in the Register for sync reconciliation, not Budget money. */
   supersededTransactionIds: string[];
+  /** Accounts whose expired browser capture still holds pending rows out of the money. */
+  withheldBrowserPendingAccountIds: string[];
 };
 
 /**
@@ -76,5 +82,10 @@ export async function loadWorkingPendingSelection(
     supersededTransactionIds: candidates
       .filter((row) => !selectedIds.has(row.id))
       .map((row) => row.id),
+    withheldBrowserPendingAccountIds: withheldBrowserPendingAccountIds(
+      candidates,
+      accounts,
+      nowMs,
+    ),
   };
 }

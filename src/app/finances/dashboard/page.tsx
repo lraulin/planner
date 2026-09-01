@@ -63,6 +63,7 @@ export default async function FinancesDashboardPage() {
         <DashboardView
           accounts={data.accounts}
           pending={data.pending}
+          withheldBrowserPendingAccountIds={data.withheldBrowserPendingAccountIds}
           bills={data.bills}
           paydays={data.paydays}
           billCharges={data.billCharges}
@@ -71,7 +72,6 @@ export default async function FinancesDashboardPage() {
           budgetConfigured={budget.configured}
           underfundedBills={underfundedBills}
           upcoming={upcoming}
-          loadedAtMs={data.loadedAtMs}
         />
       </Suspense>
     </AppShell>

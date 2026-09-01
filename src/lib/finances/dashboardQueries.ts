@@ -35,7 +35,7 @@ import { spendingVsIncome, type SpendingVsIncome } from "./expectedSpending";
 import { numericStringToCents } from "./money";
 import { listAccounts, listTransactions } from "./queries";
 import type { FinanceAccountRow } from "./types";
-import { loadSelectedWorkingPending } from "./workingPendingQuery";
+import { loadWorkingPendingSelection } from "./workingPendingQuery";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { tagsInNotes } from "./tags";
 import { bankRows, moneyRows } from "./splitRows";
@@ -315,6 +315,11 @@ export type DashboardData = {
   accounts: FinanceAccountRow[];
   /** Rows the bank has not yet posted. Signed in module convention. */
   pending: PendingRow[];
+  /**
+   * Accounts whose expired browser capture still holds pending rows out of the money — the
+   * only case where a fresh bank snapshot changes what the dashboard can show.
+   */
+  withheldBrowserPendingAccountIds: string[];
   bills: StoredBillRow[];
   paydays: Payday[];
   /**
@@ -345,7 +350,11 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
         and(eq(financePayees.userId, userId), eq(financePayees.notACommitment, true)),
       ),
   ]);
-  const pending = await loadSelectedWorkingPending(userId, accounts, loadedAtMs);
+  const pendingSelection = await loadWorkingPendingSelection(
+    userId,
+    accounts,
+    loadedAtMs,
+  );
 
   // One index, built once, and the only route from a bank string to a bill envelope. Resolving
   // per panel is how a merchant ends up folded into a bill on one surface and not another.
@@ -372,7 +381,8 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
   return {
     loadedAtMs,
     accounts,
-    pending,
+    pending: pendingSelection.rows,
+    withheldBrowserPendingAccountIds: pendingSelection.withheldBrowserPendingAccountIds,
     bills,
     paydays: paydaysFrom(rows),
     billCharges,

@@ -40,3 +40,38 @@ export function selectWorkingPending<T extends WorkingPendingRow>(
       : !isScrapeFeed(row.source);
   });
 }
+
+/**
+ * Accounts whose expired browser capture is still holding pending rows out of the money.
+ *
+ * Expiry on its own is not something a reader can act on. `browserPendingAsOf` is never
+ * cleared once a card has been captured, so a warning keyed to the timestamp alone fires
+ * forever on a card whose pending SimpleFIN already reports correctly — including when the
+ * bank page has no pending activity at all and a fresh capture would change nothing.
+ *
+ * What is worth reporting is data Planner holds and is deliberately ignoring: browser rows
+ * that expiry has excluded and that only a fresh capture can replace.
+ */
+export function withheldBrowserPendingAccountIds<T extends WorkingPendingRow>(
+  pending: readonly T[],
+  accounts: readonly WorkingPendingAccount[],
+  nowMs: number,
+): string[] {
+  const expired = new Set(
+    accounts
+      .filter(
+        (account) =>
+          account.browserPendingAsOf !== null &&
+          !hasBrowserPendingAuthority(account.browserPendingAsOf, nowMs),
+      )
+      .map((account) => account.id),
+  );
+
+  const withheld = new Set<string>();
+  for (const row of pending) {
+    if (expired.has(row.accountId) && isScrapeFeed(row.source)) {
+      withheld.add(row.accountId);
+    }
+  }
+  return [...withheld];
+}

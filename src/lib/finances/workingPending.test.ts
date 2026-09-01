@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { BROWSER_PENDING_AUTHORITY_MS } from "./browserPendingAuthority";
-import { selectWorkingPending } from "./workingPending";
+import {
+  selectWorkingPending,
+  withheldBrowserPendingAccountIds,
+} from "./workingPending";
 
 const NOW = Date.parse("2026-08-18T16:00:00Z");
 
@@ -81,5 +84,65 @@ describe("selectWorkingPending", () => {
     expect(selected.reduce((sum, pending) => sum + pending.amountCents, 0)).toBe(
       -24030,
     );
+  });
+});
+
+describe("withheldBrowserPendingAccountIds", () => {
+  const EXPIRED = new Date(NOW - BROWSER_PENDING_AUTHORITY_MS - 1);
+
+  it("reports an expired capture whose rows are excluded from the money", () => {
+    expect(
+      withheldBrowserPendingAccountIds(
+        [row("chase", "api:simplefin", -5905), row("chase", "scrape:chase", -2284)],
+        [{ id: "chase", browserPendingAsOf: EXPIRED }],
+        NOW,
+      ),
+    ).toEqual(["chase"]);
+  });
+
+  it("stays silent when an expired capture holds nothing back", () => {
+    // The reported case: the card has no pending activity at all, so SimpleFIN already
+    // reports everything a fresh capture could and the ask has no effect.
+    expect(
+      withheldBrowserPendingAccountIds(
+        [],
+        [{ id: "chase", browserPendingAsOf: EXPIRED }],
+        NOW,
+      ),
+    ).toEqual([]);
+    expect(
+      withheldBrowserPendingAccountIds(
+        [row("chase", "api:simplefin", -5905)],
+        [{ id: "chase", browserPendingAsOf: EXPIRED }],
+        NOW,
+      ),
+    ).toEqual([]);
+  });
+
+  it("stays silent while the capture is still authoritative", () => {
+    expect(
+      withheldBrowserPendingAccountIds(
+        [row("chase", "scrape:chase", -2284)],
+        [{ id: "chase", browserPendingAsOf: new Date(NOW - 60_000) }],
+        NOW,
+      ),
+    ).toEqual([]);
+  });
+
+  it("names each expired card once and leaves never-captured cards alone", () => {
+    expect(
+      withheldBrowserPendingAccountIds(
+        [
+          row("capone", "scrape:capitalone", -1271),
+          row("capone", "scrape:capitalone", -1948),
+          row("chase", "api:simplefin", -5905),
+        ],
+        [
+          { id: "capone", browserPendingAsOf: EXPIRED },
+          { id: "chase", browserPendingAsOf: null },
+        ],
+        NOW,
+      ),
+    ).toEqual(["capone"]);
   });
 });

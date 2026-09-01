@@ -9,7 +9,6 @@ import {
 } from "@/app/finances/actions";
 import { syncAction } from "@/app/settings/bankSyncActions";
 import type { BankConnectionRow } from "@/lib/banksync/queries";
-import { hasBrowserPendingAuthority } from "@/lib/finances/browserPendingAuthority";
 import { accountPoolBreakdown } from "@/lib/finances/accountPool";
 import { nextPayday, type BillCharge } from "@/lib/finances/available";
 import {
@@ -63,6 +62,7 @@ const PAYDAY_CODEC: SettingCodec<{
 export function DashboardView({
   accounts,
   pending,
+  withheldBrowserPendingAccountIds,
   bills,
   paydays,
   billCharges,
@@ -71,10 +71,11 @@ export function DashboardView({
   budgetConfigured,
   underfundedBills,
   upcoming,
-  loadedAtMs,
 }: {
   accounts: readonly FinanceAccountRow[];
   pending: readonly PendingRow[];
+  /** Accounts whose expired browser capture is still holding pending rows out of the money. */
+  withheldBrowserPendingAccountIds: readonly string[];
   bills: readonly StoredBillRow[];
   paydays: readonly Payday[];
   billCharges: readonly BillCharge[];
@@ -90,8 +91,6 @@ export function DashboardView({
   }[];
   /** Bill occurrences due within the horizon — not held-back money, just a heads-up. */
   upcoming: readonly UpcomingBillRow[];
-  /** Server capture time, so freshness does not depend on an impure client render clock. */
-  loadedAtMs: number;
 }) {
   const today = useToday();
   const formatDate = useDateFormatter();
@@ -121,13 +120,12 @@ export function DashboardView({
   ).length;
   const { position, payday, stale } = analysis;
   const openAccounts = accounts.filter((account) => account.closedAt === null);
+  // Only a capture that still holds rows out of the money is worth asking about. Expiry
+  // alone never clears, so keying the ask to the timestamp nagged forever on a card whose
+  // pending SimpleFIN already reports — including a card with no pending activity at all.
+  const withheldIds = new Set(withheldBrowserPendingAccountIds);
   const staleSnapshotAccountNames = accounts
-    .filter(
-      (account) =>
-        account.kind === "credit_card" &&
-        account.browserPendingAsOf !== null &&
-        !hasBrowserPendingAuthority(new Date(account.browserPendingAsOf), loadedAtMs),
-    )
+    .filter((account) => withheldIds.has(account.id))
     .map((account) => account.name);
 
   return (
