@@ -1,6 +1,6 @@
 # Lift in any order; reorder the exercises
 
-**Status: active**
+**Status: frozen / complete** (2026-09-01)
 Spec folder: `agent-os/specs/2026-09-01-1051-workout-out-of-order-and-reorder/`
 
 ## Spec relationships
@@ -85,29 +85,30 @@ activeKey?)` finds the item (a straight exercise, or the whole group) containing
 
 ## Acceptance criteria
 
-- [ ] With exercise A untouched, typing into a set of exercise C does not scroll the drawer.
-- [ ] Working C makes C current: the sticky header names C, "Last time:" is C's history, C's row
+- [x] With exercise A untouched, typing into a set of exercise C does not scroll the drawer.
+- [x] Working C makes C current: the sticky header names C, "Last time:" is C's history, C's row
       is highlighted rather than dimmed, and checking a C set rests for C's next set.
-- [ ] Finishing every set of C advances to the first incomplete set elsewhere, in session order.
-- [ ] Never working out of order behaves exactly as before: open lands on the first incomplete
+- [x] Finishing every set of C advances to the first incomplete set elsewhere, in session order.
+- [x] Never working out of order behaves exactly as before: open lands on the first incomplete
       set, checking advances to the next, rest starts on the same rules.
-- [ ] A group member being active makes the group active: round-major still governs, and rest
+- [x] A group member being active makes the group active: round-major still governs, and rest
       still waits for the last member of the round.
-- [ ] `↑` / `↓` reorder exercises and whole groups; the ends are disabled; a group's members stay
+- [x] `↑` / `↓` reorder exercises and whole groups; the ends are disabled; a group's members stay
       contiguous; the A/B/C letters recompute.
-- [ ] The new order survives close and reopen, and starting the same title next time begins in it.
-- [ ] Cross-user: a second user cannot read, reorder, or save over another user's session.
-- [ ] Logic in `src/lib/fitness/**` with adjacent unit tests; no React component tests.
+- [x] The new order survives close and reopen, and starting the same title next time begins in it.
+- [x] Cross-user: a second user cannot read, reorder, or save over another user's session.
+- [x] Logic in `src/lib/fitness/**` with adjacent unit tests; no React component tests.
       `npm run test:unit` plus integration with Postgres up (check it did not skip).
-- [ ] Phone: reorder taps are 44px, the active exercise is obvious in one second.
+- [x] Phone: reorder taps are 44px, the active exercise is obvious in one second.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change | Why |
-| --- | ------ | --- |
-|     |        |     |
+| #   | Change                                                                                                              | Why                                                                                                                                                                                                                                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Decision 4's `pendingScroll` is a ref plus a bump counter, not a `useState` cleared by the effect.                  | `react-hooks/set-state-in-effect` is an error in this repo, and clearing the state inside the effect that consumed it is exactly the cascading-render shape it forbids. The semantics are unchanged — scroll fires on open and on advancing after a check, and nowhere else. |
+| 2   | The `↑` / `↓` pair is a shared `MoveButtons` component in its own file rather than markup repeated in both headers. | `ExerciseGroupBlock` cannot import from `SessionEditor` — `SessionEditor` imports it — so a shared control needs its own module. It also keeps the 44px sizing and the disabled styling in one place.                                                                        |
 
 ## Task 1: Save spec documentation
 
@@ -184,6 +185,13 @@ supersession is recorded.
 
 ---
 
-While this spec is **active**, when we make a material change to requirements, design, or scope
-(including from feedback on what was implemented), update the relevant sections and append to
-**Changes from original plan**. Skip pure implementation details. Freeze when verified.
+This spec is **frozen**: it is the as-built record of what was decided and why, not a living
+control plane. Reference this folder for the reasoning; open a **new delta-spec** for further
+change rather than editing anything here.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Drag-to-reorder on desktop, if buttons ever prove too slow at a keyboard.
+- Reordering members inside a group, if round-major ever stops making their order moot.
+- A "jump to current set" control, if the active exercise ever ends up off-screen in a long
+  session.

@@ -1,6 +1,9 @@
 # Standards for Lift in any order; reorder the exercises
 
-Standards commit SHA is pinned here at freeze. References, not copies — see AGENTS.md.
+**Status: frozen / complete** (2026-09-01)
+
+Standards pinned at `91999a0ab88ec727956924e702f589a4a5833395` — recover any of the files below with
+`git show 91999a0ab88ec727956924e702f589a4a5833395:agent-os/standards/<path>`. References, not copies — see AGENTS.md.
 
 - `agent-os/standards/development/clean-code.md` — active-exercise resolution and `moveItem` are
   pure logic and belong in `src/lib/fitness/**`, not in `SessionEditor`. `moveItem` goes in

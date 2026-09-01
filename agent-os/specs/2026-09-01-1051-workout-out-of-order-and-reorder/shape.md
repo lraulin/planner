@@ -1,6 +1,6 @@
 # Lift in any order; reorder the exercises — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-01)
 
 ## Scope
 
