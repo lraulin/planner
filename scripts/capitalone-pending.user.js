@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Planner: copy Capital One bank snapshot
 // @namespace    planner
-// @version      2.1
+// @version      2.2
 // @description  Copy Capital One current-cycle posted and pending activity for Planner.
 // @match        https://myaccounts.capitalone.com/*
 // @match        https://*.capitalone.com/*
@@ -237,17 +237,38 @@
     };
     const snapshot = `# planner-bank-snapshot v1\n${JSON.stringify(body, null, 2)}\n`;
     await writeClipboard(snapshot);
-    const complete =
-      body.completeness.currentCycle &&
-      body.completeness.posted &&
-      body.completeness.pending &&
-      !body.completeness.filtered &&
-      !body.completeness.searched;
-    setStatus(
-      complete && accountLast4 && balance
-        ? `Copied ${body.posted.length} posted + ${body.pending.length} pending. Paste in Planner → Finances → Dashboard.`
-        : "Copied an incomplete snapshot. Clear search/filters and load the full current cycle before applying it.",
+    const reasons = refusals(
+      { postedKnown, pendingKnown, failed: captured.failed, ...body.completeness },
+      accountLast4,
+      balance,
     );
+    setStatus(
+      reasons.length === 0
+        ? `Copied ${body.posted.length} posted + ${body.pending.length} pending. Paste in Planner → Finances → Dashboard.`
+        : `Copied an incomplete snapshot — Planner will refuse it because ${reasons.join("; and ")}.`,
+    );
+  }
+
+  /**
+   * Why Planner would reject this capture, in the reader's terms. Empty means it will not.
+   *
+   * The old status named search and filters whatever the cause was, so a clean unfiltered
+   * page that simply had not finished rendering reported the one thing the reader had
+   * already done. The five-key `completeness` contract cannot carry this, so it is derived
+   * from the same findings alongside it.
+   */
+  function refusals(found, accountLast4, balance) {
+    const reasons = [];
+    if (found.searched) reasons.push("a transaction search box still has text in it");
+    if (found.filtered) reasons.push("an activity filter is switched on");
+    if (incompletePagination()) reasons.push("the activity list has more rows to load");
+    if (!found.postedKnown)
+      reasons.push("the posted transactions table has not rendered");
+    if (!found.pendingKnown) reasons.push("the pending section has not rendered");
+    if (found.failed > 0) reasons.push(`${found.failed} row(s) could not be read`);
+    if (!accountLast4) reasons.push("the card's last four digits are not on the page");
+    if (!balance) reasons.push("the current balance could not be read");
+    return reasons;
   }
 
   async function writeClipboard(text) {

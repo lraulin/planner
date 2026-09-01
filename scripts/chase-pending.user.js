@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Planner: copy Chase bank snapshot
 // @namespace    planner
-// @version      2.2
+// @version      2.3
 // @description  Copy Chase current-cycle posted and pending activity for Planner.
 // @match        https://secure.chase.com/*
 // @match        https://*.chase.com/*
@@ -203,32 +203,81 @@
     ].some((button) => /filter/i.test(clean(button.textContent)));
   }
 
-  function completeness(postedTable, pendingTable, postedRows, pendingRows, period) {
+  /**
+   * Every assertion the capture depends on, evaluated once and kept separately.
+   *
+   * `completeness` below is the five-key contract Planner validates, and it cannot carry
+   * anything else. Keeping the individual findings here is what lets the button say which
+   * assertion failed: the old status named search and filters whatever the cause was, so a
+   * page with no pending section and a clean unfiltered view reported the one thing the
+   * reader had already done.
+   */
+  function assess(postedTable, pendingTable, postedRows, pendingRows, period) {
     const text = pageText();
-    const wholeCycle = REQUIRED_PERIOD.test(period ?? "");
-    const postedKnown =
-      Boolean(postedTable) ||
-      /no (?:recent |current )?(?:activity|transactions)/i.test(text);
-    const pendingKnown =
-      Boolean(pendingTable) || /no pending (?:charges|transactions)/i.test(text);
-    const more = [...document.querySelectorAll("button, a")].some(
-      (node) =>
-        /(?:load|show) more/i.test(clean(node.textContent)) &&
-        !node.hasAttribute("disabled"),
-    );
     return {
-      currentCycle:
-        wholeCycle &&
-        postedKnown &&
-        pendingKnown &&
-        postedRows.failed === 0 &&
-        pendingRows.failed === 0 &&
-        !more,
-      posted: wholeCycle && postedKnown && postedRows.failed === 0 && !more,
-      pending: pendingKnown && pendingRows.failed === 0,
+      period,
+      wholeCycle: REQUIRED_PERIOD.test(period ?? ""),
+      postedKnown:
+        Boolean(postedTable) ||
+        /no (?:recent |current )?(?:activity|transactions)/i.test(text),
+      pendingKnown:
+        Boolean(pendingTable) || /no pending (?:charges|transactions)/i.test(text),
+      postedFailed: postedRows.failed,
+      pendingFailed: pendingRows.failed,
+      more: [...document.querySelectorAll("button, a")].some(
+        (node) =>
+          /(?:load|show) more/i.test(clean(node.textContent)) &&
+          !node.hasAttribute("disabled"),
+      ),
       filtered: filtered(),
       searched: searched(),
     };
+  }
+
+  function completeness(found) {
+    return {
+      currentCycle:
+        found.wholeCycle &&
+        found.postedKnown &&
+        found.pendingKnown &&
+        found.postedFailed === 0 &&
+        found.pendingFailed === 0 &&
+        !found.more,
+      posted:
+        found.wholeCycle &&
+        found.postedKnown &&
+        found.postedFailed === 0 &&
+        !found.more,
+      pending: found.pendingKnown && found.pendingFailed === 0,
+      filtered: found.filtered,
+      searched: found.searched,
+    };
+  }
+
+  /** Why Planner would reject this capture, in the reader's terms. Empty means it will not. */
+  function refusals(found, accountLast4, balance) {
+    const reasons = [];
+    if (!found.wholeCycle) {
+      reasons.push(
+        found.period === null
+          ? "no activity-period dropdown was found on this page"
+          : `the activity period reads "${found.period}" — choose "Activity since last statement"`,
+      );
+    }
+    if (found.searched) reasons.push("a transaction search box still has text in it");
+    if (found.filtered) reasons.push("an activity filter is switched on");
+    if (found.more) reasons.push("the activity list has more rows to load");
+    if (!found.postedKnown) reasons.push("the posted activity table has not rendered");
+    if (!found.pendingKnown) reasons.push("the pending section has not rendered");
+    if (found.postedFailed > 0) {
+      reasons.push(`${found.postedFailed} posted row(s) could not be read`);
+    }
+    if (found.pendingFailed > 0) {
+      reasons.push(`${found.pendingFailed} pending row(s) could not be read`);
+    }
+    if (!accountLast4) reasons.push("the card's last four digits are not on the page");
+    if (!balance) reasons.push("the current balance could not be read");
+    return reasons;
   }
 
   async function copySnapshot() {
@@ -239,6 +288,7 @@
     const postedRows = rowsOf(posted, false);
     const pendingRows = rowsOf(pending, true);
     const period = periodSelection();
+    const found = assess(posted, pending, postedRows, pendingRows, period);
     const body = {
       version: 1,
       source: "chase",
@@ -246,24 +296,17 @@
       accountLast4,
       balanceKind: "posted_only",
       currentBalance: balance,
-      completeness: completeness(posted, pending, postedRows, pendingRows, period),
+      completeness: completeness(found),
       posted: postedRows.rows,
       pending: pendingRows.rows,
     };
     const text = `# planner-bank-snapshot v1\n${JSON.stringify(body, null, 2)}\n`;
     await writeClipboard(text);
-    const complete =
-      body.completeness.currentCycle &&
-      body.completeness.posted &&
-      body.completeness.pending &&
-      !body.completeness.filtered &&
-      !body.completeness.searched;
+    const reasons = refusals(found, accountLast4, balance);
     setStatus(
-      complete && accountLast4 && balance
+      reasons.length === 0
         ? `Copied ${body.posted.length} posted + ${body.pending.length} pending. Paste in Planner → Finances → Dashboard.`
-        : REQUIRED_PERIOD.test(period ?? "")
-          ? "Copied an incomplete snapshot. Clear search/filters and load the full current cycle before applying it."
-          : 'Copied an incomplete snapshot: set the activity dropdown to "Activity since last statement" first.',
+        : `Copied an incomplete snapshot — Planner will refuse it because ${reasons.join("; and ")}.`,
     );
   }
 
