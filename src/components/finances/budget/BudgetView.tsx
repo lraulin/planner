@@ -10,6 +10,7 @@ import {
   useTransition,
   type ReactNode,
 } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import {
@@ -502,10 +503,14 @@ export function BudgetView({
     [commitAssign],
   );
 
-  function goToMonth(key: string) {
+  function monthHref(key: string) {
     const next = new URLSearchParams(params.toString());
     next.set("month", monthParamOf(key));
-    router.push(`/finances/budget?${next.toString()}`);
+    return `/finances/budget?${next.toString()}`;
+  }
+
+  function goToMonth(key: string) {
+    router.push(monthHref(key));
   }
 
   const spendingRows = useMemo(
@@ -1488,6 +1493,11 @@ export function BudgetView({
           month={month}
           onPrev={() => goToMonth(prevMonthKey(data.month))}
           onNext={() => goToMonth(nextMonthKey(data.month))}
+          todayHref={
+            data.month === monthKeyOf(data.todayKey)
+              ? undefined
+              : monthHref(monthKeyOf(data.todayKey))
+          }
           pending={pending}
           onRelease={
             month.bufferedCents > 0
@@ -2018,6 +2028,7 @@ function MonthBar({
   month,
   onPrev,
   onNext,
+  todayHref,
   onRelease,
   pending,
   showHidden,
@@ -2026,6 +2037,8 @@ function MonthBar({
   month: BudgetMonth;
   onPrev: () => void;
   onNext: () => void;
+  /** Current month, when the bar is showing some other month. A URL so it opens in a new tab. */
+  todayHref?: string;
   onRelease?: () => void;
   pending: boolean;
   showHidden: boolean;
@@ -2045,6 +2058,11 @@ function MonthBar({
       <button type="button" onClick={onNext} className={button} title="Next month">
         →
       </button>
+      {todayHref ? (
+        <Link href={todayHref} className={button} title="Current month">
+          Today
+        </Link>
+      ) : null}
 
       <span className="ml-auto flex flex-wrap gap-2">
         <label className="flex min-h-tap items-center gap-2 px-1 text-[0.8125rem] text-ink md:min-h-0">
