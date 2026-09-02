@@ -141,14 +141,6 @@ import type {
   TransactionListRow,
 } from "@/lib/finances/types";
 import {
-  createFinanceTag,
-  deleteFinanceTag,
-  discoverFinanceTags,
-  updateFinanceTag,
-  type FinanceTagEdit,
-} from "@/lib/finances/tags/mutations";
-import { listFinanceTags, type FinanceTagRow } from "@/lib/finances/tags/queries";
-import {
   applyAmazonSnapshotText,
   approveAmazonChargeMatch,
   listAmazonChargeCandidates,
@@ -228,12 +220,8 @@ async function registerContext(userId: string, rawQuery?: unknown) {
   const supersededPendingIds =
     parsed?.viewId === "activity"
       ? new Set(
-          (
-            await loadWorkingPendingSelection(
-              userId,
-              accounts,
-            )
-          ).supersededTransactionIds,
+          (await loadWorkingPendingSelection(userId, accounts))
+            .supersededTransactionIds,
         )
       : undefined;
   return {
@@ -326,33 +314,6 @@ export async function unsplitTransactionAction(
 
 export async function listAccountsAction(): Promise<QueryResult<FinanceAccountRow[]>> {
   return runQuery(listAccounts);
-}
-
-export async function listFinanceTagsAction(): Promise<QueryResult<FinanceTagRow[]>> {
-  return runQuery(listFinanceTags);
-}
-
-export async function createFinanceTagAction(
-  tag: string,
-): Promise<DataActionResult<FinanceTagRow>> {
-  return runWithData((userId) => createFinanceTag(userId, { tag }));
-}
-
-export async function updateFinanceTagAction(
-  tagId: string,
-  edit: FinanceTagEdit,
-): Promise<ActionResult> {
-  return run((userId) => updateFinanceTag(userId, tagId, edit));
-}
-
-export async function deleteFinanceTagAction(tagId: string): Promise<ActionResult> {
-  return run((userId) => deleteFinanceTag(userId, tagId));
-}
-
-export async function discoverFinanceTagsAction(): Promise<
-  QueryResult<FinanceTagRow[]>
-> {
-  return runQuery(discoverFinanceTags);
 }
 
 export async function reclassifyAction(): Promise<DataActionResult<ReclassifySummary>> {

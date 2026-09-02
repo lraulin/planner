@@ -223,9 +223,9 @@ export type FinanceAccountRow = {
  * One register row.
  *
  * Carries both halves of the classification split: `derived*` is what the classifier worked
- * out and is rewritten by every reclassify, while `category`, `flowOverride`,
- * `excludeFromBaseline` and `eventLabel` are yours and survive one. The register shows
- * the effective value of each and marks which is which.
+ * out and is rewritten by every reclassify, while `flowOverride`, `excludeFromBaseline`
+ * and `eventLabel` are yours and survive one. The register shows the effective value of
+ * each and marks which is which.
  */
 export type TransactionListRow = {
   id: string;
@@ -249,7 +249,6 @@ export type TransactionListRow = {
    * feed owns the row's day (`feedWatermark.ts`). Null on nothing this app writes.
    */
   externalSource: string | null;
-  category: string | null;
   /** Optional test fixture stand-in; not loaded from the database. */
   derivedCategory?: string | null;
   derivedFlow: FinanceFlowKind | null;
@@ -260,8 +259,6 @@ export type TransactionListRow = {
   excludeFromBaseline: boolean;
   eventLabel: string;
   notes: string;
-  /** Exact, case-sensitive `#tokens` parsed from Notes. */
-  tags?: string[];
   balanceAfterCents: number | null;
   /**
    * Which envelope this row spends from, and its name for display.

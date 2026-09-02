@@ -91,15 +91,11 @@ describeDb("finance mutations", () => {
     ({ accountId, transactionId } = await seed(userId));
   });
 
-  it("sets a category and a note without touching the bank's own fields", async () => {
-    await updateTransaction(userId, transactionId, {
-      category: "Household",
-      notes: "nappies",
-    });
+  it("sets a note without touching the bank's own fields", async () => {
+    await updateTransaction(userId, transactionId, { notes: "nappies" });
 
     const row = await getTransaction(userId, transactionId);
     expect(row).toMatchObject({
-      category: "Household",
       notes: "nappies",
       sourceCategory: "Shopping",
       description: "AMAZON MKTPL*5H1YV8C82",
@@ -108,30 +104,13 @@ describeDb("finance mutations", () => {
   });
 
   it("writes only the fields supplied", async () => {
-    await updateTransaction(userId, transactionId, { category: "Household" });
+    await updateTransaction(userId, transactionId, { eventLabel: "Baby" });
     await updateTransaction(userId, transactionId, { notes: "nappies" });
 
     expect(await getTransaction(userId, transactionId)).toMatchObject({
-      category: "Household",
+      eventLabel: "Baby",
       notes: "nappies",
     });
-  });
-
-  it("treats a blank category as uncategorised rather than storing an empty string", async () => {
-    // Otherwise "" and null both mean uncategorised and every filter has to check for two
-    // values forever.
-    await updateTransaction(userId, transactionId, { category: "Household" });
-    await updateTransaction(userId, transactionId, { category: "   " });
-    expect((await getTransaction(userId, transactionId))?.category).toBeNull();
-
-    await updateTransaction(userId, transactionId, { category: "Household" });
-    await updateTransaction(userId, transactionId, { category: null });
-    expect((await getTransaction(userId, transactionId))?.category).toBeNull();
-  });
-
-  it("trims a category so two spellings do not become two categories", async () => {
-    await updateTransaction(userId, transactionId, { category: "  Household  " });
-    expect((await getTransaction(userId, transactionId))?.category).toBe("Household");
   });
 
   it("deletes one transaction and leaves the rest", async () => {
@@ -227,9 +206,9 @@ describeDb("finance user isolation", () => {
 
   it("does not let a second user change another user's transaction", async () => {
     await expect(
-      updateTransaction(intruderId, transactionId, { category: "Stolen" }),
+      updateTransaction(intruderId, transactionId, { notes: "Stolen" }),
     ).rejects.toThrow("Transaction not found.");
-    expect((await getTransaction(ownerId, transactionId))?.category).toBeNull();
+    expect((await getTransaction(ownerId, transactionId))?.notes).toBe("");
   });
 
   it("does not let a second user delete another user's transaction", async () => {

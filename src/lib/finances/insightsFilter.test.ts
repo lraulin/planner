@@ -18,7 +18,6 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     description: "WM SUPERCENTER #1981",
     amountCents: -8412,
     sourceCategory: "",
-    category: null,
     derivedCategory: "Groceries",
     derivedFlow: "spend",
     flowOverride: null,

@@ -43,8 +43,6 @@ export type ColumnDef<TCtx = unknown, TRow = OutlineNode> = {
    * priorities are `A1` / `A` / `""`. Missing means the column is not filterable.
    */
   filterValue?: (row: NodeGridRow<TRow>) => string | null;
-  /** Independent values carried by one cell, such as the tags parsed from Notes. */
-  filterValues?: (row: NodeGridRow<TRow>) => readonly string[];
   filterKind?: FilterKind;
   /**
    * How a filter value reads in the set-filter list and on a chip, when the canonical value
@@ -93,7 +91,6 @@ export type ColumnMeta = {
   /** Presence, not shape: the header only asks whether the column can sort or filter. */
   sortValue?: unknown;
   filterValue?: unknown;
-  filterValues?: unknown;
   filterKind?: FilterKind;
   /** Presentation for a filter value — see `ColumnDef.filterLabel`. */
   filterLabel?: (value: string) => string;

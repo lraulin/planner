@@ -59,18 +59,4 @@ describe("collectColumnValues", () => {
     expect(collectDistinctValues(columns, rows)).toEqual(distinctValuesOf(values));
     expect(collectDistinctValues(columns, rows).priority.sort()).toEqual(["A", "B"]);
   });
-
-  it("counts each multi-valued token once per row", () => {
-    const values = collectColumnValues(
-      [{ id: "tags", filterValues: (row: { tags: string[] }) => row.tags }],
-      [{ tags: ["gift", "travel", "gift"] }, { tags: ["gift"] }, { tags: [] }],
-    );
-    expect(values.tags).toEqual({
-      counts: new Map([
-        ["gift", 2],
-        ["travel", 1],
-      ]),
-      blanks: 1,
-    });
-  });
 });

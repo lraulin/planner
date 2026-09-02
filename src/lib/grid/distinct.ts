@@ -20,7 +20,6 @@ export type ColumnValues = {
 type FilterableColumn<TRow> = {
   id: string;
   filterValue?: (row: TRow) => string | null;
-  filterValues?: (row: TRow) => readonly string[];
 };
 
 export function collectColumnValues<TRow>(
@@ -30,19 +29,17 @@ export function collectColumnValues<TRow>(
   const map: Record<string, ColumnValues> = {};
 
   for (const column of columns) {
-    if (!column.filterValue && !column.filterValues) continue;
+    if (!column.filterValue) continue;
     const counts = new Map<string, number>();
     let blanks = 0;
 
     for (const row of rows) {
-      const values = column.filterValues
-        ? [...new Set(column.filterValues(row).filter((value) => value !== ""))]
-        : [column.filterValue?.(row) ?? ""];
-      if (values.length === 0 || (values.length === 1 && values[0] === "")) {
+      const value = column.filterValue?.(row) ?? "";
+      if (value === "") {
         blanks += 1;
         continue;
       }
-      for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+      counts.set(value, (counts.get(value) ?? 0) + 1);
     }
 
     map[column.id] = { counts, blanks };

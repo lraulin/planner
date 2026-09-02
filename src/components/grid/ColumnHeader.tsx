@@ -135,8 +135,7 @@ export function ColumnHeaderRow({
           const sortIndex = sorts.findIndex((entry) => entry.columnId === column.id);
           const sorted = sortIndex === -1 ? null : sorts[sortIndex].direction;
           const filter = filters?.[column.id] ?? ALL_FILTER;
-          const filterable =
-            enableFilters && Boolean(column.filterValue || column.filterValues);
+          const filterable = enableFilters && Boolean(column.filterValue);
           const sortable = Boolean(column.sortValue) && onSort !== undefined;
 
           return (

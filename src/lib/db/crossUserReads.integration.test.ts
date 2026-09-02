@@ -59,7 +59,6 @@ import {
 import { createCategoryGroup } from "@/lib/finances/budget/mutations";
 import { upsertBillEnvelope } from "@/lib/finances/mutations";
 import { getPayee, listAliasRows, listPayees } from "@/lib/finances/payees/queries";
-import { listFinanceTags } from "@/lib/finances/tags/queries";
 import {
   getPaymentResolution,
   getTransaction,
@@ -615,7 +614,6 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listPaymentResolutions(intruder)).toEqual([]);
     expect(await getPaymentResolution(intruder, owner.paymentResolutionId)).toBeNull();
     expect(await listPayees(intruder)).toEqual([]);
-    expect(await listFinanceTags(intruder)).toEqual([]);
     expect(await listAliasRows(intruder)).toEqual([]);
     expect(await getPayee(intruder, owner.financePayeeId)).toBeNull();
     // The filtered read takes an account id the intruder can guess; it must refuse by user

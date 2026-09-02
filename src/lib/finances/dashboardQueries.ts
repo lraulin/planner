@@ -37,7 +37,6 @@ import { listAccounts, listTransactions } from "./queries";
 import type { FinanceAccountRow } from "./types";
 import { loadWorkingPendingSelection } from "./workingPendingQuery";
 import { localDateKey } from "@/lib/schedule/geometry";
-import { tagsInNotes } from "./tags";
 import { bankRows, moneyRows } from "./splitRows";
 
 /**
@@ -87,7 +86,6 @@ export async function loadInsightsRows(
       description: financeTransactions.description,
       amount: financeTransactions.amount,
       sourceCategory: financeTransactions.sourceCategory,
-      category: financeTransactions.category,
       derivedFlow: financeTransactions.derivedFlow,
       flowOverride: financeTransactions.flowOverride,
       transferGroupId: financeTransactions.transferGroupId,
@@ -128,7 +126,6 @@ export async function loadInsightsRows(
     description: row.description,
     amountCents: numericStringToCents(row.amount) ?? 0,
     sourceCategory: row.sourceCategory,
-    category: row.category,
     derivedFlow: row.derivedFlow,
     flowOverride: row.flowOverride,
     transferGroupId: row.transferGroupId,
@@ -137,7 +134,6 @@ export async function loadInsightsRows(
     payeeId: row.payeeId,
     payeeName: row.payeeName,
     budgetCategoryName: row.budgetCategoryName,
-    tags: tagsInNotes(row.notes),
   }));
 }
 

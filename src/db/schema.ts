@@ -2198,8 +2198,6 @@ export const financeTransactions = pgTable(
     amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
     /** What the bank called it. Never overwritten by a later import, never user-edited. */
     sourceCategory: text("source_category").notNull().default(""),
-    /** Yours. Null means uncategorised — distinct from the bank's blank string. */
-    category: text("category"),
     notes: text("notes").notNull().default(""),
     /** Running balance where the feed supplies one (the 360 exports do; cards do not). */
     balanceAfter: numeric("balance_after", { precision: 14, scale: 2 }),
@@ -3072,50 +3070,6 @@ export const financePayees = pgTable(
     ),
   ],
 );
-
-/**
- * Presentation metadata for Actual-style `#tags` whose occurrences live in transaction Notes.
- * Deleting this row never edits Notes; Find existing tags can recreate it later.
- */
-export const financeTags = pgTable(
-  "finance_tags",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    /** Exact and case-sensitive, stored without the leading `#`. */
-    tag: text("tag").notNull(),
-    color: text("color"),
-    description: text("description").notNull().default(""),
-    hidden: boolean("hidden").notNull().default(false),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("finance_tags_user_tag_uq").on(table.userId, table.tag),
-    check(
-      "finance_tags_valid_tag",
-      sql`${table.tag} <> '' and ${table.tag} !~ '[#[:space:]]'`,
-    ),
-    check(
-      "finance_tags_valid_color",
-      sql`${table.color} is null or ${table.color} ~ '^#[0-9A-Fa-f]{6}$'`,
-    ),
-    index("finance_tags_user_hidden_idx").on(table.userId, table.hidden),
-  ],
-);
-
-/** Per-user receipt for the staged taxonomy-to-tags cutover. */
-export const financeCategoryCutovers = pgTable("finance_category_cutovers", {
-  userId: uuid("user_id")
-    .primaryKey()
-    .references(() => users.id, { onDelete: "cascade" }),
-  taggedTransactions: integer("tagged_transactions").notNull().default(0),
-  mappedTransactions: integer("mapped_transactions").notNull().default(0),
-  unresolvedRules: integer("unresolved_rules").notNull().default(0),
-  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
-});
 
 /**
  * The `normalizeMerchant()` strings one payee answers to.

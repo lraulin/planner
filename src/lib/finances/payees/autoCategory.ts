@@ -148,7 +148,7 @@ export function inferredDefault(
 /**
  * An unseeded rule is convertible only when it is exactly "this payee → this Category".
  *
- * Anything else — regex, amount, flow, tags, extra conditions — cannot be reconstructed
+ * Anything else — regex, amount, flow, extra conditions — cannot be reconstructed
  * from a payee default, so the cutover must abort and name it.
  */
 export function isConvertiblePayeeCategoryRule(rule: {

@@ -241,7 +241,7 @@ describe("isConvertiblePayeeCategoryRule", () => {
         ...exact,
         actions: [
           { op: "set", field: "category", value: "cat-1" },
-          { op: "add-tag", value: "legacy" },
+          { op: "set", field: "notes", value: "legacy" },
         ],
       }),
     ).toBe(false);

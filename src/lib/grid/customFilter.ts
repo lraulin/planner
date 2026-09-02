@@ -20,7 +20,7 @@ import {
  * Defined here rather than on `ColumnDef` because it is filter vocabulary, not
  * presentation — `components/grid/columns` re-exports it for the column definitions.
  */
-export type FilterKind = "text" | "priority" | "date" | "enum" | "tags" | "number";
+export type FilterKind = "text" | "priority" | "date" | "enum" | "number";
 
 export type FilterJoin = "and" | "or";
 
@@ -152,7 +152,7 @@ export function operatorsForKind(kind: FilterKind | undefined): OperatorOption[]
   const ops =
     kind === "priority" || kind === "date" || kind === "number"
       ? COMPARE_OPS
-      : kind === "enum" || kind === "tags"
+      : kind === "enum"
         ? ENUM_OPS
         : TEXT_OPS;
 
@@ -242,7 +242,6 @@ export function matchesCondition(
 }
 
 function equals(cell: string, operand: string, kind: FilterKind | undefined): boolean {
-  if (kind === "tags") return cell === operand;
   if (kind === "number") {
     const left = parseFilterNumber(cell);
     const right = parseNumberOperand(operand);

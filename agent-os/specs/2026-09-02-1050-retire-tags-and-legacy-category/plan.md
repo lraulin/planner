@@ -1,6 +1,6 @@
 # Retire Tags and the Legacy Category Column
 
-**Status: active**
+**Status: frozen / complete** (2026-09-02)
 Spec folder: `agent-os/specs/2026-09-02-1050-retire-tags-and-legacy-category/`
 
 ## Spec relationships
@@ -71,27 +71,31 @@ _"Destructive removal of the compatibility storage is a future audited delta."_
 
 ## Acceptance criteria
 
-- [ ] `/finances/tags` returns 404; the navigation registry has no Tags entry; `npm run smoke`
+- [x] `/finances/tags` returns 404; the navigation registry has no Tags entry; `npm run smoke`
       passes against the reduced route set
-- [ ] The Register has no Tags column, no tag pills, no `?tag=` deep link, and no `tag` view
-- [ ] The transaction drawer has no tag adder and no `#` autocomplete
-- [ ] Insights filters are Accounts / Categories / Merchants
-- [ ] `finance_tags`, `finance_category_cutovers`, and `finance_transactions.category` no
+- [x] The Register has no Tags column, no tag pills, no `?tag=` deep link, and no `tag` view
+- [x] The transaction drawer has no tag adder and no `#` autocomplete
+- [x] Insights filters are Accounts / Categories / Merchants
+- [x] `finance_tags`, `finance_category_cutovers`, and `finance_transactions.category` no
       longer exist in the database or in `schema.ts`
-- [ ] `effectiveCategory()` has no legacy-string fallback branch, and its tests reflect that
-- [ ] No note contains a migrated tag token; the one real note still reads `baby stuff`
-- [ ] `grep -rE "tagsInNotes|addTagToNotes|normalizeTagInput|financeTags|add-tag" src` returns
+- [x] `effectiveCategory()` has no legacy-string fallback branch, and its tests reflect that
+- [x] No note contains a migrated tag token; the one real note still reads `baby stuff`
+- [x] `grep -rE "tagsInNotes|addTagToNotes|normalizeTagInput|financeTags|add-tag" src` returns
       nothing
-- [ ] `npm test` passes with the integration project actually running (no skip warning),
+- [x] `npm test` passes with the integration project actually running (no skip warning),
       alongside typecheck, lint, and `next build`
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Why                                                                                                                                                                                                                                                                                                                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **The grid's `filterKind: "tags"` and its whole `filterValues` multi-valued path were removed, not just the Register field.** Task 4 left this conditional on whether another field used the kind; none did, and the register `tags` field also turned out to be the only producer of `filterValues` anywhere. Both came out of `src/lib/grid/{customFilter,filters,distinct}.ts`, `src/components/grid/{columns,DataGrid,ColumnHeader,ColumnMenu,GridFilterDialog}`, and the two field registries, with their grid unit tests. | Confirmed with the developer mid-implementation. A filter kind and a cell-value mechanism with zero producers is the same dead vocabulary the spec set out to remove; leaving them would have meant two shared-grid capabilities kept alive by nothing. `GridFilterValue` itself was left alone — it is the value type every field still flows through. |
+| 2   | **`finance_transactions.category` came out of more readers than task 6 listed:** `TransactionListRow` and `AnalyticsRow` (and every fixture built on them), `queries.ts` / `dashboardQueries.ts` selects, `useRegisterSource.ts`, `TransactionEdit` and its update path in `mutations.ts`, and Find's transaction corpus (`src/lib/find/{queries,searchable}.ts`, where it was a searchable "Category" detail).                                                                                                                 | The plan enumerated the audit-payload writers; the column also had readers the shaping pass had not walked. All were the same one-line removal, and the type checker found them exhaustively.                                                                                                                                                           |
+| 3   | **Three integration tests that used `category` as the stand-in for "a user edit a re-import must not clobber" were re-pointed at `notes` rather than deleted** (`import.integration.test.ts` ×3, `mutations.integration.test.ts`, `reclassify.integration.test.ts`, `banksync/mutations.integration.test.ts`). Two tests that existed only to assert the removed column's blank-and-trim normalization were deleted.                                                                                                            | The first group tests import/sync/reclassify behavior, not the column; `notes` is the same kind of user-owned field and keeps the guarantee under test. The second group had no behavior left to assert.                                                                                                                                                |
+| 4   | Migration `0092` names the 22 tags in one `regexp_replace` alternation with a `(^                                                                                                                                                                                                                                                                                                                                                                                                                                               | [[:space:]])`prefix and a`(?=$                                                                                                                                                                                                                                                                                                                          | [[:space:]])`lookahead, rather than 22 chained`replace()` calls. | Still a literal enumeration — the file is the record the spec asked for — but the boundary guard means a token can only be deleted when it stands alone, so `#ai` could never eat the front of a longer word. |
+| 5   | The `Tags` row in `pages.test.ts`'s expected Finances page list came out with the registry entry.                                                                                                                                                                                                                                                                                                                                                                                                                               | Not listed in task 3; the navigation test pins the exact page list.                                                                                                                                                                                                                                                                                     |
 
 ## Task 1: Save spec documentation
 
@@ -164,9 +168,20 @@ in a browser and confirm no orphaned `#` text and no empty filter chips.
   sentence about a future audited delta now names this spec, and the tag-scrub counts are
   recorded as built. Note that group-based reporting remains open.
 
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Group-based reporting.** Groups are the reporting axis tags were standing in for, and
+  removing tags leaves that gap open. A Group dimension in Insights and the Register is its
+  own spec, shaped on its own merits.
+- **`GridFilterValue` is now effectively scalar.** With `filterValues` gone, nothing produces
+  the `readonly string[]` arm of `string | readonly string[] | null`, and
+  `scalarFilterValues` / `filterValueBlank` still branch on it. Collapsing the union touches
+  `filters.ts`, `search.ts`, `crossFilter.ts` and `customFilter.ts`, so it was left alone
+  rather than widened into this deletion.
+
 ---
 
-**Standing rule while this spec is active:** when a material change to requirements, design,
+**Standing rule while this spec was active:** when a material change to requirements, design,
 or scope appears — including feedback on what was actually built — update the relevant
 sections and append a row to **Changes from original plan**. Skip pure implementation
 details. Freeze when verified.

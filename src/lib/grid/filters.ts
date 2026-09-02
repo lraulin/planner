@@ -179,7 +179,7 @@ export function presetOptions(kind: FilterKind | undefined): FilterOption[] {
  * named band is Custom criteria, which offers `<` `<=` `>` `>=` joined by And/Or.
  */
 export function usesSetFilter(kind: FilterKind | undefined): boolean {
-  return kind === "enum" || kind === "tags";
+  return kind === "enum";
 }
 
 /**

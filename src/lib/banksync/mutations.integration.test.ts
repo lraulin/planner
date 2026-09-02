@@ -280,7 +280,7 @@ describeDb("applySync", () => {
     expect(second.inserted).toBe(0);
   });
 
-  it("updates provider columns without touching a hand-set category or notes", async () => {
+  it("updates provider columns without touching hand-set notes", async () => {
     const userId = await makeUser();
     const connectionId = await saveConnection(userId, {
       accessUrl: "https://a:b@x.test",
@@ -297,7 +297,7 @@ describeDb("applySync", () => {
     });
     await db
       .update(financeTransactions)
-      .set({ category: "Coffee", notes: "with Dad" })
+      .set({ notes: "with Dad" })
       .where(
         and(
           eq(financeTransactions.userId, userId),
@@ -329,7 +329,6 @@ describeDb("applySync", () => {
         description: financeTransactions.description,
         amount: financeTransactions.amount,
         pending: financeTransactions.pending,
-        category: financeTransactions.category,
         notes: financeTransactions.notes,
       })
       .from(financeTransactions)
@@ -344,7 +343,6 @@ describeDb("applySync", () => {
     expect(row.amount).toBe("-5.11");
     expect(row.pending).toBe(false);
     // The whole point: a provider revision must not undo the user's own work.
-    expect(row.category).toBe("Coffee");
     expect(row.notes).toBe("with Dad");
   });
 

@@ -207,7 +207,6 @@ describeDb("reclassifyTransactions", () => {
       row.description.includes("WM SUPERCENTER"),
     );
     await updateTransaction(userId, walmart.id, {
-      category: "Baby",
       flowOverride: "refund",
       notes: "returned half of it",
     });
@@ -221,7 +220,7 @@ describeDb("reclassifyTransactions", () => {
 
     const [row] = await db
       .select({
-        category: financeTransactions.category,
+        notes: financeTransactions.notes,
         flowOverride: financeTransactions.flowOverride,
         excludeFromBaseline: financeTransactions.excludeFromBaseline,
         eventLabel: financeTransactions.eventLabel,
@@ -231,7 +230,7 @@ describeDb("reclassifyTransactions", () => {
       .where(eq(financeTransactions.id, walmart.id));
 
     expect(row).toMatchObject({
-      category: "Baby",
+      notes: "returned half of it",
       flowOverride: "refund",
       excludeFromBaseline: true,
       eventLabel: "House move",

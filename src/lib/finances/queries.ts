@@ -14,7 +14,6 @@ import {
 import type { FinanceExecutor } from "./dbExecutor";
 import { numericStringToCents } from "./money";
 import { bankRows, moneyRows } from "./splitRows";
-import { tagsInNotes } from "./tags";
 import type {
   FinanceAccountRow,
   ParsedStatementRate,
@@ -72,7 +71,6 @@ const TRANSACTION_LIST_COLUMNS = {
   amount: financeTransactions.amount,
   sourceCategory: financeTransactions.sourceCategory,
   externalSource: financeTransactions.externalSource,
-  category: financeTransactions.category,
   derivedFlow: financeTransactions.derivedFlow,
   transferGroupId: financeTransactions.transferGroupId,
   flowOverride: financeTransactions.flowOverride,
@@ -304,7 +302,6 @@ function toTransactionListRow(row: {
   amount: string;
   sourceCategory: string;
   externalSource: string | null;
-  category: string | null;
   derivedFlow: TransactionListRow["derivedFlow"];
   transferGroupId: string | null;
   flowOverride: TransactionListRow["flowOverride"];
@@ -332,14 +329,12 @@ function toTransactionListRow(row: {
     amountCents: numericStringToCents(row.amount) ?? 0,
     sourceCategory: row.sourceCategory,
     externalSource: row.externalSource,
-    category: row.category,
     derivedFlow: row.derivedFlow,
     transferGroupId: row.transferGroupId,
     flowOverride: row.flowOverride,
     excludeFromBaseline: row.excludeFromBaseline,
     eventLabel: row.eventLabel,
     notes: row.notes,
-    tags: tagsInNotes(row.notes),
     balanceAfterCents: numericStringToCents(row.balanceAfter),
     budgetCategoryId: row.budgetCategoryId,
     budgetCategoryName: row.budgetCategoryName,

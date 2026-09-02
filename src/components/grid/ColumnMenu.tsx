@@ -117,8 +117,7 @@ export function ColumnMenuButton({
   const rootRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
 
-  const canFilter =
-    Boolean(column.filterValue || column.filterValues) && onFilterChange !== undefined;
+  const canFilter = Boolean(column.filterValue) && onFilterChange !== undefined;
   const active = filterActive(filter);
   // The *field* name, not the header: a header can be a tick box with no word in it (the
   // Day tab's Done column), and "▾ column menu" names nothing.

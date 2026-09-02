@@ -11,7 +11,6 @@ import { listPayees } from "@/lib/finances/payees/queries";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { AppShell } from "@/components/shell/AppShell";
 import { FinancesView } from "@/components/finances/FinancesView";
-import { listFinanceTags } from "@/lib/finances/tags/queries";
 import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { parseBudget } from "@/lib/settings/finances";
@@ -34,7 +33,6 @@ export default async function FinancesRegisterPage() {
     envelopeCatalog,
     storedBudget,
     payees,
-    tags,
     upcoming,
   ] = await Promise.all([
     listTransactions(userId),
@@ -43,7 +41,6 @@ export default async function FinancesRegisterPage() {
     listBudgetEnvelopeOptions(userId),
     readSetting(userId, BUDGET_SCOPE),
     listPayees(userId),
-    listFinanceTags(userId),
     loadUpcomingBills(userId, todayKey, UPCOMING_HORIZON_DAYS),
   ]);
   const budgetStartMonth = parseBudget(storedBudget).startMonth;
@@ -77,7 +74,6 @@ export default async function FinancesRegisterPage() {
           catalog={envelopeCatalog}
           initialUpcoming={upcoming}
           payees={payees.map(({ id, name }) => ({ id, name }))}
-          tags={tags.map(({ tag, color }) => ({ tag, color }))}
           todayKey={todayKey}
           defaultCollapsedGroups={defaultCollapsedGroups}
         />

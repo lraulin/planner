@@ -84,13 +84,11 @@ import {
 const FINANCE_VIEW_CORE = [
   { id: "all", label: "All Transactions" },
   { id: "uncategorized", label: "Uncategorized" },
-  { id: "tag", label: "Tag" },
 ] as const;
 
 function viewDefaults(
   viewId: string,
   extras: {
-    tag: string | null;
     envelopeName: string | null;
     month: string | null;
   },
@@ -106,11 +104,9 @@ function viewDefaults(
     filters:
       viewId === "uncategorized"
         ? { category: optionsFilter(["Uncategorized"]) }
-        : viewId === "tag" && extras.tag
-          ? { tags: optionsFilter([extras.tag]) }
-          : viewId === "activity" && extras.envelopeName && extras.month
-            ? activityViewFilters(extras.envelopeName, extras.month)
-            : {},
+        : viewId === "activity" && extras.envelopeName && extras.month
+          ? activityViewFilters(extras.envelopeName, extras.month)
+          : {},
   };
 }
 
@@ -199,7 +195,6 @@ export function FinancesView({
   catalog,
   initialUpcoming = [],
   payees: _payees,
-  tags,
   todayKey,
   defaultCollapsedGroups,
 }: {
@@ -211,7 +206,6 @@ export function FinancesView({
   /** Unposted schedule occurrences. Not transactions; never mixed into `rows`. */
   initialUpcoming?: UpcomingBillRow[];
   payees: readonly { id: string; name: string }[];
-  tags: readonly { tag: string; color: string | null }[];
   /** Calendar today, so year-collapse defaults are available on the first paint. */
   todayKey: string;
   defaultCollapsedGroups: string[];
@@ -246,11 +240,10 @@ export function FinancesView({
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
   const router = useRouter();
   const pathname = usePathname();
-  // Tag / Activity deep-links live on the client so the Register page does not
+  // Activity deep-links live on the client so the Register page does not
   // subscribe to searchParams — that subscription reloaded every transaction
   // whenever the drawer wrote `?detail=`.
   const searchParams = useSearchParams();
-  const initialTag = searchParams.get("tag");
   const activityView = useMemo(
     () =>
       parseActivityRegisterParams({
@@ -292,13 +285,12 @@ export function FinancesView({
       viewDefaults(
         viewId,
         {
-          tag: initialTag,
           envelopeName: activityEnvelopeName,
           month: activityView?.month ?? null,
         },
         collapsedYears,
       ),
-    [initialTag, activityEnvelopeName, activityView, collapsedYears],
+    [activityEnvelopeName, activityView, collapsedYears],
   );
   const views = useModuleViews({
     moduleId: "finances",
@@ -309,11 +301,7 @@ export function FinancesView({
   });
   const gridState = views.grid;
   useEffect(() => {
-    if (
-      views.base === "uncategorized" ||
-      views.base === "tag" ||
-      views.base === "activity"
-    ) {
+    if (views.base === "uncategorized" || views.base === "activity") {
       gridState.clearViewState();
     }
     // Deep links are task entry points: they must open on their exact row set rather than
@@ -347,7 +335,6 @@ export function FinancesView({
     () =>
       parseRegisterQuery({
         viewId: views.base,
-        tag: initialTag,
         category: activityView?.categoryId ?? null,
         month: activityView ? searchParams.get("month") : null,
         search: gridState.search,
@@ -361,7 +348,6 @@ export function FinancesView({
       }),
     [
       views.base,
-      initialTag,
       activityView,
       searchParams,
       gridState.search,
@@ -517,16 +503,10 @@ export function FinancesView({
     [rowById, claimedByPayee],
   );
 
-  const tagColors = useMemo(
-    () => Object.fromEntries(tags.map((tag) => [tag.tag, tag.color])),
-    [tags],
-  );
-
   const columnCtx = useMemo(
     () => ({
       catalog: envelopeCatalog,
       offBudgetAccountIds,
-      tagColors,
       onSetEnvelope,
       onCreateEnvelope,
       expandedSplitIds,
@@ -535,7 +515,6 @@ export function FinancesView({
     [
       envelopeCatalog,
       offBudgetAccountIds,
-      tagColors,
       onSetEnvelope,
       onCreateEnvelope,
       expandedSplitIds,
@@ -791,10 +770,6 @@ export function FinancesView({
             <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
               Everything eligible has a Category.
             </p>
-          ) : views.base === "tag" ? (
-            <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
-              No transactions use {initialTag ? `#${initialTag}` : "this tag"}.
-            </p>
           ) : views.base === "activity" && activityEnvelopeName && activityView ? (
             <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
               {activityEmptyCopy(activityEnvelopeName, activityView.month)}
@@ -859,7 +834,6 @@ export function FinancesView({
         row={openId ? rowById(openId) : null}
         catalog={envelopeCatalog}
         offBudgetAccountIds={offBudgetAccountIds}
-        managedTags={tags.map((tag) => tag.tag)}
         onClose={closeDrawer}
         onChanged={patchRow}
         onCreateEnvelope={onCreateEnvelope}

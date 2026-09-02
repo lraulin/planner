@@ -61,18 +61,6 @@ describe("matchesFilter — universal", () => {
   });
 });
 
-describe("matchesFilter — tags", () => {
-  it("matches any exact case-sensitive token and treats an empty list as blank", () => {
-    expect(
-      matchesFilter(["gift", "Travel"], optionsFilter(["value:gift"]), "tags", TODAY),
-    ).toBe(true);
-    expect(
-      matchesFilter(["Travel"], optionsFilter(["value:travel"]), "tags", TODAY),
-    ).toBe(false);
-    expect(matchesFilter([], optionsFilter(["blanks"]), "tags", TODAY)).toBe(true);
-  });
-});
-
 describe("matchesFilter — priority presets", () => {
   const p = (id: string, value: string | null) =>
     matchesFilter(value, optionsFilter([id]), "priority", TODAY);

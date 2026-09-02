@@ -215,7 +215,6 @@ export type TransactionRow = {
   id: string;
   description: string;
   notes: string;
-  category: string | null;
   sourceCategory: string;
   eventLabel: string;
   transactionDate: string;
@@ -694,7 +693,6 @@ async function loadFinancesSource(userId: string): Promise<CorpusPart> {
           id: financeTransactions.id,
           description: financeTransactions.description,
           notes: financeTransactions.notes,
-          category: financeTransactions.category,
           sourceCategory: financeTransactions.sourceCategory,
           eventLabel: financeTransactions.eventLabel,
           transactionDate: financeTransactions.transactionDate,

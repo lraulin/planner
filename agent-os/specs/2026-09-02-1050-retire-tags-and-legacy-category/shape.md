@@ -1,6 +1,6 @@
 # Retire Tags and the Legacy Category Column — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-02)
 
 ## Scope
 
@@ -62,9 +62,10 @@ copy is not wanted.
 - **References:** See `references.md`.
 - **Product alignment:** The roadmap's `✅ Actual Categories and Tags shipped 2026-08-23`
   entry (Phase 2) closes with _"Destructive removal of the compatibility storage is a future
-  audited delta."_ This spec is that delta. The entry also claims _"Insights still filters by
-  tags without overlapping tag totals"_, which stops being true here and must be amended at
-  freeze.
+  audited delta."_ This spec is that delta. The entry also claimed _"Insights still filters by
+  tags without overlapping tag totals"_, which stopped being true here; the entry was amended
+  at freeze to name this spec, record the scrub counts as built, and note that group-based
+  reporting remains open.
 
 ## Standards Applied
 

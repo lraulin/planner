@@ -83,8 +83,6 @@ async function requireTransaction(
 }
 
 export type TransactionEdit = {
-  /** Null clears it back to uncategorised. */
-  category?: string | null;
   notes?: string;
   /** Null defers to the classifier again. */
   flowOverride?: FinanceFlowKind | null;
@@ -98,7 +96,6 @@ const TRANSACTION_AUDIT_COLUMNS = {
   transactionDate: financeTransactions.transactionDate,
   amount: financeTransactions.amount,
   pending: financeTransactions.pending,
-  category: financeTransactions.category,
   budgetCategoryId: financeTransactions.budgetCategoryId,
   derivedFlow: financeTransactions.derivedFlow,
   flowOverride: financeTransactions.flowOverride,
@@ -119,7 +116,6 @@ function transactionAuditFields(row: TransactionAuditRow) {
     transactionDate: row.transactionDate,
     amount: row.amount,
     pending: row.pending,
-    category: row.category,
     budgetCategoryId: row.budgetCategoryId,
     derivedFlow: row.derivedFlow,
     flowOverride: row.flowOverride,
@@ -149,7 +145,6 @@ export async function updateTransaction(
   edit: TransactionEdit,
 ): Promise<void> {
   const values: {
-    category?: string | null;
     notes?: string;
     flowOverride?: FinanceFlowKind | null;
     excludeFromBaseline?: boolean;
@@ -157,12 +152,6 @@ export async function updateTransaction(
     updatedAt: Date;
   } = { updatedAt: new Date() };
 
-  if (edit.category !== undefined) {
-    // A blank string and "uncategorised" are the same thing to a person, so store one of
-    // them. Null is the uncategorised value, matching the nullable column.
-    const trimmed = edit.category === null ? null : edit.category.trim();
-    values.category = trimmed === "" ? null : trimmed;
-  }
   if (edit.notes !== undefined) values.notes = edit.notes;
   if (edit.flowOverride !== undefined) values.flowOverride = edit.flowOverride;
   if (edit.excludeFromBaseline !== undefined) {
@@ -183,13 +172,10 @@ export async function updateTransaction(
       .limit(1);
     if (!before) throw new Error("Transaction not found.");
 
-    const categoryAfter =
-      values.category !== undefined ? values.category : before.category;
     const flowOverrideAfter =
       values.flowOverride !== undefined ? values.flowOverride : before.flowOverride;
     const excludedAfter = values.excludeFromBaseline ?? before.excludeFromBaseline;
     const moneyChanged =
-      categoryAfter !== before.category ||
       flowOverrideAfter !== before.flowOverride ||
       excludedAfter !== before.excludeFromBaseline;
     const scope = transactionAuditScope([before]);
@@ -221,12 +207,10 @@ export async function updateTransaction(
           entityType: "transaction",
           entityIdentity: transactionId,
           before: {
-            category: before.category,
             flowOverride: before.flowOverride,
             excludeFromBaseline: before.excludeFromBaseline,
           },
           after: {
-            category: categoryAfter,
             flowOverride: flowOverrideAfter,
             excludeFromBaseline: excludedAfter,
           },
@@ -498,7 +482,7 @@ export type ReclassifySummary = {
  * the sharpest test available for this whole layer, and it is written down as one.
  *
  * Only `derived_*`, `transfer_group_id` and the recomputable `payee_id` are written.
- * `category`, `flow_override`, `exclude_from_baseline` and `event_label` belong to the user
+ * `flow_override`, `exclude_from_baseline` and `event_label` belong to the user
  * and are not in the update statement at all, so no amount of re-running can erase a
  * correction.
  */

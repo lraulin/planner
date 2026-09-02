@@ -16,7 +16,6 @@ export const REGISTER_VISIBLE_COLUMN_IDS = [
   "account",
   "description",
   "category",
-  "tags",
   "flow",
   "sourceCategory",
   "amount",
@@ -32,7 +31,6 @@ export const REGISTER_FIELD_IDS = [
   "description",
   "payee",
   "category",
-  "tags",
   "flow",
   "sourceCategory",
   "amount",
@@ -50,7 +48,6 @@ export type RegisterField = {
   id: RegisterFieldId;
   filterKind: FilterKind;
   filterValue?: (row: TransactionListRow) => string | null;
-  filterValues?: (row: TransactionListRow) => readonly string[];
   sortValue?: (row: TransactionListRow) => string | number | null | undefined;
 };
 
@@ -87,12 +84,6 @@ export const registerFields: Record<RegisterFieldId, RegisterField> = {
         ? "Not budgeted"
         : (row.budgetCategoryName ?? "Uncategorized"),
     sortValue: (row) => (row.budgetCategoryName ?? "").toLowerCase(),
-  },
-  tags: {
-    id: "tags",
-    filterKind: "tags",
-    filterValues: (row) => row.tags ?? [],
-    sortValue: (row) => (row.tags ?? []).join("\u0000"),
   },
   flow: {
     id: "flow",
@@ -148,8 +139,7 @@ export function registerFilterValues(
 ): Record<string, GridFilterValue> {
   const values: Record<string, GridFilterValue> = {};
   for (const field of REGISTER_FIELDS) {
-    if (field.filterValues) values[field.id] = field.filterValues(row);
-    else if (field.filterValue) values[field.id] = field.filterValue(row);
+    if (field.filterValue) values[field.id] = field.filterValue(row);
   }
   return values;
 }

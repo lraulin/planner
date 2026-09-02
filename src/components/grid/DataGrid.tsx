@@ -545,8 +545,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
             column.compact !== undefined ||
             column.compactTextWithCtx !== undefined ||
             column.compactText !== undefined ||
-            column.filterValue !== undefined ||
-            column.filterValues !== undefined,
+            column.filterValue !== undefined,
         ),
       ),
     [columns],
@@ -624,8 +623,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     for (const row of narrowingNodeRows) {
       const values: Record<string, GridFilterValue> = {};
       for (const column of filterColumns) {
-        if (column.filterValues) values[column.id] = column.filterValues(row);
-        else if (column.filterValue) values[column.id] = column.filterValue(row);
+        if (column.filterValue) values[column.id] = column.filterValue(row);
       }
       if (
         rowPassesFilters(values, filters, kinds, today) &&

@@ -63,8 +63,6 @@ export type AnalyticsRow = {
   /** Signed; positive is money into the account. */
   amountCents: number;
   sourceCategory: string;
-  /** Legacy taxonomy override; unused for envelope Category. */
-  category: string | null;
   /** Test fixture stand-in for Category; production rows use `budgetCategoryName`. */
   derivedCategory?: string | null;
   derivedFlow: FinanceFlowKind | null;
@@ -78,7 +76,6 @@ export type AnalyticsRow = {
   payeeName: string | null;
   /** Actual-style budget Category name; null is Uncategorized. */
   budgetCategoryName?: string | null;
-  tags?: string[];
 };
 
 /**
@@ -94,7 +91,6 @@ export type FlowFields = {
 
 /** The fields that decide a category, on the same terms as {@link FlowFields}. */
 export type CategoryFields = {
-  category?: string | null;
   derivedCategory?: string | null;
   sourceCategory?: string;
   budgetCategoryName?: string | null;
@@ -114,15 +110,12 @@ export function effectiveFlow(row: FlowFields): FinanceFlowKind {
 }
 
 /**
- * The category to report this row under, in the order the founding spec's column split
- * implies: the user's own, then the classifier's, then the bank's vocabulary mapped onto
- * our taxonomy, then an honest admission.
+ * The category to report this row under: the envelope it spends from, or an honest
+ * admission that it has none.
  */
 export function effectiveCategory(row: CategoryFields): string {
   if (row.budgetCategoryName) return row.budgetCategoryName;
   if ("budgetCategoryName" in row) return UNCATEGORIZED;
-  const own = row.category?.trim();
-  if (own) return own;
   // Test fixtures still pass a Category stand-in as `derivedCategory`.
   if (row.derivedCategory) return row.derivedCategory;
   return UNCATEGORIZED;

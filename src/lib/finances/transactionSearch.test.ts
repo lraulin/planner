@@ -12,7 +12,6 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     description: "WM SUPERCENTER #1981",
     amountCents: -8412,
     sourceCategory: "",
-    category: null,
     derivedCategory: "Groceries",
     derivedFlow: "spend",
     flowOverride: null,
@@ -116,15 +115,14 @@ describe("searchTransactions", () => {
 
   it("uses the effective category, not the bank's leftover label", () => {
     const rowWithOverride = row({
-      category: "Baby",
       derivedCategory: "Groceries",
       sourceCategory: "Shopping",
     });
-    expect(searchTransactions([rowWithOverride], { category: "Baby" }).rows).toEqual([
-      rowWithOverride,
-    ]);
     expect(
       searchTransactions([rowWithOverride], { category: "Groceries" }).rows,
+    ).toEqual([rowWithOverride]);
+    expect(
+      searchTransactions([rowWithOverride], { category: "Shopping" }).rows,
     ).toEqual([]);
   });
 });

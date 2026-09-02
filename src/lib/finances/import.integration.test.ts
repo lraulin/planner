@@ -339,18 +339,14 @@ describeDb("finance CSV import", () => {
     expect(await listTransactions(userId)).toHaveLength(2);
   });
 
-  it("does not overwrite an edited category or note on re-import", async () => {
+  it("does not overwrite an edited note on re-import", async () => {
     await importFinanceCsvFiles({ userId, files: [chaseFile] });
     const [row] = await listTransactions(userId);
-    await updateTransaction(userId, row.id, {
-      category: "Household",
-      notes: "nappies",
-    });
+    await updateTransaction(userId, row.id, { notes: "nappies" });
 
     await importFinanceCsvFiles({ userId, files: [chaseFile] });
 
     const [after] = await listTransactions(userId);
-    expect(after.category).toBe("Household");
     expect(after.notes).toBe("nappies");
     // The bank's own category is still the bank's.
     expect(after.sourceCategory).toBe("Shopping");
@@ -546,13 +542,13 @@ describeDb("finance statement import", () => {
     expect(accounts[0].closedAt).not.toBeNull();
   });
 
-  it("does not overwrite a category on a CSV row that a later statement also contains", async () => {
+  it("does not overwrite a note on a CSV row that a later statement also contains", async () => {
     await importFinanceCsvFiles({ userId, files: [caponeBankFile] });
     const payroll = (await listTransactions(userId)).find((r) =>
       r.description.includes("TRUSTEDQA"),
     );
     if (!payroll) throw new Error("expected the CSV payroll row");
-    await updateTransaction(userId, payroll.id, { category: "Pay" });
+    await updateTransaction(userId, payroll.id, { notes: "payday" });
 
     await importFinanceCsvFiles({
       userId,
@@ -565,7 +561,7 @@ describeDb("finance statement import", () => {
     });
 
     const after = (await listTransactions(userId)).find((r) => r.id === payroll.id);
-    expect(after?.category).toBe("Pay");
+    expect(after?.notes).toBe("payday");
   });
 });
 
@@ -739,17 +735,17 @@ describeDb("finance Chase card statement import", () => {
     expect(await listStatements(userId)).toHaveLength(1);
   });
 
-  it("does not overwrite a category on a CSV row a later statement also contains", async () => {
+  it("does not overwrite a note on a CSV row a later statement also contains", async () => {
     await importFinanceCsvFiles({ userId, files: [chaseFile] });
     const amazon = (await listTransactions(userId)).find((r) =>
       r.description.includes("5H1YV8C82"),
     );
     if (!amazon) throw new Error("expected the CSV Amazon row");
-    await updateTransaction(userId, amazon.id, { category: "Household" });
+    await updateTransaction(userId, amazon.id, { notes: "nappies" });
 
     await importFinanceCsvFiles({ userId, files: [chaseOverlapStatement] });
     const after = (await listTransactions(userId)).find((r) => r.id === amazon.id);
-    expect(after?.category).toBe("Household");
+    expect(after?.notes).toBe("nappies");
   });
 
   it("lands a Capital One card statement on the existing 3448 account and skips overlap", async () => {

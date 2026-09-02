@@ -39,11 +39,10 @@ export const REGISTER_BLOCK_SIZE = 100;
 export const REGISTER_SEARCH_MAX = 200;
 export const REGISTER_PREFETCH = 25;
 
-export type RegisterViewId = "all" | "uncategorized" | "tag" | "activity";
+export type RegisterViewId = "all" | "uncategorized" | "activity";
 
 export type RegisterQuery = {
   viewId: RegisterViewId;
-  tag: string | null;
   /** Envelope id when `viewId` is `activity`; otherwise null. */
   category: string | null;
   /** Budget month (`YYYY-MM-01`) when `viewId` is `activity`; otherwise null. */
@@ -96,18 +95,12 @@ export type RegisterPrepared = {
   block: RegisterRowBlock<RegisterTransactionRow>;
 };
 
-const VIEW_IDS: ReadonlySet<string> = new Set([
-  "all",
-  "uncategorized",
-  "tag",
-  "activity",
-]);
+const VIEW_IDS: ReadonlySet<string> = new Set(["all", "uncategorized", "activity"]);
 const FIELD_KINDS = registerFieldKinds();
 
 export function registerQueryKey(query: RegisterQuery): string {
   return JSON.stringify({
     viewId: query.viewId,
-    tag: query.tag,
     category: query.category,
     month: query.month,
     search: query.search,
@@ -129,12 +122,6 @@ function asViewId(value: unknown): RegisterViewId {
 
 function asDateKey(value: unknown): string | null {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
-}
-
-function asTag(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const tag = value.trim().slice(0, 64);
-  return tag === "" ? null : tag;
 }
 
 function asSearch(value: unknown): string {
@@ -226,7 +213,6 @@ export function parseRegisterQuery(value: unknown): RegisterQuery {
   if (viewId === "activity" && (!category || !month)) viewId = "all";
   return {
     viewId,
-    tag: viewId === "tag" ? asTag(record.tag) : null,
     category: viewId === "activity" ? category : null,
     month: viewId === "activity" ? month : null,
     search: asSearch(record.search),
@@ -291,9 +277,6 @@ function viewRows(
       (row) => eligible.has(row.id) && row.budgetCategoryId === null,
     );
   }
-  if (query.viewId === "tag" && query.tag) {
-    return ledger.filter((row) => (row.tags ?? []).includes(query.tag as string));
-  }
   if (query.viewId === "activity" && query.category && query.month) {
     const ids = activityContributionIds(
       ledger,
@@ -354,9 +337,6 @@ export function prepareRegister(
       id: field.id,
       filterValue: field.filterValue
         ? (row: TransactionListRow) => field.filterValue!(row)
-        : undefined,
-      filterValues: field.filterValues
-        ? (row: TransactionListRow) => field.filterValues!(row)
         : undefined,
     })),
     base,

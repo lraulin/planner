@@ -51,7 +51,6 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     description,
     amountCents: -8412,
     sourceCategory: "",
-    category: null,
     derivedCategory: "Groceries",
     derivedFlow: "spend",
     flowOverride: null,
@@ -82,9 +81,7 @@ describe("effectiveFlow", () => {
 });
 
 describe("effectiveCategory", () => {
-  it("uses the envelope name, then a leftover user taxonomy, then Uncategorized", () => {
-    expect(effectiveCategory(row({ category: "Baby" }))).toBe("Baby");
-    expect(effectiveCategory(row({ category: null }))).toBe("Groceries");
+  it("uses the envelope name, then Uncategorized", () => {
     expect(
       effectiveCategory(row({ derivedCategory: null, sourceCategory: "Gas" })),
     ).toBe("Uncategorized");

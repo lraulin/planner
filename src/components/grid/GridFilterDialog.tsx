@@ -88,8 +88,7 @@ function GridFilterDialogBody({
   const joinName = useId();
 
   const filterable = useMemo(
-    () =>
-      columns.filter((column) => Boolean(column.filterValue || column.filterValues)),
+    () => columns.filter((column) => Boolean(column.filterValue)),
     [columns],
   );
   const byId = useMemo(

@@ -31,7 +31,6 @@ function tx(
     amountCents: -1000,
     sourceCategory: "",
     externalSource: null,
-    category: null,
     derivedCategory: null,
     derivedFlow: "spend",
     flowOverride: null,
@@ -39,7 +38,6 @@ function tx(
     eventLabel: "",
 
     notes: "",
-    tags: [],
     balanceAfterCents: null,
     budgetCategoryId: null,
     budgetCategoryName: null,

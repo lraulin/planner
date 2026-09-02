@@ -18,7 +18,6 @@ import { FLOW_KINDS, flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
 import type { RegisterTransactionRow } from "@/lib/finances/registerQuery";
-import { addTagToNotes, normalizeTagInput, tagsInNotes } from "@/lib/finances/tags";
 
 /**
  * Edit the user-owned half of a transaction.
@@ -35,7 +34,6 @@ export function TransactionDrawer({
   row,
   catalog,
   offBudgetAccountIds,
-  managedTags,
   onClose,
   onChanged,
   onCreateEnvelope,
@@ -46,7 +44,6 @@ export function TransactionDrawer({
   row: RegisterTransactionRow | null;
   catalog: EnvelopeCatalog;
   offBudgetAccountIds: ReadonlySet<string>;
-  managedTags: readonly string[];
   onClose: () => void;
   onChanged: (id: string, patch: Partial<TransactionListRow>) => void;
   onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
@@ -70,7 +67,6 @@ export function TransactionDrawer({
           row={row}
           catalog={catalog}
           offBudgetAccountIds={offBudgetAccountIds}
-          managedTags={managedTags}
           onClose={onClose}
           onChanged={onChanged}
           onCreateEnvelope={onCreateEnvelope}
@@ -101,7 +97,6 @@ function TransactionForm({
   row,
   catalog,
   offBudgetAccountIds,
-  managedTags,
   onClose,
   onChanged,
   onCreateEnvelope,
@@ -111,7 +106,6 @@ function TransactionForm({
   row: RegisterTransactionRow;
   catalog: EnvelopeCatalog;
   offBudgetAccountIds: ReadonlySet<string>;
-  managedTags: readonly string[];
   onClose: () => void;
   onChanged: (id: string, patch: Partial<TransactionListRow>) => void;
   onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
@@ -129,7 +123,6 @@ function TransactionForm({
   const [envelopeId, setEnvelopeId] = useState(row.budgetCategoryId);
   const [savingEnvelope, startEnvelopeTransition] = useTransition();
   const [learningNotice, setLearningNotice] = useState<string | null>(null);
-  const [tagDraft, setTagDraft] = useState("");
   const envelopeRefusal = categoryAssignmentRefusal({
     accountOffBudget: offBudgetAccountIds.has(row.accountId),
     categoryAssignable: row.categoryAssignable,
@@ -158,7 +151,6 @@ function TransactionForm({
         onChanged(row.id, {
           notes: draft.notes,
           flowOverride: draft.flowOverride,
-          tags: tagsInNotes(draft.notes),
         });
       }
       if (thenClose) onClose();
@@ -199,53 +191,6 @@ function TransactionForm({
               value={draft.notes}
               onChange={(value) => patch("notes", value)}
             />
-            <div className="flex flex-col gap-2">
-              <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
-                Tags
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {tagsInNotes(draft.notes).map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded bg-surface-raised px-1.5 py-px text-[0.75rem] text-ink"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  list="finance-tag-options"
-                  value={tagDraft}
-                  onChange={(event) => setTagDraft(event.target.value)}
-                  placeholder="#tag"
-                  aria-label="Add tag"
-                  className="min-h-tap min-w-0 flex-1 rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:py-1 md:text-[0.8125rem]"
-                />
-                <datalist id="finance-tag-options">
-                  {managedTags.map((tag) => (
-                    <option key={tag} value={`#${tag}`} />
-                  ))}
-                </datalist>
-                <button
-                  type="button"
-                  className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink md:min-h-0"
-                  onClick={() => {
-                    try {
-                      const tag = normalizeTagInput(tagDraft);
-                      patch("notes", addTagToNotes(draft.notes, tag));
-                      setTagDraft("");
-                    } catch (tagError) {
-                      setError(
-                        tagError instanceof Error ? tagError.message : "Invalid tag.",
-                      );
-                    }
-                  }}
-                >
-                  Add
-                </button>
-              </div>
-            </div>
             {catalog.envelopes.length > 0 &&
               row.splitChildCount === 0 &&
               (envelopeRefusal ? (

@@ -495,9 +495,7 @@ export function searchCorpus(
         fields: [
           name("Description", transaction.description),
           detail("Notes", transaction.notes),
-          detail("Category", transaction.category),
           detail("Source category", transaction.sourceCategory),
-
           detail("Event", transaction.eventLabel),
         ],
       });

@@ -1030,13 +1030,18 @@ period)` so money already spent stops being held twice and only going over bites
   split `Software & AI` into AI, Productivity & Security, and Software & Development.
   ✅ **Actual Categories and Tags shipped 2026-08-23.**
   `agent-os/specs/2026-08-23-2023-actual-categories-and-tags/`. Budget envelopes are now the
-  one transaction Category written by the Register; the former reporting taxonomy survives as
-  case-sensitive Notes tags. Learning and later-match rule composition from decisions 3, 4,
-  and 8 were superseded by payee auto-category
-  (`agent-os/specs/2026-08-24-1522-category-by-kind-and-history/`). Insights still filters by
-  tags without overlapping tag totals. The additive cutover preserved 4,798 tagged
-  transactions and 4,799 Category assignments. Destructive removal of the compatibility
-  storage is a future audited delta.
+  one transaction Category written by the Register; the former reporting taxonomy survived for
+  a transitional period as case-sensitive Notes tags. Learning and later-match rule
+  composition from decisions 3, 4, and 8 were superseded by payee auto-category
+  (`agent-os/specs/2026-08-24-1522-category-by-kind-and-history/`). The additive cutover
+  preserved 4,798 tagged transactions and 4,799 Category assignments. **The compatibility
+  storage was destructively removed on 2026-09-02**
+  (`agent-os/specs/2026-09-02-1050-retire-tags-and-legacy-category/`): tags are gone
+  entirely — table, page, Register column and view, drawer adder, and the Insights filter
+  dimension — along with `finance_category_cutovers` and `finance_transactions.category`.
+  Migration `0092` scrubbed the 22 migrated tokens from 4,798 notes, 4,797 of which became
+  empty; the one note with real text kept it. Group-based reporting, the replacement for the
+  axis tags were standing in for, remains open.
   ✅ **Budget, Schedules and Commitments merged into one budget, shipped 2026-08-24.**
   `agent-os/specs/2026-08-23-2313-one-budget/`. **The parallel-systems phase every entry
   above deferred is over.** A bill is now a `kind: 'bill'` row on `finance_budget_categories`
