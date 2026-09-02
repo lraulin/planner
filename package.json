@@ -60,7 +60,7 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.5",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.3.2",
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
