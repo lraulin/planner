@@ -1,6 +1,6 @@
 # Cancelled bill handling
 
-**Status: active**  
+**Status: frozen / complete** (2026-09-03)  
 Spec folder: `agent-os/specs/2026-09-03-0951-cancelled-bill-handling/`
 
 ## Spec relationships
@@ -42,23 +42,23 @@ What we want: cancelled-and-done leaves the monthly budget on its own, comes bac
 
 ## Acceptance criteria
 
-- [ ] Cancelled bill with $0 Assigned, $0 Activity, $0 Available is absent from Bills (Show Hidden off) in that month.
-- [ ] Same bill stays on Bills in a month that already has a payment (Activity ≠ 0), then is absent in a later $0 month.
-- [ ] Cancelled bill with leftover Available (or Assigned) stays visible until that money is moved out. Hide is not required.
-- [ ] Show Hidden on reveals quiet cancelled bills, subdued like hidden envelopes; off hides them again.
-- [ ] A charge filed to a cancelled bill in the viewed month brings the row back without Show Hidden. Inspector shows **A charge posted after this bill was cancelled.** Status remains Cancelled.
-- [ ] Cancelled scheduled bill has no Next charge in the inspector and no next-due key. Reactivating restores next charge from the stored anchor. Paused still shows and edits next charge.
-- [ ] Hide envelope still works for ordinary (and active/paused) envelopes. Cancelled does not write `hidden`.
-- [ ] Unit tests on the visibility predicate, next-due skip, and inspector warning. No React component tests. lint, typecheck, `test:unit`. Browser: cancel a paid bill, a leftover bill, a $0 bill; Show Hidden; post a charge after cancel; confirm next charge is gone.
+- [x] Cancelled bill with $0 Assigned, $0 Activity, $0 Available is absent from Bills (Show Hidden off) in that month.
+- [x] Same bill stays on Bills in a month that already has a payment (Activity ≠ 0), then is absent in a later $0 month.
+- [x] Cancelled bill with leftover Available (or Assigned) stays visible until that money is moved out. Hide is not required.
+- [x] Show Hidden on reveals quiet cancelled bills, subdued like hidden envelopes; off hides them again.
+- [x] A charge filed to a cancelled bill in the viewed month brings the row back without Show Hidden. Inspector shows **A charge posted after this bill was cancelled.** Status remains Cancelled.
+- [x] Cancelled scheduled bill has no Next charge in the inspector and no next-due key. Reactivating restores next charge from the stored anchor. Paused still shows and edits next charge.
+- [x] Hide envelope still works for ordinary (and active/paused) envelopes. Cancelled does not write `hidden`.
+- [x] Unit tests on the visibility predicate, next-due skip, and inspector warning. No React component tests. lint, typecheck, `test:unit`. Browser: cancel a paid bill, a leftover bill, a $0 bill; Show Hidden; post a charge after cancel; confirm next charge is gone.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change | Why                                    |
+| --- | ------ | -------------------------------------- |
+|     | None   | As-built matches the shaped decisions. |
 
 ## Task 1: Save Spec Documentation
 
@@ -102,4 +102,12 @@ Quiet cancelled rows (the Show Hidden set) use the same italic / faint name trea
 
 ---
 
-While this spec is **active**, when we make a material change to requirements, design, or scope (including from feedback on what was implemented), update the relevant sections and append to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Mark `(cancelled)` in the Register picker
+- Omit cancelled from Move money / Assign Manual destination catalogs
+- Auto-assign leftover out of a cancelled bill
+
+---
+
+Frozen 2026-09-03. Further change opens a new delta-spec.

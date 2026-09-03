@@ -10,6 +10,7 @@ import type { BillEnvelopeEdit } from "@/lib/finances/mutations";
 import { formatUsd } from "@/lib/finances/money";
 import { activityRegisterHref } from "@/lib/finances/registerActivity";
 import type { Cadence } from "@/lib/finances/recurringBills";
+import { isQuietCancelledBill } from "@/lib/finances/budget/hierarchy";
 import type { EnvelopeIndicator } from "@/lib/finances/budget/indicator";
 import { type BudgetBillRow, type BudgetRow } from "@/lib/finances/budget/rows";
 import { AvailablePill, FundingBar } from "./FundingChrome";
@@ -233,7 +234,7 @@ function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnC
               />
             ) : (
               <span
-                className={`min-w-0 truncate ${row.node.hidden ? "text-ink-faint italic" : ""}`}
+                className={`min-w-0 truncate ${row.node.hidden || isQuietCancelledBill(row.node) ? "text-ink-faint italic" : ""}`}
                 onDoubleClick={(event) => {
                   event.stopPropagation();
                   ctx.onStartRename(row.node);

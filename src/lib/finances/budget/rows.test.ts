@@ -308,4 +308,104 @@ describe("sectionGridRows", () => {
       "Spending",
     ]);
   });
+
+  it("omits a quiet cancelled bill unless Show Hidden is on", () => {
+    const groups: BudgetGroupRow[] = [
+      {
+        id: "bills",
+        parentGroupId: null,
+        name: "Bills",
+        kind: "bill",
+        sortKey: "a",
+        hidden: false,
+      },
+    ];
+    const netflix = {
+      ...category("netflix", "bills", "a", false, "bill"),
+      bill: {
+        status: "cancelled" as const,
+        cancelledOn: null,
+        url: "",
+        cadenceMonths: 1,
+        cadenceDays: null,
+        dueDay: null,
+        anchorDate: null,
+        scheduled: true,
+        expectedCents: 1_299,
+      },
+    };
+    const emptyMonth = findMonth(
+      buildBudget({
+        categories: [{ id: "netflix", groupId: "bills", isIncome: false }],
+        allocations: [],
+        activity: [],
+        buffered: [],
+        startMonth: "2026-08-01",
+        endMonth: "2026-08-01",
+        openingCents: 0,
+      }),
+      "2026-08-01",
+    );
+    if (!emptyMonth) throw new Error("no august");
+    const rows = budgetRows(groups, [netflix], emptyMonth);
+    expect(sectionGridRows(groups, "bill", rows).map((row) => row.id)).toEqual([
+      "bills",
+    ]);
+    expect(
+      sectionGridRows(groups, "bill", rows, { showHidden: true }).map((row) => row.id),
+    ).toContain("netflix");
+  });
+
+  it("keeps a cancelled bill on the grid when leftover Available remains", () => {
+    const groups: BudgetGroupRow[] = [
+      {
+        id: "bills",
+        parentGroupId: null,
+        name: "Bills",
+        kind: "bill",
+        sortKey: "a",
+        hidden: false,
+      },
+    ];
+    const netflix = {
+      ...category("netflix", "bills", "a", false, "bill"),
+      bill: {
+        status: "cancelled" as const,
+        cancelledOn: null,
+        url: "",
+        cadenceMonths: 1,
+        cadenceDays: null,
+        dueDay: null,
+        anchorDate: null,
+        scheduled: true,
+        expectedCents: 1_299,
+      },
+    };
+    const leftover = findMonth(
+      buildBudget({
+        categories: [{ id: "netflix", groupId: "bills", isIncome: false }],
+        allocations: [
+          {
+            month: "2026-08-01",
+            categoryId: "netflix",
+            amountCents: 1_299,
+            carryover: true,
+            snoozed: false,
+          },
+        ],
+        activity: [],
+        buffered: [],
+        startMonth: "2026-08-01",
+        endMonth: "2026-08-01",
+        openingCents: 0,
+      }),
+      "2026-08-01",
+    );
+    if (!leftover) throw new Error("no august");
+    const rows = budgetRows(groups, [netflix], leftover);
+    expect(rows[0]?.balanceCents).toBe(1_299);
+    expect(sectionGridRows(groups, "bill", rows).map((row) => row.id)).toContain(
+      "netflix",
+    );
+  });
 });

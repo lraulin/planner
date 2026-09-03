@@ -5,12 +5,14 @@ import { groupMembers } from "@/lib/grid/groupMembers";
 
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
 import type { BudgetRow } from "./rows";
+import type { BillFacet } from "./queries";
 import {
   budgetChildren,
   budgetEnvelopeLabel,
   budgetSiblings,
   budgetGroupDepths,
   descendantEnvelopeIds,
+  isQuietCancelledBill,
   moveDestinations,
   nestedBudgetGridRows,
   resolveBudgetDrop,
@@ -52,7 +54,26 @@ function category(
   };
 }
 
-function row(id: string, groupId: string | null): BudgetRow {
+function billFacet(overrides: Partial<BillFacet> = {}): BillFacet {
+  return {
+    status: "active",
+    cancelledOn: null,
+    url: "",
+    cadenceMonths: 1,
+    cadenceDays: null,
+    dueDay: null,
+    anchorDate: null,
+    scheduled: true,
+    expectedCents: 1_000,
+    ...overrides,
+  };
+}
+
+function row(
+  id: string,
+  groupId: string | null,
+  overrides: Partial<BudgetRow> = {},
+): BudgetRow {
   return {
     id,
     groupId,
@@ -72,6 +93,7 @@ function row(id: string, groupId: string | null): BudgetRow {
     bill: null,
     nextDueKey: null,
     expectedKey: null,
+    ...overrides,
   };
 }
 
@@ -313,6 +335,139 @@ describe("moveDestinations", () => {
     expect(moveDestinations(groups, categories, { kind: "group", id: "nope" })).toEqual(
       [],
     );
+  });
+});
+
+describe("isQuietCancelledBill", () => {
+  const cancelled = billFacet({ status: "cancelled" });
+
+  it("is quiet only when cancelled and Assigned, Activity, and Available are all 0", () => {
+    expect(
+      isQuietCancelledBill(row("netflix", null, { kind: "bill", bill: cancelled })),
+    ).toBe(true);
+  });
+
+  it("is not quiet when leftover Available remains, including carry-in sitting in Available", () => {
+    expect(
+      isQuietCancelledBill(
+        row("netflix", null, {
+          kind: "bill",
+          bill: cancelled,
+          balanceCents: 500,
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("is not quiet when Assigned or Activity is non-zero", () => {
+    expect(
+      isQuietCancelledBill(
+        row("netflix", null, {
+          kind: "bill",
+          bill: cancelled,
+          assignedCents: 1,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isQuietCancelledBill(
+        row("netflix", null, {
+          kind: "bill",
+          bill: cancelled,
+          activityCents: -1_299,
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("does not treat a paused $0 bill as quiet", () => {
+    expect(
+      isQuietCancelledBill(
+        row("netflix", null, {
+          kind: "bill",
+          bill: billFacet({ status: "paused" }),
+        }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("nestedBudgetGridRows cancelled visibility", () => {
+  const billsGroup = group("bills", null, "A", "bill");
+  const netflix = category("netflix", "bills", "A", "bill");
+
+  it("omits a quiet cancelled bill from the grid", () => {
+    const grid = nestedBudgetGridRows(
+      [billsGroup],
+      [netflix],
+      [
+        row("netflix", "bills", {
+          kind: "bill",
+          bill: billFacet({ status: "cancelled" }),
+        }),
+      ],
+    );
+    expect(grid.map((entry) => entry.id)).toEqual(["bills"]);
+  });
+
+  it("keeps a cancelled bill that still has leftover Available", () => {
+    const grid = nestedBudgetGridRows(
+      [billsGroup],
+      [netflix],
+      [
+        row("netflix", "bills", {
+          kind: "bill",
+          bill: billFacet({ status: "cancelled" }),
+          balanceCents: 800,
+        }),
+      ],
+    );
+    expect(grid.map((entry) => entry.id)).toContain("netflix");
+  });
+
+  it("keeps a cancelled bill that has Activity this month", () => {
+    const grid = nestedBudgetGridRows(
+      [billsGroup],
+      [netflix],
+      [
+        row("netflix", "bills", {
+          kind: "bill",
+          bill: billFacet({ status: "cancelled" }),
+          activityCents: -1_299,
+        }),
+      ],
+    );
+    expect(grid.map((entry) => entry.id)).toContain("netflix");
+  });
+
+  it("brings a quiet cancelled bill back when Show Hidden is on", () => {
+    const grid = nestedBudgetGridRows(
+      [billsGroup],
+      [netflix],
+      [
+        row("netflix", "bills", {
+          kind: "bill",
+          bill: billFacet({ status: "cancelled" }),
+        }),
+      ],
+      { showHidden: true },
+    );
+    expect(grid.map((entry) => entry.id)).toContain("netflix");
+  });
+
+  it("still hides an ordinary hidden envelope unless Show Hidden is on", () => {
+    const old = category("old", null, "A");
+    old.hidden = true;
+    expect(
+      nestedBudgetGridRows([], [old], [row("old", null, { hidden: true })]).map(
+        (entry) => entry.id,
+      ),
+    ).toEqual([]);
+    expect(
+      nestedBudgetGridRows([], [old], [row("old", null, { hidden: true })], {
+        showHidden: true,
+      }).map((entry) => entry.id),
+    ).toEqual(["old"]);
   });
 });
 

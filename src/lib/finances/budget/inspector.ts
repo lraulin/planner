@@ -5,6 +5,7 @@
  * Spec: `agent-os/specs/2026-08-25-1633-budget-inspector/` D7.
  */
 
+import type { EnvelopeStatus } from "@/db/schema";
 import { formatUsd } from "@/lib/finances/money";
 import {
   annualCents,
@@ -44,6 +45,11 @@ export function billCadence(bill: BillFacet): Cadence {
 export type BillInspectorView = {
   scheduled: boolean;
   showDateEditor: boolean;
+  /**
+   * Cancelled bills omit the Next charge field entirely — not an editor, not
+   * "Unscheduled", not an editable empty. Stored `anchorDate` is untouched.
+   */
+  omitNextCharge: boolean;
   cadenceCaption: string;
   expectedCents: number;
   annualCents: number;
@@ -55,17 +61,41 @@ export type BillInspectorView = {
   estimateCopy: string | null;
 };
 
+/**
+ * Scheduled bills of any status except cancelled grow a next-charge date.
+ * Paused still walks; cancelled keeps `anchorDate` so reactivate restores it.
+ */
+export function walksNextDue(bill: Pick<BillFacet, "scheduled" | "status">): boolean {
+  return bill.scheduled && bill.status !== "cancelled";
+}
+
+export const CANCELLED_CHARGE_WARNING =
+  "A charge posted after this bill was cancelled.";
+
+/** Inspector copy when a cancelled bill still has Activity this month. */
+export function cancelledChargeWarning(
+  status: EnvelopeStatus,
+  activityCents: number,
+): string | null {
+  if (status === "cancelled" && activityCents !== 0) {
+    return CANCELLED_CHARGE_WARNING;
+  }
+  return null;
+}
+
 export function billInspectorView(bill: BillFacet): BillInspectorView {
   const cadence = billCadence(bill);
   const expectedCents = bill.expectedCents ?? 0;
   const yearly =
     bill.expectedCents === null ? 0 : annualCents(bill.expectedCents, cadence);
   const monthlyCents = Math.round(yearly / 12);
+  const omitNextCharge = bill.status === "cancelled";
 
   if (!bill.scheduled) {
     return {
       scheduled: false,
       showDateEditor: false,
+      omitNextCharge,
       cadenceCaption: "Irregular",
       expectedCents,
       annualCents: yearly,
@@ -79,7 +109,8 @@ export function billInspectorView(bill: BillFacet): BillInspectorView {
 
   return {
     scheduled: true,
-    showDateEditor: true,
+    showDateEditor: walksNextDue(bill),
+    omitNextCharge,
     cadenceCaption: cadenceLabel(cadence),
     expectedCents,
     annualCents: yearly,

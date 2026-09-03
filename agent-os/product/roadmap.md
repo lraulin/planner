@@ -1107,6 +1107,12 @@ period)` so money already spent stops being held twice and only going over bites
   notes live in a right pane on desktop and a full-screen sheet below `md`. Envelopes
   remain the obligation registry; unscheduled bills keep estimate language, not a fake
   date. The funding-indicators spec had left this pane out of scope.
+  ✅ **Cancelled bill handling shipped 2026-09-03.**
+  `agent-os/specs/2026-09-03-0951-cancelled-bill-handling/`. A cancelled bill with $0
+  Assigned, Activity, and Available leaves the Bills grid on its own; leftover or a
+  payment in the viewed month keeps it; a later charge brings it back with an inspector
+  warning. Show Hidden reveals the quiet $0 row (same switch as hidden envelopes).
+  Cancelled scheduled bills omit Next charge; paused still shows and edits it.
   ✅ **Budget Activity → Register shipped 2026-08-28.**
   `agent-os/specs/2026-08-28-1356-budget-activity-register-links/`. Envelope Activity
   (Regular, Bills, Savings, and the inspector line) drills to the Register filtered to

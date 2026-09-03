@@ -6,9 +6,11 @@ import { CadenceSelect } from "@/components/finances/CadenceSelect";
 import { AmountCell, DateKeyCell } from "@/components/grid/cells";
 import type { EnvelopeStatus } from "@/db/schema";
 import type { EnvelopeIndicator } from "@/lib/finances/budget/indicator";
+import { isQuietCancelledBill } from "@/lib/finances/budget/hierarchy";
 import {
   billCadence,
   billInspectorView,
+  cancelledChargeWarning,
   inspectorBreakdown,
 } from "@/lib/finances/budget/inspector";
 import {
@@ -107,6 +109,10 @@ export function BudgetInspector({
   );
   const bill = isBillRow(row) ? row : null;
   const billView = bill ? billInspectorView(bill.bill) : null;
+  const chargeWarning = bill
+    ? cancelledChargeWarning(bill.bill.status, row.activityCents)
+    : null;
+  const subduedName = row.hidden || isQuietCancelledBill(row);
   const targetSummary = row.target !== null ? summarize(row.target) : null;
   const hasTarget = targetSummary !== null;
   const snoozeReason = snoozeUnavailableReason(row, month, currentMonth);
@@ -116,7 +122,7 @@ export function BudgetInspector({
       <header className="min-w-0">
         <h2
           id={titleId}
-          className={`truncate text-[1.0625rem] font-semibold ${row.hidden ? "italic text-ink-faint" : "text-ink"}`}
+          className={`truncate text-[1.0625rem] font-semibold ${subduedName ? "italic text-ink-faint" : "text-ink"}`}
         >
           {row.name}
         </h2>
@@ -199,7 +205,12 @@ export function BudgetInspector({
         <section className="rounded border border-rule bg-surface px-3 py-2">
           <h3 className="mb-2 text-[0.75rem] font-medium text-ink-muted">Bill</h3>
           <div className="flex flex-col gap-2">
-            {billView.showDateEditor ? (
+            {chargeWarning ? (
+              <p className="text-[0.8125rem] text-[var(--chart-spend)]">
+                {chargeWarning}
+              </p>
+            ) : null}
+            {billView.omitNextCharge ? null : billView.showDateEditor ? (
               <label className={labelClass}>
                 Next charge
                 <DateKeyCell

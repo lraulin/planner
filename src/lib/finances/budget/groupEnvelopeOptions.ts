@@ -307,9 +307,9 @@ function envelopeRow(
 }
 
 /**
- * Destination catalog: drop hidden envelopes and anything under a hidden group,
- * same predicate as `nestedBudgetGridRows(..., { showHidden: false })`. Filing
- * surfaces (Register, Payees) keep the full catalog.
+ * Destination catalog: drop hidden envelopes and anything under a hidden group.
+ * Quiet cancelled bills stay here — Hide is the catalog filter, not cancelled
+ * status. Filing surfaces (Register, Payees) keep the full catalog.
  */
 export function visibleEnvelopeCatalog(catalog: EnvelopeCatalog): EnvelopeCatalog {
   const groupById = new Map(catalog.groups.map((group) => [group.id, group]));

@@ -22,6 +22,7 @@ import { loadWorkingPendingSelection } from "../workingPendingQuery";
 import { lastChargeByEnvelope } from "../billLastCharge";
 import { billAnchor } from "../commitments";
 import type { StoredBill } from "../recurringBills";
+import { walksNextDue } from "./inspector";
 import {
   buildBudget,
   findMonth,
@@ -598,11 +599,12 @@ function storedBillOf(category: BudgetCategoryRow): StoredBill | null {
 }
 
 /**
- * Next charge per scheduled bill envelope, of any status.
+ * Next charge per scheduled bill envelope, except cancelled.
  *
  * Distinct from {@link loadBillSnapshots}: apply only funds active bills that state an
  * amount, and deriving the grid column from that list left paused bills (and bills with
- * no amount yet) showing "—" with nothing to edit.
+ * no amount yet) showing "—" with nothing to edit. Cancelled keeps stored `anchorDate`
+ * so reactivate restores the walk; it does not grow a next-due key while cancelled.
  */
 export async function loadBillAnchors(
   userId: string,
@@ -618,7 +620,9 @@ export async function loadBillAnchors(
 
   for (const category of categories) {
     const bill = storedBillOf(category);
-    if (bill === null || !bill.scheduled) continue;
+    if (bill === null || category.bill === null || !walksNextDue(category.bill)) {
+      continue;
+    }
     const anchor = billAnchor(bill, lastCharge.get(category.id) ?? null, todayKey);
     if (anchor.nextDueKey !== null) nextDueKeys.set(category.id, anchor.nextDueKey);
     if (anchor.expectedKey !== null) expectedKeys.set(category.id, anchor.expectedKey);

@@ -1,6 +1,6 @@
 # Cancelled bill handling — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-03)
 
 ## Scope
 

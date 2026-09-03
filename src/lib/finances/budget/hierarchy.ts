@@ -189,6 +189,28 @@ export function budgetEnvelopeLabel(
 }
 
 /**
+ * A cancelled bill with nothing left to do in the viewed month.
+ *
+ * Assigned, Activity and Available all $0 means the obligation is done here — leftover
+ * dollars (including carry-in in Available) keep it on the grid so they can be moved out.
+ * Paused is never quiet by status. Hidden envelopes stay on the existing `hidden` gate.
+ */
+export function isQuietCancelledBill(
+  row: Pick<
+    BudgetRow,
+    "kind" | "bill" | "assignedCents" | "activityCents" | "balanceCents"
+  >,
+): boolean {
+  return (
+    row.kind === "bill" &&
+    row.bill?.status === "cancelled" &&
+    row.assignedCents === 0 &&
+    row.activityCents === 0 &&
+    row.balanceCents === 0
+  );
+}
+
+/**
  * Recursive Budget rows for DataGrid. A group count is every visible descendant envelope,
  * not merely its direct children, so the collapsed header describes the same rows it hides.
  *
@@ -198,6 +220,9 @@ export function budgetEnvelopeLabel(
  * and "only an empty group may be deleted" became unreachable
  * (`agent-os/specs/2026-08-28-1613-group-kind/`). Pass this only the groups of one section,
  * or a group will render in every table at once.
+ *
+ * Quiet cancelled bills follow the same Show Hidden switch as hidden envelopes: omitted
+ * from the grid (not from totals) unless `showHidden`.
  */
 export function nestedBudgetGridRows<T extends BudgetRow>(
   groups: readonly BudgetGroupRow[],
@@ -214,11 +239,15 @@ export function nestedBudgetGridRows<T extends BudgetRow>(
     ? groups
     : groups.filter((group) => !group.hidden);
   const visibleGroupIds = new Set(visibleGroups.map((group) => group.id));
-  const visibleCategories = categories.filter(
-    (category) =>
-      (category.groupId === null || visibleGroupIds.has(category.groupId)) &&
-      (options.showHidden || !category.hidden),
-  );
+  const visibleCategories = categories.filter((category) => {
+    if (category.groupId !== null && !visibleGroupIds.has(category.groupId)) {
+      return false;
+    }
+    if (options.showHidden) return true;
+    if (category.hidden) return false;
+    const row = rowById.get(category.id);
+    return row === undefined || !isQuietCancelledBill(row);
+  });
   const depths = budgetGroupDepths(groups);
   const result: GridRow<T>[] = [];
   const emitted = new Set<string>();
