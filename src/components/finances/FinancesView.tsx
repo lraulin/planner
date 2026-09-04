@@ -23,7 +23,10 @@ import {
   activityViewFilters,
   parseActivityRegisterParams,
 } from "@/lib/finances/registerActivity";
-import { THIS_MONTH_DATE_FILTER } from "@/lib/finances/registerFields";
+import {
+  isThisMonthDateFilter,
+  THIS_MONTH_DATE_FILTER,
+} from "@/lib/finances/registerFields";
 import {
   parseRegisterQuery,
   type RegisterPrepared,
@@ -311,10 +314,12 @@ export function FinancesView({
   }, []);
   useEffect(() => {
     if (views.base !== "all") return;
+    if (isThisMonthDateFilter(gridState.filters.date)) return;
     gridState.setFilter("date", THIS_MONTH_DATE_FILTER);
-    // Entering All Transactions reseeds Date. A leftover Achieve id or last visit's
-    // Last 30 must not keep showing the whole ledger. Changing the band during the
-    // visit still works because this effect does not re-run while base stays "all".
+    // Entering All Transactions reseeds Date. Skip when This Month is already
+    // in force (including the view default) so we do not materialise a blob and
+    // show Unsaved changes. Changing the band during the visit still works
+    // because this effect does not re-run while base stays "all".
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reseed on enter, not on setFilter identity
   }, [views.base]);
   useEffect(() => {
@@ -783,7 +788,7 @@ export function FinancesView({
             <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
               {activityEmptyCopy(activityEnvelopeName, activityView.month)}
             </p>
-          ) : (
+          ) : counts.total === 0 ? (
             <div className="mx-auto w-full max-w-2xl p-6">
               <p className="mb-4 text-center text-[0.9375rem] text-ink-muted">
                 No transactions yet. Import a CSV export from your bank to get started.
@@ -792,6 +797,10 @@ export function FinancesView({
                 <FinanceImportPanel />
               </div>
             </div>
+          ) : (
+            <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
+              No transactions match the current filters.
+            </p>
           )
         }
       />

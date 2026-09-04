@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { optionsFilter } from "@/lib/grid/customFilter";
 import {
+  isThisMonthDateFilter,
   registerFields,
   reseedAllTransactionsDate,
   THIS_MONTH_DATE_FILTER,
@@ -30,5 +31,7 @@ describe("reseedAllTransactionsDate", () => {
     });
     expect(next.date).toEqual(THIS_MONTH_DATE_FILTER);
     expect(next.payee).toEqual(optionsFilter(["value:Walmart"]));
+    expect(isThisMonthDateFilter(next.date)).toBe(true);
+    expect(isThisMonthDateFilter(optionsFilter(["last-month"]))).toBe(false);
   });
 });

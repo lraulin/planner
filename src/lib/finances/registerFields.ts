@@ -9,6 +9,7 @@ import { flowLabel } from "./flowLabels";
 import { formatUsd } from "./money";
 import { feedLabel, type TransactionListRow } from "./types";
 import {
+  isOptionsFilter,
   optionsFilter,
   type ColumnFilter,
   type FilterKind,
@@ -156,6 +157,15 @@ export function registerFieldKinds(): Record<string, FilterKind | undefined> {
 
 /** All Transactions' Date band. Posted stays on the Achieve `date` list. */
 export const THIS_MONTH_DATE_FILTER = optionsFilter(["this-month"]);
+
+export function isThisMonthDateFilter(filter: ColumnFilter | undefined): boolean {
+  return (
+    filter !== undefined &&
+    isOptionsFilter(filter) &&
+    filter.ids.length === 1 &&
+    filter.ids[0] === "this-month"
+  );
+}
 
 /**
  * Force Date to This Month and leave every other column's filter alone.
