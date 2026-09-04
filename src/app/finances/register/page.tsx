@@ -5,6 +5,7 @@ import { loadRecurringBills, loadUpcomingBills } from "@/lib/finances/dashboardQ
 import { UPCOMING_HORIZON_DAYS } from "@/lib/finances/commitments";
 import { claimedPayeesOf } from "@/lib/finances/registerBillDraft";
 import { collapsedYearGroupIds } from "@/lib/finances/grouping";
+import { THIS_MONTH_DATE_FILTER } from "@/lib/finances/registerFields";
 import { parseRegisterQuery, prepareRegister } from "@/lib/finances/registerQuery";
 import { listBudgetEnvelopeOptions } from "@/lib/finances/budget/queries";
 import { listPayees } from "@/lib/finances/payees/queries";
@@ -55,6 +56,7 @@ export default async function FinancesRegisterPage() {
       collapsedGroups: defaultCollapsedGroups,
       sorts: [{ columnId: "date", direction: "desc" }],
       groupBy: ["year", "month"],
+      filters: { date: THIS_MONTH_DATE_FILTER },
     }),
     {
       offBudgetAccountIds: new Set(

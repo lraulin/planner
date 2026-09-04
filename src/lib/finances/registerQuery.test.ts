@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { customFilter, optionsFilter } from "@/lib/grid/customFilter";
+import { activityViewFilters } from "./registerActivity";
+import { THIS_MONTH_DATE_FILTER } from "./registerFields";
 import type { TransactionListRow } from "./types";
 import {
   parseBlockOffset,
@@ -86,6 +88,15 @@ describe("parseRegisterQuery", () => {
     expect(parsed.sorts).toEqual([{ columnId: "date", direction: "desc" }]);
     expect(parsed.groupBy).toEqual(["year", "account"]);
     expect(parsed.today).toBeNull();
+  });
+
+  it("accepts All Transactions' This Month options-filter", () => {
+    const parsed = parseRegisterQuery({
+      filters: { date: THIS_MONTH_DATE_FILTER },
+      today: "2026-08-24",
+    });
+    expect(parsed.filters.date).toEqual(THIS_MONTH_DATE_FILTER);
+    expect(parsed.today).toBe("2026-08-24");
   });
 
   it("keeps Amount > 0 when the operand arrives as a JSON number", () => {
@@ -479,6 +490,37 @@ describe("registerQueryKey", () => {
     const left = query({ collapsedGroups: ["group:year:2024", "group:year:2025"] });
     const right = query({ collapsedGroups: ["group:year:2025", "group:year:2024"] });
     expect(registerQueryKey(left)).toBe(registerQueryKey(right));
+  });
+});
+
+describe("Date calendar bands", () => {
+  const ledger = [
+    tx({ id: "july", transactionDate: "2026-07-31" }),
+    tx({ id: "aug-1", transactionDate: "2026-08-01" }),
+    tx({ id: "aug-24", transactionDate: "2026-08-24" }),
+    tx({ id: "sep", transactionDate: "2026-09-01" }),
+  ];
+
+  it("scopes All Transactions This Month to the current calendar month", () => {
+    const prepared = prepareRegister(
+      ledger,
+      query({ groupBy: [], filters: { date: THIS_MONTH_DATE_FILTER } }),
+      EMPTY_CTX,
+    );
+    expect(prepared.index.nodeIds.sort()).toEqual(["aug-1", "aug-24"]);
+    expect(prepared.index.shown).toBe(2);
+    expect(prepared.index.total).toBe(4);
+  });
+
+  it("still applies custom gte/lte month bounds, including a non-current month", () => {
+    // Activity chips are this shape. Calendar kind must not treat them as relative bands.
+    const july = activityViewFilters("Groceries", "2026-07-01").date;
+    const prepared = prepareRegister(
+      ledger,
+      query({ groupBy: [], filters: { date: july } }),
+      EMPTY_CTX,
+    );
+    expect(prepared.index.nodeIds).toEqual(["july"]);
   });
 });
 

@@ -4,6 +4,7 @@ import { useId, useMemo, useState } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
 import {
   defaultFilterOperand,
+  isCalendarDayKind,
   operatorNeedsOperand,
   operatorsForKind,
   type FilterJoin,
@@ -304,7 +305,7 @@ function GridFilterDialogBody({
                       ) : (
                         <input
                           aria-label="Operand"
-                          type={column?.filterKind === "date" ? "date" : "text"}
+                          type={isCalendarDayKind(column?.filterKind) ? "date" : "text"}
                           inputMode={
                             column?.filterKind === "number" ? "decimal" : undefined
                           }
@@ -397,7 +398,7 @@ function defaultOperandFor(byId: Map<string, ColumnMeta>, columnId: string): str
 
 function placeholderFor(kind: ColumnMeta["filterKind"]): string {
   if (kind === "priority") return "A1";
-  if (kind === "date") return "YYYY-MM-DD";
+  if (isCalendarDayKind(kind)) return "YYYY-MM-DD";
   if (kind === "number") return "0.00";
   return "value";
 }

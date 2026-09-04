@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { buildGridChips, type GridChip } from "@/lib/grid/chips";
 import type { CrossColumnFilter } from "@/lib/grid/crossFilter";
+import { isCalendarDayKind } from "@/lib/grid/customFilter";
 import { filterOptions, type ColumnFilter } from "@/lib/grid/filters";
 import type { ColumnMeta } from "./columns";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
@@ -59,7 +60,7 @@ export function GridFilterChips({
         labelOf: (columnId) => byId.get(columnId)?.label ?? columnId,
         optionLabelOf: (columnId, optionId) => {
           const column = byId.get(columnId);
-          if (column?.filterKind === "date" && optionId.startsWith("value:")) {
+          if (isCalendarDayKind(column?.filterKind) && optionId.startsWith("value:")) {
             return formatDate(optionId.slice("value:".length));
           }
           // A value entry reads through the column's own `filterLabel`, so a chip says
@@ -77,7 +78,7 @@ export function GridFilterChips({
         },
         operandLabelOf: (columnId, value) => {
           const kind = byId.get(columnId)?.filterKind;
-          if (kind === "date") return formatDate(value);
+          if (isCalendarDayKind(kind)) return formatDate(value);
           // Blank number operands mean 0; the chip has to agree or Amount > 0 reads as
           // `[Amount] > ''`.
           if (kind === "number" && value.trim() === "") return "0";

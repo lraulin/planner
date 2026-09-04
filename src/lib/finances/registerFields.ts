@@ -8,7 +8,11 @@ import { effectiveFlow, effectiveMerchant } from "./analytics";
 import { flowLabel } from "./flowLabels";
 import { formatUsd } from "./money";
 import { feedLabel, type TransactionListRow } from "./types";
-import type { FilterKind } from "@/lib/grid/customFilter";
+import {
+  optionsFilter,
+  type ColumnFilter,
+  type FilterKind,
+} from "@/lib/grid/customFilter";
 import type { GridFilterValue } from "@/lib/grid/filterValue";
 
 export const REGISTER_VISIBLE_COLUMN_IDS = [
@@ -54,7 +58,7 @@ export type RegisterField = {
 export const registerFields: Record<RegisterFieldId, RegisterField> = {
   date: {
     id: "date",
-    filterKind: "date",
+    filterKind: "calendar",
     filterValue: (row) => row.transactionDate,
     sortValue: (row) => row.transactionDate,
   },
@@ -148,4 +152,19 @@ export function registerFieldKinds(): Record<string, FilterKind | undefined> {
   const kinds: Record<string, FilterKind | undefined> = {};
   for (const field of REGISTER_FIELDS) kinds[field.id] = field.filterKind;
   return kinds;
+}
+
+/** All Transactions' Date band. Posted stays on the Achieve `date` list. */
+export const THIS_MONTH_DATE_FILTER = optionsFilter(["this-month"]);
+
+/**
+ * Force Date to This Month and leave every other column's filter alone.
+ *
+ * All Transactions reseeds Date on every visit so a leftover Achieve id or last
+ * visit's Last 30 cannot keep showing the whole ledger. Named views do not call this.
+ */
+export function reseedAllTransactionsDate(
+  filters: Record<string, ColumnFilter>,
+): Record<string, ColumnFilter> {
+  return { ...filters, date: THIS_MONTH_DATE_FILTER };
 }

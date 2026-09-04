@@ -33,6 +33,7 @@ import type { SelectMods } from "@/lib/grid/selection";
 import { SelectionCheckbox } from "./SelectionCheckbox";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
+import { isCalendarDayKind } from "@/lib/grid/customFilter";
 import type { ColumnDef, NodeGridRow } from "./columns";
 import { RowSelectedContext } from "./rowSelectedContext";
 
@@ -433,7 +434,7 @@ function textOf<TCtx, TRow>(
     : column.compactText
       ? column.compactText(row)
       : (column.filterValue?.(row) ?? null);
-  const text = column.filterKind === "date" ? formatDate(raw) : raw;
+  const text = isCalendarDayKind(column.filterKind) ? formatDate(raw) : raw;
   return text && text.trim() !== "" ? text : null;
 }
 
@@ -449,7 +450,7 @@ function fullTextOf<TCtx, TRow>(
       ? column.compactText(row)
       : (column.filterValue?.(row) ?? null);
   if (!raw || raw.trim() === "") return null;
-  return column.filterKind === "date" ? formatFullDateKey(raw) : raw;
+  return isCalendarDayKind(column.filterKind) ? formatFullDateKey(raw) : raw;
 }
 
 /**

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
+  isCalendarDayKind,
   isCustomFilter,
   isOptionsFilter,
   optionsFilter,
@@ -122,7 +123,9 @@ export function ColumnMenuButton({
   // The *field* name, not the header: a header can be a tick box with no word in it (the
   // Day tab's Done column), and "▾ column menu" names nothing.
   const name = fieldNameOf(column);
-  const filterLabel = column.filterKind === "date" ? formatDate : column.filterLabel;
+  const filterLabel = isCalendarDayKind(column.filterKind)
+    ? formatDate
+    : column.filterLabel;
 
   // Measured before the popover's first paint, so it never renders off screen and then
   // jumps. Also picks the opening tab: the funnel is what this button used to be, and on a

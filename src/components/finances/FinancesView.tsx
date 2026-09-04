@@ -23,6 +23,7 @@ import {
   activityViewFilters,
   parseActivityRegisterParams,
 } from "@/lib/finances/registerActivity";
+import { THIS_MONTH_DATE_FILTER } from "@/lib/finances/registerFields";
 import {
   parseRegisterQuery,
   type RegisterPrepared,
@@ -106,7 +107,7 @@ function viewDefaults(
         ? { category: optionsFilter(["Uncategorized"]) }
         : viewId === "activity" && extras.envelopeName && extras.month
           ? activityViewFilters(extras.envelopeName, extras.month)
-          : {},
+          : { date: THIS_MONTH_DATE_FILTER },
   };
 }
 
@@ -308,6 +309,14 @@ export function FinancesView({
     // inheriting an unrelated Register search from the previous visit.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deep-link mount reset
   }, []);
+  useEffect(() => {
+    if (views.base !== "all") return;
+    gridState.setFilter("date", THIS_MONTH_DATE_FILTER);
+    // Entering All Transactions reseeds Date. A leftover Achieve id or last visit's
+    // Last 30 must not keep showing the whole ledger. Changing the band during the
+    // visit still works because this effect does not re-run while base stays "all".
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reseed on enter, not on setFilter identity
+  }, [views.base]);
   useEffect(() => {
     // Activity is URL-only. A valid activity URL must keep its params; leftover
     // category/month on any other view must not become the next Register visit.

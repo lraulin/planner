@@ -6,6 +6,7 @@ import {
   customFilter,
   defaultFilterOperand,
   describeCustom,
+  isCalendarDayKind,
   operatorNeedsOperand,
   operatorsForKind,
   type FilterKind,
@@ -113,7 +114,7 @@ function CustomFilterDialogBody({
     kind === "number" ? (value) => (value.trim() === "" ? "0" : value) : undefined,
   );
   const useValueSelect = kind === "enum" && distinctValues.length > 0;
-  const useDateInput = kind === "date";
+  const useDateInput = isCalendarDayKind(kind);
 
   return (
     <ModalShell open onClose={onClose} labelledBy={titleId} width="max-w-xl">
@@ -206,7 +207,7 @@ function CustomFilterDialogBody({
                         placeholder={
                           kind === "priority"
                             ? "A1"
-                            : kind === "date"
+                            : isCalendarDayKind(kind)
                               ? "YYYY-MM-DD"
                               : kind === "number"
                                 ? "0.00"
