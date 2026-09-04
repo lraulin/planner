@@ -37,12 +37,15 @@ describe("operatorsForKind", () => {
     expect(en).toEqual(["eq", "neq", "blank", "nonblank"]);
   });
 
-  it("gives date, priority, and number comparisons", () => {
-    for (const kind of ["date", "priority", "number"] as const) {
+  it("gives date, calendar, priority, and number comparisons", () => {
+    for (const kind of ["date", "calendar", "priority", "number"] as const) {
       const ids = operatorsForKind(kind).map((o) => o.id);
       expect(ids).toContain("gte");
       expect(ids).not.toContain("contains");
     }
+    expect(operatorsForKind("calendar").map((o) => o.id)).toEqual(
+      operatorsForKind("date").map((o) => o.id),
+    );
   });
 });
 
@@ -98,6 +101,21 @@ describe("matchesCondition — date and priority compares", () => {
       matchesCondition("2026-08-01", { op: "gte", value: "2026-08-01" }, "date"),
     ).toBe(true);
     expect(matchesCondition(null, { op: "lt", value: "2026-08-01" }, "date")).toBe(
+      false,
+    );
+  });
+
+  it("compares calendar days the same way as date", () => {
+    expect(
+      matchesCondition("2026-08-01", { op: "gte", value: "2026-08-01" }, "calendar"),
+    ).toBe(true);
+    expect(
+      matchesCondition("2026-08-31", { op: "lte", value: "2026-08-31" }, "calendar"),
+    ).toBe(true);
+    expect(
+      matchesCondition("2026-07-31", { op: "gte", value: "2026-08-01" }, "calendar"),
+    ).toBe(false);
+    expect(matchesCondition(null, { op: "lte", value: "2026-08-31" }, "calendar")).toBe(
       false,
     );
   });

@@ -46,7 +46,14 @@ describe("matchesFilter — universal", () => {
    */
   it("hides every row under a cleared checklist", () => {
     expect(filterActive(NONE_FILTER)).toBe(true);
-    for (const kind of ["text", "enum", "priority", "date", "number"] as const) {
+    for (const kind of [
+      "text",
+      "enum",
+      "priority",
+      "date",
+      "calendar",
+      "number",
+    ] as const) {
       expect(matchesFilter("NS", NONE_FILTER, kind, TODAY)).toBe(false);
       expect(matchesFilter(null, NONE_FILTER, kind, TODAY)).toBe(false);
       expect(matchesFilter("", NONE_FILTER, kind, TODAY)).toBe(false);
@@ -149,6 +156,88 @@ describe("matchesFilter — deadline presets", () => {
   });
 });
 
+describe("matchesFilter — calendar presets", () => {
+  const c = (id: string, value: string | null, today: string | null = TODAY) =>
+    matchesFilter(value, optionsFilter([id]), "calendar", today);
+
+  it("keeps This Month inside the current calendar month, including remaining days", () => {
+    expect(c("this-month", "2026-07-01")).toBe(true);
+    expect(c("this-month", "2026-07-28")).toBe(true);
+    expect(c("this-month", "2026-07-31")).toBe(true);
+    expect(c("this-month", "2026-06-30")).toBe(false);
+    expect(c("this-month", "2026-08-01")).toBe(false);
+  });
+
+  it("keeps Last Month on the previous calendar month, including a year boundary", () => {
+    expect(c("last-month", "2026-06-01")).toBe(true);
+    expect(c("last-month", "2026-06-30")).toBe(true);
+    expect(c("last-month", "2026-07-01")).toBe(false);
+
+    expect(c("last-month", "2025-12-31", "2026-01-01")).toBe(true);
+    expect(c("last-month", "2026-01-01", "2026-01-01")).toBe(false);
+  });
+
+  it("keeps This Year on the current calendar year, including Jan 1", () => {
+    expect(c("this-year", "2026-01-01")).toBe(true);
+    expect(c("this-year", "2026-12-31")).toBe(true);
+    expect(c("this-year", "2025-12-31")).toBe(false);
+    expect(c("this-year", "2027-01-01")).toBe(false);
+    expect(c("this-year", "2026-01-01", "2026-01-01")).toBe(true);
+  });
+
+  it("includes today in Last 7 Days and Last 30 Days", () => {
+    // Inclusive lookback: today and the six / 29 days before it. The same option
+    // id on a deadline column excludes today — that is a previous-N window.
+    expect(c("last-7-days", TODAY)).toBe(true);
+    expect(c("last-7-days", "2026-07-22")).toBe(true);
+    expect(c("last-7-days", "2026-07-21")).toBe(false);
+    expect(c("last-7-days", "2026-07-29")).toBe(false);
+
+    expect(c("last-30-days", TODAY)).toBe(true);
+    expect(c("last-30-days", "2026-06-29")).toBe(true);
+    expect(c("last-30-days", "2026-06-28")).toBe(false);
+
+    expect(matchesFilter(TODAY, optionsFilter(["last-7-days"]), "date", TODAY)).toBe(
+      false,
+    );
+  });
+
+  it("crosses a year boundary on Last 7 Days and a leap-day month end", () => {
+    expect(c("last-7-days", "2025-12-26", "2026-01-01")).toBe(true);
+    expect(c("last-7-days", "2025-12-25", "2026-01-01")).toBe(false);
+
+    expect(c("this-month", "2024-02-29", "2024-02-29")).toBe(true);
+    expect(c("this-month", "2024-03-01", "2024-02-29")).toBe(false);
+    expect(c("last-month", "2024-01-31", "2024-02-29")).toBe(true);
+    expect(c("last-month", "2024-02-01", "2024-02-29")).toBe(false);
+
+    expect(c("this-month", "2026-03-31", "2026-03-31")).toBe(true);
+    expect(c("last-month", "2026-02-28", "2026-03-31")).toBe(true);
+    expect(c("last-month", "2026-02-29", "2026-03-31")).toBe(false);
+  });
+
+  it("does not hide calendar-filtered rows before hydration", () => {
+    expect(c("this-month", "2020-01-01", null)).toBe(true);
+    expect(c("this-month", null, null)).toBe(true);
+    expect(c("last-7-days", TODAY, null)).toBe(true);
+  });
+
+  it("fails named bands on a blank cell once today is known", () => {
+    expect(c("this-month", null)).toBe(false);
+    expect(c("this-month", "")).toBe(false);
+    expect(c("last-month", null)).toBe(false);
+    expect(c("last-7-days", null)).toBe(false);
+    expect(c("last-30-days", "")).toBe(false);
+    expect(c("this-year", null)).toBe(false);
+  });
+
+  it("does not hide rows under a leftover Achieve option id", () => {
+    expect(c("past", "2020-01-01")).toBe(true);
+    expect(c("none", null)).toBe(true);
+    expect(c("today-and-past", TODAY)).toBe(true);
+  });
+});
+
 describe("matchesFilter — number presets", () => {
   const positive = optionsFilter(["positive"]);
   const negative = optionsFilter(["negative"]);
@@ -236,6 +325,12 @@ describe("filterOptions", () => {
       "(Positive)",
     );
   });
+
+  it("names calendar bands so a chip can say (This Month), not the raw id", () => {
+    const options = filterOptions("calendar", []);
+    expect(options.find((o) => o.id === "this-month")?.label).toBe("(This Month)");
+    expect(options.map((o) => o.id)).not.toContain("today-and-past");
+  });
 });
 
 describe("usesSetFilter", () => {
@@ -245,6 +340,7 @@ describe("usesSetFilter", () => {
     // Open-ended or continuous: a list of the values present is a list of the rows.
     expect(usesSetFilter("priority")).toBe(false);
     expect(usesSetFilter("date")).toBe(false);
+    expect(usesSetFilter("calendar")).toBe(false);
     expect(usesSetFilter("text")).toBe(false);
     expect(usesSetFilter("number")).toBe(false);
     expect(usesSetFilter(undefined)).toBe(false);
@@ -256,6 +352,21 @@ describe("presetOptions", () => {
     expect(presetOptions("enum")).toEqual([]);
 
     expect(presetOptions("date").map((o) => o.id)).toContain("today-and-past");
+    expect(presetOptions("date").map((o) => o.id)).not.toContain("this-month");
+    expect(presetOptions("calendar").map((o) => o.id)).toEqual([
+      "this-month",
+      "last-month",
+      "last-7-days",
+      "last-30-days",
+      "this-year",
+    ]);
+    expect(presetOptions("calendar").map((o) => o.label)).toEqual([
+      "(This Month)",
+      "(Last Month)",
+      "(Last 7 Days)",
+      "(Last 30 Days)",
+      "(This Year)",
+    ]);
     expect(presetOptions("priority").map((o) => o.id)).toContain("only-as");
 
     // Free text has no bands of its own, but "has a value at all" is still worth one click.
@@ -275,6 +386,7 @@ describe("presetOptions", () => {
       "text",
       "priority",
       "date",
+      "calendar",
       "enum",
       "number",
       undefined,

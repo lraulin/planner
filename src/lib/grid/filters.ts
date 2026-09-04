@@ -1,3 +1,4 @@
+import { monthEndKey, monthKeyOf, prevMonthKey } from "@/lib/finances/budget/envelope";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import {
   filterActive,
@@ -141,6 +142,23 @@ export const DATE_PRESETS: FilterOption[] = [
 ];
 
 /**
+ * Ledger date bands. These are calendar months and inclusive lookbacks, not Achieve
+ * deadline windows — a transaction always has a date, and the budget's unit is a month.
+ *
+ * `(Last 7 Days)` / `(Last 30 Days)` include today. The same option ids on `date` exclude
+ * today because those are "the previous N days" of a deadline. Kind chooses the matcher.
+ */
+export const CALENDAR_DATE_PRESETS: FilterOption[] = [
+  { id: "this-month", label: "(This Month)" },
+  { id: "last-month", label: "(Last Month)" },
+  { id: "last-7-days", label: "(Last 7 Days)" },
+  { id: "last-30-days", label: "(Last 30 Days)" },
+  { id: "this-year", label: "(This Year)" },
+];
+
+const CALENDAR_BAND_IDS = new Set(CALENDAR_DATE_PRESETS.map((option) => option.id));
+
+/**
  * The semantic bands a column kind offers, without the universal entries or the values.
  *
  * Exactly one of these and the set filter is ever on screen — see `usesSetFilter`. Enum
@@ -153,6 +171,7 @@ export function presetOptions(kind: FilterKind | undefined): FilterOption[] {
   if (kind === "enum") return [];
   if (kind === "priority") return PRIORITY_PRESETS;
   if (kind === "date") return DATE_PRESETS;
+  if (kind === "calendar") return CALENDAR_DATE_PRESETS;
   if (kind === "number") return [...NUMBER_PRESETS, ...BLANK_PRESETS];
   return BLANK_PRESETS;
 }
@@ -211,9 +230,11 @@ export function filterOptions(
       ? PRIORITY_PRESETS
       : kind === "date"
         ? DATE_PRESETS
-        : kind === "number"
-          ? NUMBER_PRESETS
-          : [];
+        : kind === "calendar"
+          ? CALENDAR_DATE_PRESETS
+          : kind === "number"
+            ? NUMBER_PRESETS
+            : [];
 
   const values = distinctValues
     .filter((value) => value !== "")
@@ -273,6 +294,13 @@ function matchesOption(
     return values.length === 0
       ? matchesDeadline(null, id, today)
       : values.some((entry) => matchesDeadline(entry, id, today));
+  }
+
+  if (kind === "calendar") {
+    const values = scalarFilterValues(value);
+    return values.length === 0
+      ? matchesCalendar(null, id, today)
+      : values.some((entry) => matchesCalendar(entry, id, today));
   }
 
   if (kind === "number") {
@@ -387,6 +415,48 @@ function matchesDeadline(
     if (blank) return false;
     const to = shiftDays(today, 14);
     return value > today && value <= to;
+  }
+
+  return true;
+}
+
+/**
+ * Month-oriented bands for a `calendar` column. Month math is the budget's
+ * `monthKeyOf` / `monthEndKey` so This Month and Last Month cannot drift from
+ * envelope months at a leap-day or month-end.
+ *
+ * Unknown today matches everything (SSR / hydration). Blanks fail every named
+ * band once today is known. A leftover Achieve option id is unknown here and
+ * must not hide rows.
+ */
+function matchesCalendar(
+  value: string | null,
+  id: string,
+  today: string | null,
+): boolean {
+  if (!today) return true;
+
+  const blank = value === null || value === "";
+  if (blank) return !CALENDAR_BAND_IDS.has(id);
+
+  if (id === "this-month") {
+    const month = monthKeyOf(today);
+    return value >= month && value <= monthEndKey(month);
+  }
+  if (id === "last-month") {
+    const month = prevMonthKey(monthKeyOf(today));
+    return value >= month && value <= monthEndKey(month);
+  }
+  if (id === "this-year") {
+    const january = monthKeyOf(`${today.slice(0, 4)}-01-01`);
+    const december = monthKeyOf(`${today.slice(0, 4)}-12-01`);
+    return value >= january && value <= monthEndKey(december);
+  }
+  if (id === "last-7-days") {
+    return value >= shiftDays(today, -6) && value <= today;
+  }
+  if (id === "last-30-days") {
+    return value >= shiftDays(today, -29) && value <= today;
   }
 
   return true;

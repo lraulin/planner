@@ -20,7 +20,12 @@ import {
  * Defined here rather than on `ColumnDef` because it is filter vocabulary, not
  * presentation — `components/grid/columns` re-exports it for the column definitions.
  */
-export type FilterKind = "text" | "priority" | "date" | "enum" | "number";
+export type FilterKind = "text" | "priority" | "date" | "calendar" | "enum" | "number";
+
+/** Deadline bands (`date`) and ledger month bands (`calendar`) both compare as day keys. */
+export function isCalendarDayKind(kind: FilterKind | undefined): boolean {
+  return kind === "date" || kind === "calendar";
+}
 
 export type FilterJoin = "and" | "or";
 
@@ -150,7 +155,7 @@ const COMPARE_OPS: FilterOperator[] = [
 /** Operators legal for a column's filter kind. */
 export function operatorsForKind(kind: FilterKind | undefined): OperatorOption[] {
   const ops =
-    kind === "priority" || kind === "date" || kind === "number"
+    kind === "priority" || isCalendarDayKind(kind) || kind === "number"
       ? COMPARE_OPS
       : kind === "enum"
         ? ENUM_OPS
@@ -299,7 +304,7 @@ function compare(
     return applyCompare(left, right, op);
   }
 
-  if (kind === "date") {
+  if (isCalendarDayKind(kind)) {
     // Canonical filter values are YYYY-MM-DD — lexicographic order matches calendar order.
     return applyCompare(cell, operand, op);
   }
