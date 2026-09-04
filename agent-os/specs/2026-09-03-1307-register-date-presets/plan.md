@@ -1,6 +1,6 @@
 # Register calendar date presets
 
-**Status: active**  
+**Status: frozen / complete** (2026-09-04)  
 Spec folder: `agent-os/specs/2026-09-03-1307-register-date-presets/`
 
 ## Spec relationships
@@ -38,25 +38,26 @@ This is Register daily-use, not a named roadmap line. Note it at freeze under Fi
 
 ## Acceptance criteria
 
-- [ ] Register Date funnel lists `(All)`, `(Custom)...`, then the five calendar bands — not the Achieve deadline list.
-- [ ] Tasks / Projects / Goals Deadline (and other `filterKind: "date"` columns) still show the Achieve bands.
-- [ ] Posted still uses the Achieve date list.
-- [ ] All Transactions first paint and every subsequent visit show This Month as the Date chip; the prepared index `shown` count is that month, not the whole ledger.
-- [ ] Picking Last Month / Last 7 / Last 30 / This Year / All / Custom updates the grid for this visit; leaving All Transactions and returning restores This Month.
-- [ ] Reset this grid on All Transactions restores Date = This Month. Clear all drops the Date chip until the next All Transactions visit.
-- [ ] A named Register view that stored a Date filter keeps it.
-- [ ] Budget Activity still opens with Date = custom `gte` first of that month AND `lte` last of that month, including when that month is not the current month.
-- [ ] Custom Date criteria on Register Date still accepts `>=` / `<=` calendar days.
-- [ ] Pure tests: each band on a fixture around a month/year boundary (Jan 1, Feb 29 leap, month last day); Last 7/30 include today; unknown today matches all; blanks fail named bands; Achieve `date` matchers unchanged.
-- [ ] `npm run test:unit`, lint, typecheck; `npm run smoke` with the dev server up; browser-verified Register Date funnel, default chip, band switch, Activity drill-down, and a Tasks deadline funnel still showing Achieve bands.
+- [x] Register Date funnel lists `(All)`, `(Custom)...`, then the five calendar bands — not the Achieve deadline list.
+- [x] Tasks / Projects / Goals Deadline (and other `filterKind: "date"` columns) still show the Achieve bands.
+- [x] Posted still uses the Achieve date list.
+- [x] All Transactions first paint and every subsequent visit show This Month as the Date chip; the prepared index `shown` count is that month, not the whole ledger.
+- [x] Picking Last Month / Last 7 / Last 30 / This Year / All / Custom updates the grid for this visit; leaving All Transactions and returning restores This Month.
+- [x] Reset this grid on All Transactions restores Date = This Month. Clear all drops the Date chip until the next All Transactions visit.
+- [x] A named Register view that stored a Date filter keeps it.
+- [x] Budget Activity still opens with Date = custom `gte` first of that month AND `lte` last of that month, including when that month is not the current month.
+- [x] Custom Date criteria on Register Date still accepts `>=` / `<=` calendar days.
+- [x] Pure tests: each band on a fixture around a month/year boundary (Jan 1, Feb 29 leap, month last day); Last 7/30 include today; unknown today matches all; blanks fail named bands; Achieve `date` matchers unchanged.
+- [x] `npm run test:unit`, lint, typecheck; `npm run smoke` with the dev server up; browser-verified Register Date funnel, default chip, band switch, Activity drill-down, and a Tasks deadline funnel still showing Achieve bands.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                           | Why                                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| 1   | Reseed skips the write when Date is already This Month (including the view default).             | Writing the default into `grid:finances` marked Unsaved changes on every All Transactions visit.     |
+| 2   | All Transactions empty copy is "no rows match" when the ledger has rows but This Month is empty. | Opening in a month with no transactions used to show the import panel as if the register were blank. |
 
 ## Task 1: Save Spec Documentation
 
@@ -104,4 +105,4 @@ Do not change Register wiring in this task.
 
 ---
 
-While this spec is **active**, when we make a material change to requirements, design, or scope (including from feedback on what was implemented), update the relevant sections and append to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+Frozen 2026-09-04. Further change is a new delta-spec, not an edit to this folder.

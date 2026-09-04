@@ -1117,6 +1117,12 @@ period)` so money already spent stops being held twice and only going over bites
   `agent-os/specs/2026-08-28-1356-budget-activity-register-links/`. Envelope Activity
   (Regular, Bills, Savings, and the inspector line) drills to the Register filtered to
   the transactions that summed to that figure.
+  ✅ **Register Date calendar bands shipped 2026-09-04.**
+  `agent-os/specs/2026-09-03-1307-register-date-presets/`. All Transactions opens on
+  This Month (and reseeds Date on every visit). The Date funnel is This Month / Last
+  Month / Last 7 Days / Last 30 Days / This Year — not Achieve's deadline list.
+  Posted and task/project deadlines stay on that list. Activity still uses absolute
+  `gte`/`lte` bounds for the linked budget month.
   ✅ **Weekly envelope targets shipped 2026-08-27.**
   `agent-os/specs/2026-08-27-1949-weekly-envelope-targets/`. A fourth template type for
   ordinary spending anchored to a weekday: an amount and a weekday, whose monthly ask is

@@ -1,6 +1,6 @@
 # Register calendar date presets — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-04)
 
 ## Scope
 
