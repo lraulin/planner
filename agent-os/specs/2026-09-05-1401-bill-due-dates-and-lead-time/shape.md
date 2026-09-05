@@ -1,6 +1,6 @@
 # Bill due dates and lead time — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-05)
 
 ## Scope
 
@@ -46,12 +46,15 @@ See `plan.md` D1–D8. The load-bearing ones and why:
   calendar occurrence, and 7 is the smallest floor that produces zero false alarms across 24
   cycles.
 
-### Open question deferred to implementation
+### Open question, as resolved
 
 D5 removes the ability to type a Next charge date on a bill that declares a due day. The
 alternative considered was to keep the cell writable and have a typed date _derive_ the due day
-and lead from it. That is cleverer and more surprising; if the read-only cell turns out to be
-annoying in use, revisit it as a change row rather than silently allowing two writers again.
+and lead from it. That is cleverer and more surprising.
+
+**Shipped as specified:** the cell is read-only in both the grid and the drawer, with a title
+naming the due day and lead that govern it and how to get the editor back. If it turns out to
+be annoying in use, that is a new delta-spec, not an edit here.
 
 ## Context
 

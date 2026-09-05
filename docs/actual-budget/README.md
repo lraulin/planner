@@ -72,9 +72,16 @@ narrowed by later deltas:
 - The budget starts at a chosen month with an opening position, instead of assuming the ledger
   goes back to the beginning. Changing the pool boundary rebases that opening once.
 - No CRDT, no tombstones, no local-first sync.
-- Recurrence for a bill envelope is derived from charge history (`nextDueFrom`) rather
-  than a stored `RecurConfig` cursor — a missed or early charge self-corrects instead of
-  needing an explicit skip. See `agent-os/specs/2026-08-23-2313-one-budget/` D2.
+- Recurrence for a bill envelope is derived rather than held in a stored `RecurConfig`
+  cursor, and there is still no skip. See `agent-os/specs/2026-08-23-2313-one-budget/` D2.
+  **What it is derived _from_ changed:** a bill that declares a due day gets a calendar
+  occurrence series (`billSchedule.ts`), and a posted charge is matched to its nearest
+  occurrence. Deriving it by walking from the last charge did _not_ self-correct — it
+  re-anchored, absorbing every deviation permanently, which falsely flagged 16 of 24 real
+  rent cycles. Bills with no due day still walk. See
+  `agent-os/specs/2026-09-05-1401-bill-due-dates-and-lead-time/` D1, which supersedes that
+  half of one-budget D2. Actual's `skipWeekend` + solve mode stays retired: lead days plus a
+  7-day grace covers the observed drift.
 - **Assign is YNAB-shaped, not Actual's Apply/Overwrite.** The fill _gesture_ clamps to
   Ready to Assign, previews a shortfall or a multi-envelope split (a single fully funded
   envelope writes immediately), and offers eight auto-assign options. Apply may no longer

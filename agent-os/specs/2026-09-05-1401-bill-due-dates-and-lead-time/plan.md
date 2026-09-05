@@ -1,6 +1,6 @@
 # Bill due dates and lead time
 
-**Status: active**
+**Status: frozen / complete** (2026-09-05)
 Spec folder: `agent-os/specs/2026-09-05-1401-bill-due-dates-and-lead-time/`
 
 ## Spec relationships
@@ -96,28 +96,36 @@ second column overloaded to cover for it. This spec fixes the model.
 
 ## Acceptance criteria
 
-- [ ] Rent, set to due day 1 / lead 7, shows **Next charge 2026-09-24** and **Due 2026-10-01**,
-      and does not appear on the Bills review list.
-- [ ] Replaying the 24 real rent postings produces 24 matched occurrences and 0 review entries.
-      Pinned by a unit test using the real date series.
-- [ ] A bill with `dueDay: null` produces identical anchors to today's code. Pinned by a test,
-      because this is the regression that would be invisible.
-- [ ] Setting a due day on a bill with history offers a suggested lead and does not apply it.
-- [ ] The Budget page's Before payday / On payday cue, the 12-month forward projection, the
+- [x] Rent, set to due day 1 / lead 7, shows **Next charge 2026-09-24** and **Due 2026-10-01**,
+      and does not appear on the Bills review list. Verified against the live database.
+- [x] Replaying the 24 real rent postings produces 24 matched occurrences and 0 review entries.
+      Pinned by `billSchedule.test.ts` using the real date series.
+- [x] A bill with `dueDay: null` produces identical anchors to today's code. Pinned by
+      `commitments.test.ts` ("keeps walking a bill that declares no due day"), asserted as
+      equality against the undeclared anchor rather than against copied literals.
+- [x] Setting a due day on a bill with history offers a suggested lead and does not apply it.
+- [x] The Budget page's Before payday / On payday cue, the 12-month forward projection, the
       Upcoming strip and the derived bill target all read the corrected expected date with no
-      change to their own code.
-- [ ] A second user cannot read or write the first user's `dueDay` / `leadDays`.
-- [ ] Every item in the Task 7 cleanup list is gone, and `npm run lint`, `npm run typecheck`,
-      `npm run test:unit` (Postgres up — check for the skip warning), `npm run build` and
-      `npm run smoke` all pass.
+      change to their own code. The forward projection now reads
+      2026-09-24, 10-25, 11-24, 12-25, 2027-01-25, **02-22**, 03-25 … — self-correcting through
+      the short month instead of drifting.
+- [x] A second user cannot read, change or delete the first user's `dueDay` / `leadDays`.
+- [x] Every item in the Task 7 cleanup list is gone, and `npm run lint`, `npm run typecheck`,
+      `npm test` (unit + integration, Postgres up, no skip warning), `npm run build` and
+      `npm run smoke` (62 routes) all pass.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                | Why                                                                                                                                                                                                                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `loadBillAnchors` returns one `Map<string, BillAnchor>` instead of `{ nextDueKeys, expectedKeys }`, and `budgetRows` takes that one map.                                              | Task 4 was about to add a third parallel map keyed the same way — the "same fact split across three collections" shape. One map is the model; it also means the next field on `BillAnchor` needs no plumbing at all.                                    |
+| 2   | `billsNeedingReview(bills, todayKey)` takes rows whose anchors are already resolved, not `(bills, lastCharges, todayKey)`.                                                            | The review panel is a client component reading server-computed rows. Passing charge history so it could re-derive what the server already derived would be a second answer to the same question — the exact failure `spendingVsIncome` was deleted for. |
+| 3   | The occurrence API is `declaredSeries(bill, phaseRef)` → `BillSeries`, then `occurrenceAt(series, k)` / `nearestOccurrence(series, key)`, rather than every function taking the bill. | The seed is a _phase_, resolved from `anchorDate ?? lastCharge ?? today` — data the bill row does not carry. Resolving it once and passing the series keeps the phase rule in one place instead of at four call sites.                                  |
+| 4   | `BillSeries` stores `seedMonthKey` + `dueDay`, not a `seedDueKey` date.                                                                                                               | A seed _date_ built in a short month is itself clamped: a 31st seeded in February becomes the 28th and every occurrence after it inherits that. Shifting the month and applying the due day fresh is immune. Pinned by a test.                          |
+| 5   | `incomeFromPaydays` deleted alongside `spendingVsIncome`.                                                                                                                             | Task 7 said to _check_ whether it still had callers. It did not — deleting `spendingVsIncome` left it with only its own test, which is the condition the rest of the cleanup list was written against.                                                  |
+| 6   | Clearing a bill's `dueDay` also clears `leadDays`, in `upsertBillEnvelope`.                                                                                                           | A lead with no due day has nothing to lead. Left set, it would come back as a surprise the next time a due day was declared. Pinned by an integration test.                                                                                             |
 
 ---
 
@@ -246,6 +254,20 @@ Delete the corresponding test blocks; do not leave tests asserting deleted behav
 
 ---
 
-**Standing rule while this spec is active:** material changes to requirements, design or scope —
-including feedback on what gets built — go into `plan.md` / `shape.md` and get a row in **Changes
-from original plan**. Skip pure implementation details. Freeze when verified.
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **No bill declares a day cadence today**, so the "unchanged for a day cadence" guarantee rests
+  on unit tests rather than on the live file. Worth re-checking when Vetsource is declared.
+- **`anchorDate` still carries two meanings** for an undeclared bill (the charge being waited
+  for, and the accrual period start). This spec removed the third — "the due date" — by giving
+  that its own column. Collapsing the remaining two is its own design.
+- **The lead is suggested only from the bill drawer.** A bill declared straight from a Register
+  transaction has no history loaded at that moment and gets no offer.
+- **1Password sits on the review list**, expected 2026-03-30 and 159 days past. That is a real
+  signal about a real bill, not a defect of this work — it has no due day and its yearly charge
+  has not posted.
+
+---
+
+**This spec is frozen.** Reference this folder; open a **new delta-spec** for further change
+rather than editing it.
