@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  aliasOverlap,
   billAnchor,
   nextChargeWriteError,
   periodIndex,
-  periodLengthDays,
-  periodStartKey,
   projectForwardMonths,
   upcomingBillOccurrences,
   billsNeedingReview,
@@ -50,25 +47,6 @@ describe("periodIndex", () => {
     expect(periodIndex("2026-02-01", "month")).toBe(
       periodIndex("2026-01-31", "month") + 1,
     );
-  });
-
-  it("round-trips through periodStartKey, December included", () => {
-    // December is `year × 12 + 12`, which is the year's own multiple — the case that folds
-    // into next January if the inverse is written the obvious way.
-    for (const key of ["2026-08-16", "2025-12-31", "2026-01-01", "2024-02-29"]) {
-      const monthly = periodIndex(key, "month");
-      expect(periodStartKey(monthly, "month")).toBe(`${key.slice(0, 7)}-01`);
-
-      const weekly = periodIndex(key, "week");
-      expect(periodIndex(periodStartKey(weekly, "week"), "week")).toBe(weekly);
-    }
-  });
-
-  it("measures a month's real length, February included", () => {
-    expect(periodLengthDays(periodIndex("2026-02-10", "month"), "month")).toBe(28);
-    expect(periodLengthDays(periodIndex("2024-02-10", "month"), "month")).toBe(29);
-    expect(periodLengthDays(periodIndex("2026-08-10", "month"), "month")).toBe(31);
-    expect(periodLengthDays(periodIndex("2026-08-10", "week"), "week")).toBe(7);
   });
 });
 
@@ -296,64 +274,6 @@ describe("suggestCommitmentName", () => {
 
   it("keeps a name that is nothing but digits rather than emptying the field", () => {
     expect(suggestCommitmentName("76767")).toBe("76767");
-  });
-});
-
-describe("aliasOverlap", () => {
-  const monthly = { unit: "month", n: 1 } as const;
-
-  function charges(...keys: string[]) {
-    return keys.map((dateKey) => ({ dateKey }));
-  }
-
-  it("says nothing when one spelling hands off to the next", () => {
-    // The vendor renamed itself in April. Merged, this is one clean monthly series.
-    expect(
-      aliasOverlap(
-        charges("2026-01-04", "2026-02-04", "2026-03-04"),
-        charges("2026-04-04", "2026-05-04", "2026-06-04"),
-        monthly,
-      ),
-    ).toEqual([]);
-  });
-
-  it("flags two spellings charging inside the same cycle", () => {
-    const found = aliasOverlap(
-      charges("2026-01-04", "2026-02-04", "2026-03-04"),
-      charges("2026-01-19", "2026-02-19", "2026-03-19"),
-      monthly,
-    );
-
-    expect(found).toHaveLength(3);
-    expect(found[0]).toEqual({
-      existingKey: "2026-01-04",
-      candidateKey: "2026-01-19",
-      gapDays: 15,
-    });
-  });
-
-  it("ignores two charges from the same spelling landing close together", () => {
-    // A double charge inside one series is not evidence about the *other* series, which is
-    // the only thing this function is being asked about.
-    expect(
-      aliasOverlap(
-        charges("2026-01-04", "2026-01-06", "2026-02-04"),
-        charges("2026-03-04"),
-        monthly,
-      ),
-    ).toEqual([]);
-  });
-
-  it("scales with the cadence rather than with the calendar month", () => {
-    const weekly = { unit: "day", n: 7 } as const;
-    // The same five-day gap: an ordinary handoff on a weekly cadence, and two charges in one
-    // cycle on a monthly one. Bucketing by calendar month could not tell these apart.
-    expect(aliasOverlap(charges("2026-01-04"), charges("2026-01-09"), weekly)).toEqual(
-      [],
-    );
-    expect(
-      aliasOverlap(charges("2026-01-04"), charges("2026-01-09"), monthly),
-    ).toHaveLength(1);
   });
 });
 

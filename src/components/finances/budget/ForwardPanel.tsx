@@ -5,7 +5,7 @@ import type { regularIncomePlan } from "@/lib/finances/budget/incomePlan";
 import { DateText } from "@/components/date/DateText";
 import { formatUsd } from "@/lib/finances/money";
 import type { projectForwardMonths } from "@/lib/finances/commitments";
-import type { SpendingVsIncome } from "@/lib/finances/expectedSpending";
+import type { SpendingVsIncome } from "@/lib/finances/commitmentRows";
 
 /**
  * Two forecast panels carried over from the retired Commitments page, collapsed by default

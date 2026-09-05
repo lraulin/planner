@@ -5,8 +5,7 @@
  * recurring spend (pizza, groceries: cadence known, amount fuzzy and derived from history).
  * That tier is retired — its charges are ordinary envelopes now, funded by an ordinary
  * `simple` template — and what remains here is bill-specific: cost math, the forward
- * projection, and the generic period-bucketing primitives `periodIndex` /
- * `periodStartKey` / `periodLengthDays` still use by merchant *detection*
+ * projection, and `periodIndex`, the week/month bucketing merchant *detection* uses
  * (`recurringMerchants` in `analytics.ts`), independent of any stored rate.
  *
  * **What this module owns is bill arithmetic.** Stable payees own merchant identity; a
@@ -16,6 +15,9 @@
  * **Period boundaries are fixed, not rolling.** `periodIndex` anchors on a known Monday and
  * divides, so the buckets do not move with `todayKey` — a rolling seven-day window would let
  * two readers of the same history disagree about which week a charge falls in.
+ *
+ * **When a bill declares a due day, its dates are not computed here** — `billSchedule.ts`
+ * owns that calendar series, and `billAnchor` branches into it.
  *
  * Pure, `YYYY-MM-DD` keys throughout, no `Date` for calendar arithmetic, `todayKey` always
  * supplied by the caller (`agent-os/standards/development/dates.md`).
@@ -35,9 +37,8 @@ import {
   cadenceDaysApprox,
   cadenceOf,
   nextDueFrom,
-  previousDueDate,
+  shiftByCadence,
   type Cadence,
-  nextDueDate,
   shiftDateKeyMonths,
   type StoredBill,
 } from "./recurringBills";
@@ -52,28 +53,10 @@ export type StoredBillRow = StoredBill & {
   url: string;
 };
 
-/**
- * The shared view the dashboard and the budget page project a bill into, so neither grows a
- * second, slightly different idea of what a commitment is.
- */
-export type Commitment = {
-  id: string;
-  name: string;
-  payees: readonly CommitmentPayee[];
-};
-
 export type CommitmentPayee = { id: string; name: string };
 
-export function asBillCommitment(bill: StoredBillRow): Commitment {
-  return {
-    id: bill.id,
-    name: bill.name,
-    payees: bill.payees,
-  };
-}
-
 /** Which envelope a bank merchant string belongs to. */
-export type CommitmentRef = {
+type CommitmentRef = {
   id: string;
   /** The user's name for it — and the key everything downstream groups by. */
   name: string;
@@ -117,29 +100,6 @@ export function periodIndex(dateKey: string, period: Period): number {
     return Number(dateKey.slice(0, 4)) * 12 + Number(dateKey.slice(5, 7));
   }
   return Math.floor(daysBetweenKeys(PERIOD_EPOCH, dateKey) / 7);
-}
-
-/** The first day of a period, given the index `periodIndex` produced. */
-export function periodStartKey(index: number, period: Period): string {
-  if (period === "month") {
-    // `periodIndex` is `year × 12 + month` with month 1-based, so month 12 of a year lands on
-    // the year's own multiple and has to come back out as December rather than as next January.
-    const year = Math.floor((index - 1) / 12);
-    const month = index - year * 12;
-    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-01`;
-  }
-  return shiftDateKey(PERIOD_EPOCH, index * 7);
-}
-
-/** How many days a period spans. Seven, or the length of the calendar month. */
-export function periodLengthDays(index: number, period: Period): number {
-  if (period === "month") {
-    return daysBetweenKeys(
-      periodStartKey(index, period),
-      periodStartKey(index + 1, period),
-    );
-  }
-  return 7;
 }
 
 /** A charge counting toward a commitment. Cost is positive, as `spendCents` reports it. */
@@ -233,7 +193,7 @@ export function billAnchor(
     (lastCharge === null || bill.anchorDate > lastCharge)
   ) {
     return {
-      periodStartKey: previousDueDate(bill.anchorDate, cadence),
+      periodStartKey: shiftByCadence(bill.anchorDate, cadence, -1),
       expectedKey: bill.anchorDate,
       nextDueKey:
         bill.anchorDate >= todayKey
@@ -254,7 +214,7 @@ export function billAnchor(
 
   return {
     periodStartKey: lastCharge,
-    expectedKey: nextDueDate(lastCharge, cadence),
+    expectedKey: shiftByCadence(lastCharge, cadence),
     nextDueKey: nextDueFrom(lastCharge, cadence, todayKey),
     dueKey: null,
   };
@@ -277,66 +237,6 @@ export function nextChargeWriteError(
     return `Next charge must be after the last posted charge (${lastChargeKey}).`;
   }
   return null;
-}
-
-/**
- * Two charges from different spellings of the same bill, arriving too close together.
- *
- * **What this is for.** A vendor renames itself and the same bill turns up twice on the review
- * list, so its second spelling gets added to the commitment that already exists. That is a
- * rename when the two series *hand off* — the old string stops, the new one starts, and the
- * merged history is one clean run of charges about a cadence apart. It is two separate bills
- * when they overlap, and the merge would then quietly double what the commitment costs.
- *
- * **The test is a cadence, not the calendar.** For each charge from the spelling being added,
- * find the nearest charge already on the commitment: closer than 60% of a cadence and the two
- * were charged in the same cycle, which a rename could not produce. This needs no notion of
- * "the same month", so it reads the same way for a 28-day autoship as for a quarterly bill —
- * and it reports once per new charge rather than once per adjacent pair, so three double-billed
- * months read as three.
- *
- * Reports, never blocks. A vendor migrating billing systems really can charge twice in the
- * month it moves, and this module has proposed rather than applied since the cadence specs.
- */
-export type AliasOverlap = {
-  /** The charge already on the commitment. */
-  existingKey: string;
-  /** The charge from the spelling being added. */
-  candidateKey: string;
-  /** Days between them. */
-  gapDays: number;
-};
-
-/** Below this share of a cadence, two charges are not one series. */
-const OVERLAP_RATIO = 0.6;
-
-export function aliasOverlap(
-  existing: readonly { dateKey: string }[],
-  candidate: readonly { dateKey: string }[],
-  cadence: Cadence,
-): AliasOverlap[] {
-  const limit = cadenceDaysApprox(cadence) * OVERLAP_RATIO;
-  const overlaps: AliasOverlap[] = [];
-
-  for (const charge of candidate) {
-    let nearest: { dateKey: string; gapDays: number } | null = null;
-    for (const other of existing) {
-      const gapDays = Math.abs(daysBetweenKeys(other.dateKey, charge.dateKey));
-      if (nearest === null || gapDays < nearest.gapDays) {
-        nearest = { dateKey: other.dateKey, gapDays };
-      }
-    }
-    if (nearest === null || nearest.gapDays >= limit) continue;
-    overlaps.push({
-      existingKey: nearest.dateKey,
-      candidateKey: charge.dateKey,
-      gapDays: nearest.gapDays,
-    });
-  }
-
-  return overlaps.sort((left, right) =>
-    left.candidateKey.localeCompare(right.candidateKey),
-  );
 }
 
 /**
@@ -423,7 +323,7 @@ export function billsNeedingReview(
 
 // — Twelve-month forward view ————————————————————————————————————————————————
 
-export type ForwardItem = {
+type ForwardItem = {
   name: string;
   cents: number;
   /** False for unscheduled bills and tier 2 rates — they contribute money, not a date. */

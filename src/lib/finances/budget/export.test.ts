@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseCsvRows } from "@/lib/csv/text";
 import type { ExportColumnSource } from "@/lib/grid/exportCsv";
 import type { ForwardBucket } from "@/lib/finances/commitments";
-import type { SpendingVsIncome } from "@/lib/finances/expectedSpending";
+import type { SpendingVsIncome } from "@/lib/finances/commitmentRows";
 import {
   budgetExportDocument,
   gridExportSection,

@@ -79,27 +79,6 @@ export function normalizedMonthlyIncome(medianPaycheckCents: number): number {
   return Math.round((medianPaycheckCents * PAYCHECKS_PER_YEAR) / 12);
 }
 
-/**
- * The paycheck figures the Commitments comparison uses, derived from the already-detected
- * payday series rather than by running detection again.
- *
- * `loadDashboard` only ships `paydays`, not the median, and the two must not drift: a second
- * median here that rounded even-length series differently would make the comparison disagree
- * with every other income headline.
- */
-export function incomeFromPaydays(paydays: readonly Payday[]): {
-  medianPaycheckCents: number;
-  monthlyCents: number;
-  annualCents: number;
-} {
-  const medianPaycheckCents = medianCents(paydays.map((payday) => payday.amountCents));
-  return {
-    medianPaycheckCents,
-    monthlyCents: normalizedMonthlyIncome(medianPaycheckCents),
-    annualCents: medianPaycheckCents * PAYCHECKS_PER_YEAR,
-  };
-}
-
 function median(values: readonly number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((left, right) => left - right);

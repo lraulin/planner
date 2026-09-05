@@ -30,8 +30,12 @@ import {
   type StoredBillRow,
   type UpcomingBillRow,
 } from "./commitments";
-import { billRows as billRowsOf, type BillRow } from "./commitmentRows";
-import type { SpendingVsIncome } from "./expectedSpending";
+import {
+  billRows as billRowsOf,
+  type BillRow,
+  type SpendingVsIncome,
+} from "./commitmentRows";
+
 import { regularIncomePlan } from "./budget/incomePlan";
 import { activeBillTotals } from "./commitmentRows";
 import { numericStringToCents } from "./money";

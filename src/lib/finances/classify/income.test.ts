@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   detectIncome,
-  incomeFromPaydays,
   normalizedMonthlyIncome,
   summarizeClassifiedIncome,
   type IncomeRow,
@@ -247,16 +246,5 @@ describe("normalizedMonthlyIncome", () => {
     expect(result.normalizedMonthlyIncomeCents).toBe(
       normalizedMonthlyIncome(amounts[7]),
     );
-  });
-});
-
-describe("incomeFromPaydays", () => {
-  it("reproduces detectIncome's median rather than averaging the paydays", () => {
-    const result = detectIncome(ENDAVA_CHECKS);
-    expect(incomeFromPaydays(result.paydays)).toEqual({
-      medianPaycheckCents: result.medianPaycheckCents,
-      monthlyCents: result.normalizedMonthlyIncomeCents,
-      annualCents: result.medianPaycheckCents * 26,
-    });
   });
 });

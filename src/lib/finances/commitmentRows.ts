@@ -1,6 +1,5 @@
 import type { BillCharge } from "./available";
 import { billAnchor, type StoredBillRow } from "./commitments";
-import { formatUsdWhole } from "./money";
 import { annualCents, cadenceOf } from "./recurringBills";
 
 /**
@@ -28,14 +27,6 @@ export function observedAmountRange(
   return { lowCents, highCents };
 }
 
-/** Whole-dollar range for a swingy bill: `$150–$540`. */
-export function amountRangeLabel(range: {
-  lowCents: number;
-  highCents: number;
-}): string {
-  return `${formatUsdWhole(range.lowCents)}–${formatUsdWhole(range.highCents)}`;
-}
-
 /**
  * A bill envelope with its cost columns and next-due date resolved — what the budget grid's
  * hideable A year / Monthly columns and the URL/status cells read.
@@ -58,11 +49,6 @@ export type BillRow = StoredBillRow & {
   annualCostCents: number;
   /** `annualCostCents / 12` — comparable across cadences. The Amount column is not. */
   monthlyCents: number;
-  /**
-   * Observed min–max of matched charges when the spread exceeds 25% of the dearest
-   * charge. Null when history is tight, a single fill, or the amounts were not supplied.
-   */
-  amountRange: { lowCents: number; highCents: number } | null;
   /** The next due date has already passed and nothing has posted since. */
   overdue: boolean;
 };
@@ -109,14 +95,6 @@ export function billRows(
       // The editable "Next charge" column: always today or later. `expectedKey` below is the
       // one that can sit in the past — that is exactly what "overdue" means.
       nextDueKey: anchor?.nextDueKey ?? null,
-      amountRange: observedAmountRange(
-        charges.flatMap((charge) =>
-          (charge.billId ? charge.billId === bill.id : charge.name === bill.name) &&
-          charge.costCents !== undefined
-            ? [charge.costCents]
-            : [],
-        ),
-      ),
       overdue:
         bill.status === "active" &&
         anchor?.expectedKey !== null &&
@@ -131,6 +109,27 @@ export type MoneyTotals = {
   annualCents: number;
   monthlyCents: number;
   weeklyCents: number;
+};
+
+/**
+ * Expected bills against expected income, on the months and year the budget shares.
+ *
+ * Lives beside `MoneyTotals` because that is the only shape it adds to. The function that
+ * once built it is gone: `dashboardQueries.ts` constructs the value from the budget's own
+ * income plan, which was already what the page showed — the builder was a second, quietly
+ * disagreeing answer to the same question (it used the median-paycheck series instead).
+ */
+export type SpendingVsIncome = {
+  bills: MoneyTotals;
+  income: {
+    medianPaycheckCents: number;
+    monthlyCents: number;
+    annualCents: number;
+  };
+  remainder: {
+    monthlyCents: number;
+    annualCents: number;
+  };
 };
 
 /** Active bills, summed on the columns that share a period. Amount is excluded on purpose. */

@@ -16,7 +16,7 @@
 
 import { formatUsd } from "@/lib/finances/money";
 import type { ForwardBucket } from "@/lib/finances/commitments";
-import type { SpendingVsIncome } from "@/lib/finances/expectedSpending";
+import type { SpendingVsIncome } from "@/lib/finances/commitmentRows";
 import { escapeCsvField } from "@/lib/csv/text";
 import {
   exportableColumns,

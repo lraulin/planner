@@ -222,23 +222,17 @@ export function cadenceDaysApprox(cadence: Cadence): number {
   return cadence.unit === "day" ? cadence.n : cadence.n * DAYS_PER_MONTH;
 }
 
-/** Shift a key by one whole cadence, in whichever unit it is counted. */
-export function shiftByCadence(key: string, cadence: Cadence): string {
+/**
+ * Shift a key by whole cadences, in whichever unit the cadence is counted.
+ *
+ * One signed function rather than a `nextDueDate` / `previousDueDate` pair: the pair had the
+ * same body with the sign flipped, which is one rule written twice and two places for it to
+ * drift when a third unit turns up.
+ */
+export function shiftByCadence(key: string, cadence: Cadence, count = 1): string {
   return cadence.unit === "day"
-    ? shiftDateKey(key, cadence.n)
-    : shiftDateKeyMonths(key, cadence.n);
-}
-
-/** When the next one lands, given the last one that did. */
-export function nextDueDate(lastChargeOn: string, cadence: Cadence): string {
-  return shiftByCadence(lastChargeOn, cadence);
-}
-
-/** One cadence back — the charge a declared future date is the successor to. */
-export function previousDueDate(dueOn: string, cadence: Cadence): string {
-  return cadence.unit === "day"
-    ? shiftDateKey(dueOn, -cadence.n)
-    : shiftDateKeyMonths(dueOn, -cadence.n);
+    ? shiftDateKey(key, count * cadence.n)
+    : shiftDateKeyMonths(key, count * cadence.n);
 }
 
 /**
@@ -253,13 +247,13 @@ export function nextDueFrom(
   cadence: Cadence,
   todayKey: string,
 ): string {
-  let due = nextDueDate(lastChargeOn, cadence);
+  let due = shiftByCadence(lastChargeOn, cadence);
   // Two years of cadences is far past any real gap; beyond that the anchor is wrong, and
   // walking further would only produce a confident answer built on a bad one.
   const span = cadence.unit === "day" ? 730 : 24;
   const limit = Math.ceil(span / Math.max(1, cadence.n)) + 1;
   for (let step = 0; step < limit && due < todayKey; step++) {
-    due = nextDueDate(due, cadence);
+    due = shiftByCadence(due, cadence);
   }
   return due;
 }
@@ -272,7 +266,7 @@ export function nextDueFrom(
  * semi-annual bill covers its own 181 days rather than a notional 183.
  */
 export function spanDays(chargeDateKey: string, cadence: Cadence): number {
-  return daysBetweenKeys(chargeDateKey, nextDueDate(chargeDateKey, cadence));
+  return daysBetweenKeys(chargeDateKey, shiftByCadence(chargeDateKey, cadence));
 }
 
 /**

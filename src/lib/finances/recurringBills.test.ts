@@ -8,9 +8,8 @@ import {
   cadenceMonthsFromGapDays,
   cadenceOf,
   detectCadence,
-  nextDueDate,
+  shiftByCadence,
   nextDueFrom,
-  previousDueDate,
   shiftDateKeyMonths,
   spanDays,
 } from "./recurringBills";
@@ -136,9 +135,12 @@ describe("cadenceLabel", () => {
   });
 });
 
-describe("nextDueDate", () => {
-  it("is one cadence on from the last charge", () => {
-    expect(nextDueDate("2026-03-03", { unit: "month", n: 6 })).toBe("2026-09-03");
+describe("shiftByCadence", () => {
+  it("steps forward one cadence by default and backward on a negative count", () => {
+    expect(shiftByCadence("2026-03-03", { unit: "month", n: 6 })).toBe("2026-09-03");
+    expect(shiftByCadence("2026-09-03", { unit: "month", n: 6 }, -1)).toBe(
+      "2026-03-03",
+    );
   });
 });
 
@@ -222,9 +224,9 @@ describe("day cadences", () => {
   const autoship = { unit: "day", n: 28 } as const;
 
   it("walks forward by days, not by calendar months", () => {
-    expect(nextDueDate("2026-08-14", autoship)).toBe("2026-09-11");
+    expect(shiftByCadence("2026-08-14", autoship)).toBe("2026-09-11");
     // A monthly reading would say 2026-09-14, three days late and later every cycle.
-    expect(nextDueDate("2026-08-14", { unit: "month", n: 1 })).toBe("2026-09-14");
+    expect(shiftByCadence("2026-08-14", { unit: "month", n: 1 })).toBe("2026-09-14");
     expect(nextDueFrom("2026-05-21", autoship, "2026-08-21")).toBe("2026-09-10");
   });
 
@@ -240,8 +242,10 @@ describe("day cadences", () => {
   });
 
   it("steps back a whole cycle", () => {
-    expect(previousDueDate("2026-09-11", autoship)).toBe("2026-08-14");
-    expect(previousDueDate("2026-09-01", { unit: "month", n: 1 })).toBe("2026-08-01");
+    expect(shiftByCadence("2026-09-11", autoship, -1)).toBe("2026-08-14");
+    expect(shiftByCadence("2026-09-01", { unit: "month", n: 1 }, -1)).toBe(
+      "2026-08-01",
+    );
   });
 
   it("reads as weeks where the days divide evenly", () => {

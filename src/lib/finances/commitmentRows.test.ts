@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  activeBillTotals,
-  amountRangeLabel,
-  billRows,
-  observedAmountRange,
-} from "./commitmentRows";
+import { activeBillTotals, billRows, observedAmountRange } from "./commitmentRows";
 import type { BillCharge } from "./available";
 import type { StoredBillRow } from "./commitments";
 
@@ -90,10 +85,11 @@ describe("billRows", () => {
 });
 
 describe("observedAmountRange", () => {
-  it("prints a range when fills swing more than 25%", () => {
-    const range = observedAmountRange([33_600, 54_000]);
-    expect(range).not.toBeNull();
-    if (range) expect(amountRangeLabel(range)).toBe("$336–$540");
+  it("reports a range when fills swing more than 25%", () => {
+    expect(observedAmountRange([33_600, 54_000])).toEqual({
+      lowCents: 33_600,
+      highCents: 54_000,
+    });
   });
 
   it("stays quiet for a tight bill, or a single charge", () => {
