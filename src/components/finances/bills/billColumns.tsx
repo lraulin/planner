@@ -3,7 +3,11 @@ import type { ColumnDef } from "@/components/grid/columns";
 import { TextCell, AmountCell, DateKeyCell } from "@/components/grid/cells";
 import { CadenceSelect } from "../CadenceSelect";
 import { UrlCell } from "../budget/UrlCell";
-import { billCadence, billInspectorView } from "@/lib/finances/budget/inspector";
+import {
+  billCadence,
+  billInspectorView,
+  declaresBillSchedule,
+} from "@/lib/finances/budget/inspector";
 import { formatUsd } from "@/lib/finances/money";
 import type { BudgetBillRow } from "@/lib/finances/budget/rows";
 import type { BillPatch } from "../budget/budgetColumns";
@@ -80,6 +84,15 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
         <span>—</span>
       ) : !row.node.bill.scheduled ? (
         <span className="text-xs text-ink-muted">Unscheduled</span>
+      ) : declaresBillSchedule(row.node.bill) ? (
+        // Derived, not typed: two writable sources for one date is how `anchorDate`
+        // acquired three meanings (D5).
+        <span
+          className="text-xs"
+          title={`Set by the due day (${row.node.bill.dueDay}) and a ${row.node.bill.leadDays}-day payment lead. Clear the due day to type a date.`}
+        >
+          {row.node.nextDueKey ?? "—"}
+        </span>
       ) : (
         <DateKeyCell
           value={row.node.nextDueKey ?? ""}
@@ -88,6 +101,23 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
           align="left"
           onChange={(anchorDate) => ctx.patch(row.node, { anchorDate })}
         />
+      ),
+  },
+  {
+    id: "due",
+    label: "Due",
+    width: "10rem",
+    compact: "meta",
+    filterKind: "date",
+    filterValue: (row) => row.node.dueKey,
+    sortValue: (row) => row.node.dueKey,
+    // The contract date, as distinct from Next charge, which stays the posting date the
+    // envelope funds. Only a bill that declares a due day has one to show.
+    render: (row) =>
+      row.node.dueKey === null ? (
+        <span className="text-xs text-ink-muted">—</span>
+      ) : (
+        <span className="text-xs">{row.node.dueKey}</span>
       ),
   },
   {

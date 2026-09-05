@@ -407,6 +407,7 @@ export function BillsView({
             <BillFields
               bill={opened}
               pending={pending}
+              chargeKeys={forecast.chargeKeys.get(opened.id)}
               onPatchBill={ctx.patch}
               onEditPayees={setPayeeBill}
             />

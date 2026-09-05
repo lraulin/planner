@@ -13,6 +13,7 @@ import {
   cadenceOf,
   type Cadence,
 } from "@/lib/finances/recurringBills";
+import { declaresSchedule } from "@/lib/finances/billSchedule";
 import type { BillFacet } from "./queries";
 
 export type InspectorBreakdown = {
@@ -67,6 +68,19 @@ export type BillInspectorView = {
  */
 export function walksNextDue(bill: Pick<BillFacet, "scheduled" | "status">): boolean {
   return bill.scheduled && bill.status !== "cancelled";
+}
+
+/**
+ * Whether this bill's charge dates come from its declared due day rather than from a walk.
+ *
+ * `BillFacet` allows a null `cadenceMonths` (an ordinary envelope's shape), which
+ * `declaresSchedule` does not; this is the one place the two meet.
+ */
+export function declaresBillSchedule(bill: BillFacet): boolean {
+  return (
+    bill.cadenceMonths !== null &&
+    declaresSchedule({ ...bill, cadenceMonths: bill.cadenceMonths })
+  );
 }
 
 export const CANCELLED_CHARGE_WARNING =

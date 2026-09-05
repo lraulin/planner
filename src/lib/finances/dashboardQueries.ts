@@ -272,6 +272,11 @@ export async function loadUpcomingBills(
 
 export type BillForecast = {
   billRows: BillRow[];
+  /**
+   * Posted charge dates per bill envelope id, oldest first — what `suggestLeadDays` reads to
+   * offer a payment lead when a due day is declared. Already loaded for the projection.
+   */
+  chargeKeys: Map<string, string[]>;
   months: ReturnType<typeof projectForwardMonths>;
   comparison: SpendingVsIncome;
   incomePlan: ReturnType<typeof regularIncomePlan>;
@@ -322,6 +327,12 @@ export async function loadBillForecast(
   const rowsOut = billRowsOf(bills, flatCharges, todayKey);
   return {
     billRows: rowsOut,
+    chargeKeys: new Map(
+      [...chargesByName].map(([id, charges]) => [
+        id,
+        charges.map((charge) => charge.dateKey).sort(),
+      ]),
+    ),
     months: projectForwardMonths(bills, chargesByName, todayKey),
     incomePlan,
     comparison: {
