@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { UrlLink } from "@/components/url/UrlLink";
+
 /**
  * A stored link, shown as a link and edited on purpose.
  *
@@ -71,15 +73,11 @@ export function UrlCell({
 
   return (
     <span className="flex min-w-0 items-center gap-1">
-      <a
-        href={withScheme(value)}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={value}
-        className="min-w-0 truncate text-[0.75rem] text-ink-muted underline decoration-rule underline-offset-2 hover:text-ink"
-      >
-        {hostLabel(value)}
-      </a>
+      <UrlLink
+        value={value}
+        display="host"
+        className="min-w-0 text-[0.75rem] text-ink-muted underline decoration-rule hover:text-ink"
+      />
       <button
         type="button"
         disabled={disabled}
@@ -98,15 +96,4 @@ export function UrlCell({
 export function withScheme(url: string): string {
   if (url === "") return "";
   return /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
-}
-
-/** The part worth reading: the host, without the scheme, `www.`, or the path. */
-function hostLabel(url: string): string {
-  try {
-    return new URL(withScheme(url)).hostname.replace(/^www\./, "");
-  } catch {
-    // Not parseable as a URL — show what was typed rather than an error. The link still
-    // renders; the browser gets to decide what it means.
-    return url;
-  }
 }

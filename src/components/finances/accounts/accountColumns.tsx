@@ -6,6 +6,7 @@ import { accountKindLabel } from "@/lib/finances/accountKind";
 import { formatUsd } from "@/lib/finances/money";
 import type { OperationalAccount } from "@/lib/finances/accountOperations";
 import Link from "next/link";
+import { UrlLink } from "@/components/url/UrlLink";
 import { toDateKey } from "@/lib/schedule/geometry";
 
 import { type PendingRow } from "@/lib/finances/workingBalance";
@@ -37,6 +38,18 @@ function Text({ value, muted = true }: { value: string; muted?: boolean }) {
   );
 }
 
+/**
+ * The account name, linked to the bank site when one is stored. The link is the fast way
+ * into online banking from the row you are already looking at.
+ */
+function NameCell({ name, url }: { name: string; url: string }) {
+  return (
+    <UrlLink value={url} className="text-[0.8125rem] font-medium text-ink">
+      {name}
+    </UrlLink>
+  );
+}
+
 function asDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
@@ -51,22 +64,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     filterValue: (row) => row.node.name || null,
     sortValue: (row) => row.node.name.toLowerCase(),
     compact: "primary",
-    render: (row) =>
-      row.node.url ? (
-        <a
-          href={row.node.url}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="truncate text-[0.8125rem] font-medium text-ink underline-offset-2 hover:underline"
-          onClick={(event) => event.stopPropagation()}
-        >
-          {row.node.name}
-        </a>
-      ) : (
-        <span className="truncate text-[0.8125rem] font-medium text-ink">
-          {row.node.name}
-        </span>
-      ),
+    render: (row) => <NameCell name={row.node.name} url={row.node.url} />,
   },
   {
     id: "kind",
@@ -105,7 +103,9 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     filterKind: "text",
     filterValue: (row) => row.node.url || null,
     sortValue: (row) => row.node.url,
-    render: (row) => <Text value={row.node.url} />,
+    render: (row) => (
+      <UrlLink value={row.node.url} className="text-[0.8125rem] text-ink-muted" />
+    ),
   },
   {
     id: "closed",

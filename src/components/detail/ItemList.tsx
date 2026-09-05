@@ -24,6 +24,7 @@ import type { NodeItemValues } from "@/lib/detail/types";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { formatPriority } from "@/lib/tree/format";
 import { normalizeHttpUrl } from "@/lib/url/pageTitle";
+import { UrlLink } from "@/components/url/UrlLink";
 import {
   CLIPBOARD_UNREADABLE,
   clipboardAttachRefusal,
@@ -376,7 +377,11 @@ export function ItemList({
                         }`}
                       >
                         {column === "url" ? (
-                          <UrlCell value={summary} />
+                          <UrlLink
+                            value={summary}
+                            className="block text-[var(--select-edge)]"
+                            empty={<span className="text-ink-faint">—</span>}
+                          />
                         ) : (
                           summary || emptyPrompt
                         )}
@@ -499,30 +504,6 @@ function summaryOf(
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (value instanceof Date) return toDateKey(value);
   return String(value);
-}
-
-/** Attachment URL column: clickable when it is a real http(s) link. */
-function UrlCell({ value }: { value: string }) {
-  if (!value) return <span className="text-ink-faint">—</span>;
-
-  const href = normalizeHttpUrl(value);
-  if (!href) {
-    return <span className="text-ink">{value}</span>;
-  }
-
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={value}
-      onClick={(event) => event.stopPropagation()}
-      onDoubleClick={(event) => event.stopPropagation()}
-      className="block truncate text-[var(--select-edge)] underline-offset-2 hover:underline"
-    >
-      {value}
-    </a>
-  );
 }
 
 function RowButton({

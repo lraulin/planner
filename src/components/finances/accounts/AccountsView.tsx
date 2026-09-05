@@ -34,6 +34,7 @@ import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { FinanceImportPanel } from "../FinanceImportPanel";
 import { AccountDrawer } from "./AccountDrawer";
+import { UrlLink } from "@/components/url/UrlLink";
 import {
   ACCOUNT_COLUMN_IDS,
   accountColumns,
@@ -376,14 +377,12 @@ export function AccountsView({
                 {accountDetail.balanceSourceLabel} · {accountDetail.freshness}
               </p>
               {accountDetail.url ? (
-                <a
+                <UrlLink
+                  value={accountDetail.url}
                   className="inline-block min-h-tap underline"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  href={accountDetail.url}
                 >
                   Open banking site
-                </a>
+                </UrlLink>
               ) : null}
             </section>
           ) : null

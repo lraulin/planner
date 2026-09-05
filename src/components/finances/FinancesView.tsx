@@ -78,6 +78,7 @@ import { FinanceImportPanel } from "./FinanceImportPanel";
 import { CategorySelect } from "./CategorySelect";
 import { TransactionDrawer } from "./TransactionDrawer";
 import { ModalShell } from "@/components/detail/ModalShell";
+import { UrlLink } from "@/components/url/UrlLink";
 import { TrackAsBillDialog } from "./TrackAsBillDialog";
 import { NewEnvelopeDialog } from "./NewEnvelopeDialog";
 import type {
@@ -157,18 +158,9 @@ function AccountBalances({ accounts }: { accounts: FinanceAccountRow[] }) {
             title={title}
             className="flex items-baseline gap-1.5 text-[0.8125rem]"
           >
-            {account.url ? (
-              <a
-                href={account.url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="text-ink-muted underline-offset-2 hover:underline"
-              >
-                {account.name}
-              </a>
-            ) : (
-              <span className="text-ink-muted">{account.name}</span>
-            )}
+            <UrlLink value={account.url} className="text-ink-muted">
+              {account.name}
+            </UrlLink>
             <span
               className={`tabular font-medium ${
                 account.balanceCents < 0 || mismatch ? "text-priority-a" : "text-ink"

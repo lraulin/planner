@@ -9,7 +9,8 @@ import {
 } from "@/lib/finances/budget/inspector";
 import type { BudgetBillRow } from "@/lib/finances/budget/rows";
 import { formatUsd } from "@/lib/finances/money";
-import { UrlCell, withScheme } from "./UrlCell";
+import { UrlCell } from "./UrlCell";
+import { UrlLink } from "@/components/url/UrlLink";
 import type { BillPatch } from "./budgetColumns";
 const fieldClass =
   "min-h-tap w-full rounded border border-rule bg-surface px-2 py-1.5 text-base text-ink md:min-h-0 md:py-1 md:text-[0.8125rem]";
@@ -154,14 +155,12 @@ export function BillFields({
             Edit payees…
           </button>
           {bill.bill.url !== "" ? (
-            <a
-              href={withScheme(bill.bill.url)}
-              target="_blank"
-              rel="noopener noreferrer"
+            <UrlLink
+              value={bill.bill.url}
               className="min-h-tap rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
             >
               Open URL
-            </a>
+            </UrlLink>
           ) : null}
         </div>
       </div>
