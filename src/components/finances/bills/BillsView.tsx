@@ -27,6 +27,8 @@ import {
 import { optionsFilter } from "@/lib/grid/customFilter";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { DataGrid } from "@/components/grid/DataGrid";
+import type { MenuItem } from "@/components/grid/ContextMenu";
+import { rowMenuFor } from "@/components/grid/rowMenu";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
@@ -38,8 +40,8 @@ import { ReviewDrawer } from "../budget/ReviewDrawer";
 import { CommitmentPayeeDialog } from "../budget/CommitmentPayeeDialog";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { billColumns, type BillColumnCtx } from "./billColumns";
-import { useRegisterCommands } from "@/components/shell/CommandProvider";
-import type { Command } from "@/lib/commands/registry";
+import { INSERT_AFTER, OPEN_RECORD } from "@/lib/commands/chords";
+import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
 
 const VIEWS = [
   { id: "active", label: "Active bills" },
@@ -80,6 +82,7 @@ export function BillsView({
   const [reviewing, setReviewing] = useState(false);
   const [payeeBill, setPayeeBill] = useState<BudgetBillRow | null>(null);
   const { detail, setDetail } = useViewStateUrl();
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const views = useModuleViews({
     moduleId: "finance-bills",
@@ -120,6 +123,8 @@ export function BillsView({
   const ids = useMemo(() => rows.map((row) => row.id), [rows]);
   const nav = useNavigableIds(ids);
   const multi = useMultiSelect(nav.order, null);
+  const { selectedId, selectedIds, select, selectAll, toggleSelectAll, headerState } =
+    multi;
   const distinct = useMemo(
     () =>
       collectDistinctValues(
@@ -151,30 +156,103 @@ export function BillsView({
       }),
     [run, setDetail, data.categories],
   );
-  const commands = useMemo(
-    (): Command[] => [
-      {
-        id: "bills.new",
-        label: "New bill",
-        group: "view",
-        menu: "file",
-        keywords: "create envelope recurring",
-        run: create,
-      },
-      {
-        id: "bills.review",
-        label: `Discover recurring charges (${review.length})`,
-        group: "view",
-        menu: "tools",
-        keywords: "review recurring detect",
-        run: () => setReviewing(true),
-      },
-    ],
-    [create, review.length],
+  const commitRename = useCallback(
+    (id: string, name: string) => {
+      setRenamingId(null);
+      const trimmed = name.trim();
+      const current = rows.find((row) => row.id === id);
+      if (!current || trimmed === "" || trimmed === current.name) return;
+      run(() => updateBudgetCategoryAction(id, { name: trimmed }));
+    },
+    [rows, run],
   );
-  useRegisterCommands(commands);
+  /**
+   * Open / Rename / New from the shared grid deck, not `catalogCapabilities`.
+   * That helper always ships Delete, and bills are cancelled rather than deleted.
+   */
+  const capabilitiesFor = useCallback(
+    (rowId: string | null, count: number): GridCommandCapabilities => {
+      const noRow = rowId === null ? "Select a row first" : undefined;
+      return {
+        selection: {
+          id: rowId,
+          count,
+          label: rows.find((row) => row.id === rowId)?.name,
+        },
+        actions: {
+          onRename: (id) => setRenamingId(id),
+          onSelectAll: selectAll,
+        },
+        pageCommands: [
+          {
+            id: "grid.create",
+            label: "New bill",
+            group: "record",
+            menu: "new",
+            section: "New",
+            icon: "new",
+            toolbar: 10,
+            rowMenu: true,
+            bindings: INSERT_AFTER,
+            keywords: "create envelope recurring",
+            run: create,
+          },
+          {
+            id: "record.open",
+            label: "Open bill",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "open",
+            toolbar: 50,
+            rowMenu: true,
+            bindings: OPEN_RECORD,
+            disabled: Boolean(noRow),
+            title: noRow,
+            run: () => {
+              if (rowId) setDetail(rowId);
+            },
+          },
+          {
+            id: "bills.review",
+            label: `Discover recurring charges (${review.length})`,
+            group: "view",
+            menu: "tools",
+            keywords: "review recurring detect",
+            run: () => setReviewing(true),
+          },
+        ],
+      };
+    },
+    [rows, create, setDetail, selectAll, review.length],
+  );
+  const commandCapabilities = useMemo(
+    () => capabilitiesFor(selectedId, selectedIds.size),
+    [capabilitiesFor, selectedId, selectedIds.size],
+  );
+  const rowMenu = useCallback(
+    (id: string | null): MenuItem[] => {
+      const items = rowMenuFor(capabilitiesFor(id, id ? 1 : 0));
+      if (!id) return items;
+      return [
+        ...items,
+        {
+          label: "Open in Budget",
+          onSelect: () => router.push(budgetEnvelopeHref(id, data.month)),
+        },
+        {
+          label: "View transactions",
+          onSelect: () => router.push(activityRegisterHref(id, data.month)),
+        },
+      ];
+    },
+    [capabilitiesFor, router, data.month],
+  );
   const ctx: BillColumnCtx = {
     pending,
+    renamingId,
+    onRename: commitRename,
+    onCancelRename: () => setRenamingId(null),
     editPayees: setPayeeBill,
     groups: data.groups
       .filter((group) => group.kind === "bill")
@@ -237,35 +315,22 @@ export function BillsView({
         views={views}
         groupDimensions={["budgetGroup"]}
         groupIds={groupIds}
+        commandCapabilities={commandCapabilities}
       />
       <DataGrid
         rows={gridRows}
         columns={grid.columns}
         allColumns={billColumns}
         columnCtx={ctx}
-        selectedId={multi.selectedId}
-        selectedIds={multi.selectedIds}
-        selectAllState={multi.headerState}
-        onToggleSelectAll={multi.toggleSelectAll}
-        onSelect={multi.select}
+        selectedId={selectedId}
+        selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
+        onSelect={select}
         onOpenDetail={setDetail}
         ariaLabel="Bills"
         rowLabel={(row) => row.node.name}
-        rowMenu={(id) =>
-          id
-            ? [
-                { label: "Open bill", onSelect: () => setDetail(id) },
-                {
-                  label: "Open in Budget",
-                  onSelect: () => router.push(budgetEnvelopeHref(id, data.month)),
-                },
-                {
-                  label: "View transactions",
-                  onSelect: () => router.push(activityRegisterHref(id, data.month)),
-                },
-              ]
-            : [{ label: "New bill", onSelect: create }]
-        }
+        rowMenu={rowMenu}
         enableFilters
         enableSort
         sorts={grid.sorts}

@@ -1,4 +1,5 @@
 "use client";
+import { useRef, useState } from "react";
 import type { ColumnDef } from "@/components/grid/columns";
 import { TextCell, AmountCell, DateKeyCell } from "@/components/grid/cells";
 import { CadenceSelect } from "../CadenceSelect";
@@ -25,7 +26,67 @@ export type BillColumnCtx = {
   groups: readonly { id: string; name: string }[];
   patch: (row: BudgetBillRow, edit: BillPatch) => void;
   edit: (id: string, edit: BudgetCategoryEdit) => void;
+  /** The row whose name is currently an input, if any. */
+  renamingId: string | null;
+  /** Enter or blur. An unchanged or empty name is a cancel, not a write. */
+  onRename: (id: string, name: string) => void;
+  /** Escape. */
+  onCancelRename: () => void;
 };
+
+/**
+ * The name cell while it is being renamed.
+ *
+ * Same contract as Budget's inline rename: commit on Enter/blur, revert on Escape,
+ * empty or unchanged is cancel. Copied rather than imported — Budget's name cell
+ * also carries funding chrome this page must not take on.
+ */
+function RenameInput({
+  initial,
+  label,
+  disabled,
+  onCommit,
+  onCancel,
+}: {
+  initial: string;
+  label: string;
+  disabled: boolean;
+  onCommit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  // Escape reverts, so a blur that follows it must not then commit the reverted text.
+  const cancelled = useRef(false);
+  return (
+    <input
+      autoFocus
+      aria-label={label}
+      value={value}
+      disabled={disabled}
+      className="min-h-tap w-full min-w-0 rounded border border-select-edge bg-surface px-1 text-base text-ink md:min-h-0 md:text-xs"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={() => {
+        if (cancelled.current) return;
+        onCommit(value);
+      }}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onCommit(value);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          cancelled.current = true;
+          onCancel();
+        }
+      }}
+    />
+  );
+}
 const field =
   "min-h-tap w-full rounded border border-rule bg-surface px-1 text-base md:min-h-0 md:text-xs";
 export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
@@ -38,13 +99,20 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     filterKind: "text",
     filterValue: (row) => row.node.name,
     sortValue: (row) => row.node.name,
-    render: (row, ctx) => (
-      <TextCell
-        value={row.node.name}
-        ariaLabel={`Name for ${row.node.name}`}
-        onChange={(name) => ctx.edit(row.id, { name })}
-      />
-    ),
+    render: (row, ctx) =>
+      ctx.renamingId === row.node.id ? (
+        <RenameInput
+          initial={row.node.name}
+          label={`Name for ${row.node.name}`}
+          disabled={ctx.pending}
+          onCommit={(name) => ctx.onRename(row.node.id, name)}
+          onCancel={ctx.onCancelRename}
+        />
+      ) : (
+        <span className="truncate text-[0.8125rem] font-medium text-ink">
+          {row.node.name}
+        </span>
+      ),
   },
   {
     id: "budgetGroup",

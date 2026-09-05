@@ -1072,6 +1072,11 @@ period)` so money already spent stops being held twice and only going over bites
   balances and total cash flow, with nested group reporting and exact Register drills.
   This closes the group-based reporting gap above and supersedes baseline/one-off
   reporting. Retired exclusions are archived; assignments remain unchanged.
+  ✅ **Bills name opens the record, shipped 2026-09-05.**
+  `agent-os/specs/2026-09-05-1642-bills-open-record/`. The Bill name is display
+  text; Enter / double-click / compact tap open the overlay drawer; F2 /
+  Shift+Enter rename. Amount, cadence, and status stay inline editors. Budget
+  keeps its persistent inspector.
   ✅ **YNAB-shaped Assign shipped 2026-08-24.**
   `agent-os/specs/2026-08-24-1311-budget-assign-options/`. Apply / Overwrite / Copy last
   month / 3-month average / Set all to zero are gone. Ready to Assign has Assign (Auto:

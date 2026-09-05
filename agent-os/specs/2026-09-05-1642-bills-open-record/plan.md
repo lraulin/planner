@@ -1,6 +1,6 @@
 # Bills open-record gestures
 
-**Status: active**  
+**Status: frozen / complete** (2026-09-05)  
 Spec folder: `agent-os/specs/2026-09-05-1642-bills-open-record/`
 
 ## Spec relationships
@@ -35,23 +35,24 @@ Budget is a different page with a different primary job (assigning money) and a 
 
 ## Acceptance criteria
 
-- [ ] Double-click the bill **name** opens the existing drawer. Double-click empty row chrome does too.
-- [ ] Enter with a bill selected (focus not in a cell editor) opens the same drawer. Item ▸ Open bill, row menu, Commands panel, and `⌘K` all run it.
-- [ ] Compact (below `md`): tapping the name opens the sheet; tapping amount/cadence/status still edits those controls.
-- [ ] F2 / Shift+Enter / Item ▸ Rename puts the selected name into an input. Enter/blur commits; Escape reverts; empty or unchanged does not write.
-- [ ] Double-click (or Enter) inside amount, cadence, status, group, or next-charge still commits/stays in that editor — it does not steal focus into the drawer.
-- [ ] New bill still opens the drawer on the created row. `?detail=` still deep-links.
-- [ ] Open in Budget and View transactions remain on the row menu.
-- [ ] Browser-verified desktop and phone, both themes. `src/app/finances/bills/page.tsx` is unchanged, so `npm run smoke` is optional; still start the app and click through. `npm run lint`, `typecheck`, `test:unit`.
+- [x] Double-click the bill **name** opens the existing drawer. Double-click empty row chrome does too.
+- [x] Enter with a bill selected (focus not in a cell editor) opens the same drawer. Item ▸ Open bill, row menu, Commands panel, and `⌘K` all run it.
+- [x] Compact (below `md`): tapping the name opens the sheet; tapping amount/cadence/status still edits those controls.
+- [x] F2 / Shift+Enter / Item ▸ Rename puts the selected name into an input. Enter/blur commits; Escape reverts; empty or unchanged does not write.
+- [x] Double-click (or Enter) inside amount, cadence, status, group, or next-charge still commits/stays in that editor — it does not steal focus into the drawer.
+- [x] New bill still opens the drawer on the created row. `?detail=` still deep-links.
+- [x] Open in Budget and View transactions remain on the row menu.
+- [x] Browser-verified desktop and phone, both themes. `src/app/finances/bills/page.tsx` is unchanged, so `npm run smoke` is optional; still start the app and click through. `npm run lint`, `typecheck`, `test:unit`.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                         | Why                                                                                                                                                                                    |
+| --- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Open / New / Rename are `GridCommandCapabilities` + `pageCommands`, not `catalogCapabilities`. | That helper always ships Delete. Bills are cancelled, not deleted.                                                                                                                     |
+| 2   | Compact amount/cadence/status stay meta chips; a tap on those chips opens the sheet.           | Below `md` those columns were never live editors — they are chips. Name tap is the new open path; the editors live in the sheet. Desktop amount/cadence/status still stay in the cell. |
 
 ## Task 1: Save Spec Documentation
 

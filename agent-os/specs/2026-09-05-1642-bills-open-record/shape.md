@@ -1,6 +1,6 @@
 # Bills open-record gestures — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-05)
 
 ## Scope
 
