@@ -5,6 +5,7 @@ import { BudgetSetup } from "@/components/finances/budget/BudgetSetup";
 import { BudgetView } from "@/components/finances/budget/BudgetView";
 import { monthKeyFromParam } from "@/lib/finances/budget/envelope";
 import { loadBudget, loadBillAnchors } from "@/lib/finances/budget/queries";
+import type { BillAnchor } from "@/lib/finances/commitments";
 import { loadInsightsRows } from "@/lib/finances/dashboardQueries";
 import { paydaysFrom } from "@/lib/finances/analytics";
 import { listPayees } from "@/lib/finances/payees/queries";
@@ -32,10 +33,7 @@ export default async function FinancesBudgetPage({
   ]);
   const anchors = data.configured
     ? await loadBillAnchors(userId, data.categories, data.todayKey)
-    : {
-        nextDueKeys: new Map<string, string>(),
-        expectedKeys: new Map<string, string>(),
-      };
+    : new Map<string, BillAnchor>();
 
   return (
     <AppShell active="finances">
@@ -43,8 +41,7 @@ export default async function FinancesBudgetPage({
         {data.configured ? (
           <BudgetView
             data={data}
-            nextDueKeys={anchors.nextDueKeys}
-            expectedKeys={anchors.expectedKeys}
+            anchors={anchors}
             payees={payees.map(({ id, name, claim }) => ({
               id,
               name,

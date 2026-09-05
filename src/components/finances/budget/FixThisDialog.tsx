@@ -20,6 +20,7 @@ import {
   unassignPreview,
 } from "@/lib/finances/budget/fixThis";
 import { indicatorsFromAssign } from "@/lib/finances/budget/indicator";
+import type { BillAnchor } from "@/lib/finances/commitments";
 import type { EnvelopeRef } from "@/lib/finances/budget/operations";
 import type { BudgetCategoryRow, BudgetGroupRow } from "@/lib/finances/budget/queries";
 import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
@@ -44,8 +45,7 @@ export function FixThisDialog({
   groups,
   categories,
   goals,
-  nextDueKeys,
-  expectedKeys,
+  anchors,
   showHidden,
   pending,
   onCancel,
@@ -56,8 +56,7 @@ export function FixThisDialog({
   groups: readonly BudgetGroupRow[];
   categories: readonly BudgetCategoryRow[];
   goals: Readonly<Record<string, number>>;
-  nextDueKeys: ReadonlyMap<string, string>;
-  expectedKeys: ReadonlyMap<string, string>;
+  anchors: ReadonlyMap<string, BillAnchor>;
   showHidden: boolean;
   pending: boolean;
   onCancel: () => void;
@@ -110,20 +109,10 @@ export function FixThisDialog({
       groups,
       categories,
       goals,
-      nextDueKeys,
-      expectedKeys,
+      anchors,
     });
     return indicatorsFromAssign(activeMonth, scan.envelopes, scan.bills);
-  }, [
-    source,
-    previous,
-    groups,
-    categories,
-    goals,
-    nextDueKeys,
-    expectedKeys,
-    activeMonth,
-  ]);
+  }, [source, previous, groups, categories, goals, anchors, activeMonth]);
 
   const selected = useMemo(() => {
     for (const section of sections) {

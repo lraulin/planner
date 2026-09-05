@@ -66,8 +66,13 @@ export type DeclaredBill = {
  * wherever a `DeclaredBill` is wanted, so the read is one query either way.
  */
 export type StoredBill = DeclaredBill & {
-  /** Day of the period the charge is expected, 1–31, or null to walk from the last charge. */
+  /**
+   * Day of the month the bill is **due**, 1–31, or null when it has no calendar due date and
+   * its dates are walked from the last charge on file. See `billSchedule.ts`.
+   */
   dueDay: number | null;
+  /** How many days before the due date the charge posts, 0–60. Zero means on the due date. */
+  leadDays: number;
 };
 
 /**

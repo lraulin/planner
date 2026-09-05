@@ -3,13 +3,11 @@ import { budgetRows, isBillRow, type BudgetBillRow } from "./budget/rows";
 import { buildBudget, findMonth } from "./budget/envelope";
 import { budgetEnvelopeLabel, nestedBudgetGridRows } from "./budget/hierarchy";
 import type { GridRow } from "@/lib/tree/slice";
+import type { BillAnchor } from "./commitments";
 
 export function managementBillRows(
   data: BudgetData,
-  anchors: {
-    nextDueKeys: ReadonlyMap<string, string>;
-    expectedKeys: ReadonlyMap<string, string>;
-  },
+  anchors: ReadonlyMap<string, BillAnchor>,
 ) {
   const month =
     findMonth(data.months, data.month) ??
@@ -22,14 +20,9 @@ export function managementBillRows(
       endMonth: data.month,
       openingCents: 0,
     })[0];
-  return budgetRows(
-    data.groups,
-    data.categories,
-    month,
-    data.goals,
-    anchors.nextDueKeys,
-    anchors.expectedKeys,
-  ).filter(isBillRow);
+  return budgetRows(data.groups, data.categories, month, data.goals, anchors).filter(
+    isBillRow,
+  );
 }
 
 export function billGroupLabel(

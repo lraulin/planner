@@ -8,7 +8,7 @@ import {
   periodStartKey,
   projectForwardMonths,
   upcomingBillOccurrences,
-  staleSubscriptions,
+  billsNeedingReview,
   suggestCommitmentName,
   unclaimedMerchants,
   type StoredBillRow,
@@ -28,6 +28,7 @@ function bill(overrides: Partial<StoredBillRow> = {}): StoredBillRow {
     anchorDate: null,
     scheduled: true,
     dueDay: null,
+    leadDays: 0,
     ...overrides,
   };
 }
@@ -71,14 +72,22 @@ describe("periodIndex", () => {
   });
 });
 
-describe("staleSubscriptions", () => {
-  const charges = (dateKey: string) =>
-    new Map([["Netflix", [{ dateKey, costCents: 1599 }]]]);
+describe("billsNeedingReview", () => {
+  /** The panel's real composition: server-resolved anchors, then the grace check. */
+  const reviews = (
+    bills: readonly StoredBillRow[],
+    lastCharge: string | null,
+    todayKey: string,
+  ) =>
+    billsNeedingReview(
+      bills.map((row) => ({ ...row, ...billAnchor(row, lastCharge, todayKey) })),
+      todayKey,
+    );
 
   it("flags a monthly subscription whose charge never arrived", () => {
     // The Disney+/Paramount+/HBO Max case: still on the list, no longer billing.
     const monthly = bill({ name: "Netflix", cadenceMonths: 1, expectedCents: 1599 });
-    const [stale] = staleSubscriptions([monthly], charges("2026-06-01"), "2026-08-16");
+    const [stale] = reviews([monthly], "2026-06-01", "2026-08-16");
 
     expect(stale).toMatchObject({ name: "Netflix", expectedOn: "2026-07-01" });
     expect(stale.overdueDays).toBe(46);
@@ -87,26 +96,29 @@ describe("staleSubscriptions", () => {
   it("leaves a charge that is merely a few days late alone", () => {
     // Weekend drift on a monthly bill is not a cancelled subscription.
     const monthly = bill({ name: "Netflix", cadenceMonths: 1 });
-    expect(staleSubscriptions([monthly], charges("2026-07-14"), "2026-08-16")).toEqual(
-      [],
-    );
+    expect(reviews([monthly], "2026-07-14", "2026-08-16")).toEqual([]);
+  });
+
+  it("holds a monthly bill six days late, which grace 5 would have flagged", () => {
+    // The floor is 7 because rent's worst real lateness against its calendar occurrence was
+    // six days. Grace 5 put three of its 24 cycles on the review list for a day each.
+    const monthly = bill({ name: "Netflix", cadenceMonths: 1 });
+    expect(reviews([monthly], "2026-07-10", "2026-08-16")).toEqual([]);
+    expect(reviews([monthly], "2026-07-08", "2026-08-16")).toHaveLength(1);
   });
 
   it("scales the grace period with the cadence", () => {
     // Five days late on a yearly bill is nothing; the same lateness on a monthly one is not.
     const yearly = bill({ name: "Netflix", cadenceMonths: 12 });
-    expect(staleSubscriptions([yearly], charges("2025-08-06"), "2026-08-16")).toEqual(
-      [],
-    );
+    expect(reviews([yearly], "2025-08-06", "2026-08-16")).toEqual([]);
   });
 
   it("says nothing about a cancelled or unscheduled bill", () => {
-    const old = charges("2026-01-01");
     for (const overrides of [{ status: "cancelled" as const }, { scheduled: false }]) {
       expect(
-        staleSubscriptions(
+        reviews(
           [bill({ name: "Netflix", cadenceMonths: 1, ...overrides })],
-          old,
+          "2026-01-01",
           "2026-08-16",
         ),
       ).toEqual([]);
@@ -116,7 +128,7 @@ describe("staleSubscriptions", () => {
   it("skips a bill with no charge and no anchor rather than inventing a due date", () => {
     // "Overdue" computed from a date nobody observed is a guess wearing a fact's clothes.
     const never = bill({ name: "Netflix", cadenceMonths: 1, anchorDate: null });
-    expect(staleSubscriptions([never], new Map(), "2026-08-16")).toEqual([]);
+    expect(reviews([never], null, "2026-08-16")).toEqual([]);
   });
 
   it("falls back to the declared anchor when history does not reach the bill", () => {
@@ -125,7 +137,7 @@ describe("staleSubscriptions", () => {
       cadenceMonths: 1,
       anchorDate: "2026-05-10",
     });
-    const [stale] = staleSubscriptions([anchored], new Map(), "2026-08-16");
+    const [stale] = reviews([anchored], null, "2026-08-16");
 
     expect(stale.expectedOn).toBe("2026-05-10");
   });
@@ -138,10 +150,21 @@ describe("staleSubscriptions", () => {
       expectedCents: 7188,
       anchorDate: "2027-03-30",
     });
-    const history = new Map([
-      ["1Password", [{ dateKey: "2025-03-30", costCents: 7188 }]],
-    ]);
-    expect(staleSubscriptions([onePassword], history, "2026-08-16")).toEqual([]);
+    expect(reviews([onePassword], "2025-03-30", "2026-08-16")).toEqual([]);
+  });
+
+  it("names the due date a declared bill's late charge pays", () => {
+    const rent = bill({ name: "Rent", cadenceMonths: 1, dueDay: 1, leadDays: 7 });
+    const [stale] = reviews([rent], "2026-06-26", "2026-08-16");
+
+    expect(stale).toMatchObject({ expectedOn: "2026-07-25", dueOn: "2026-08-01" });
+  });
+
+  it("clears rent off the list, which the walk kept it on", () => {
+    // Posted 2026-08-26 for the 2026-09-01 due date; the walk expected 2026-09-26 and
+    // reported the 2026-09-24 charge as never having arrived.
+    const rent = bill({ name: "Rent", cadenceMonths: 1, dueDay: 1, leadDays: 7 });
+    expect(reviews([rent], "2026-08-26", "2026-09-05")).toEqual([]);
   });
 });
 
@@ -344,6 +367,7 @@ describe("billAnchor", () => {
       periodStartKey: "2026-08-01",
       expectedKey: "2026-09-01",
       nextDueKey: "2026-09-01",
+      dueKey: null,
     });
   });
 
@@ -356,6 +380,7 @@ describe("billAnchor", () => {
       periodStartKey: "2026-06-01",
       expectedKey: "2026-07-01",
       nextDueKey: "2026-09-01",
+      dueKey: null,
     });
   });
 
@@ -366,6 +391,7 @@ describe("billAnchor", () => {
       periodStartKey: "2026-08-03",
       expectedKey: "2026-09-03",
       nextDueKey: "2026-09-03",
+      dueKey: null,
     });
   });
 
@@ -374,6 +400,7 @@ describe("billAnchor", () => {
       periodStartKey: null,
       expectedKey: null,
       nextDueKey: null,
+      dueKey: null,
     });
   });
 
@@ -385,6 +412,52 @@ describe("billAnchor", () => {
         "2026-08-21",
       ),
     ).toMatchObject({ expectedKey: "2026-09-11", nextDueKey: "2026-09-11" });
+  });
+
+  // — With a declared due day, the dates come from the calendar ————————————————
+
+  const rent = bill({ cadenceMonths: 1, dueDay: 1, leadDays: 7 });
+
+  it("matches the last charge to the occurrence it paid and waits for the next", () => {
+    // Posted 2026-08-26 against a 2026-08-25 expectation, for the 2026-09-01 due date.
+    expect(billAnchor(rent, "2026-08-26", "2026-09-05")).toEqual({
+      periodStartKey: "2026-08-25",
+      expectedKey: "2026-09-24",
+      nextDueKey: "2026-09-24",
+      dueKey: "2026-10-01",
+    });
+  });
+
+  it("does not let an early charge drag the expectation forward", () => {
+    // The walk answered 2026-05-17 here, and then read the ordinary 2026-05-27 payment as
+    // ten days late. The calendar series re-anchors instead of absorbing the deviation.
+    expect(billAnchor(rent, "2025-04-17", "2025-05-01")).toMatchObject({
+      expectedKey: "2025-05-25",
+      dueKey: "2025-06-01",
+    });
+  });
+
+  it("projects from the due day alone when nothing has posted yet", () => {
+    // The walk had nothing to say without history; a declared due day is itself an anchor.
+    expect(billAnchor(rent, null, "2026-09-05")).toMatchObject({
+      expectedKey: "2026-09-24",
+      dueKey: "2026-10-01",
+    });
+  });
+
+  it("keeps walking a bill that declares no due day", () => {
+    // The regression that would be invisible: every existing bill has `dueDay: null`.
+    expect(billAnchor({ ...rent, dueDay: null }, "2026-08-26", "2026-09-05")).toEqual(
+      billAnchor(monthly, "2026-08-26", "2026-09-05"),
+    );
+  });
+
+  it("ignores a due day on a day cadence or an unscheduled bill", () => {
+    for (const overrides of [{ cadenceDays: 28 }, { scheduled: false }]) {
+      expect(
+        billAnchor({ ...rent, ...overrides }, "2026-08-26", "2026-09-05").dueKey,
+      ).toBeNull();
+    }
   });
 });
 

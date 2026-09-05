@@ -907,6 +907,7 @@ export async function updateBudgetCategory(
             cadenceMonths: null,
             cadenceDays: null,
             dueDay: null,
+            leadDays: 0,
             anchorDate: null,
             scheduled: true,
             expectedCents: null,
@@ -1653,14 +1654,7 @@ export async function assignBudget(
   const previous = findMonth(data.months, prevMonthKey(month.month));
   const snapshots = await loadBillSnapshots(userId, data.categories, data.todayKey);
   const anchors = await loadBillAnchors(userId, data.categories, data.todayKey);
-  const rows = budgetRows(
-    data.groups,
-    data.categories,
-    month,
-    data.goals,
-    anchors.nextDueKeys,
-    anchors.expectedKeys,
-  );
+  const rows = budgetRows(data.groups, data.categories, month, data.goals, anchors);
   const envelopes = rows.map((row) => assignEnvelopeFromRow(row, previous));
   const result = planAssign({
     option: params.option,

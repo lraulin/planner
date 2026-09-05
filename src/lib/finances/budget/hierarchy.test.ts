@@ -64,6 +64,7 @@ function billFacet(overrides: Partial<BillFacet> = {}): BillFacet {
     cadenceMonths: 1,
     cadenceDays: null,
     dueDay: null,
+    leadDays: 0,
     anchorDate: null,
     scheduled: true,
     expectedCents: 1_000,
@@ -97,6 +98,7 @@ function row(
     bill: null,
     nextDueKey: null,
     expectedKey: null,
+    dueKey: null,
     ...overrides,
   };
 }

@@ -17,6 +17,7 @@ import {
   billsGridRows,
 } from "@/lib/finances/billsView";
 import { billCadence } from "@/lib/finances/budget/inspector";
+import { billsNeedingReview, type BillAnchor } from "@/lib/finances/commitments";
 import { billDueSoon } from "@/lib/finances/budget/dueCue";
 import { budgetEnvelopeLabel } from "@/lib/finances/budget/hierarchy";
 import {
@@ -66,10 +67,7 @@ export function BillsView({
   lastCharges,
 }: {
   data: BudgetData;
-  anchors: {
-    nextDueKeys: ReadonlyMap<string, string>;
-    expectedKeys: ReadonlyMap<string, string>;
-  };
+  anchors: ReadonlyMap<string, BillAnchor>;
   forecast: BillForecast;
   review: readonly RecurringMerchant[];
   payees: readonly { id: string; name: string; budgetCategoryId: string | null }[];
@@ -199,13 +197,23 @@ export function BillsView({
       ),
   };
   const opened = rows.find((row) => row.id === detail);
-  const reviewDates = rows.filter(
-    (row) =>
-      row.bill.status === "active" &&
-      row.bill.scheduled &&
-      row.expectedKey &&
-      row.expectedKey < data.todayKey,
+  // The grace belongs to `billsNeedingReview`, not here: this panel used to flag any passed
+  // expected date, which put rent on the list for the days its charge took to clear.
+  const reviewDates = billsNeedingReview(
+    rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      status: row.bill.status,
+      scheduled: row.bill.scheduled,
+      cadenceMonths: row.bill.cadenceMonths ?? 1,
+      cadenceDays: row.bill.cadenceDays,
+      expectedCents: row.bill.expectedCents,
+      expectedKey: row.expectedKey,
+      dueKey: row.dueKey,
+    })),
+    data.todayKey,
   );
+  const rowById = new Map(rows.map((row) => [row.id, row]));
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <div className="flex shrink-0 flex-wrap gap-3 border-b border-rule px-3 py-2 text-xs">
@@ -287,31 +295,45 @@ export function BillsView({
               An expected date has passed. This asks for review; it does not prove a
               payment was missed.
             </p>
-            {reviewDates.map((row) => (
-              <div className="flex flex-wrap gap-3 py-1" key={row.id}>
-                <button
-                  type="button"
-                  className="underline"
-                  onClick={() => setDetail(row.id)}
-                >
-                  {row.name} · expected {row.expectedKey}
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => ctx.patch(row, { anchorDate: data.todayKey })}
-                >
-                  Still active · reset expected date
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => ctx.patch(row, { status: "cancelled" })}
-                >
-                  Cancelled
-                </button>
-              </div>
-            ))}
+            {reviewDates.map((item) => {
+              const row = rowById.get(item.billId);
+              return (
+                <div className="flex flex-wrap gap-3 py-1" key={item.billId}>
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => setDetail(item.billId)}
+                  >
+                    {item.name} · expected {item.expectedOn}
+                    {item.dueOn === null ? "" : `, due ${item.dueOn}`}
+                  </button>
+                  {item.dueOn === null ? (
+                    <button
+                      type="button"
+                      disabled={pending || !row}
+                      onClick={() =>
+                        row && ctx.patch(row, { anchorDate: data.todayKey })
+                      }
+                    >
+                      Still active · reset expected date
+                    </button>
+                  ) : (
+                    // A declared bill has no writable expected date to reset — its dates come
+                    // from the due day and the lead, so the fix is to check those.
+                    <button type="button" onClick={() => setDetail(item.billId)}>
+                      Still active · check the due day
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={pending || !row}
+                    onClick={() => row && ctx.patch(row, { status: "cancelled" })}
+                  >
+                    Cancelled
+                  </button>
+                </div>
+              );
+            })}
           </details>
         ) : null}
         <ForecastDetails

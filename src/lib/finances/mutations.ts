@@ -782,8 +782,16 @@ export type BillEnvelopeEdit = {
    * yearly figure is solid and whose delivery date is a tank sensor and the weather.
    */
   scheduled?: boolean;
-  /** Day of the period the charge is expected, 1–31, or null to walk from the last charge. */
+  /**
+   * Day of the month the bill is **due**, 1–31, or null to walk from the last charge on file.
+   * A declared due day makes the bill's dates calendar arithmetic (`billSchedule.ts`).
+   */
   dueDay?: number | null;
+  /**
+   * How many days before the due date the charge posts, 0–60. Rent is due the 1st and
+   * autopays seven days ahead, so its charge lands in the previous month.
+   */
+  leadDays?: number;
   /** Optional group for a **new** bill. Ignored when the bill already exists. Null — the default — sits the bill in the Bills section with no group. */
   groupId?: string | null;
 };
@@ -838,6 +846,14 @@ function requireValidBillEnvelope(edit: BillEnvelopeEdit): string {
     (!Number.isInteger(edit.dueDay) || edit.dueDay < 1 || edit.dueDay > 31)
   ) {
     throw new Error("A due day must be a whole number from 1 to 31.");
+  }
+  // Validated here as well as in the CHECK: a constraint violation surfaces as a database
+  // error the user cannot act on.
+  if (
+    edit.leadDays !== undefined &&
+    (!Number.isInteger(edit.leadDays) || edit.leadDays < 0 || edit.leadDays > 60)
+  ) {
+    throw new Error("A payment lead must be a whole number of days from 0 to 60.");
   }
   return name;
 }
@@ -979,6 +995,10 @@ export async function upsertBillEnvelope(
         ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
         ...(edit.scheduled !== undefined ? { scheduled: edit.scheduled } : {}),
         ...(edit.dueDay !== undefined ? { dueDay: edit.dueDay } : {}),
+        // Clearing the due day returns the bill to the walk, where a lead has no meaning and
+        // would come back as a surprise if the due day were ever set again.
+        ...(edit.dueDay === null ? { leadDays: 0 } : {}),
+        ...(edit.leadDays !== undefined ? { leadDays: edit.leadDays } : {}),
         ...(edit.status !== undefined ? { status: edit.status } : {}),
         // Cancelling stamps the date and reactivating clears it, so the pair cannot disagree —
         // a `cancelledOn` left behind on an active bill would read as a fact about the future.
@@ -1031,6 +1051,10 @@ export async function upsertBillEnvelope(
           notes: edit.notes?.trim() ?? "",
           scheduled: edit.scheduled ?? true,
           dueDay: edit.dueDay ?? null,
+          leadDays:
+            edit.dueDay === undefined || edit.dueDay === null
+              ? 0
+              : (edit.leadDays ?? 0),
           status: edit.status ?? "active",
           cancelledOn:
             edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,

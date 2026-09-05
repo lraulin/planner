@@ -22,6 +22,7 @@ function bill(over: Partial<StoredBillRow> = {}): StoredBillRow {
     anchorDate: null,
     scheduled: true,
     dueDay: 1,
+    leadDays: 0,
     ...over,
   };
 }

@@ -141,7 +141,7 @@ export function currentMonthUnderfundedGap(params: {
   groups: Parameters<typeof budgetRows>[0];
   categories: Parameters<typeof budgetRows>[1];
   goals: Parameters<typeof budgetRows>[3];
-  nextDueKeys: ReadonlyMap<string, string>;
+  anchors: Parameters<typeof budgetRows>[4];
 }): number {
   const currentKey = monthKeyOf(params.todayKey);
   const current = findMonth(params.months, currentKey);
@@ -152,7 +152,7 @@ export function currentMonthUnderfundedGap(params: {
     params.categories,
     current,
     params.goals,
-    params.nextDueKeys,
+    params.anchors,
   );
   return underfundedGapCents(
     currentKey,
@@ -168,16 +168,14 @@ export function assignScanInputs(params: {
   groups: Parameters<typeof budgetRows>[0];
   categories: Parameters<typeof budgetRows>[1];
   goals?: Parameters<typeof budgetRows>[3];
-  nextDueKeys?: Parameters<typeof budgetRows>[4];
-  expectedKeys?: Parameters<typeof budgetRows>[5];
+  anchors?: Parameters<typeof budgetRows>[4];
 }): { envelopes: AssignEnvelope[]; bills: Map<string, BillSnapshot> } {
   const rows = budgetRows(
     params.groups,
     params.categories,
     params.month,
     params.goals ?? {},
-    params.nextDueKeys ?? new Map(),
-    params.expectedKeys ?? new Map(),
+    params.anchors ?? new Map(),
   );
   return {
     envelopes: rows.map((row) => assignEnvelopeFromRow(row, params.previous)),

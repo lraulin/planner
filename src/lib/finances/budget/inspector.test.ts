@@ -16,6 +16,7 @@ function bill(overrides: Partial<BillFacet> = {}): BillFacet {
     cadenceMonths: 1,
     cadenceDays: null,
     dueDay: null,
+    leadDays: 0,
     anchorDate: null,
     scheduled: true,
     expectedCents: 8_799,

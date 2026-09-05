@@ -890,7 +890,10 @@ const fieldDescriptions: Record<string, string> = {
   status: "active, paused, or cancelled.",
   url: "Where the bill is managed — account, billing or cancel page. Stored, never followed.",
   scheduled: "Whether the dates are predictable. False for propane.",
-  dueDay: "Day of the period the charge is expected, 1-31.",
+  dueDay:
+    "Day of the month the bill is due, 1-31. Set it and the charge dates come from the calendar instead of walking from the last charge; null returns it to the walk.",
+  leadDays:
+    "Days before the due date the charge actually posts, 0-60 — rent due the 1st on autopay seven days ahead is 7. Only meaningful with a dueDay.",
   employer: "Employer or company name.",
   jobTitle: "Role or title held at that employer.",
   employmentType:

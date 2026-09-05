@@ -61,6 +61,7 @@ function envelope(name: string, activityCents: number): BudgetRow {
     bill: null,
     nextDueKey: null,
     expectedKey: null,
+    dueKey: null,
   };
 }
 

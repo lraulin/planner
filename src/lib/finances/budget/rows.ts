@@ -13,6 +13,7 @@ import { categoryMonth, type BudgetMonth } from "./envelope";
 import type { BillFacet, BudgetCategoryRow, BudgetGroupRow } from "./queries";
 import { compareBudgetNames, nestedBudgetGridRows } from "./hierarchy";
 import type { EnvelopeKind } from "@/db/schema";
+import type { BillAnchor } from "../commitments";
 
 export type BudgetRow = {
   id: string;
@@ -37,6 +38,12 @@ export type BudgetRow = {
    * Null for ordinary envelopes and bills with no anchor yet.
    */
   expectedKey: string | null;
+  /**
+   * The contractual due date `expectedKey` pays, for a bill that declares a due day. Null for
+   * every other envelope: without a declared due day there is no contract date, only a
+   * posting to predict. See `billSchedule.ts`.
+   */
+  dueKey: string | null;
   /** Template goal for this month; null when Apply has not written one. */
   goalCents: number | null;
   kind: EnvelopeKind;
@@ -81,8 +88,7 @@ export function budgetRows(
   categories: readonly BudgetCategoryRow[],
   month: BudgetMonth,
   goals: Readonly<Record<string, number>> = {},
-  nextDueKeys: ReadonlyMap<string, string> = new Map(),
-  expectedKeys: ReadonlyMap<string, string> = new Map(),
+  anchors: ReadonlyMap<string, BillAnchor> = new Map(),
 ): BudgetRow[] {
   const groupName = new Map(groups.map((group) => [group.id, group.name]));
 
@@ -115,8 +121,9 @@ export function budgetRows(
         snoozed: cell.snoozed,
         kind: category.kind,
         bill: category.bill,
-        nextDueKey: nextDueKeys.get(category.id) ?? null,
-        expectedKey: expectedKeys.get(category.id) ?? null,
+        nextDueKey: anchors.get(category.id)?.nextDueKey ?? null,
+        expectedKey: anchors.get(category.id)?.expectedKey ?? null,
+        dueKey: anchors.get(category.id)?.dueKey ?? null,
       };
     });
 }

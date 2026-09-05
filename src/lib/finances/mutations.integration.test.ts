@@ -8,7 +8,11 @@ import {
   financeTransactions,
   users,
 } from "@/db/schema";
-import { createBudgetCategory, createCategoryGroup } from "./budget/mutations";
+import {
+  createBudgetCategory,
+  createCategoryGroup,
+  deleteBudgetCategory,
+} from "./budget/mutations";
 import {
   loadBillSnapshots,
   loadNextDueKeys,
@@ -489,6 +493,47 @@ describeDb("declared bill envelopes", () => {
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
+  it("refuses a payment lead the column would reject with a database error", async () => {
+    // Validated in lib as well as in the CHECK: a constraint violation surfaces as a
+    // database error the user cannot act on.
+    for (const leadDays of [-1, 61, 7.5]) {
+      await expect(
+        upsertBillEnvelope(userId, {
+          name: "Geico",
+          cadence: { unit: "month", n: 6 },
+          dueDay: 1,
+          leadDays,
+        }),
+      ).rejects.toThrow("A payment lead must be a whole number of days from 0 to 60.");
+    }
+    expect(await loadRecurringBills(userId)).toEqual([]);
+  });
+
+  it("clears the payment lead when the due day is cleared", async () => {
+    // A lead with no due day has nothing to lead, and would come back as a surprise if the
+    // due day were ever set again.
+    await upsertBillEnvelope(userId, {
+      name: "RENT:RAULIN",
+      cadence: { unit: "month", n: 1 },
+      dueDay: 1,
+      leadDays: 7,
+    });
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      dueDay: 1,
+      leadDays: 7,
+    });
+
+    await upsertBillEnvelope(userId, {
+      name: "RENT:RAULIN",
+      cadence: { unit: "month", n: 1 },
+      dueDay: null,
+    });
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      dueDay: null,
+      leadDays: 0,
+    });
+  });
+
   it("creates a bill with no group and does not invent Spending › Bills", async () => {
     await upsertBillEnvelope(userId, {
       name: "Geico",
@@ -676,6 +721,7 @@ describeDb("next due keys for the bills grid", () => {
           cadenceMonths: 1,
           cadenceDays: null,
           dueDay: null,
+          leadDays: 0,
           anchorDate: "2026-09-01",
           scheduled: true,
           expectedCents: 1299,
@@ -704,6 +750,7 @@ describeDb("declared bill envelope isolation", () => {
       cadence: { unit: "month", n: 6 },
       expectedCents: 141_260,
       dueDay: 3,
+      leadDays: 5,
     });
   });
 
@@ -718,11 +765,26 @@ describeDb("declared bill envelope isolation", () => {
       cadence: { unit: "month", n: 6 },
       expectedCents: 1,
       dueDay: 28,
+      leadDays: 30,
     });
 
     expect((await loadRecurringBills(ownerId))[0]).toMatchObject({
       expectedCents: 141_260,
       dueDay: 3,
+      leadDays: 5,
+    });
+  });
+
+  it("does not let a second user delete another user's bill", async () => {
+    const [owned] = await loadRecurringBills(ownerId);
+    await expect(deleteBudgetCategory(intruderId, owned.id)).rejects.toThrow(
+      "That envelope does not exist.",
+    );
+
+    expect((await loadRecurringBills(ownerId))[0]).toMatchObject({
+      id: owned.id,
+      dueDay: 3,
+      leadDays: 5,
     });
   });
 

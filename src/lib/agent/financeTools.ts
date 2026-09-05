@@ -783,6 +783,7 @@ export async function saveSubscriptionTool(
     url: optionalString(args, "url"),
     scheduled: args.scheduled === undefined ? undefined : args.scheduled === true,
     dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),
+    leadDays: optionalNumber(args, "leadDays"),
     notes: optionalString(args, "notes"),
   });
   const row = (await loadRecurringBills(userId)).find(
@@ -849,6 +850,7 @@ export async function upsertSubscriptionTool(
       url: optionalString(args, "url"),
       scheduled: args.scheduled === undefined ? undefined : args.scheduled === true,
       dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),
+      leadDays: optionalNumber(args, "leadDays"),
       notes: optionalString(args, "notes"),
     }),
   );

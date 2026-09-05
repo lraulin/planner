@@ -2724,12 +2724,29 @@ export const financeBudgetCategories = pgTable(
      */
     cadenceDays: smallint("cadence_days"),
     /**
-     * Day of a bill's period the charge is expected, 1–31, or null to walk from the last
-     * charge on file. Not clamped to 28: a rent due on the 31st is a real thing, and the
-     * month arithmetic in `recurringBills.ts` already shortens an overlong day to the
-     * month's end rather than spilling into the next one.
+     * Day of the month the bill is **due** — the date on the contract, 1–31 — or null when
+     * the bill has no calendar due date and its dates are walked from the last charge on
+     * file. Not clamped to 28: rent due on the 31st is a real thing, and the month
+     * arithmetic clamps an overlong day to the month's end rather than spilling into the
+     * next one.
+     *
+     * When set (with a month cadence, and `scheduled`), it makes the bill's occurrences pure
+     * calendar arithmetic measured from a seed — `dueAt(k) = seedDue + k × cadenceMonths` —
+     * and a posted charge is matched to its *nearest* occurrence rather than becoming the
+     * anchor for the next one. A walk from the last posting absorbs every deviation
+     * permanently; a calendar series self-corrects. See `src/lib/finances/billSchedule.ts`.
      */
     dueDay: smallint("due_day"),
+    /**
+     * How many days **before** the due date the charge actually posts, 0–60. Rent is due the
+     * 1st but autopay fires seven days ahead at the landlady's request, so the charge lands
+     * in the previous month. `expectedAt(k) = dueAt(k) − leadDays` is what the envelope
+     * funds and what "Next charge" means; the due date is the contract, not the cash flow.
+     *
+     * Zero — the default, and the only legal value on a bill with no `dueDay` and on an
+     * ordinary envelope — means the charge posts on the due date.
+     */
+    leadDays: smallint("lead_days").notNull().default(0),
     /**
      * Anchors a bill's next-due walk when the imported history does not reach a real
      * charge. Null means the latest charge on file is the anchor.
@@ -2795,6 +2812,7 @@ export const financeBudgetCategories = pgTable(
         and ${table.cadenceMonths} is null
         and ${table.cadenceDays} is null
         and ${table.dueDay} is null
+        and ${table.leadDays} = 0
         and ${table.anchorDate} is null
         and ${table.scheduled} = true
         and ${table.expectedCents} is null
@@ -2813,6 +2831,12 @@ export const financeBudgetCategories = pgTable(
     check(
       "finance_budget_categories_due_day",
       sql`${table.dueDay} is null or (${table.dueDay} >= 1 and ${table.dueDay} <= 31)`,
+    ),
+    // Two months of lead is past any autopay arrangement worth modelling; beyond that the
+    // charge belongs to a different occurrence and the due day is wrong.
+    check(
+      "finance_budget_categories_lead_days",
+      sql`${table.leadDays} >= 0 and ${table.leadDays} <= 60`,
     ),
   ],
 );

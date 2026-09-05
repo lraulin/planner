@@ -20,7 +20,7 @@ import { listAccounts } from "../queries";
 import { accountBalanceView } from "../workingBalance";
 import { loadWorkingPendingSelection } from "../workingPendingQuery";
 import { lastChargeByEnvelope } from "../billLastCharge";
-import { billAnchor } from "../commitments";
+import { billAnchor, type BillAnchor } from "../commitments";
 import type { StoredBill } from "../recurringBills";
 import { walksNextDue } from "./inspector";
 import {
@@ -76,6 +76,8 @@ export type BillFacet = {
   cadenceMonths: number | null;
   cadenceDays: number | null;
   dueDay: number | null;
+  /** Days before the due date the charge posts. Zero unless `dueDay` is declared. */
+  leadDays: number;
   anchorDate: string | null;
   scheduled: boolean;
   expectedCents: number | null;
@@ -216,6 +218,7 @@ function categoriesOf(userId: string, executor: FinanceExecutor = db) {
       cadenceMonths: financeBudgetCategories.cadenceMonths,
       cadenceDays: financeBudgetCategories.cadenceDays,
       dueDay: financeBudgetCategories.dueDay,
+      leadDays: financeBudgetCategories.leadDays,
       anchorDate: financeBudgetCategories.anchorDate,
       scheduled: financeBudgetCategories.scheduled,
       expectedCents: financeBudgetCategories.expectedCents,
@@ -249,6 +252,7 @@ function parsedCategories(
             cadenceMonths: row.cadenceMonths,
             cadenceDays: row.cadenceDays,
             dueDay: row.dueDay,
+            leadDays: row.leadDays,
             anchorDate: row.anchorDate,
             scheduled: row.scheduled,
             expectedCents: row.expectedCents,
@@ -563,6 +567,7 @@ function storedBillOf(category: BudgetCategoryRow): StoredBill | null {
     expectedCents: category.bill.expectedCents,
     scheduled: category.bill.scheduled,
     dueDay: category.bill.dueDay,
+    leadDays: category.bill.leadDays,
   };
 }
 
@@ -578,25 +583,22 @@ export async function loadBillAnchors(
   userId: string,
   categories: readonly BudgetCategoryRow[],
   todayKey: string,
-): Promise<{
-  nextDueKeys: Map<string, string>;
-  expectedKeys: Map<string, string>;
-}> {
+): Promise<Map<string, BillAnchor>> {
   const lastCharge = await lastChargeByEnvelope(userId);
-  const nextDueKeys = new Map<string, string>();
-  const expectedKeys = new Map<string, string>();
+  const anchors = new Map<string, BillAnchor>();
 
   for (const category of categories) {
     const bill = storedBillOf(category);
     if (bill === null || category.bill === null || !walksNextDue(category.bill)) {
       continue;
     }
-    const anchor = billAnchor(bill, lastCharge.get(category.id) ?? null, todayKey);
-    if (anchor.nextDueKey !== null) nextDueKeys.set(category.id, anchor.nextDueKey);
-    if (anchor.expectedKey !== null) expectedKeys.set(category.id, anchor.expectedKey);
+    anchors.set(
+      category.id,
+      billAnchor(bill, lastCharge.get(category.id) ?? null, todayKey),
+    );
   }
 
-  return { nextDueKeys, expectedKeys };
+  return anchors;
 }
 
 export async function loadNextDueKeys(
@@ -604,7 +606,12 @@ export async function loadNextDueKeys(
   categories: readonly BudgetCategoryRow[],
   todayKey: string,
 ): Promise<Map<string, string>> {
-  return (await loadBillAnchors(userId, categories, todayKey)).nextDueKeys;
+  const anchors = await loadBillAnchors(userId, categories, todayKey);
+  return new Map(
+    [...anchors].flatMap(([id, anchor]) =>
+      anchor.nextDueKey === null ? [] : [[id, anchor.nextDueKey] as const],
+    ),
+  );
 }
 
 /**

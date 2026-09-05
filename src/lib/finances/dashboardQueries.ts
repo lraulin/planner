@@ -203,6 +203,7 @@ export async function loadRecurringBills(userId: string): Promise<StoredBillRow[
         anchorDate: financeBudgetCategories.anchorDate,
         scheduled: financeBudgetCategories.scheduled,
         dueDay: financeBudgetCategories.dueDay,
+        leadDays: financeBudgetCategories.leadDays,
         notes: financeBudgetCategories.notes,
       })
       .from(financeBudgetCategories)

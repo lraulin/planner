@@ -840,6 +840,7 @@ export const inputSchemas = {
     url: z.string().optional(),
     scheduled: z.boolean().optional(),
     dueDay: z.number().int().min(1).max(31).nullable().optional(),
+    leadDays: z.number().int().min(0).max(60).optional(),
     notes: z.string().optional(),
   }),
   list_payees: z.strictObject({
@@ -865,6 +866,7 @@ export const inputSchemas = {
     url: z.string().optional(),
     scheduled: z.boolean().optional(),
     dueDay: z.number().int().min(1).max(31).nullable().optional(),
+    leadDays: z.number().int().min(0).max(60).optional(),
     notes: z.string().optional(),
   }),
   set_commitment_payees: z.strictObject({

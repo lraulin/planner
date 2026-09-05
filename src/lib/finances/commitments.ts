@@ -24,6 +24,13 @@
 import type { EnvelopeStatus } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import {
+  declaredSeries,
+  firstOccurrenceFrom,
+  nearestOccurrence,
+  nextOccurrenceAfter,
+  occurrenceAt,
+} from "./billSchedule";
+import {
   annualCents,
   cadenceDaysApprox,
   cadenceOf,
@@ -142,24 +149,7 @@ export type CommitmentCharge = {
 };
 
 /**
- * A subscription whose expected charge never arrived.
- *
- * This is the check that catches the dead half of a detected subscription list — the streaming
- * services that were cancelled or never activated and went on being counted.
- */
-export type StaleSubscription = {
-  billId: string;
-  name: string;
-  /** When the charge was expected. */
-  expectedOn: string;
-  /** What it would have been, when the bill states an amount. */
-  expectedCents: number | null;
-  /** How far past due, in days. */
-  overdueDays: number;
-};
-
-/**
- * The three dates a bill's anchor implies, in one place because the column means two things.
+ * The dates a bill's anchor implies, in one place because the column means two things.
  *
  * `anchorDate` was read as **the next charge** by the Commitments grid — a date typed into a
  * column headed "Next charge" — and as **the period start** by the set-aside accrual, which
@@ -171,6 +161,9 @@ export type StaleSubscription = {
  * waited for**, and the period it accrues over is the cadence ending on it. Everything else
  * walks from the last charge on file, which is an observed fact and the better anchor whenever
  * there is one.
+ *
+ * None of that applies to a bill that **declares a due day** — there the dates come from the
+ * calendar and `anchorDate` supplies only the series' phase. See `billSchedule.ts`.
  */
 export type BillAnchor = {
   /** Where the current accrual period began. Null when nothing anchors it. */
@@ -180,15 +173,59 @@ export type BillAnchor = {
    * why this is not the same field as `nextDueKey`.
    */
   expectedKey: string | null;
-  /** The next charge at or after today: what the editable Next charge column shows. */
+  /** The next charge at or after today: what the Next charge column shows. */
   nextDueKey: string | null;
+  /**
+   * The **contractual** due date `expectedKey` pays, for a bill that declares a due day.
+   * Null for every other bill, which has no due date to state — only a posting to predict.
+   */
+  dueKey: string | null;
 };
+
+/**
+ * The dates a bill declaring a due day is on: a calendar series, with the last posting
+ * matched to the occurrence it paid rather than becoming the anchor for the next one.
+ *
+ * This is the whole fix. A walk from the last posting absorbs every deviation permanently, so
+ * rent's autopay landing anywhere from the 17th to the 31st dragged the expectation around
+ * and reported 16 of 24 real charges as never having arrived.
+ */
+function declaredAnchor(
+  bill: StoredBill,
+  lastCharge: string | null,
+  todayKey: string,
+): BillAnchor | null {
+  const series = declaredSeries(bill, bill.anchorDate ?? lastCharge ?? todayKey);
+  if (series === null) return null;
+
+  // With no history, the first occurrence still ahead of us is the one being waited for;
+  // there is nothing yet paid to step past.
+  const outstanding =
+    lastCharge === null
+      ? firstOccurrenceFrom(series, todayKey)
+      : nextOccurrenceAfter(series, nearestOccurrence(series, lastCharge));
+  const previous = occurrenceAt(series, outstanding.index - 1);
+  const next =
+    outstanding.expectedKey >= todayKey
+      ? outstanding
+      : firstOccurrenceFrom(series, todayKey);
+
+  return {
+    periodStartKey: previous.expectedKey,
+    expectedKey: outstanding.expectedKey,
+    nextDueKey: next.expectedKey,
+    dueKey: outstanding.dueKey,
+  };
+}
 
 export function billAnchor(
   bill: StoredBill,
   lastCharge: string | null,
   todayKey: string,
 ): BillAnchor {
+  const declared = declaredAnchor(bill, lastCharge, todayKey);
+  if (declared !== null) return declared;
+
   const cadence = cadenceOf(bill);
 
   if (
@@ -202,17 +239,24 @@ export function billAnchor(
         bill.anchorDate >= todayKey
           ? bill.anchorDate
           : nextDueFrom(bill.anchorDate, cadence, todayKey),
+      dueKey: null,
     };
   }
 
   if (lastCharge === null) {
-    return { periodStartKey: bill.anchorDate, expectedKey: null, nextDueKey: null };
+    return {
+      periodStartKey: bill.anchorDate,
+      expectedKey: null,
+      nextDueKey: null,
+      dueKey: null,
+    };
   }
 
   return {
     periodStartKey: lastCharge,
     expectedKey: nextDueDate(lastCharge, cadence),
     nextDueKey: nextDueFrom(lastCharge, cadence, todayKey),
+    dueKey: null,
   };
 }
 
@@ -298,60 +342,83 @@ export function aliasOverlap(
 /**
  * How late a charge may be before its absence means something.
  *
- * Proportional with a floor: a monthly bill needs a few days for weekend drift, and a yearly
- * one drifts by more than five days without anything being wrong.
+ * Proportional with a floor: a monthly bill needs days for weekend drift, and a yearly one
+ * drifts by more than a week without anything being wrong.
+ *
+ * **The floor of 7 is measured, not chosen.** Replayed against rent's real postings and their
+ * calendar occurrences, the worst lateness was six days (2026-07-31 against a 2026-07-25
+ * expectation); a floor of 5 flags three of those 24 cycles for a single day each, and 7 flags
+ * none. Re-derive it rather than guessing at it if the data changes.
  */
 function graceDays(cadence: Cadence): number {
-  return Math.max(5, Math.ceil(cadenceDaysApprox(cadence) * 0.1));
+  return Math.max(7, Math.ceil(cadenceDaysApprox(cadence) * 0.1));
 }
 
+/** What the review check needs of a bill — its dates already resolved by `billAnchor`. */
+export type ReviewableBill = {
+  id: string;
+  name: string;
+  status: EnvelopeStatus;
+  scheduled: boolean;
+  cadenceMonths: number;
+  cadenceDays?: number | null;
+  expectedCents: number | null;
+  /** The charge being waited for. Null when nothing anchors the bill yet. */
+  expectedKey: string | null;
+  /** The contractual due date it pays, for a bill that declares a due day. */
+  dueKey: string | null;
+};
+
+/** A bill whose expected charge has not arrived, and by how much it is late. */
+export type BillReview = {
+  billId: string;
+  name: string;
+  /** When the charge was expected to post. */
+  expectedOn: string;
+  /** The due date it pays, when the bill declares one. */
+  dueOn: string | null;
+  /** What it would have been, when the bill states an amount. */
+  expectedCents: number | null;
+  /** How far past the expected date, in days — already past the grace. */
+  overdueDays: number;
+};
+
 /**
- * Active scheduled bills whose next charge is overdue with nothing posted.
+ * Active scheduled bills whose expected charge is overdue with nothing posted.
  *
  * **Flags, never applies** — the founding rule of every declaration in this module
- * (`agent-os/specs/2026-08-14-1012-recurring-bill-cadences/`). A bill with no charge on file at
- * all is skipped rather than reported: with no anchor there is no due date, and "overdue" built
- * on a date nobody observed is a guess wearing a fact's clothes.
+ * (`agent-os/specs/2026-08-14-1012-recurring-bill-cadences/`). A bill with no anchor at all is
+ * skipped rather than reported: "overdue" built on a date nobody observed is a guess wearing a
+ * fact's clothes.
+ *
+ * The grace is what stops this being noise. The Bills panel used to filter
+ * `expectedKey < todayKey` inline with no grace at all, which put a bill on the review list
+ * for the one day its charge took to clear — 42 such days across rent's history alone.
  */
-export function staleSubscriptions(
-  bills: readonly StoredBillRow[],
-  charges: ReadonlyMap<string, readonly CommitmentCharge[]>,
+export function billsNeedingReview(
+  bills: readonly ReviewableBill[],
   todayKey: string,
-): StaleSubscription[] {
-  const stale: StaleSubscription[] = [];
+): BillReview[] {
+  const reviews: BillReview[] = [];
 
   for (const bill of bills) {
     if (bill.status !== "active" || !bill.scheduled) continue;
+    if (bill.expectedKey === null) continue;
 
-    const mine = (charges.get(bill.name) ?? []).filter(
-      (charge) => charge.dateKey <= todayKey,
-    );
-    const lastCharge =
-      mine.length > 0
-        ? mine.reduce(
-            (latest, charge) => (charge.dateKey > latest ? charge.dateKey : latest),
-            mine[0].dateKey,
-          )
-        : null;
-    // `billAnchor` is what decides whether a declared future date is the charge being waited
-    // for or the one already had — the rule that stopped 1Password's 2027 anchor from
-    // flagging 2026-03-30 as missing, and it now lives in one place.
-    const { expectedKey } = billAnchor(bill, lastCharge, todayKey);
-    if (expectedKey === null) continue;
-
-    const overdueDays = daysBetweenKeys(expectedKey, todayKey);
+    const overdueDays = daysBetweenKeys(bill.expectedKey, todayKey);
     if (overdueDays <= graceDays(cadenceOf(bill))) continue;
 
-    stale.push({
+    reviews.push({
       billId: bill.id,
       name: bill.name,
-      expectedOn: expectedKey,
+      expectedOn: bill.expectedKey,
+      dueOn: bill.dueKey,
       expectedCents: bill.expectedCents,
       overdueDays,
     });
   }
 
-  return stale.sort((left, right) => right.overdueDays - left.overdueDays);
+  return reviews.sort((left, right) => right.overdueDays - left.overdueDays);
 }
 
 // — Twelve-month forward view ————————————————————————————————————————————————
@@ -427,7 +494,7 @@ function finishBucket(
   };
 }
 
-export function billOccurrences(
+function billOccurrences(
   bill: StoredBillRow,
   charges: readonly CommitmentCharge[],
   todayKey: string,
@@ -441,6 +508,21 @@ export function billOccurrences(
           charges[0].dateKey,
         )
       : null;
+
+  // A declared bill's occurrences are the calendar series, not a walk — and unlike the walk
+  // below it can project without any history at all, because the due day is the anchor.
+  const series = declaredSeries(bill, bill.anchorDate ?? lastPosted ?? todayKey);
+  if (series !== null) {
+    const dates: string[] = [];
+    let occurrence = firstOccurrenceFrom(series, todayKey);
+    // 24 occurrences is the same bound the walk below uses; past that the horizon is wrong.
+    while (dates.length < 24 && occurrence.expectedKey < horizonKey) {
+      dates.push(occurrence.expectedKey);
+      occurrence = nextOccurrenceAfter(series, occurrence);
+    }
+    return dates;
+  }
+
   const lastCharge =
     bill.anchorDate !== null && (lastPosted === null || bill.anchorDate > lastPosted)
       ? shiftDateKeyMonths(bill.anchorDate, -bill.cadenceMonths)

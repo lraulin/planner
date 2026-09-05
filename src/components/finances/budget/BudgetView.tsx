@@ -110,6 +110,7 @@ import { formatUsd } from "@/lib/finances/money";
 import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
 import { cadenceOf } from "@/lib/finances/recurringBills";
 import type { Payday } from "@/lib/finances/classify/income";
+import type { BillAnchor } from "@/lib/finances/commitments";
 import { nextPayday } from "@/lib/finances/available";
 import { monthlyFundingPlan } from "@/lib/finances/budget/incomePlan";
 import { useSetting } from "@/components/settings/SettingsProvider";
@@ -174,16 +175,13 @@ const SECTION_CHOICES: { kind: EnvelopeKind; label: string }[] = [
  */
 export function BudgetView({
   data,
-  nextDueKeys,
-  expectedKeys,
+  anchors,
   payees,
   paydays,
 }: {
   data: BudgetData;
-  /** Next charge per bill envelope id, from `loadBillAnchors`. */
-  nextDueKeys: ReadonlyMap<string, string>;
-  /** Charge being waited for, which may be in the past. */
-  expectedKeys: ReadonlyMap<string, string>;
+  /** Resolved charge dates per bill envelope id, from `loadBillAnchors`. */
+  anchors: ReadonlyMap<string, BillAnchor>;
   /** Every payee, with its current bill/envelope claim if any — for the payees dialog. */
   payees: readonly { id: string; name: string; budgetCategoryId: string | null }[];
   paydays: readonly Payday[];
@@ -273,17 +271,8 @@ export function BudgetView({
 
   const rows = useMemo(
     () =>
-      month
-        ? budgetRows(
-            data.groups,
-            data.categories,
-            month,
-            data.goals,
-            nextDueKeys,
-            expectedKeys,
-          )
-        : [],
-    [data.groups, data.categories, month, data.goals, nextDueKeys, expectedKeys],
+      month ? budgetRows(data.groups, data.categories, month, data.goals, anchors) : [],
+    [data.groups, data.categories, month, data.goals, anchors],
   );
   const sections = useMemo(() => budgetSections(rows), [rows]);
   const fundingPlan = useMemo(
@@ -1606,7 +1595,7 @@ export function BudgetView({
               groups: data.groups,
               categories: data.categories,
               goals: data.goals,
-              nextDueKeys,
+              anchors,
             }) > 0
               ? " This month still has envelopes to cover — those holes are the first job."
               : ""}
@@ -1941,8 +1930,7 @@ export function BudgetView({
           groups={data.groups}
           categories={data.categories}
           goals={data.goals}
-          nextDueKeys={nextDueKeys}
-          expectedKeys={expectedKeys}
+          anchors={anchors}
           showHidden={showHidden}
           pending={pending}
           onCancel={() => setFixing(false)}
