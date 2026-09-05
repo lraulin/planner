@@ -24,4 +24,12 @@ Before releasing migrations 0093 and 0094:
 - Neon historical-schema API successfully retrieved the schema at `2026-09-05T16:25:56Z` (HTTP 200). No restore or production mutation was used for this check.
 - Prior exclusion metadata remains in `finance_reporting_archive`; historical event labels are also preserved in transaction notes. The archive is recovery storage without an application writer or public read surface.
 
-Production verification is recorded below once the deployment completes.
+## Production verification
+
+- Implementation `b134c7005be0c5f4d0cd6c9ced17f3b53e5dd129` pushed to `origin/master`; pre-push unit and Postgres integration gates passed.
+- Vercel production deployment `6283579628` completed successfully at `2026-09-05T17:07:14Z`. The pre-release backup was 42 minutes old.
+- Read-only production check confirmed Payroll/VA Regular and Gifts/Interest Other, with all four expected amounts NULL.
+- All 10 legacy exclusion records were archived. Production had zero nonempty event labels; label preservation is covered by the migration integration test.
+- All 62 allocation rows have the same before/after fingerprint, including amounts and metadata.
+- Authenticated production browser checks rendered Accounts operations, the Active bills grid with default next-charge/name sorting and collapsed forecasts, Spending/Cost of living with actual Regular income, and Budget’s Regular/Other bands with explicit missing estimates. Saved finance tab order retained its prior relative order after Dashboard removal and Bills insertion.
+- Roadmap updated and the spec frozen after these checks. Production: `https://planner-lee-5344.vercel.app`.

@@ -1,6 +1,6 @@
 # Finances centered on envelope budgeting
 
-**Status: active**
+**Status: frozen / complete** (2026-09-05)
 
 ## Spec relationships
 
@@ -60,7 +60,7 @@ Retire baseline calculations, one-off suggestions and exclusion writers. Archive
 - [x] Metadata archive/retirement, stable finance tools and generated docs.
 - [x] Tests: gift/house, accumulated Savings, nested/duplicate groups, refunds, splits, hidden, uncategorized, pending/transfers, bill date boundaries, same-record editing, ownership.
 - [x] Lint, typecheck, unit/integration suites, build, smoke; desktop/phone both themes; daily workflow and sorting while editing.
-- [ ] Production deployment verification; update roadmap and freeze after release.
+- [x] Production deployment verification; update roadmap and freeze after release.
 
 ## Changes from original plan
 
@@ -73,3 +73,7 @@ Retire baseline calculations, one-off suggestions and exclusion writers. Archive
 | Nullable amount fields show blanks and accept explicit zero                                       | An unset estimate is unknown, not a zero-dollar plan.                                                                                             |
 | Phone balances open a detail sheet; balance totals link to Budget and activity totals to Register | Carry-in, assignments and Available are balance facts, not transaction sums.                                                                      |
 | Shared grid double-clicks inside controls stay in the editor                                      | The phone/desktop workflow check reproduced drawer focus theft while editing an amount. The shared row handler now excludes interactive controls. |
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+No implementation work remains in this scope. Income expectations deliberately start unset for the user to enter. Future behavior changes open a new delta-spec referencing this folder.

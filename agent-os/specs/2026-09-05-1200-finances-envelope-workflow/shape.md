@@ -1,6 +1,6 @@
 # Shaping notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-05)
 
 The envelope model replaced custom budgeting while Dashboard and Insights retained the earlier workflow. Give every workflow a clear home and report from stable envelope identity. Carry forward one-pool arithmetic, target engine, nested groups, bill recurrence and cancelled-history semantics. Income expectations are planning metadata only; no estimate creates money. Current organization intentionally governs historical presentation. Existing Archivo typography, light/dark palettes, tabular money, shared DataGrid, desktop inspector and mobile sheet remain.
 

@@ -1062,6 +1062,16 @@ period)` so money already spent stops being held twice and only going over bites
   section, and the Next 12 Months / Expected vs Income panels carried over as collapsed
   `<details>`. A guarded, previewed cutover moved every real bill, recurring-spend rate and
   payee claim onto the new shape before the old tables were dropped.
+  ✅ **Finance workflows centered on envelopes, shipped 2026-09-05.**
+  `agent-os/specs/2026-09-05-1200-finances-envelope-workflow/`. Budget is the default;
+  Dashboard bookmarks redirect to Accounts, whose operational grid owns refresh, bank
+  links, snapshots, balances and freshness. Bills manages the same bill-envelope IDs,
+  dates, recurrence, discovery and collapsed forecasts; funding stays in Budget.
+  Regular/Other income roles and explicit monthly expectations replace paycheck-only
+  planning. Insights now separates cost of living, Savings spending, monthly envelope
+  balances and total cash flow, with nested group reporting and exact Register drills.
+  This closes the group-based reporting gap above and supersedes baseline/one-off
+  reporting. Retired exclusions are archived; assignments remain unchanged.
   ✅ **YNAB-shaped Assign shipped 2026-08-24.**
   `agent-os/specs/2026-08-24-1311-budget-assign-options/`. Apply / Overwrite / Copy last
   month / 3-month average / Set all to zero are gone. Ready to Assign has Assign (Auto:
