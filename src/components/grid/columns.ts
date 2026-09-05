@@ -32,7 +32,12 @@ export type ColumnDef<TCtx = unknown, TRow = OutlineNode> = {
    * whose header is already unique.
    */
   fieldLabel?: string;
-  /** A CSS grid track size, e.g. `minmax(16rem,1fr)` or `3rem`. */
+  /**
+   * The column's default width, as a definite CSS length (`22rem`, `3rem`) — never an
+   * `fr`. The one elastic track in a grid is the filler `buildGridTemplate` puts at the
+   * end; a second one would take the slack back from wherever this column sits, which is
+   * what used to make a resize move the boundaries either side of the one being dragged.
+   */
   width: string;
   align?: ColumnAlign;
   render: (row: NodeGridRow<TRow>, ctx: TCtx) => ReactNode;
@@ -117,26 +122,6 @@ export type ColumnControls = {
   /** The whole `grid:{tabId}` scope: columns, filters, sort, groups, density. */
   resetGrid: () => void;
 };
-
-/**
- * CSS `grid-template-columns` value for the visible set.
- *
- * A stored override wins over the column's declared track. Overrides are pixel numbers
- * rather than free-text CSS: they come from a drag, and from a settings blob anyone can
- * edit in devtools, so the one thing they must not be able to do is inject a track
- * expression into the layout.
- */
-export function buildGridTemplate(
-  columns: Pick<ColumnMeta, "id" | "width">[],
-  widths?: Record<string, number>,
-): string {
-  return columns
-    .map((column) => {
-      const override = widths?.[column.id];
-      return override === undefined ? column.width : `${override}px`;
-    })
-    .join(" ");
-}
 
 /** What to call a column in a list of fields to pick from. */
 export function fieldNameOf(column: Pick<ColumnMeta, "label" | "fieldLabel">): string {

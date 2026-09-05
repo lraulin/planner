@@ -66,7 +66,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
   {
     id: "product",
     label: "Product",
-    width: "minmax(14rem,1.8fr)",
+    width: "25rem",
     hideable: false,
     ...accessors("product"),
     compact: "primary",

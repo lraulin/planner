@@ -39,7 +39,7 @@ export const resourcesColumns: ColumnDef<ResourcesColumnCtx, ResourceListRow>[] 
   {
     id: "name",
     label: "Resource",
-    width: "minmax(11rem,1fr)",
+    width: "17rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.shortName || null,
@@ -54,7 +54,7 @@ export const resourcesColumns: ColumnDef<ResourcesColumnCtx, ResourceListRow>[] 
   {
     id: "contact",
     label: "Contact",
-    width: "minmax(9rem,0.8fr)",
+    width: "14rem",
     filterKind: "text",
     filterValue: (row) => row.node.contactName,
     sortValue: (row) => row.node.contactName?.toLowerCase() ?? null,
@@ -124,7 +124,7 @@ export const resourcesColumns: ColumnDef<ResourcesColumnCtx, ResourceListRow>[] 
   {
     id: "description",
     label: "Description",
-    width: "minmax(12rem,1.2fr)",
+    width: "19rem",
     filterKind: "text",
     filterValue: (row) => row.node.description || null,
     sortValue: (row) => row.node.description.toLowerCase(),

@@ -33,7 +33,7 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
   {
     id: "city",
     label: "City",
-    width: "minmax(9rem,0.9fr)",
+    width: "14rem",
     hideable: false,
     filterKind: "text",
     // The label is the fallback identity for a place with no city — a cabin, a boat.
@@ -49,7 +49,7 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
   {
     id: "country",
     label: "Country",
-    width: "minmax(8rem,0.7fr)",
+    width: "12rem",
     // Few values, and "show me the Korean addresses" is a tick, not a search.
     filterKind: "enum",
     filterValue: (row) => row.node.country || null,
@@ -118,7 +118,7 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
   {
     id: "address",
     label: "Address",
-    width: "minmax(12rem,1.3fr)",
+    width: "20rem",
     filterKind: "text",
     filterValue: (row) => row.node.address || null,
     sortValue: (row) => row.node.address.toLowerCase(),
@@ -128,7 +128,7 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
   {
     id: "landlord",
     label: "Landlord",
-    width: "minmax(9rem,0.8fr)",
+    width: "14rem",
     filterKind: "text",
     filterValue: (row) => row.node.landlordName || null,
     sortValue: (row) => row.node.landlordName.toLowerCase(),

@@ -34,7 +34,7 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
   {
     id: "employer",
     label: "Employer",
-    width: "minmax(11rem,1fr)",
+    width: "17rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.employer || null,
@@ -49,7 +49,7 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
   {
     id: "title",
     label: "Title",
-    width: "minmax(10rem,0.9fr)",
+    width: "15rem",
     filterKind: "text",
     filterValue: (row) => row.node.jobTitle || null,
     sortValue: (row) => row.node.jobTitle.toLowerCase(),
@@ -120,7 +120,7 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
   {
     id: "location",
     label: "Location",
-    width: "minmax(9rem,0.9fr)",
+    width: "14rem",
     filterKind: "text",
     filterValue: (row) => row.node.location || null,
     sortValue: (row) => row.node.location.toLowerCase(),
@@ -130,7 +130,7 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
   {
     id: "supervisor",
     label: "Supervisor",
-    width: "minmax(9rem,0.8fr)",
+    width: "14rem",
     filterKind: "text",
     filterValue: (row) => row.node.supervisorName || null,
     sortValue: (row) => row.node.supervisorName.toLowerCase(),
@@ -140,7 +140,7 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
   {
     id: "reason",
     label: "Reason for leaving",
-    width: "minmax(10rem,1fr)",
+    width: "16rem",
     filterKind: "text",
     filterValue: (row) => row.node.reasonForLeaving || null,
     sortValue: (row) => row.node.reasonForLeaving.toLowerCase(),

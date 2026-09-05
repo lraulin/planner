@@ -65,7 +65,7 @@ export const activityColumns: ColumnDef<ActivityColumnCtx, FinanceAuditEventSumm
     {
       id: "action",
       label: "Action",
-      width: "minmax(12rem,1fr)",
+      width: "18rem",
       hideable: false,
       filterKind: "enum",
       filterValue: (row) => financeAuditActionLabel(row.node.kind),

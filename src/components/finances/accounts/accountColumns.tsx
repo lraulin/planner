@@ -58,7 +58,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
   {
     id: "name",
     label: "Account",
-    width: "minmax(11rem,1.2fr)",
+    width: "18rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.name || null,
@@ -79,7 +79,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
   {
     id: "institution",
     label: "Institution",
-    width: "minmax(8rem,0.8fr)",
+    width: "13rem",
     filterKind: "text",
     filterValue: (row) => row.node.institution || null,
     sortValue: (row) => row.node.institution.toLowerCase(),
@@ -99,7 +99,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
   {
     id: "url",
     label: "URL",
-    width: "minmax(10rem,1fr)",
+    width: "16rem",
     filterKind: "text",
     filterValue: (row) => row.node.url || null,
     sortValue: (row) => row.node.url,
@@ -235,7 +235,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
   {
     id: "source",
     label: "Source",
-    width: "minmax(8rem,0.8fr)",
+    width: "13rem",
     filterKind: "enum",
     filterValue: (row) => row.node.balanceSourceLabel,
     sortValue: (row) => row.node.balanceSourceLabel,

@@ -55,7 +55,7 @@ const reportColumns: ColumnDef<ReportCtx, ReportEnvelope>[] = [
   {
     id: "name",
     label: "Envelope",
-    width: "minmax(12rem,1fr)",
+    width: "18rem",
     compact: "primary",
     render: (row) => (
       <span className={row.node.hidden ? "text-ink-muted italic" : ""}>
@@ -390,7 +390,7 @@ export function InsightsView({
               envelope’s Available balance.
             </p>
           ) : null}
-          <div className="mb-3 grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(15rem,1fr)]">
+          <div className="mb-3 grid gap-3 md:grid-cols-[minmax(0,2fr)_21rem]">
             <CashFlowChart
               points={points}
               axisLabel="month · actual regular income and spending"

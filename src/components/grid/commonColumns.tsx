@@ -455,7 +455,7 @@ function textColumn(
   id: string,
   label: string,
   value: (node: OutlineNode) => string,
-  width = "minmax(10rem,1fr)",
+  width = "16rem",
 ): ColumnDef<OutlineColumnCtx> {
   return {
     id,
@@ -747,7 +747,7 @@ export function scheduleStatusColumn(
 export function nameColumn(
   options: { width?: string; flat?: boolean; dragHandle?: boolean } = {},
 ): ColumnDef<OutlineColumnCtx> {
-  const { width = "minmax(14rem,1.4fr)", flat = false, dragHandle = false } = options;
+  const { width = "30rem", flat = false, dragHandle = false } = options;
 
   return {
     id: "name",

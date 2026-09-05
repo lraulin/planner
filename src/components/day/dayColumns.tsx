@@ -173,7 +173,7 @@ export const DAY_COLUMNS: ColumnDef<DayColumnCtx, DailyItemView>[] = [
   {
     id: "title",
     label: "Item",
-    width: "minmax(14rem,1fr)",
+    width: "20rem",
     hideable: false,
     render: (row, ctx) => <TitleCell item={row.node} ctx={ctx} />,
     sortValue: (row) => row.node.title.toLowerCase(),

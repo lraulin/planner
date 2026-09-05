@@ -40,7 +40,7 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
   {
     id: "name",
     label: "Name",
-    width: "minmax(11rem,1fr)",
+    width: "17rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.displayName || null,
@@ -57,7 +57,7 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
   {
     id: "company",
     label: "Company",
-    width: "minmax(8rem,0.8fr)",
+    width: "13rem",
     filterKind: "text",
     filterValue: (row) => row.node.company || null,
     sortValue: (row) => row.node.company.toLowerCase(),
@@ -66,7 +66,7 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
   {
     id: "jobTitle",
     label: "Job Title",
-    width: "minmax(8rem,0.8fr)",
+    width: "13rem",
     filterKind: "text",
     filterValue: (row) => row.node.jobTitle || null,
     sortValue: (row) => row.node.jobTitle.toLowerCase(),
@@ -95,7 +95,7 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
   {
     id: "email",
     label: "E-mail",
-    width: "minmax(10rem,1fr)",
+    width: "16rem",
     filterKind: "text",
     filterValue: (row) => row.node.primaryEmail || null,
     sortValue: (row) => row.node.primaryEmail.toLowerCase(),

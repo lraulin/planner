@@ -86,7 +86,7 @@ export const timelineColumns: ColumnDef<TimelineColumnCtx, ChronologyRow>[] = [
   {
     id: "title",
     label: "Event",
-    width: "minmax(14rem,1.6fr)",
+    width: "24rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.title || null,
@@ -182,7 +182,7 @@ export const timelineColumns: ColumnDef<TimelineColumnCtx, ChronologyRow>[] = [
   {
     id: "notes",
     label: "Notes",
-    width: "minmax(12rem,1.2fr)",
+    width: "19rem",
     filterKind: "text",
     filterValue: (row) => row.node.notes || null,
     sortValue: (row) => row.node.notes.toLowerCase(),

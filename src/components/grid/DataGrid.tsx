@@ -20,7 +20,6 @@ import type { DropZone } from "@/lib/tree/dnd";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import {
   alignClass,
-  buildGridTemplate,
   type ColumnControls,
   type ColumnDef,
   type ColumnMeta,
@@ -35,6 +34,7 @@ import {
   type CrossColumnFilter,
 } from "@/lib/grid/crossFilter";
 import { withAncestors } from "@/lib/grid/ancestors";
+import { buildGridTemplate } from "@/lib/grid/template";
 import { collectColumnValues, distinctValuesOf } from "@/lib/grid/distinct";
 import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
 import type { GridFilterValue } from "@/lib/grid/filterValue";
@@ -717,6 +717,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     getScrollElement: () => gridRef.current,
     estimateSize: () => rowEstimate,
     overscan: 12,
+    // The sticky header sits over the top of the scrollport; without this the virtualizer
+    // scrolls a row to exactly where the header covers it.
+    scrollPaddingStart: compact ? 0 : rowEstimate,
     getItemKey: (index) => displayRows[index]?.id ?? index,
     enabled: virtualize,
   });
@@ -1156,43 +1159,6 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
             : undefined
         }
       >
-        {/* No column header on a phone: there are no columns to head, and sort, filter and
-          resize are all mouse-shaped controls at 10px. Sorting stays reachable from the
-          view's own toolbar. */}
-        {!compact && (
-          <ColumnHeaderRow
-            columns={columns}
-            allColumns={filterColumns}
-            gridTemplate={gridTemplate}
-            sorts={enableSort ? sorts : []}
-            onSort={enableSort ? handleSort : undefined}
-            onSetSort={enableSort ? handleSetSort : undefined}
-            filters={filters}
-            onFilterChange={handleFilterChange}
-            distinctValues={distinctValues}
-            columnValues={columnValues}
-            onResize={onResizeColumn}
-            onResetWidth={onResetColumnWidth}
-            widths={widths}
-            controls={columnControls}
-            enableFilters={enableFilters}
-            leadingGutter={
-              gutter === "checkbox" ? (
-                <SelectionCheckbox
-                  state={selectAllState ?? "none"}
-                  onSelect={() => onToggleSelectAll?.()}
-                  ariaLabel="Select all"
-                />
-              ) : (
-                // `false` still draws the empty track, which is what a grab-bar gutter
-                // wants — a header checkbox over a column of drag handles selects nothing
-                // the handles below it can act on.
-                false
-              )
-            }
-          />
-        )}
-
         {compact && onToggleSelectAll ? (
           <div className="flex min-h-tap items-center gap-2 border-b border-rule-strong bg-surface-raised px-2.5">
             <SelectionCheckbox
@@ -1210,11 +1176,14 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
           tabIndex={0}
           role="treegrid"
           aria-label={ariaLabel}
-          className={
+          className={[
+            // One row of scroll padding so a row brought into view by the keyboard lands
+            // below the sticky header instead of under it.
+            compact ? "" : "scroll-pt-[var(--row-height)]",
             autoHeight
               ? "min-h-0 overflow-x-auto outline-none"
-              : "min-h-0 flex-1 overflow-auto outline-none"
-          }
+              : "min-h-0 flex-1 overflow-auto outline-none",
+          ].join(" ")}
           /*
            * The blank-area menu. Rows handle their own right-click and mark themselves with
            * `data-node-row`, so this fires for everything else the grid covers: the empty space
@@ -1236,13 +1205,71 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
             })
           }
         >
-          {displayRows.length === 0
-            ? (empty ?? (
-                <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
-                  Nothing to show.
-                </div>
-              ))
-            : (() => {
+          {/*
+            The track surface. Header, rows and footer share one grid template, so they have
+            to share one box: `w-max` lets it outgrow the viewport — the grid then scrolls
+            sideways with the header along for the ride, which is why the header lives in
+            here rather than above the scroller — and `min-w-full` keeps the filler track
+            reaching the right edge when the columns do not fill it.
+          */}
+          <div
+            className={
+              compact
+                ? "flex min-h-full flex-col"
+                : "flex min-h-full w-max min-w-full flex-col"
+            }
+          >
+            {/* No column header on a phone: there are no columns to head, and sort, filter and
+          resize are all mouse-shaped controls at 10px. Sorting stays reachable from the
+          view's own toolbar. */}
+            {!compact && (
+              <ColumnHeaderRow
+                columns={columns}
+                allColumns={filterColumns}
+                gridTemplate={gridTemplate}
+                sorts={enableSort ? sorts : []}
+                onSort={enableSort ? handleSort : undefined}
+                onSetSort={enableSort ? handleSetSort : undefined}
+                filters={filters}
+                onFilterChange={handleFilterChange}
+                distinctValues={distinctValues}
+                columnValues={columnValues}
+                onResize={onResizeColumn}
+                onResetWidth={onResetColumnWidth}
+                widths={widths}
+                controls={columnControls}
+                enableFilters={enableFilters}
+                leadingGutter={
+                  gutter === "checkbox" ? (
+                    <SelectionCheckbox
+                      state={selectAllState ?? "none"}
+                      onSelect={() => onToggleSelectAll?.()}
+                      ariaLabel="Select all"
+                    />
+                  ) : (
+                    // `false` still draws the empty track, which is what a grab-bar gutter
+                    // wants — a header checkbox over a column of drag handles selects nothing
+                    // the handles below it can act on.
+                    false
+                  )
+                }
+              />
+            )}
+
+            {displayRows.length === 0 ? (
+              // `grid flex-1` rather than letting the panel size itself: an empty state
+              // centres over the height it is given, and below the sticky header that is
+              // the rest of the scrollport. `grid` stretches the panel into it; `h-full`
+              // alone resolves against nothing here.
+              <div className="grid flex-1">
+                {empty ?? (
+                  <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
+                    Nothing to show.
+                  </div>
+                )}
+              </div>
+            ) : (
+              (() => {
                 const renderAt = (index: number, style?: CSSProperties) => {
                   const row = displayRows[index];
                   if (!row) return null;
@@ -1362,9 +1389,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                     )}
                   </div>
                 );
-              })()}
+              })()
+            )}
 
-          {footerRow}
+            {footerRow}
+          </div>
         </div>
 
         {menu && rowMenu && (

@@ -62,7 +62,7 @@ export function buildOutlineColumns(
 ): ColumnDef<OutlineColumnCtx>[] {
   return [
     priorityColumn(),
-    nameColumn({ width: "minmax(16rem,1fr)", dragHandle: true }),
+    nameColumn({ dragHandle: true }),
     categoryColumn(),
     {
       id: "effort",

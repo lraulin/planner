@@ -7,8 +7,8 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@/lib/settings/grid";
 import type { SortDirection } from "@/lib/settings/grid";
+import { resizedColumnWidth } from "@/lib/grid/template";
 import type { ColumnValues } from "@/lib/grid/distinct";
 import { headerDropIndex } from "@/lib/grid/columnMenu";
 import { alignClass, type ColumnControls, type ColumnMeta } from "./columns";
@@ -119,7 +119,10 @@ export function ColumnHeaderRow({
   return (
     <>
       <div
-        className="grid flex-none items-center border-b border-rule-strong bg-surface-raised pr-3 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted"
+        // Sticky inside the grid's scroller: it holds its place down the page and travels
+        // sideways with the rows, which is the only way a scrolled-across grid keeps its
+        // labels over the right columns.
+        className="sticky top-0 z-30 grid items-center border-b border-rule-strong bg-surface-raised pr-3 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted"
         style={{
           gridTemplateColumns: gridTemplate,
           columnGap: "0.75rem",
@@ -304,7 +307,7 @@ function ResizeHandle({
     const startWidth = cell.getBoundingClientRect().width;
 
     function onMove(move: PointerEvent) {
-      onResize(clampWidth(Math.round(startWidth + (move.clientX - startX))));
+      onResize(resizedColumnWidth(startWidth, move.clientX - startX));
     }
     function onUp() {
       document.removeEventListener("pointermove", onMove);
@@ -326,8 +329,4 @@ function ResizeHandle({
       className="ml-auto h-4 w-1 flex-none cursor-col-resize rounded-full bg-transparent hover:bg-rule-strong"
     />
   );
-}
-
-function clampWidth(width: number): number {
-  return Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, width));
 }

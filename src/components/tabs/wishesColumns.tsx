@@ -71,7 +71,7 @@ export const wishesColumns: ColumnDef<WishesColumnCtx, WishListRow>[] = [
   {
     id: "title",
     label: "Title",
-    width: "minmax(12rem,1fr)",
+    width: "18rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.title || null,
@@ -88,7 +88,7 @@ export const wishesColumns: ColumnDef<WishesColumnCtx, WishListRow>[] = [
   {
     id: "description",
     label: "Description",
-    width: "minmax(12rem,1.2fr)",
+    width: "19rem",
     filterKind: "text",
     filterValue: (row) => row.node.description || null,
     sortValue: (row) => row.node.description.toLowerCase(),

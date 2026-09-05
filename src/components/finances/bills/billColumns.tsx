@@ -32,7 +32,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
   {
     id: "name",
     label: "Bill",
-    width: "minmax(12rem,1fr)",
+    width: "18rem",
     hideable: false,
     compact: "primary",
     filterKind: "text",

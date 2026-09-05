@@ -68,7 +68,7 @@ export const metricsColumns: ColumnDef<MetricsColumnCtx, MetricListRow>[] = [
   {
     id: "title",
     label: "Title",
-    width: "minmax(12rem,1.4fr)",
+    width: "20rem",
     hideable: false,
     compact: "primary",
     filterKind: "text",
@@ -90,7 +90,7 @@ export const metricsColumns: ColumnDef<MetricsColumnCtx, MetricListRow>[] = [
   {
     id: "category",
     label: "Category",
-    width: "minmax(8rem,0.8fr)",
+    width: "13rem",
     filterKind: "enum",
     filterValue: (row) => row.node.category || null,
     sortValue: (row) => row.node.category.toLowerCase(),
@@ -101,7 +101,7 @@ export const metricsColumns: ColumnDef<MetricsColumnCtx, MetricListRow>[] = [
   {
     id: "question",
     label: "Question",
-    width: "minmax(10rem,1fr)",
+    width: "16rem",
     // Prose, and often long — it reads badly as a chip and pushes out the reading itself.
     compact: "hidden",
     filterKind: "text",

@@ -40,7 +40,7 @@ export const payeeColumns: ColumnDef<PayeeColumnCtx, PayeeRow>[] = [
   {
     id: "name",
     label: "Payee",
-    width: "minmax(11rem,1.2fr)",
+    width: "18rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.name || null,
@@ -67,7 +67,7 @@ export const payeeColumns: ColumnDef<PayeeColumnCtx, PayeeRow>[] = [
   {
     id: "aliases",
     label: "Answers to",
-    width: "minmax(12rem,1.6fr)",
+    width: "22rem",
     filterKind: "text",
     filterValue: (row) => aliasSummary(row.node) || null,
     sortValue: (row) => String(row.node.aliases.length).padStart(4, "0"),
@@ -109,7 +109,7 @@ export const payeeColumns: ColumnDef<PayeeColumnCtx, PayeeRow>[] = [
   {
     id: "autoCategory",
     label: "Auto Category",
-    width: "minmax(9rem,0.9fr)",
+    width: "14rem",
     filterKind: "enum",
     filterValue: (row) => autoCategorySummary(row.node),
     sortValue: (row) => autoCategorySummary(row.node).toLowerCase(),
@@ -119,7 +119,7 @@ export const payeeColumns: ColumnDef<PayeeColumnCtx, PayeeRow>[] = [
   {
     id: "envelope",
     label: "Envelope",
-    width: "minmax(8rem,0.8fr)",
+    width: "13rem",
     filterKind: "enum",
     filterValue: (row) => row.node.claim?.name ?? null,
     sortValue: (row) => (row.node.claim?.name ?? "").toLowerCase(),

@@ -96,7 +96,7 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteSummary>[] = [
   {
     id: "title",
     label: "Title",
-    width: "minmax(12rem,1fr)",
+    width: "18rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.title || null,
@@ -119,7 +119,7 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteSummary>[] = [
     // The column that replaces Achieve's always-present note panel: without body text in
     // the grid, two notes are indistinguishable while scanning. See `shape.md`.
     label: "Preview",
-    width: "minmax(12rem,1.4fr)",
+    width: "20rem",
     filterKind: "text",
     filterValue: (row) => row.node.snippet.slice(0, 60) || null,
     render: (row) => <SnippetCell snippet={row.node.snippet} />,

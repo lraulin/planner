@@ -122,7 +122,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
   {
     id: "account",
     label: "Account",
-    width: "minmax(9rem,0.7fr)",
+    width: "13rem",
     ...accessors("account"),
     compact: "meta",
     render: (row) => <Text value={row.node.accountName} />,
@@ -130,7 +130,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
   {
     id: "description",
     label: "Description",
-    width: "minmax(14rem,1.6fr)",
+    width: "24rem",
     hideable: false,
     ...accessors("description"),
     compact: "primary",
@@ -186,7 +186,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
   {
     id: "payee",
     label: "Payee",
-    width: "minmax(8rem,0.8fr)",
+    width: "13rem",
     // The merchant behind the bank's line — one identity across every spelling of it, which is
     // what the description column cannot give you: `WM SUPERCENTER #1981` and `WAL-MART #2201`
     // are the same shop and sort nowhere near each other.
@@ -202,7 +202,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
   {
     id: "category",
     label: "Category",
-    width: "minmax(8rem,0.6fr)",
+    width: "12rem",
     ...accessors("category"),
     compact: "meta",
     compactTextWithCtx: (row, ctx) =>
@@ -263,7 +263,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
   {
     id: "flow",
     label: "Flow",
-    width: "minmax(9rem,0.6fr)",
+    width: "13rem",
     ...accessors("flow"),
     compact: "hidden",
     render: (row) => (
@@ -276,7 +276,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
   {
     id: "sourceCategory",
     label: "Bank category",
-    width: "minmax(8rem,0.6fr)",
+    width: "12rem",
     ...accessors("sourceCategory"),
     compact: "hidden",
     render: (row) => <Text value={row.node.sourceCategory} />,
@@ -330,7 +330,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
   {
     id: "source",
     label: "Source",
-    width: "minmax(8rem,0.6fr)",
+    width: "12rem",
     // Which feed wrote the row. Provenance decides which feed owns the row's day
     // (`feedWatermark.ts`), and answering "where did this come from" should not need a
     // database query.
@@ -341,7 +341,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
   {
     id: "notes",
     label: "Notes",
-    width: "minmax(10rem,1fr)",
+    width: "16rem",
     ...accessors("notes"),
     compact: "hidden",
     render: (row) => <Text value={row.node.notes} />,

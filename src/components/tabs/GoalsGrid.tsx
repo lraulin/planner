@@ -87,7 +87,7 @@ function buildColumns(today: string | null): ColumnDef<GoalsCtx>[] {
     {
       id: "name",
       label: "Title",
-      width: "minmax(12rem,1fr)",
+      width: "18rem",
       hideable: false,
       filterKind: "text",
       filterValue: (row) => row.node.name,
@@ -108,7 +108,7 @@ function buildColumns(today: string | null): ColumnDef<GoalsCtx>[] {
     {
       id: "definition",
       label: "Definition",
-      width: "minmax(12rem,1.2fr)",
+      width: "19rem",
       filterKind: "text",
       filterValue: (row) => row.node.definition || null,
       render: (row, ctx) => (

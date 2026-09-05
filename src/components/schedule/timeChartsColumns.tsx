@@ -26,7 +26,7 @@ export const timeChartsColumns: ColumnDef<TimeChartsColumnCtx, TimeChartListRow>
   {
     id: "name",
     label: "Name",
-    width: "minmax(12rem,1fr)",
+    width: "18rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.name || null,
@@ -44,7 +44,7 @@ export const timeChartsColumns: ColumnDef<TimeChartsColumnCtx, TimeChartListRow>
   {
     id: "description",
     label: "Description",
-    width: "minmax(12rem,1.4fr)",
+    width: "20rem",
     filterKind: "text",
     filterValue: (row) => row.node.description || null,
     sortValue: (row) => row.node.description.toLowerCase(),

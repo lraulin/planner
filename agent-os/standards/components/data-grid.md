@@ -98,6 +98,31 @@ writes it synchronously beside the state, because `dragover` can arrive before a
 runs. The same applies to anything else a drag callback reads: take it from a ref, not the
 render that built the row.
 
+### Column widths: definite tracks, one filler at the end
+
+Header, rows, group headers and the footer all lay out on the **same** `grid-template-columns`
+(`buildGridTemplate`, `lib/grid/template.ts`), and they share one box inside the grid's
+scroller so the header travels sideways with the rows it labels. Every column contributes a
+**definite** track — its declared `width`, or the pixel override a resize stored — and the
+template ends with a single elastic filler, `minmax(0,1fr)`.
+
+**The filler is the only elastic track, and it must stay last.** A column declared
+`minmax(12rem,1fr)` used to be the grid's shock absorber, and it sat first: a drag on some
+other column's right edge added pixels there and took them out of the name column, so the
+boundary under the cursor never moved and one two columns away moved backwards instead.
+Slack that lives at the end can only be taken from the end — which is why the grabbed
+boundary now follows the pointer, columns to its left never move, and Achieve's "drag to the
+new size" (`user-manual.md`) describes what happens.
+
+- **A column's `width` is a default, never a share.** No `fr`, and no `minmax`;
+  `buildGridTemplate` collapses one to its floor rather than let a second elastic track back
+  into the layout.
+- **The filler collapses to zero when the columns outgrow the container**, and the grid
+  scrolls horizontally — sticky header included. It is not a squeeze: before this, the columns
+  past the right edge were simply unreachable.
+- **Widths are stored per grid** and reset from the column menu or a double-click on the
+  handle; see Persistence.
+
 ## Grouping
 
 - **Up to three levels**, chosen from progressive `Group by` / `then by` selects that appear

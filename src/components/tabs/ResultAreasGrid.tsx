@@ -78,7 +78,7 @@ function buildColumns(): ColumnDef<ResultAreasCtx>[] {
     {
       id: "name",
       label: "Result Area",
-      width: "minmax(12rem,1fr)",
+      width: "18rem",
       hideable: false,
       filterKind: "text",
       filterValue: (row) => row.node.name,

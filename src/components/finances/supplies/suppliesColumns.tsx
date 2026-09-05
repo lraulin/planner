@@ -225,7 +225,7 @@ export function suppliesColumns(): ColumnDef<SuppliesColumnCtx, SupplyGridRow>[]
     {
       id: "name",
       label: "Item / Brand",
-      width: "minmax(12rem,1.2fr)",
+      width: "19rem",
       hideable: false,
       filterKind: "text",
       filterValue: (row) =>
@@ -299,7 +299,7 @@ export function suppliesColumns(): ColumnDef<SuppliesColumnCtx, SupplyGridRow>[]
     {
       id: "vendor",
       label: "Vendor",
-      width: "minmax(6rem,0.6fr)",
+      width: "10rem",
       filterKind: "enum",
       filterValue: (row) =>
         row.node.kind === "option" ? row.node.option.vendor : null,
@@ -379,7 +379,7 @@ export function suppliesColumns(): ColumnDef<SuppliesColumnCtx, SupplyGridRow>[]
     {
       id: "rate",
       label: "Rate",
-      width: "minmax(8rem,0.7fr)",
+      width: "12rem",
       render: (row, ctx) => <RateCell row={row} ctx={ctx} />,
       sortValue: (row) =>
         row.node.kind === "item" ? unitsPerDay(row.node.rate) : null,
@@ -506,7 +506,7 @@ export function suppliesColumns(): ColumnDef<SuppliesColumnCtx, SupplyGridRow>[]
     {
       id: "group",
       label: "Group",
-      width: "minmax(6rem,0.5fr)",
+      width: "9rem",
       filterKind: "enum",
       filterValue: (row) =>
         row.node.kind === "item" ? row.node.item.groupLabel : null,
@@ -524,7 +524,7 @@ export function suppliesColumns(): ColumnDef<SuppliesColumnCtx, SupplyGridRow>[]
     {
       id: "envelope",
       label: "Funded from",
-      width: "minmax(7rem,0.6fr)",
+      width: "11rem",
       filterKind: "enum",
       filterValue: (row) =>
         row.node.kind === "item" ? (row.node.item.envelopeName ?? "") : null,

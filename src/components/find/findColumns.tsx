@@ -36,7 +36,7 @@ export const findColumns: FindColumn[] = [
   {
     id: "type",
     label: "Type",
-    width: "minmax(7rem,0.5fr)",
+    width: "10rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.typeLabel,
@@ -47,7 +47,7 @@ export const findColumns: FindColumn[] = [
   {
     id: "name",
     label: "Name",
-    width: "minmax(12rem,1.1fr)",
+    width: "19rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.name,
@@ -65,7 +65,7 @@ export const findColumns: FindColumn[] = [
   {
     id: "where",
     label: "Where",
-    width: "minmax(11rem,1fr)",
+    width: "17rem",
     filterKind: "text",
     filterValue: (row) => row.node.where || null,
     sortValue: (row) => row.node.where.toLowerCase(),
@@ -75,7 +75,7 @@ export const findColumns: FindColumn[] = [
   {
     id: "field",
     label: "Field",
-    width: "minmax(8rem,0.6fr)",
+    width: "12rem",
     filterKind: "text",
     filterValue: (row) => hitLabels(row.node) || null,
     sortValue: (row) => hitLabels(row.node).toLowerCase(),
@@ -84,7 +84,7 @@ export const findColumns: FindColumn[] = [
   {
     id: "match",
     label: "Match",
-    width: "minmax(14rem,1.4fr)",
+    width: "22rem",
     filterKind: "text",
     filterValue: (row) => row.node.hits[0]?.snippet ?? null,
     sortValue: (row) => (row.node.hits[0]?.snippet ?? "").toLowerCase(),

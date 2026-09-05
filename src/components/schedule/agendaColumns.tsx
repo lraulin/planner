@@ -118,7 +118,7 @@ export const agendaColumns: ColumnDef<AgendaColumnCtx, AgendaRow>[] = [
   {
     id: "subject",
     label: "Subject",
-    width: "minmax(12rem,1fr)",
+    width: "18rem",
     hideable: false,
     filterKind: "text",
     filterValue: (row) => row.node.subject || null,

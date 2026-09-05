@@ -221,7 +221,7 @@ function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnC
   return {
     id: "name",
     label,
-    width: "minmax(12rem,1fr)",
+    width: "18rem",
     hideable: false,
     render: (row, ctx) => {
       const indicator = indicatorOf(ctx, row.node.id);
