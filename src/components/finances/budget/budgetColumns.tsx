@@ -225,6 +225,13 @@ function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnC
     hideable: false,
     render: (row, ctx) => {
       const indicator = indicatorOf(ctx, row.node.id);
+      const dueCue = billDueCue(
+        row.node,
+        ctx.month,
+        ctx.todayKey,
+        ctx.paydayKey,
+        indicator.state,
+      );
       return (
         <div className="relative flex h-full w-full min-w-0 flex-col justify-center gap-0.5 md:block md:self-stretch">
           <div className="flex min-w-0 items-center gap-1.5 md:h-full">
@@ -250,9 +257,12 @@ function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnC
             {row.node.nextDueKey && row.node.bill?.status !== "cancelled" ? (
               <span className="shrink-0 text-[0.6875rem] text-ink-muted">
                 <DateText dateKey={row.node.nextDueKey} className="inline" />
-                {billDueCue(row.node, ctx.month, ctx.todayKey, ctx.paydayKey) ? (
-                  <span className="ml-1 text-priority-b">
-                    {billDueCue(row.node, ctx.month, ctx.todayKey, ctx.paydayKey)}
+                {dueCue ? (
+                  <span
+                    className={`ml-1 ${dueCue.urgent ? "text-priority-b" : ""}`}
+                    title={dueCue.hint}
+                  >
+                    {dueCue.label}
                   </span>
                 ) : null}
               </span>

@@ -4,6 +4,7 @@ import { budgetRows } from "./budget/rows";
 import type { BudgetCategoryRow, BudgetData, BudgetGroupRow } from "./budget/queries";
 import { monthlyFundingPlan } from "./budget/incomePlan";
 import { billDueCue, billDueSoon } from "./budget/dueCue";
+import type { IndicatorState } from "./budget/indicator";
 import { budgetReturnContext, revealBudgetGroups } from "./budget/returnContext";
 import {
   spendingComparisonRows,
@@ -312,11 +313,23 @@ describe("bill due cues", () => {
     },
   };
   it("distinguishes before and on payday only in the current budget month", () => {
-    expect(billDueCue(row, "2026-09-01", "2026-09-28", "2026-10-01")).toBe(
-      "Before payday",
-    );
-    expect(billDueCue(row, "2026-09-01", "2026-09-28", "2026-09-30")).toBe("On payday");
-    expect(billDueCue(row, "2026-10-01", "2026-09-28", "2026-10-01")).toBeNull();
+    expect(
+      billDueCue(row, "2026-09-01", "2026-09-28", "2026-10-01", "funded"),
+    ).toMatchObject({ label: "Before payday" });
+    expect(
+      billDueCue(row, "2026-09-01", "2026-09-28", "2026-09-30", "funded"),
+    ).toMatchObject({ label: "On payday" });
+    expect(
+      billDueCue(row, "2026-10-01", "2026-09-28", "2026-10-01", "funded"),
+    ).toBeNull();
+  });
+  it("only shouts while the envelope still needs money", () => {
+    const cue = (state: IndicatorState) =>
+      billDueCue(row, "2026-09-01", "2026-09-28", "2026-10-01", state)?.urgent;
+    expect(cue("underfunded")).toBe(true);
+    expect(cue("overspent")).toBe(true);
+    for (const state of ["funded", "on-track", "overassigned", "fully-spent"] as const)
+      expect(cue(state)).toBe(false);
   });
   it("uses a 14-day inclusive horizon across months and omits inactive or unscheduled bills", () => {
     expect(billDueSoon({ ...row, nextDueKey: "2026-10-12" }, "2026-09-28")).toBe(true);
