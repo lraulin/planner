@@ -1512,7 +1512,21 @@ const DataRow = memo(
             toggle: event.metaKey || event.ctrlKey,
           });
         }}
-        onDoubleClick={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
+        onDoubleClick={
+          onOpenDetail
+            ? (event) => {
+                // Double-click selects text inside an editor. Opening the drawer steals focus
+                // between that click and the user's next keystroke.
+                if (
+                  (event.target as HTMLElement).closest(
+                    "input, select, textarea, button, a, [contenteditable=true]",
+                  )
+                )
+                  return;
+                onOpenDetail(row.id);
+              }
+            : undefined
+        }
         onContextMenu={
           onContextMenu &&
           ((event) => {
