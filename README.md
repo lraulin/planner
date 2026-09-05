@@ -171,7 +171,9 @@ handler is disabled; friends create accounts by redeeming an invite minted in Se
 Unauthenticated visitors are redirected to `/login` (`/signup` is allowlisted but inert
 without a valid token). The agent API uses a separate Bearer key (see above).
 
-Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
+Hosting uses Vercel Hobby for the app and Neon's metered Launch plan for Postgres. The
+production recovery policy keeps projected total Neon spend below $5/month; see
+[`docs/production-backup-recovery.md`](docs/production-backup-recovery.md).
 
 1. Create a Neon project named `planner`. Copy the **pooled** connection string — the host
    containing `-pooler`. Serverless functions open a connection per invocation, so the
@@ -225,6 +227,22 @@ Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
 
 Vercel's Hobby tier is free but its terms limit it to non-commercial use. If this ever
 becomes something you sell, hosting has to move.
+
+### Production backups
+
+Daily portable PostgreSQL backups are encrypted locally and synchronized through Dropbox;
+Neon separately provides seven-day PITR and weekly snapshots. The operator commands are:
+
+| Command                       | Purpose                                                   |
+| ----------------------------- | --------------------------------------------------------- |
+| `npm run backup:setup`        | Preflight Keychain, Dropbox, Neon, and the LaunchAgent    |
+| `npm run backup:run`          | Create when due, verify, publish atomically, then retain  |
+| `npm run backup:status`       | Check LaunchAgent, Dropbox freshness, PITR, and snapshots |
+| `npm run backup:restore-test` | Restore into disposable PostgreSQL 18 and verify data     |
+| `npm run backup:uninstall`    | Remove the schedule while preserving keys and archives    |
+
+Setup, recovery, quarterly drills, credential rotation, and cost escalation are documented
+in [`docs/production-backup-recovery.md`](docs/production-backup-recovery.md).
 
 ## Notes
 

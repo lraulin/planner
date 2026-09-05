@@ -548,6 +548,11 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   Tier A–C tables still grow with product surfaces. Downloads and clipboard copies are
   stamped with a local instant (filename + body) as of
   `specs/2026-08-29-1349-export-stamps-and-activity`.
+- **✅ Production recovery.** `specs/2026-09-05-0906-production-backup-recovery`. Seven-day
+  Neon PITR and weekly 90-day snapshots cover recent and provider-side recovery; encrypted
+  daily PostgreSQL 18 dumps in Dropbox are the provider-independent layer. The Mac
+  LaunchAgent, quarterly restore drill, and $5 Neon escalation threshold are operational
+  policy, not Planner UI.
 
 ### Google integration
 
@@ -596,7 +601,7 @@ Treat as one track with staged depth:
 Achieve lets you attach a **local filesystem path**. That only works on the machine that
 has the file — fine for a Windows desktop app, broken for a multi-device web app. We also
 should not host binary blobs ourselves: **S3 (or similar) is paid**, and free hosting
-(Vercel / Neon free tiers) is not a file store.
+(Vercel Hobby / Neon Launch) is not a file store.
 
 **Constraint:** the planner stores **references**, not file bytes. The file lives in the
 user’s cloud (or stays a plain URL); we open it in a new tab or via the provider’s UI.

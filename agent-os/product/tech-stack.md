@@ -1,6 +1,7 @@
 # Tech Stack
 
-Chosen to run at **$0** on free tiers at personal scale, with minimal ops overhead.
+Chosen for minimal ops overhead and a tightly bounded personal-scale cost. Vercel remains
+free; Neon is on its metered Launch plan with a $5/month escalation threshold.
 
 ## Frontend
 
@@ -51,10 +52,14 @@ avoid — the whole project started because Achieve was abandoned.
 ## Other
 
 - **Hosting:** Vercel (Hobby tier, free for personal use).
-- **Database hosting:** Neon (free tier); Supabase is the fallback. Serverless runtimes must
-  use Neon's _pooled_ connection string; migrations use the direct one.
-- **Cost constraint:** free tiers are the default. Paid or metered services need a
-  justification, and AWS is only in scope for the Phase 3 Bedrock assistant.
+- **Database hosting:** Neon (metered Launch plan); Supabase is the fallback. Serverless
+  runtimes use Neon's _pooled_ connection string; migrations and backups use direct,
+  least-privilege connections.
+- **Recovery:** seven-day Neon PITR, weekly 90-day Neon snapshots, and daily portable GPG
+  dumps synchronized to Dropbox from Lee's Mac. See `docs/production-backup-recovery.md`.
+- **Cost constraint:** keep the existing $3 spending notification and treat $5 projected
+  total Neon spend as the escalation threshold. Backup history plus snapshots targets less
+  than $1/month; Dropbox backups survive any provider-side reduction.
 
 ### Migrations run as part of the deploy
 

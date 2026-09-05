@@ -63,6 +63,24 @@ It is gated hard on `VERCEL_ENV === "production"`. **Preview deployments share t
 database**; without the gate, a push to any branch could reshape production's schema. A
 failed migration fails the build rather than deploying code whose tables do not exist.
 
+### Recovery gate
+
+Routine additive production migrations rely on the configured seven-day Neon point-in-time
+history. Record the deploy time so the recovery point is unambiguous.
+
+A destructive or data-transforming migration has a stronger manual gate **before it is
+deployed**:
+
+1. Run `npm run backup:run -- --force` on the backup Mac.
+2. Run `npm run backup:status` and verify the named Dropbox generation is less than one hour
+   old, its checksum/manifest are valid, Neon PITR reports seven days, and a Neon recovery
+   point exists at that UTC timestamp.
+3. Confirm Dropbox has synchronized the generation off the Mac.
+
+If any check fails, do not deploy the migration. A schema change that cannot be rolled back
+is not made safer by the fact that its SQL generated successfully. The operational details
+and provider-independent restore path live in `docs/production-backup-recovery.md`.
+
 ## `db:push` — local scratch only
 
 `db:push` writes `schema.ts` straight to a database and produces **no migration file**, so
