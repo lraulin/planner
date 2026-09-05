@@ -30,8 +30,6 @@ function row(
     derivedCategory: null,
     derivedFlow: extras.derivedFlow ?? "spend",
     flowOverride: extras.flowOverride ?? null,
-    excludeFromBaseline: false,
-    eventLabel: "",
 
     notes: "",
     balanceAfterCents: null,

@@ -26,8 +26,7 @@ function row(
     derivedCategory: extras.derivedCategory ?? null,
     derivedFlow: extras.derivedFlow ?? null,
     flowOverride: extras.flowOverride ?? null,
-    excludeFromBaseline: extras.excludeFromBaseline ?? false,
-    eventLabel: extras.eventLabel ?? "",
+
     notes: "",
     balanceAfterCents: null,
     budgetCategoryId: null,

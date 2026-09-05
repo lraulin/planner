@@ -58,7 +58,6 @@ import {
   deleteTransaction,
   deleteTransactions,
   reclassifyTransactions,
-  setOneOff,
   setSubscriptionStatus,
   updateAccount,
   deleteAccount,
@@ -318,13 +317,6 @@ export async function listAccountsAction(): Promise<QueryResult<FinanceAccountRo
 
 export async function reclassifyAction(): Promise<DataActionResult<ReclassifySummary>> {
   return runWithData(reclassifyTransactions);
-}
-
-export async function setOneOffAction(
-  transactionIds: readonly string[],
-  edit: { excludeFromBaseline: boolean; eventLabel?: string },
-): Promise<ActionResult> {
-  return run((userId) => setOneOff(userId, transactionIds, edit));
 }
 
 export async function setRecurringBillAction(

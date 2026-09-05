@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lte, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -31,12 +31,16 @@ import {
   type UpcomingBillRow,
 } from "./commitments";
 import { billRows as billRowsOf, type BillRow } from "./commitmentRows";
-import { spendingVsIncome, type SpendingVsIncome } from "./expectedSpending";
+import type { SpendingVsIncome } from "./expectedSpending";
+import { regularIncomePlan } from "./budget/incomePlan";
+import { activeBillTotals } from "./commitmentRows";
 import { numericStringToCents } from "./money";
 import { listAccounts, listTransactions } from "./queries";
 import type { FinanceAccountRow } from "./types";
 import { loadWorkingPendingSelection } from "./workingPendingQuery";
 import { localDateKey } from "@/lib/schedule/geometry";
+import { budgetContributionSql } from "./budget/contributionSql";
+import type { EnvelopeReportRow } from "./reports";
 import { bankRows, moneyRows } from "./splitRows";
 
 /**
@@ -75,7 +79,9 @@ function scopeConditions(userId: string, filter: InsightsFilter) {
 export async function loadInsightsRows(
   userId: string,
   filter: InsightsFilter = {},
-): Promise<AnalyticsRow[]> {
+): Promise<EnvelopeReportRow[]> {
+  const accounts = await listAccounts(userId);
+  const pending = await loadWorkingPendingSelection(userId, accounts);
   const rows = await db
     .select({
       id: financeTransactions.id,
@@ -89,11 +95,15 @@ export async function loadInsightsRows(
       derivedFlow: financeTransactions.derivedFlow,
       flowOverride: financeTransactions.flowOverride,
       transferGroupId: financeTransactions.transferGroupId,
-      excludeFromBaseline: financeTransactions.excludeFromBaseline,
-      eventLabel: financeTransactions.eventLabel,
       payeeId: financeTransactions.payeeId,
       payeeName: financePayees.name,
       budgetCategoryName: financeBudgetCategories.name,
+      budgetCategoryId: financeTransactions.budgetCategoryId,
+      groupId: financeBudgetCategories.groupId,
+      envelopeKind: financeBudgetCategories.kind,
+      incomeRole: financeBudgetCategories.incomeRole,
+      accountOffBudget: financeAccounts.offBudget,
+      contributesToBudget: sql<boolean>`coalesce((${budgetContributionSql(userId, pending.supersededTransactionIds)}), false)`,
       notes: financeTransactions.notes,
     })
     .from(financeTransactions)
@@ -114,7 +124,16 @@ export async function loadInsightsRows(
     )
     // Money: leaves. Every analytics rollup downstream sums these by flow, and a parent
     // beside its children would double each split in the burn rate.
-    .where(and(moneyRows, ...scopeConditions(userId, filter)))
+    .where(
+      and(
+        moneyRows,
+        eq(financeAccounts.userId, userId),
+        pending.supersededTransactionIds.length
+          ? notInArray(financeTransactions.id, pending.supersededTransactionIds)
+          : undefined,
+        ...scopeConditions(userId, filter),
+      ),
+    )
     .orderBy(asc(financeTransactions.transactionDate), asc(financeTransactions.id));
 
   return rows.map((row) => ({
@@ -129,11 +148,15 @@ export async function loadInsightsRows(
     derivedFlow: row.derivedFlow,
     flowOverride: row.flowOverride,
     transferGroupId: row.transferGroupId,
-    excludeFromBaseline: row.excludeFromBaseline,
-    eventLabel: row.eventLabel,
     payeeId: row.payeeId,
     payeeName: row.payeeName,
     budgetCategoryName: row.budgetCategoryName,
+    budgetCategoryId: row.budgetCategoryId,
+    groupId: row.groupId,
+    envelopeKind: row.envelopeKind,
+    incomeRole: row.incomeRole,
+    accountOffBudget: row.accountOffBudget,
+    contributesToBudget: row.contributesToBudget,
   }));
 }
 
@@ -239,9 +262,9 @@ export async function loadUpcomingBills(
     if (row.payeeId === null || effectiveFlow(row) !== "spend") continue;
     const ref = claims.get(row.payeeId);
     if (!ref) continue;
-    const list = chargesByName.get(ref.name) ?? [];
+    const list = chargesByName.get(ref.id) ?? [];
     list.push({ dateKey: row.transactionDate, costCents: spendCentsOf(row) });
-    chargesByName.set(ref.name, list);
+    chargesByName.set(ref.id, list);
   }
   return upcomingBillOccurrences(bills, chargesByName, todayKey, horizonDays);
 }
@@ -250,6 +273,7 @@ export type BillForecast = {
   billRows: BillRow[];
   months: ReturnType<typeof projectForwardMonths>;
   comparison: SpendingVsIncome;
+  incomePlan: ReturnType<typeof regularIncomePlan>;
 };
 
 /**
@@ -277,18 +301,40 @@ export async function loadBillForecast(
     const ref = row.payeeId ? claims.get(row.payeeId) : undefined;
     if (ref === undefined || !billNames.has(ref.name)) continue;
     const charge = { dateKey: row.transactionDate, costCents: spendCentsOf(row) };
-    flatCharges.push({ name: ref.name, ...charge });
-    const list = chargesByName.get(ref.name) ?? [];
+    flatCharges.push({ billId: ref.id, name: ref.name, ...charge });
+    const list = chargesByName.get(ref.id) ?? [];
     list.push(charge);
-    chargesByName.set(ref.name, list);
+    chargesByName.set(ref.id, list);
   }
 
-  const paydays = paydaysFrom(rows);
+  const incomeRows = await db
+    .select({
+      id: financeBudgetCategories.id,
+      name: financeBudgetCategories.name,
+      kind: financeBudgetCategories.kind,
+      incomeRole: financeBudgetCategories.incomeRole,
+      expectedMonthlyIncomeCents: financeBudgetCategories.expectedMonthlyIncomeCents,
+    })
+    .from(financeBudgetCategories)
+    .where(eq(financeBudgetCategories.userId, userId));
+  const incomePlan = regularIncomePlan(incomeRows);
   const rowsOut = billRowsOf(bills, flatCharges, todayKey);
   return {
     billRows: rowsOut,
     months: projectForwardMonths(bills, chargesByName, todayKey),
-    comparison: spendingVsIncome(rowsOut, paydays),
+    incomePlan,
+    comparison: {
+      bills: activeBillTotals(rowsOut),
+      income: {
+        medianPaycheckCents: 0,
+        monthlyCents: incomePlan.knownCents,
+        annualCents: incomePlan.knownCents * 12,
+      },
+      remainder: {
+        monthlyCents: incomePlan.knownCents - activeBillTotals(rowsOut).monthlyCents,
+        annualCents: incomePlan.knownCents * 12 - activeBillTotals(rowsOut).annualCents,
+      },
+    },
   };
 }
 

@@ -71,8 +71,6 @@ export async function retireCoveredScrapeRows(
       budgetCategoryId: financeTransactions.budgetCategoryId,
       notes: financeTransactions.notes,
       flowOverride: financeTransactions.flowOverride,
-      excludeFromBaseline: financeTransactions.excludeFromBaseline,
-      eventLabel: financeTransactions.eventLabel,
     })
     .from(financeTransactions)
     .where(
@@ -104,8 +102,6 @@ export async function retireCoveredScrapeRows(
     budgetCategoryId: row.budgetCategoryId,
     notes: row.notes,
     flowOverride: row.flowOverride,
-    excludeFromBaseline: row.excludeFromBaseline,
-    eventLabel: row.eventLabel,
   }));
 
   const dates = retiring.flatMap((row) => [
@@ -131,8 +127,6 @@ export async function retireCoveredScrapeRows(
       budgetCategoryId: financeTransactions.budgetCategoryId,
       notes: financeTransactions.notes,
       flowOverride: financeTransactions.flowOverride,
-      excludeFromBaseline: financeTransactions.excludeFromBaseline,
-      eventLabel: financeTransactions.eventLabel,
     })
     .from(financeTransactions)
     .where(
@@ -166,8 +160,6 @@ export async function retireCoveredScrapeRows(
     budgetCategoryId: row.budgetCategoryId,
     notes: row.notes,
     flowOverride: row.flowOverride,
-    excludeFromBaseline: row.excludeFromBaseline,
-    eventLabel: row.eventLabel,
   }));
 
   const plan = planFeedHandover(retiring, replacements);

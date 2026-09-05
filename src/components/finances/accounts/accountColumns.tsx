@@ -2,24 +2,28 @@
 
 import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
-import { accountKindLabel, accountSourceLabel } from "@/lib/finances/accountKind";
+import { accountKindLabel } from "@/lib/finances/accountKind";
 import { formatUsd } from "@/lib/finances/money";
-import type { FinanceAccountRow } from "@/lib/finances/types";
+import type { OperationalAccount } from "@/lib/finances/accountOperations";
+import Link from "next/link";
 import { toDateKey } from "@/lib/schedule/geometry";
 
-export type AccountColumnCtx = Record<string, never>;
+import { type PendingRow } from "@/lib/finances/workingBalance";
+export type AccountColumnCtx = {
+  pending: readonly PendingRow[];
+  staleIds: ReadonlySet<string>;
+  onSnapshot: () => void;
+};
 
 export const ACCOUNT_COLUMN_IDS = [
   "name",
-  "kind",
-  "institution",
-  "lastFour",
-  "url",
-  "closed",
-  "budget",
   "balance",
-  "transactions",
+  "posted",
+  "pending",
+  "asOf",
+  "freshness",
   "source",
+  "budget",
 ] as const;
 
 function Text({ value, muted = true }: { value: string; muted?: boolean }) {
@@ -37,7 +41,7 @@ function asDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
-export const accountColumns: ColumnDef<AccountColumnCtx, FinanceAccountRow>[] = [
+export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] = [
   {
     id: "name",
     label: "Account",
@@ -133,22 +137,87 @@ export const accountColumns: ColumnDef<AccountColumnCtx, FinanceAccountRow>[] = 
   },
   {
     id: "balance",
-    label: "Balance",
+    label: "Working balance",
+    compactText: (row) => `Working ${formatUsd(row.node.workingCents)}`,
     width: "8rem",
     align: "right",
     filterKind: "number",
-    filterValue: (row) => formatUsd(row.node.balanceCents),
-    sortValue: (row) => row.node.balanceCents,
+    filterValue: (row) => formatUsd(row.node.workingCents),
+    sortValue: (row) => row.node.workingCents,
     compact: "meta",
     render: (row) => (
       <span
         className={`tabular text-[0.8125rem] ${
-          row.node.balanceCents < 0 ? "text-priority-a" : "text-ink"
+          row.node.workingCents < 0 ? "text-priority-a" : "text-ink"
         }`}
       >
-        {formatUsd(row.node.balanceCents)}
+        {formatUsd(row.node.workingCents)}
       </span>
     ),
+  },
+  ...(["posted", "pending"] as const).map(
+    (id): ColumnDef<AccountColumnCtx, OperationalAccount> => ({
+      id,
+      label: id === "posted" ? "Posted / headline" : "Pending added",
+      width: "9rem",
+      align: "right",
+      compact: "hidden",
+      filterKind: "number",
+      filterValue: (row) =>
+        formatUsd(row.node[id === "posted" ? "postedCents" : "pendingCents"]),
+      sortValue: (row) => row.node[id === "posted" ? "postedCents" : "pendingCents"],
+      render: (row) => (
+        <span className="tabular text-xs text-ink-muted">
+          {formatUsd(row.node[id === "posted" ? "postedCents" : "pendingCents"])}
+        </span>
+      ),
+    }),
+  ),
+  {
+    id: "asOf",
+    label: "Balance as of",
+    compactText: (row) => row.node.balanceSourceLabel,
+    width: "12rem",
+    compact: "meta",
+    sortValue: (row) =>
+      row.node.syncedBalanceAsOf?.toISOString() ?? row.node.statementPeriodEnd,
+    render: (row) => (
+      <Text
+        value={
+          row.node.syncedBalanceAsOf
+            ? new Date(row.node.syncedBalanceAsOf).toLocaleString()
+            : row.node.statementPeriodEnd
+              ? `Statement ${row.node.statementPeriodEnd}`
+              : "Imported history"
+        }
+      />
+    ),
+  },
+  {
+    id: "freshness",
+    label: "Freshness",
+    compactText: (row) => row.node.freshness,
+    width: "13rem",
+    compact: "meta",
+    filterKind: "enum",
+    filterValue: (row) => row.node.freshness,
+    sortValue: (row) => row.node.freshness,
+    render: (row, ctx) =>
+      row.node.needsConnection ? (
+        <Link href="/settings" className="text-xs text-priority-a underline">
+          Reconnect bank
+        </Link>
+      ) : ctx.staleIds.has(row.id) ? (
+        <button
+          type="button"
+          onClick={ctx.onSnapshot}
+          className="text-xs text-priority-a underline"
+        >
+          Paste fresh snapshot
+        </button>
+      ) : (
+        <Text value={row.node.freshness} />
+      ),
   },
   {
     id: "transactions",
@@ -168,8 +237,8 @@ export const accountColumns: ColumnDef<AccountColumnCtx, FinanceAccountRow>[] = 
     label: "Source",
     width: "minmax(8rem,0.8fr)",
     filterKind: "enum",
-    filterValue: (row) => accountSourceLabel(row.node.externalSource),
-    sortValue: (row) => accountSourceLabel(row.node.externalSource),
-    render: (row) => <Text value={accountSourceLabel(row.node.externalSource)} />,
+    filterValue: (row) => row.node.balanceSourceLabel,
+    sortValue: (row) => row.node.balanceSourceLabel,
+    render: (row) => <Text value={row.node.balanceSourceLabel} />,
   },
 ];

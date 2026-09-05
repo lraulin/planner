@@ -34,8 +34,6 @@ function placeholder(id: string): TransactionListRow {
     externalSource: null,
     derivedFlow: null,
     flowOverride: null,
-    excludeFromBaseline: false,
-    eventLabel: "",
     notes: "",
     balanceAfterCents: null,
     budgetCategoryId: null,
@@ -321,7 +319,9 @@ export function useRegisterSource({
 
   return {
     index,
-    gridRows,
+    // A drill-down must never temporarily present the previous query's money as its own.
+    gridRows: key === index.queryKey ? gridRows : [],
+    queryPending: key !== index.queryKey,
     pendingRowIds,
     error,
     setError,

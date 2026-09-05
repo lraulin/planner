@@ -381,13 +381,13 @@ export function AmountCell({
   disabled = false,
   className = "",
 }: {
-  cents: number;
+  cents: number | null;
   onCommit: (cents: number) => void;
   label: string;
   disabled?: boolean;
   className?: string;
 }) {
-  const shown = (cents / 100).toFixed(2);
+  const shown = cents === null ? "" : (cents / 100).toFixed(2);
   const [value, setValue] = useState(shown);
   const [invalid, setInvalid] = useState(false);
   // A commit elsewhere (Assign, Move money, an undo) changes `cents` under a field nobody is
@@ -404,6 +404,7 @@ export function AmountCell({
   const cancelled = useRef(false);
 
   function commit() {
+    if (cents === null && value.trim() === "") return;
     const next = parseAmountEntryCents(value);
 
     if (next === null) {

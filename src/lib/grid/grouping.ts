@@ -22,7 +22,7 @@ export type NoteGroupBy =
   "subject" | "contexts" | "flag" | CalendarNoteGroupBy | "linked";
 
 export type GridGroupBy =
-  TreeGroupBy | NoteGroupBy | "account" | "flow" | "order" | "channel";
+  TreeGroupBy | NoteGroupBy | "account" | "flow" | "order" | "channel" | "budgetGroup";
 
 export const TREE_GROUP_BY_VALUES: readonly TreeGroupBy[] = [
   "category",
@@ -52,9 +52,11 @@ const GRID_GROUP_BY_VALUES: readonly GridGroupBy[] = [
   "flow",
   "order",
   "channel",
+  "budgetGroup",
 ];
 
 export const GROUP_BY_LABELS: Record<GridGroupBy, string> = {
+  budgetGroup: "Group",
   account: "Account",
   flow: "Flow",
   order: "Order",

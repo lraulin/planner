@@ -49,6 +49,8 @@ function category(
     notes: "",
     target: null,
     kind,
+    incomeRole: "other",
+    expectedMonthlyIncomeCents: null,
     isIncome: kind === "income",
     bill: null,
   };
@@ -79,6 +81,8 @@ function row(
     groupId,
     sortKey: "A",
     name: id,
+    incomeRole: "other",
+    expectedMonthlyIncomeCents: null,
     isIncome: false,
     hidden: false,
     notes: "",
@@ -98,6 +102,22 @@ function row(
 }
 
 describe("budget hierarchy", () => {
+  it("reveals a linked hidden envelope and its ancestry without showing unrelated hidden rows", () => {
+    const hiddenGroup = { ...group("hidden", null, "A"), hidden: true };
+    const linked = { ...category("linked", "hidden", "A"), hidden: true };
+    const unrelated = { ...category("unrelated", "hidden", "B"), hidden: true };
+    expect(
+      nestedBudgetGridRows(
+        [hiddenGroup],
+        [linked, unrelated],
+        [
+          row("linked", "hidden", { hidden: true }),
+          row("unrelated", "hidden", { hidden: true }),
+        ],
+        { showHidden: false, revealIds: new Set(["hidden", "linked"]) },
+      ).map((entry) => entry.id),
+    ).toEqual(["hidden", "linked"]);
+  });
   const groups = [
     group("spending", null, "A"),
     group("bills", "spending", "B"),

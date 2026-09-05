@@ -1,794 +1,707 @@
 "use client";
-
-import { useCallback, useMemo, useState } from "react";
-import {
-  coverageGap,
-  effectiveCategory,
-  spendCentsOf,
-  TREND_OTHER,
-  typicalIncomePerBucketCents,
-  type AnalyticsRow,
-} from "@/lib/finances/analytics";
-import type { CarryingCost } from "@/lib/finances/dashboardQueries";
-import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
-import { insightsCommands } from "@/lib/finances/insightsCommands";
-import type { StoredBillRow } from "@/lib/finances/commitments";
-import {
-  unresolvedPaypalInflows,
-  type PaypalResolution,
-} from "@/lib/finances/paypalMatch";
-import type { PaymentResolutionRow } from "@/lib/finances/queries";
-import type { ReconcileStatement } from "@/lib/finances/reconcile";
-import {
-  drillLabel,
-  insightsFilterOptions,
-  rowsForDrill,
-  type InsightsDrill,
-} from "@/lib/finances/insightsFilter";
-import { formatUsd } from "@/lib/finances/money";
-import { cashFlowSankey } from "@/lib/finances/sankeyFlow";
-import { reclassifyAction } from "@/app/finances/actions";
-import {
-  CHART_MODE_LABELS,
-  INSIGHTS_AXES,
-  INSIGHTS_CHART_MODES,
-  INSIGHTS_WINDOWS,
-  WINDOW_LABELS,
-  insightsFilterOf,
-  parseInsightsView,
-  serializeInsightsView,
-  type InsightsAxis,
-  type InsightsViewSettings,
-} from "@/lib/settings/finances";
-import { INSIGHTS_SCOPE } from "@/lib/settings/scopes";
-import {
-  useDateFormatter,
-  useSetting,
-  type SettingCodec,
-} from "@/components/settings/SettingsProvider";
-import { useToday } from "@/components/grid/useToday";
-import { ToolbarSegments } from "@/components/tabs/tabChrome";
-import { useRegisterCommands } from "@/components/shell/CommandProvider";
-import { AssetDebtChart } from "./AssetDebtChart";
-import { CarryingCostTable } from "./CarryingCostTable";
-import { CashFlowChart } from "./CashFlowChart";
-import { CategoryBars } from "./CategoryBars";
-import { FilterSelect } from "./FilterSelect";
-import { OneOffReview } from "./OneOffReview";
-import { Panel, PanelEmpty, StatRow, StatTile } from "./Panel";
-import { RankedBars } from "./RankedBars";
+import { useId, useState, useMemo } from "react";
 import Link from "next/link";
+import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
+import { useRouter } from "next/navigation";
+import type { ColumnDef } from "@/components/grid/columns";
+import { DataGrid } from "@/components/grid/DataGrid";
+import { useGridState } from "@/components/grid/useGridState";
+import { useSetting } from "@/components/settings/SettingsProvider";
+import { INSIGHTS_SCOPE } from "@/lib/settings/scopes";
+import { WINDOW_LABELS } from "@/lib/settings/finances";
+import { parseReportSettings } from "@/lib/finances/reportSettings";
+import {
+  spendingComparisonRows,
+  sumReportActivity,
+  cashMovementSummary,
+  cashReportPoints,
+  rankedReportSpending,
+  applyReportFilters,
+  completedMonthAverages,
+  envelopeReportRows,
+  reportMonthlySeries,
+  reportRange,
+  scopeCategoryIds,
+  spendingContributions,
+  regularIncomeContributions,
+  type EnvelopeReportRow,
+  type ReportEnvelope,
+} from "@/lib/finances/reports";
+import { effectiveFlow, rowsInRange, type DateRange } from "@/lib/finances/analytics";
+import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
+import { cashFlowSankey } from "@/lib/finances/sankeyFlow";
+import type { CarryingCost } from "@/lib/finances/dashboardQueries";
+import type { StatementListRow } from "@/lib/finances/types";
+import type { BudgetData } from "@/lib/finances/budget/queries";
+import {
+  monthKeyOf,
+  monthEndKey,
+  monthParamOf,
+  monthKeyFromParam,
+} from "@/lib/finances/budget/envelope";
+import { budgetEnvelopeHref } from "@/lib/finances/registerActivity";
+import { budgetEnvelopeLabel } from "@/lib/finances/budget/hierarchy";
+import { reportRegisterHref, type ReportDrill } from "@/lib/finances/reportDrill";
+import { formatUsd } from "@/lib/finances/money";
+import { FilterSelect } from "./FilterSelect";
+import { CashFlowChart } from "./CashFlowChart";
+import { AssetDebtChart } from "./AssetDebtChart";
 import { SankeyChart } from "./SankeyChart";
-import { SpendingTrendsChart } from "./SpendingTrendsChart";
-import { TransactionAudit } from "./TransactionAudit";
-import { UpcomingBills } from "./UpcomingBills";
+import { CarryingCostTable } from "./CarryingCostTable";
+import { coverageGap } from "@/lib/finances/analytics";
 
-const INSIGHTS_CODEC: SettingCodec<InsightsViewSettings> = {
-  parse: parseInsightsView,
-  serialize: serializeInsightsView,
-};
-
-const AXIS_LABELS: Record<InsightsAxis, string> = {
-  month: "Months",
-  "pay-period": "Pay periods",
-};
-
-/**
- * The Finances insights dashboard.
- *
- * Filters narrow the whole history first. Windowing and the trailing average then run on
- * that filtered set, so a grocery-only view does not mix in everyone else's average.
- * The coverage gap still reads the unfiltered import — it is a fact about the feed, not
- * about the current slice.
- */
-function asPaypalResolutions(
-  rows: readonly PaymentResolutionRow[],
-): PaypalResolution[] {
-  return rows.flatMap((row) => {
-    if (row.direction !== "in" && row.direction !== "out") return [];
-    return [
-      {
-        externalId: row.externalId,
-        date: row.transactionDate,
-        amountCents: row.amountCents,
-        counterparty: row.counterparty,
-        direction: row.direction,
-      },
-    ];
-  });
-}
-
+type ReportCtx = { link: (ids: string[]) => string; month: string; balances: boolean };
+const reportColumns: ColumnDef<ReportCtx, ReportEnvelope>[] = [
+  {
+    id: "name",
+    label: "Envelope",
+    width: "minmax(12rem,1fr)",
+    compact: "primary",
+    render: (row) => (
+      <span className={row.node.hidden ? "text-ink-muted italic" : ""}>
+        {row.node.name}
+      </span>
+    ),
+    sortValue: (row) => row.node.name,
+  },
+  ...(
+    [
+      "spendingCents",
+      "carryInCents",
+      "assignedCents",
+      "activityCents",
+      "balanceCents",
+    ] as const
+  ).map((id): ColumnDef<ReportCtx, ReportEnvelope> => ({
+    id,
+    label: {
+      spendingCents: "Spending",
+      carryInCents: "Carry-in",
+      assignedCents: "Assigned",
+      activityCents: "Activity",
+      balanceCents: "Available",
+    }[id],
+    width: "8rem",
+    align: "right",
+    compact: id === "balanceCents" ? "hidden" : "meta",
+    compactText: (row) =>
+      id === "carryInCents"
+        ? `Available ${formatUsd(row.node.balanceCents)}`
+        : `${{ spendingCents: "Spending", carryInCents: "Carry-in", assignedCents: "Assigned", activityCents: "Activity", balanceCents: "Available" }[id]} ${formatUsd(row.node[id])}`,
+    sortValue: (row) => row.node[id],
+    render: (row, ctx) => (
+      <Link
+        className="tabular text-xs underline decoration-rule underline-offset-2"
+        href={
+          id === "spendingCents" || id === "activityCents"
+            ? ctx.link([row.id])
+            : budgetEnvelopeHref(row.id, ctx.month)
+        }
+      >
+        {formatUsd(row.node[id])}
+      </Link>
+    ),
+  })),
+];
+const label =
+  "min-h-tap rounded border border-rule bg-surface px-2 py-1 text-base md:min-h-0 md:text-xs";
 export function InsightsView({
   rows,
+  data,
   carryingCost,
-  unclassified,
-  bills,
-  statements = [],
-  resolutions = [],
+  statements,
 }: {
-  rows: AnalyticsRow[];
+  rows: readonly EnvelopeReportRow[];
+  data: BudgetData;
   carryingCost: CarryingCost;
-  unclassified: number;
-  bills: StoredBillRow[];
-  statements?: readonly ReconcileStatement[];
-  resolutions?: readonly PaymentResolutionRow[];
+  statements: StatementListRow[];
 }) {
-  const formatDate = useDateFormatter();
-  const today = useToday();
-  // Which declarations the dashboard holds money back for. Passed alongside the analysis
-  // rather than folded into `RecurringMerchant`, so `analytics.ts` stays unaware that
-  // budgeting exists — it costs a year of a bill, and what to do about that is not its call.
-
-  const { value: view, patch } = useSetting(INSIGHTS_SCOPE, INSIGHTS_CODEC);
-  const [reclassified, setReclassified] = useState<string | null>(null);
-  const [reclassifying, setReclassifying] = useState(false);
-
-  const reclassify = useCallback(() => {
-    setReclassifying(true);
-    void reclassifyAction().then((result) => {
-      setReclassifying(false);
-      if (result.ok && result.data) {
-        setReclassified(
-          `Reclassified ${result.data.updated.toLocaleString()} of ${result.data.scanned.toLocaleString()} rows.`,
-        );
-      } else if (!result.ok) {
-        setReclassified(result.error);
-      }
-    });
-  }, []);
-
-  const commands = useMemo(
-    () =>
-      insightsCommands({
-        hasRows: rows.length > 0,
-        reclassifying,
-        reclassify,
-      }),
-    [rows.length, reclassifying, reclassify],
+  const router = useRouter();
+  const titleId = useId();
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const payees = useMemo(
+    () => [
+      ...new Map(
+        rows
+          .filter((row) => row.payeeId)
+          .map((row) => [
+            row.payeeId as string,
+            { id: row.payeeId as string, name: row.payeeName ?? row.description },
+          ]),
+      ).values(),
+    ],
+    [rows],
   );
-  useRegisterCommands(commands);
-
-  const filterOptions = useMemo(() => insightsFilterOptions(rows), [rows]);
-  const unresolvedPaypal = useMemo(
-    () => unresolvedPaypalInflows(rows, asPaypalResolutions(resolutions)),
-    [rows, resolutions],
+  const codec = useMemo(
+    () => ({
+      parse: (value: unknown) => parseReportSettings(value, data.categories, payees),
+      serialize: (value: ReturnType<typeof parseReportSettings>) => value,
+    }),
+    [data.categories, payees],
   );
-
-  const analysis = useMemo(() => {
-    const core = analyzeInsights(rows, bills, {
-      filter: insightsFilterOf(view),
-      window: view.window,
-      axis: view.axis,
-      levelRecurring: view.levelRecurring,
-      today,
-      statements,
-      suppressPayeeIds: bills.flatMap((bill) => bill.payees.map((payee) => payee.id)),
+  const { value: view, patch } = useSetting(INSIGHTS_SCOPE, codec);
+  const grid = useGridState("insights-envelopes", reportColumns, {
+    order: reportColumns.map((column) => column.id),
+    sorts: [{ columnId: "spendingCents", direction: "desc" }],
+  });
+  const details = useGridState("insights-details", [], { order: [] });
+  const range = reportRange(
+    view.window,
+    data.todayKey,
+    rows[0]?.transactionDate ?? null,
+  );
+  const month = view.month ?? monthKeyOf(data.todayKey);
+  const balanceRange = { startKey: month, endKey: monthEndKey(month) };
+  const filtered = useMemo(() => applyReportFilters(rows, view), [rows, view]);
+  const comparisonRows = spendingComparisonRows(rows, view);
+  const points = reportMonthlySeries(comparisonRows, view.scope, range, data.todayKey);
+  const averages = completedMonthAverages(points, data.todayKey);
+  const expenseIds = scopeCategoryIds(data.categories, view.scope).filter(
+    (id) => !view.categoryIds.length || view.categoryIds.includes(id),
+  );
+  const regularIds = data.categories
+    .filter((row) => row.kind === "income" && row.incomeRole === "regular")
+    .map((row) => row.id);
+  const windowed = filtered.filter(
+    (row) =>
+      row.transactionDate >= range.startKey && row.transactionDate <= range.endKey,
+  );
+  const spendRows = spendingContributions(windowed, view.scope);
+  const incomeRows = regularIncomeContributions(
+    comparisonRows.filter(
+      (row) =>
+        row.transactionDate >= range.startKey && row.transactionDate <= range.endKey,
+    ),
+  );
+  const table = envelopeReportRows(data, filtered, {
+    report: view.report === "balances" ? "balances" : "spending",
+    month,
+    range,
+    scope: view.scope,
+    categoryIds: view.categoryIds,
+  });
+  const opened = table.envelopes.find((row) => row.id === detailId);
+  const uncategorized = applyReportFilters(rows, { ...view, categoryIds: [] }).filter(
+    (row) =>
+      row.transactionDate >= range.startKey &&
+      row.transactionDate <= range.endKey &&
+      row.contributesToBudget &&
+      row.budgetCategoryId === null,
+  );
+  const drill = (
+    categoryIds: string[],
+    span: DateRange = range,
+    overrides: Partial<ReportDrill> = {},
+  ) =>
+    reportRegisterHref({
+      basis: "envelope",
+      categoryIds,
+      from: span.startKey,
+      to: span.endKey,
+      accountIds: view.report === "balances" ? [] : view.accountIds,
+      payeeIds: view.report === "balances" ? [] : view.payeeIds,
+      uncategorized: false,
+      direction: "all",
+      allCategories: false,
+      ...overrides,
     });
-    if (core.empty) return core;
-    return {
-      ...core,
-      sankey: cashFlowSankey(core.windowed, view.sankeyGrouping),
-      coverage: coverageGap(rows, statements),
-      drilled: drilledRows(core.windowed, view.drill, core.trends.keys),
-    };
-  }, [rows, today, view, bills, statements]);
-
-  function setDrill(next: InsightsDrill) {
-    patch((current) => ({
-      ...current,
-      drill: sameDrill(current.drill, next) ? null : next,
-    }));
-  }
-
-  const bucketNoun = view.axis === "pay-period" ? "pay period" : "month";
-  const filterActive =
-    view.accounts.length + view.categories.length + view.merchants.length > 0;
-
-  if (rows.length === 0) {
-    return (
-      <div className="min-h-0 flex-1 overflow-auto p-3">
-        <PanelEmpty>
-          No transactions yet. Import a CSV from the Register and the dashboard fills
-          in.
-        </PanelEmpty>
-      </div>
-    );
-  }
-
-  if (analysis.empty) {
-    return (
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule bg-surface-raised px-3 py-2">
-          <FilterSelect
-            label="Accounts"
-            options={filterOptions.accounts.map((account) => ({
-              id: account.id,
-              label: account.name,
-            }))}
-            selected={view.accounts}
-            onChange={(accounts) => patch((current) => ({ ...current, accounts }))}
-          />
-          <FilterSelect
-            label="Categories"
-            options={filterOptions.categories.map((category) => ({
-              id: category,
-              label: category,
-            }))}
-            selected={view.categories}
-            onChange={(categories) => patch((current) => ({ ...current, categories }))}
-          />
-          <FilterSelect
-            label="Merchants"
-            options={filterOptions.merchants.map((merchant) => ({
-              id: merchant,
-              label: merchant,
-            }))}
-            selected={view.merchants}
-            onChange={(merchants) => patch((current) => ({ ...current, merchants }))}
-          />
+  const balances = view.report === "balances";
+  const columns = grid.columns.filter((column) =>
+    balances
+      ? column.id !== "spendingCents"
+      : column.id === "name" || column.id === "spendingCents",
+  );
+  const cash = analyzeInsights(
+    applyReportFilters(rows, {
+      accountIds: view.accountIds,
+      payeeIds: [],
+      categoryIds: [],
+    }),
+    [],
+    {
+      range,
+      today: data.todayKey,
+      statements: statements.filter(
+        (row) => !view.accountIds.length || view.accountIds.includes(row.accountId),
+      ),
+    },
+  );
+  const cashSummary = cashMovementSummary(windowed);
+  const inflows = cashSummary.inflowCents;
+  const outflows = cashSummary.outflowCents;
+  const cashPoints = cash.empty ? [] : cashReportPoints(windowed, cash.flow);
+  const secondaryPayees = rankedReportSpending(spendRows, data, "merchant");
+  const coverage = coverageGap(rows, statements);
+  return (
+    <div className="min-h-0 flex-1 overflow-auto bg-surface p-3">
+      <header className="mb-3 flex flex-wrap items-center gap-2">
+        <h1 className="mr-3 text-lg font-semibold">Insights</h1>
+        {(
+          [
+            ["spending", "Spending"],
+            ["balances", "Envelope balances"],
+            ["cashflow", "Cash flow"],
+          ] as const
+        ).map(([id, title]) => (
           <button
             type="button"
-            onClick={() =>
-              patch((current) => ({
-                ...current,
-                accounts: [],
-                categories: [],
-                merchants: [],
-              }))
-            }
-            className="min-h-tap text-[0.75rem] text-ink-muted hover:text-ink md:min-h-0"
+            key={id}
+            className={`${label} ${view.report === id ? "border-select-edge bg-select" : ""}`}
+            onClick={() => patch((current) => ({ ...current, report: id }))}
           >
-            Clear filters
+            {title}
           </button>
-        </div>
-        <div className="p-3">
-          <PanelEmpty>Nothing matches these filters.</PanelEmpty>
-        </div>
-      </div>
-    );
-  }
-
-  const { split, coverage, reconciliation } = analysis;
-  const incomePerBucket = typicalIncomePerBucketCents(analysis.income, view.axis);
-  const netPerBucket =
-    analysis.buckets.length > 0
-      ? Math.round(
-          analysis.flow.reduce((total, point) => total + point.netCents, 0) /
-            Math.max(1, analysis.flow.length),
-        )
-      : 0;
-
-  return (
-    <div className="min-h-0 flex-1 overflow-auto">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule bg-surface-raised px-3 py-2">
-        <ToolbarSegments
-          label="Window"
-          options={INSIGHTS_WINDOWS.map((option) => ({
-            value: option,
-            label: WINDOW_LABELS[option],
-          }))}
-          value={view.window}
-          onChange={(next) => patch((current) => ({ ...current, window: next }))}
-        />
-        <ToolbarSegments
-          label="Axis"
-          options={INSIGHTS_AXES.map((option) => ({
-            value: option,
-            label: AXIS_LABELS[option],
-          }))}
-          value={view.axis}
-          onChange={(next) => patch((current) => ({ ...current, axis: next }))}
-        />
-        <ToolbarSegments
-          label="Chart"
-          options={INSIGHTS_CHART_MODES.map((option) => ({
-            value: option,
-            label: CHART_MODE_LABELS[option],
-          }))}
-          value={view.mode}
-          onChange={(next) => patch((current) => ({ ...current, mode: next }))}
-        />
-        <FilterSelect
-          label="Accounts"
-          options={filterOptions.accounts.map((account) => ({
-            id: account.id,
-            label: account.name,
-          }))}
-          selected={view.accounts}
-          onChange={(accounts) => patch((current) => ({ ...current, accounts }))}
-        />
-        <FilterSelect
-          label="Categories"
-          options={filterOptions.categories.map((category) => ({
-            id: category,
-            label: category,
-          }))}
-          selected={view.categories}
-          onChange={(categories) => patch((current) => ({ ...current, categories }))}
-        />
-        <FilterSelect
-          label="Merchants"
-          options={filterOptions.merchants.map((merchant) => ({
-            id: merchant,
-            label: merchant,
-          }))}
-          selected={view.merchants}
-          onChange={(merchants) => patch((current) => ({ ...current, merchants }))}
-        />
-        <label className="flex min-h-tap cursor-pointer items-center gap-1.5 text-[0.75rem] text-ink-muted md:min-h-0">
-          <input
-            type="checkbox"
-            checked={view.levelRecurring}
+        ))}
+        <Link
+          className="ml-auto text-xs underline"
+          href="/finances/register?view=uncategorized"
+        >
+          Categorize transactions
+        </Link>
+      </header>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {balances ? (
+          <label className="text-xs">
+            Month{" "}
+            <input
+              type="month"
+              className={label}
+              value={monthParamOf(month)}
+              onChange={(event) => {
+                const next = monthKeyFromParam(event.target.value);
+                if (next) patch((current) => ({ ...current, month: next }));
+              }}
+            />
+          </label>
+        ) : (
+          <select
+            aria-label="Report period"
+            className={label}
+            value={view.window}
             onChange={(event) =>
               patch((current) => ({
                 ...current,
-                levelRecurring: event.target.checked,
+                window: event.target.value as typeof view.window,
               }))
             }
-            className="size-4"
-          />
-          Level bills
-        </label>
-        {filterActive && (
-          <button
-            type="button"
-            onClick={() =>
+          >
+            {Object.entries(WINDOW_LABELS).map(([id, title]) => (
+              <option key={id} value={id}>
+                {title}
+              </option>
+            ))}
+          </select>
+        )}
+        {view.report === "spending" ? (
+          <select
+            aria-label="Spending scope"
+            className={label}
+            value={view.scope}
+            onChange={(event) =>
               patch((current) => ({
                 ...current,
-                accounts: [],
-                categories: [],
-                merchants: [],
+                scope: event.target.value as typeof view.scope,
               }))
             }
-            className="min-h-tap text-[0.75rem] text-ink-muted hover:text-ink md:min-h-0"
           >
-            Clear filters
-          </button>
-        )}
-        <span className="text-[0.75rem] text-ink-muted">
-          {formatDate(analysis.range.startKey)} – {formatDate(analysis.range.endKey)}
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-3 p-3">
-        <StatRow>
-          <StatTile
-            label="Monthly income"
-            value={formatUsd(analysis.income.totalMonthlyCents)}
-            detail={
-              analysis.income.paydayCount === 0
-                ? "No paycheck series detected in this window"
-                : analysis.income.otherMonthlyCents === 0
-                  ? `Median paycheck ${formatUsd(analysis.income.medianPaycheckCents)} × 26 ÷ 12`
-                  : `${formatUsd(analysis.income.paycheckMonthlyCents)} from pay (median ${formatUsd(
-                      analysis.income.medianPaycheckCents,
-                    )} × 26 ÷ 12) plus ${formatUsd(analysis.income.otherMonthlyCents)} a month of other reliable income`
-            }
-            tone="income"
-          />
-          <StatTile
-            label={`Baseline burn per ${bucketNoun}${split.levelled ? " (levelled)" : ""}`}
-            value={formatUsd(split.baselinePerBucketCents)}
-            detail={
-              split.levelled
-                ? `Ongoing spend over ${split.bucketCount} ${bucketNoun}${
-                    split.bucketCount === 1 ? "" : "s"
-                  }, with bills accrued at their cadence — ${formatUsd(
-                    Math.round(split.billsCents / Math.max(1, split.bucketCount)),
-                  )} a ${bucketNoun} of them, whether or not a charge landed here. Untick "Level bills" for what actually posted.`
-                : `Ongoing spend only, as posted, over ${split.bucketCount} ${bucketNoun}${
-                    split.bucketCount === 1 ? "" : "s"
-                  }. A semi-annual bill lands whole in its own ${bucketNoun}; tick "Level bills" to spread it.`
-            }
-            tone="spend"
-          />
-          <StatTile
-            label="One-off spend"
-            value={formatUsd(split.oneOffCents)}
-            detail={
-              split.events.length > 0
-                ? `${split.events.length} named ${split.events.length === 1 ? "event" : "events"}`
-                : "Nothing excluded from the baseline yet"
-            }
-          />
-          <StatTile
-            label={`Average net per ${bucketNoun}`}
-            value={formatUsd(netPerBucket)}
-            detail="Money in minus money out, transfers excluded"
-            tone={netPerBucket < 0 ? "spend" : "income"}
-          />
-        </StatRow>
-
-        <Panel
-          title={
-            view.mode === "net"
-              ? `Net cash flow by ${bucketNoun}`
-              : view.mode === "fixed-variable"
-                ? `Bills and everything else by ${bucketNoun}`
-                : `Money in and out by ${bucketNoun}`
-          }
-          subtitle={
-            view.levelRecurring
-              ? `Recurring bills are spread across the ${bucketNoun}s they cover, so one monthly charge cannot swamp a single ${bucketNoun}. A bar is then an ongoing obligation rather than a record of that ${bucketNoun}: nothing is created or lost, though a bill straddling the window edge shifts the visible total a little.`
-              : view.mode === "net"
-                ? "Bars are transaction net — earned minus spent, transfers out. The dotted line is money crossing the boundary of these accounts: refunds, reimbursements, liquidations, gifts. It funds a month without being earned, so it sits outside net rather than in it. The dashed line is the change in statement-anchored household position, and the three reconcile: net + external = statement, give or take a residual."
-                : view.mode === "fixed-variable"
-                  ? "The out bar split into recurring bills and everything else — the half that is actually a decision each period."
-                  : view.axis === "month"
-                    ? "Calendar months. A month holding three paychecks looks rich and the next looks broke — switch the axis to pay periods to remove that."
-                    : "One bucket per paycheck, so two stretches of a biweekly year are comparable."
-          }
-        >
-          <CashFlowChart
-            points={analysis.flow}
-            axisLabel={bucketNoun}
-            mode={view.mode}
-            selectedKey={view.drill?.kind === "bucket" ? view.drill.startKey : null}
-            onSelect={(_key, startKey, endKey) =>
-              setDrill({ kind: "bucket", startKey, endKey })
-            }
-          />
-          {reconciliation !== null && (
-            <p className="mt-2 text-[0.75rem] text-ink-muted">
-              Across this window: net {formatUsd(reconciliation.netCents)} + external{" "}
-              {formatUsd(reconciliation.externalCents)} ={" "}
-              {formatUsd(reconciliation.netCents + reconciliation.externalCents)},
-              against {formatUsd(reconciliation.statementCents)} of statement-anchored
-              movement —{" "}
-              {reconciliation.residualCents === 0
-                ? "an exact reconciliation."
-                : `a residual of ${formatUsd(reconciliation.residualCents)}, which is what no imported row accounts for.`}
-              {view.levelRecurring
-                ? " Counted from the rows as they posted, so it does not match the levelled bars above."
-                : ""}
-            </p>
-          )}
-        </Panel>
-
-        <Panel
-          title="The rows behind the figure"
-          subtitle="Click a bar, a stack, a Sankey node or a payee. This list is that number, so it can be audited."
-        >
-          <TransactionAudit
-            rows={analysis.drilled}
-            title={view.drill ? drillLabel(view.drill) : "Everything in the window"}
-            onClear={
-              view.drill
-                ? () => patch((current) => ({ ...current, drill: null }))
-                : undefined
-            }
-          />
-        </Panel>
-
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <Panel
-            title="Where it went"
-            subtitle={
-              coverage.holes.length > 0
-                ? `${coverage.holes.length} statement hole${coverage.holes.length === 1 ? "" : "s"} — category totals skip those dates.`
-                : coverage.completeFrom
-                  ? `Complete from ${formatDate(coverage.completeFrom)}. Before then ${formatUsd(
-                      coverage.unitemizedCents,
-                    )} exists only as lump card payments, so it cannot appear here.`
-                  : "Spending by category over the window."
-            }
-          >
-            <CategoryBars
-              totals={analysis.categories}
-              selected={view.drill?.kind === "category" ? view.drill.id : null}
-              onSelect={(category) => setDrill({ kind: "category", id: category })}
-            />
-          </Panel>
-
-          <Panel
-            title="Top payees"
-            subtitle="Who was paid, ranked the same way as the categories — length, not angle."
-          >
-            <RankedBars
-              items={analysis.payees.map((entry) => ({
-                key: entry.merchant,
-                label: entry.merchant,
-                cents: entry.cents,
-                share: entry.share,
-              }))}
-              selected={view.drill?.kind === "merchant" ? view.drill.id : null}
-              onSelect={(merchant) => setDrill({ kind: "merchant", id: merchant })}
-              restNoun="smaller payees"
-              empty="No payees in this window."
-            />
-          </Panel>
-        </div>
-
-        <Panel
-          title={`Spending trends by ${bucketNoun}`}
-          subtitle={
-            incomePerBucket > 0
-              ? `Top categories across the window, everything else folded into Other. The red line is typical income for a ${bucketNoun}. Click a segment.`
-              : "Top categories across the window, everything else folded into Other. Click a segment."
-          }
-          actions={
-            <ToolbarSegments
-              label="Bars"
+            <option value="living">Cost of living</option>
+            <option value="savings">Savings</option>
+            <option value="all">All spending</option>
+          </select>
+        ) : null}
+        {!balances ? (
+          <>
+            <FilterSelect
+              label="Accounts"
               options={[
-                { value: "stacked", label: "Stacked" },
-                { value: "grouped", label: "Grouped" },
+                ...new Map(
+                  rows.map((row) => [
+                    row.accountId,
+                    { id: row.accountId, label: row.accountName },
+                  ]),
+                ).values(),
               ]}
-              value={view.trendMode}
-              onChange={(next) => patch((current) => ({ ...current, trendMode: next }))}
-            />
-          }
-        >
-          <SpendingTrendsChart
-            keys={analysis.trends.keys}
-            points={analysis.trends.points}
-            mode={view.trendMode}
-            incomeCents={incomePerBucket}
-            onSelect={(category) => setDrill({ kind: "category", id: category })}
-          />
-        </Panel>
-
-        <Panel
-          title="Cash flow"
-          subtitle="This period's income sources and where the money went. Thickness is amount; nothing here claims a given paycheck bought the groceries."
-          actions={
-            <ToolbarSegments
-              label="Group"
-              options={[
-                { value: "category", label: "Category" },
-                { value: "category-merchant", label: "Category & merchant" },
-              ]}
-              value={view.sankeyGrouping}
-              onChange={(next) =>
-                patch((current) => ({ ...current, sankeyGrouping: next }))
+              selected={view.accountIds}
+              onChange={(accountIds) =>
+                patch((current) => ({ ...current, accountIds }))
               }
             />
-          }
-        >
-          <SankeyChart model={analysis.sankey} onSelect={setDrill} />
-        </Panel>
-
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <Panel
-            title="Baseline vs one-off"
-            subtitle="Two numbers, never blended: an average that folds in a wedding answers a question nobody asked."
-          >
-            <div className="flex flex-col gap-2">
-              <div className="grid grid-cols-2 gap-2">
-                <StatTile
-                  label="Baseline"
-                  value={formatUsd(split.baselineCents)}
-                  tone="spend"
-                />
-                <StatTile label="One-off" value={formatUsd(split.oneOffCents)} />
-              </div>
-              {split.events.length === 0 ? (
-                <PanelEmpty>
-                  Nothing is excluded yet. Confirm a suggestion below to name an event.
-                </PanelEmpty>
-              ) : (
-                <ul className="flex flex-col divide-y divide-rule text-[0.8125rem]">
-                  {split.events.map((event) => (
-                    <li
-                      key={event.label}
-                      className="flex items-baseline justify-between gap-2 py-1"
-                    >
-                      <span className="min-w-0 truncate text-ink">{event.label}</span>
-                      <span className="flex-none text-[0.75rem] text-ink-muted">
-                        {event.count} {event.count === 1 ? "charge" : "charges"}
-                      </span>
-                      <span className="tabular flex-none text-ink">
-                        {formatUsd(event.cents)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </Panel>
-
-          <Panel
-            title="Cash vs card debt"
-            subtitle="Cash minus card debt across the imported accounts. Not net worth — no mortgage, car or unimported retirement account is in here."
-          >
-            <div className="flex flex-col gap-3">
-              <StatRow>
-                <StatTile
-                  label="Assets"
-                  value={formatUsd(analysis.latest?.assetCents ?? 0)}
-                  tone="income"
-                />
-                <StatTile
-                  label="Debt"
-                  value={formatUsd(analysis.latest?.debtCents ?? 0)}
-                  tone="spend"
-                />
-                <StatTile
-                  label="Debt-to-asset"
-                  value={
-                    analysis.debtRatio === null
-                      ? "—"
-                      : `${Math.round(analysis.debtRatio * 100)}%`
-                  }
-                />
-              </StatRow>
-              <AssetDebtChart
-                points={analysis.assetDebt}
-                onSelect={(startKey, endKey) =>
-                  setDrill({ kind: "bucket", startKey, endKey })
-                }
-              />
-              <ul className="flex flex-col divide-y divide-rule text-[0.8125rem]">
-                {analysis.contributions.map((entry) => (
-                  <li key={entry.accountId}>
-                    <button
-                      type="button"
-                      onClick={() => setDrill({ kind: "account", id: entry.accountId })}
-                      className={`flex w-full min-h-tap items-baseline justify-between gap-2 py-1 text-left md:min-h-0 ${
-                        view.drill?.kind === "account" &&
-                        view.drill.id === entry.accountId
-                          ? "bg-select"
-                          : ""
-                      }`}
-                    >
-                      <span className="min-w-0 truncate text-ink">
-                        {entry.accountName}
-                      </span>
-                      <span className="tabular flex-none text-ink-muted">
-                        {formatUsd(entry.changeCents)}
-                      </span>
-                      <span className="tabular flex-none text-ink">
-                        {formatUsd(entry.endCents)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </Panel>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3">
-          <Panel
-            title="Recurring charges"
-            subtitle="Detection still runs here so the cash-flow chart can level bills. Curation — track, edit, dismiss — lives on Commitments."
-          >
-            {(() => {
-              const open = analysis.recurring.filter((entry) => !entry.declared).length;
-              const declared = analysis.recurring.filter(
-                (entry) => entry.declared,
-              ).length;
-              return (
-                <p className="text-[0.8125rem] text-ink">
-                  {open > 0 ? (
-                    <>
-                      {open} detected {open === 1 ? "charge" : "charges"} to review on{" "}
-                      <Link href="/finances/budget">Budget</Link>
-                      {declared > 0 && ` · ${declared} already tracked`}.
-                    </>
-                  ) : declared > 0 ? (
-                    <>
-                      {declared} tracked on <Link href="/finances/budget">Budget</Link>.
-                      Nothing new to review.
-                    </>
-                  ) : (
-                    <>
-                      Nothing in this window looks regular enough to review.{" "}
-                      <Link href="/finances/budget">Budget</Link> is where declarations
-                      live.
-                    </>
-                  )}
-                </p>
-              );
-            })()}
-          </Panel>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <Panel
-            title="One-offs to review"
-            subtitle="Suggestions only. An annual premium looks like a one-off to any statistic, so nothing is excluded until you say so — and if it is a bill, say that instead."
-          >
-            <OneOffReview
-              suggestions={analysis.suggestions}
-              candidates={analysis.candidates}
+            <FilterSelect
+              label="Payees"
+              options={[
+                ...payees.map((row) => ({ id: row.id, label: row.name })),
+                { id: "unknown", label: "Unknown payee" },
+              ]}
+              selected={view.payeeIds}
+              onChange={(payeeIds) => patch((current) => ({ ...current, payeeIds }))}
             />
-          </Panel>
-
-          <Panel
-            title="Upcoming bills"
-            subtitle="Projected from the last charge on file, for the cadences you declared. Nothing here reconciles against the charge that arrives — a bill still listed after its date means the import is behind, not that money went missing."
+          </>
+        ) : (
+          <span className="self-center text-xs text-ink-muted">
+            Whole envelope balances; account and payee filters do not apply.
+          </span>
+        )}
+        <FilterSelect
+          label="Envelopes"
+          options={[
+            ...data.categories.map((row) => ({
+              id: row.id,
+              label: budgetEnvelopeLabel(data.groups, row),
+            })),
+            ...(!balances ? [{ id: "uncategorized", label: "Uncategorized" }] : []),
+          ]}
+          selected={view.categoryIds}
+          onChange={(categoryIds) => patch((current) => ({ ...current, categoryIds }))}
+        />
+      </div>
+      {view.migrationWarnings.length ? (
+        <p className="mb-2 text-xs text-priority-b">
+          Previous name filters could not identify one record:{" "}
+          {view.migrationWarnings.join(", ")}. Choose the intended IDs above.
+        </p>
+      ) : null}
+      {view.report === "spending" ? (
+        <>
+          {regularIds.length === 0 ? (
+            <p className="mb-2 text-xs text-priority-b">
+              Choose Regular income envelopes on Budget to complete this comparison.
+            </p>
+          ) : null}
+          <div className="mb-3 flex flex-wrap gap-5 text-sm">
+            <Link
+              href={drill(expenseIds, range, {
+                uncategorized:
+                  view.scope === "all" &&
+                  (!view.categoryIds.length ||
+                    view.categoryIds.includes("uncategorized")),
+              })}
+            >
+              Spending{" "}
+              <b className="tabular">{formatUsd(-sumReportActivity(spendRows))}</b>
+            </Link>
+            <Link href={drill(regularIds)}>
+              Actual regular income{" "}
+              <b className="tabular">{formatUsd(sumReportActivity(incomeRows))}</b>
+            </Link>
+          </div>
+          {view.scope === "savings" ? (
+            <p className="mb-2 text-xs text-ink-muted">
+              Purchases from Savings are reported here. Overspending depends on the
+              envelope’s Available balance.
+            </p>
+          ) : null}
+          <div className="mb-3 grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(15rem,1fr)]">
+            <CashFlowChart
+              points={points}
+              axisLabel="month · actual regular income and spending"
+              incomeLabel="Regular income"
+              spendingLabel="Spending"
+              mode="in-out"
+              onSelect={(_key, startKey, endKey) =>
+                router.push(
+                  drill([...expenseIds, ...regularIds], {
+                    startKey,
+                    endKey: endKey < data.todayKey ? endKey : data.todayKey,
+                  }),
+                )
+              }
+            />
+            <div className="space-y-2 text-xs">
+              <h2 className="font-medium">Completed-month averages</h2>
+              {averages.map((avg) => (
+                <p key={avg.months} className="tabular">
+                  {avg.months} months ({avg.count} available): Spending{" "}
+                  {avg.spendCents === null ? "—" : formatUsd(avg.spendCents)} · Regular
+                  income {avg.incomeCents === null ? "—" : formatUsd(avg.incomeCents)}
+                </p>
+              ))}
+              <p className="border-t border-rule pt-2">
+                Current month is partial and excluded from these averages.
+              </p>
+              {points
+                .filter((point) => point.bucket.startKey === monthKeyOf(data.todayKey))
+                .map((point) => (
+                  <p className="tabular" key={point.bucket.key}>
+                    So far: Spending {formatUsd(point.spendCents)} · Regular income{" "}
+                    {formatUsd(point.incomeCents)}
+                  </p>
+                ))}
+            </div>
+          </div>
+          <p className="mb-2 text-xs text-ink-muted">
+            Current groups and envelope names apply to all history. Refunds reduce
+            spending. Envelope filters narrow spending; regular income shares the
+            account and payee filters.
+          </p>
+        </>
+      ) : null}
+      {view.report !== "cashflow" ? (
+        table.beforeSetup ? (
+          <p className="rounded border border-rule p-4 text-sm">
+            No budget balances exist for this month. Assignments before budget setup are
+            not reconstructed.
+          </p>
+        ) : (
+          <DataGrid
+            rows={table.rows}
+            columns={columns}
+            allColumns={reportColumns}
+            columnCtx={{
+              month,
+              balances,
+              link: (ids) => drill(ids, balances ? balanceRange : range),
+            }}
+            selectedId={null}
+            onSelect={() => {}}
+            onOpenDetail={(id) =>
+              balances ? setDetailId(id) : router.push(drill([id]))
+            }
+            ariaLabel={balances ? "Envelope balances" : "Spending by envelope"}
+            rowLabel={(row) => row.node.name}
+            enableSort
+            sorts={grid.sorts.filter((sort) =>
+              columns.some((column) => column.id === sort.columnId),
+            )}
+            onSortChange={grid.toggleSort}
+            onSetSort={grid.setSort}
+            collapsedGroups={grid.collapsedGroups}
+            onToggleGroup={grid.toggleGroup}
+            density={grid.density}
+            autoHeight
+            groupTotals={(members) =>
+              Object.fromEntries(
+                columns
+                  .filter((column) => column.id !== "name")
+                  .map((column) => {
+                    const key = column.id as
+                      | "spendingCents"
+                      | "carryInCents"
+                      | "assignedCents"
+                      | "activityCents"
+                      | "balanceCents";
+                    return [
+                      key,
+                      <Link
+                        key={key}
+                        href={
+                          key === "spendingCents" || key === "activityCents"
+                            ? drill(
+                                members.map((row) => row.id),
+                                balances ? balanceRange : range,
+                              )
+                            : `/finances/budget?month=${monthParamOf(month)}`
+                        }
+                        className="tabular underline decoration-rule"
+                      >
+                        {formatUsd(members.reduce((sum, row) => sum + row[key], 0))}
+                      </Link>,
+                    ];
+                  }),
+              )
+            }
+            empty="No envelopes match this report."
+          />
+        )
+      ) : null}
+      {view.report === "spending" ? (
+        <>
+          <div className="my-3 rounded border border-rule p-2 text-xs">
+            <Link
+              className="underline"
+              href={drill([], range, { uncategorized: true })}
+            >
+              Uncategorized: {uncategorized.length} rows ·{" "}
+              {formatUsd(-sumReportActivity(uncategorized))}
+            </Link>
+            {uncategorized.length ? (
+              <span className="ml-2 text-priority-b">
+                Categorize these to complete the cost-of-living report.
+              </span>
+            ) : null}
+          </div>
+          <details
+            open={details.switches.payees ?? false}
+            onToggle={(event) => details.setSwitch("payees", event.currentTarget.open)}
+            className="rounded border border-rule p-3 text-xs"
           >
-            <UpcomingBills bills={analysis.upcoming} />
-          </Panel>
-
-          <Panel
-            title="What the accounts cost"
-            subtitle="Interest and fees as the statements state them, not as the register infers them."
-          >
-            <CarryingCostTable cost={carryingCost} />
-          </Panel>
-
-          <Panel
-            title="What this dashboard cannot see"
-            subtitle="Every figure above is only as honest as the rows behind it."
-            actions={
-              <button
-                type="button"
-                disabled={reclassifying}
-                onClick={reclassify}
-                className="min-h-tap rounded border border-rule bg-surface-raised px-3 text-[0.8125rem] text-ink disabled:opacity-50"
+            <summary>Payee analysis</summary>
+            <ol className="mt-2 space-y-1">
+              {secondaryPayees.map((payee) => (
+                <li key={payee.id}>
+                  <Link
+                    className="underline"
+                    href={drill(expenseIds, range, {
+                      payeeIds: [payee.id],
+                      uncategorized:
+                        view.scope === "all" &&
+                        (!view.categoryIds.length ||
+                          view.categoryIds.includes("uncategorized")),
+                    })}
+                  >
+                    {payee.name} · {formatUsd(payee.cents)}
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </details>
+        </>
+      ) : null}
+      {view.report === "cashflow" ? (
+        <>
+          <div className="mb-3 flex flex-wrap gap-6 text-sm">
+            {(
+              [
+                ["in", "Inflows", inflows],
+                ["out", "Outflows", outflows],
+                ["all", "Net movement", inflows - outflows],
+              ] as const
+            ).map(([direction, title, cents]) => (
+              <Link
+                key={direction}
+                href={drill(view.categoryIds, range, {
+                  basis: "cashflow",
+                  direction,
+                  allCategories: view.categoryIds.length === 0,
+                })}
               >
-                Reclassify…
-              </button>
+                {title} <b className="tabular">{formatUsd(cents)}</b>
+              </Link>
+            ))}
+          </div>
+          <CashFlowChart
+            points={cashPoints}
+            axisLabel="month"
+            mode="in-out"
+            onSelect={(_key, startKey, endKey) =>
+              router.push(
+                drill(
+                  view.categoryIds,
+                  { startKey, endKey },
+                  { basis: "cashflow", allCategories: view.categoryIds.length === 0 },
+                ),
+              )
+            }
+          />
+          {!cash.empty ? (
+            <>
+              <h2 className="mt-3 text-sm font-medium">
+                Account-position history · whole selected accounts
+              </h2>
+              <AssetDebtChart points={cash.assetDebt} />
+              {cash.reconciliation ? (
+                <p className="my-2 text-xs">
+                  Recorded movement{" "}
+                  {formatUsd(
+                    cash.reconciliation.netCents + cash.reconciliation.externalCents,
+                  )}{" "}
+                  · Statement movement {formatUsd(cash.reconciliation.statementCents)} ·
+                  Unexplained difference {formatUsd(cash.reconciliation.residualCents)}
+                </p>
+              ) : (
+                <p className="my-2 text-xs text-ink-muted">
+                  No statement bookends for reconciliation in this period.
+                </p>
+              )}
+            </>
+          ) : null}
+          <details
+            open={details.switches.sankey ?? false}
+            onToggle={(event) => details.setSwitch("sankey", event.currentTarget.open)}
+            className="my-2 rounded border border-rule p-3 text-xs"
+          >
+            <summary>Cash-flow diagram</summary>
+            <p className="py-2 text-ink-muted">
+              All sources join the same pool. This does not attribute purchases to a
+              particular income source.
+            </p>
+            <SankeyChart
+              model={cashFlowSankey(
+                rowsInRange(filtered, range).map((row) => ({
+                  ...row,
+                  flowOverride:
+                    effectiveFlow(row) === "external_transfer"
+                      ? row.amountCents > 0
+                        ? "income"
+                        : "spend"
+                      : row.flowOverride,
+                })),
+                "category",
+              )}
+            />
+          </details>
+          <details
+            className="rounded border border-rule p-3 text-xs"
+            open={details.switches.coverage ?? false}
+            onToggle={(event) =>
+              details.setSwitch("coverage", event.currentTarget.open)
             }
           >
-            <ul className="flex flex-col gap-2 text-[0.8125rem] text-ink">
-              {coverage.holes.map((hole) => (
-                <li key={`${hole.accountId}:${hole.afterPeriodEnd}`}>
-                  {hole.accountName} has no statement after{" "}
-                  {formatDate(hole.afterPeriodEnd)} until{" "}
-                  {formatDate(hole.beforePeriodStart)}. Official close moved{" "}
-                  {formatUsd(hole.discontinuityCents)} across the gap, so cash-flow and
-                  category charts skip that stretch.
-                </li>
+            <summary>
+              Account interest, fees and coverage · all imported statements
+            </summary>
+            <CarryingCostTable cost={carryingCost} />
+            <p className="py-2">
+              {coverage.holes.length} statement gaps · {coverage.mismatches.length}{" "}
+              balance differences · {formatUsd(coverage.unitemizedCents)} unitemized
+              movement
+              {coverage.completeFrom
+                ? ` · All accounts itemize from ${coverage.completeFrom}`
+                : ""}
+            </p>
+            <Link className="underline" href="/finances/statements">
+              Review statements
+            </Link>
+          </details>
+        </>
+      ) : null}
+      <Drawer
+        open={Boolean(opened)}
+        onClose={() => setDetailId(null)}
+        labelledBy={titleId}
+      >
+        <DrawerHeader
+          titleId={titleId}
+          title={opened?.name ?? "Envelope balance"}
+          onClose={() => setDetailId(null)}
+        />
+        {opened ? (
+          <div className="space-y-3 p-3 text-sm">
+            <p>{monthParamOf(month)}</p>
+            <dl className="grid grid-cols-[1fr_auto] gap-3 tabular">
+              {(
+                [
+                  ["Carry-in", opened.carryInCents],
+                  ["Assigned", opened.assignedCents],
+                  ["Activity", opened.activityCents],
+                  ["Available", opened.balanceCents],
+                ] as const
+              ).map(([label, cents]) => (
+                <div className="contents" key={label}>
+                  <dt>{label}</dt>
+                  <dd>
+                    <Link
+                      className="underline"
+                      href={
+                        label === "Activity"
+                          ? drill([opened.id], balanceRange)
+                          : budgetEnvelopeHref(opened.id, month)
+                      }
+                    >
+                      {formatUsd(cents)}
+                    </Link>
+                  </dd>
+                </div>
               ))}
-              {coverage.mismatches.map((mismatch) => (
-                <li key={mismatch.accountId} className="text-priority-a">
-                  {mismatch.accountName} headlines{" "}
-                  {formatUsd(mismatch.anchoredBalanceCents)} from its latest statement,
-                  but the ledger sums to {formatUsd(mismatch.ledgerBalanceCents)}.
-                </li>
-              ))}
-              {coverage.completeFrom && coverage.unitemizedCents > 0 && (
-                <li>
-                  Some accounts start {formatDate(coverage.completeFrom)}.{" "}
-                  {formatUsd(coverage.unitemizedCents)} of unpaired payments before then
-                  (or inside a hole) stand in for spending the register cannot itemize.
-                </li>
-              )}
-              {coverage.lateAccounts.map((account) => (
-                <li key={account.accountName} className="text-ink-muted">
-                  {account.accountName} starts {formatDate(account.firstSeen)}.
-                </li>
-              ))}
-              {unresolvedPaypal.map((entry) => (
-                <li key={entry.rowId}>
-                  PayPal deposit {formatUsd(entry.amountCents)} on{" "}
-                  {formatDate(entry.date)} is unresolved: {entry.reason}.
-                </li>
-              ))}
-              <li
-                className={
-                  unclassified > 0 ? "text-[var(--chart-spend)]" : "text-ink-muted"
-                }
-              >
-                {unclassified > 0
-                  ? `${unclassified.toLocaleString()} rows have never been classified — reclassify to fold them in.`
-                  : "Every row has been classified."}
-              </li>
-              {reclassified && <li className="text-ink-muted">{reclassified}</li>}
-            </ul>
-          </Panel>
-        </div>
-      </div>
+            </dl>
+            <Link
+              className="inline-block min-h-tap underline"
+              href={budgetEnvelopeHref(opened.id, month)}
+            >
+              Open in Budget
+            </Link>
+          </div>
+        ) : null}
+      </Drawer>
     </div>
   );
-}
-
-function sameDrill(left: InsightsDrill | null, right: InsightsDrill): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function drilledRows(
-  rows: AnalyticsRow[],
-  drill: InsightsDrill | null,
-  trendKeys: string[],
-): AnalyticsRow[] {
-  if (drill?.kind === "category" && drill.id === TREND_OTHER) {
-    const named = new Set(trendKeys.filter((key) => key !== TREND_OTHER));
-    return rows.filter(
-      (row) => spendCentsOf(row) !== 0 && !named.has(effectiveCategory(row)),
-    );
-  }
-  return rowsForDrill(rows, drill);
 }

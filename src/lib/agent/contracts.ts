@@ -560,13 +560,10 @@ const cashFlowPointSchema = z.strictObject({
   residualCents: cents.nullable(),
 });
 
-const baselineEventSchema = z.strictObject({
-  label: z.string(),
-  cents,
-  count: z.number().int().min(0),
-});
-
 const rankedSpendSchema = z.strictObject({
+  id: z.string(),
+  groupId: id.nullable(),
+  parentGroupId: id.nullable(),
   name: z.string(),
   cents,
   share: z.number(),
@@ -782,7 +779,10 @@ export const inputSchemas = {
   get_cash_flow: z.strictObject(financeWindowFields),
   get_spending_breakdown: z.strictObject({
     ...financeWindowFields,
-    by: z.enum(["category", "merchant"]).default("category"),
+    by: z.enum(["category", "merchant", "group"]).default("category"),
+    scope: z.enum(["living", "savings", "all"]).default("living"),
+    categoryIds: z.array(id).default([]),
+    payeeIds: z.array(id).default([]),
     limit: z.number().int().min(1).max(100).default(20),
     trend: z.boolean().default(false),
   }),
@@ -1081,6 +1081,24 @@ export const outputSchemas = {
     metric: metricDetailSchema,
   }),
   get_finance_overview: z.strictObject({
+    envelopes: z.array(
+      z.strictObject({
+        id,
+        name: z.string(),
+        groupId: id.nullable(),
+        kind: z.enum(["income", "spending", "bill", "savings"]),
+        incomeRole: z.enum(["regular", "other"]),
+        expectedMonthlyIncomeCents: cents.nullable(),
+      }),
+    ),
+    groups: z.array(
+      z.strictObject({
+        id,
+        name: z.string(),
+        parentGroupId: id.nullable(),
+        kind: z.enum(["income", "spending", "bill", "savings"]),
+      }),
+    ),
     accounts: z.array(
       z.strictObject({
         id,
@@ -1159,19 +1177,11 @@ export const outputSchemas = {
       medianPaycheckCents: cents,
       paydayCount: z.number().int().min(0),
     }),
-    baseline: z.strictObject({
-      baselineCents: cents,
-      oneOffCents: cents,
-      baselinePerBucketCents: cents,
-      bucketCount: z.number().int().min(0),
-      events: z.array(baselineEventSchema),
-      levelled: z.boolean(),
-      billsCents: cents,
-    }),
   }),
   get_spending_breakdown: z.strictObject({
     range: nullableDateRangeSchema,
-    by: z.enum(["category", "merchant"]),
+    by: z.enum(["category", "merchant", "group"]),
+    scope: z.enum(["living", "savings", "all"]),
     items: z.array(rankedSpendSchema),
     totalSpendCents: cents,
     otherCents: cents,
@@ -1184,7 +1194,8 @@ export const outputSchemas = {
           label: z.string(),
           startKey: dateKey,
           endKey: dateKey,
-          byName: z.record(z.string(), cents),
+          spendingCents: cents,
+          regularIncomeCents: cents,
         }),
       )
       .optional(),
@@ -1249,8 +1260,6 @@ export const outputSchemas = {
         amountCents: cents,
         category: z.string(),
         flow: z.enum(financeFlowKindEnum.enumValues),
-        excludeFromBaseline: z.boolean(),
-        eventLabel: z.string(),
       }),
     ),
     pageInfo: pageInfoSchema,

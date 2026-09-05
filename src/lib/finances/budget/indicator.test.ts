@@ -507,6 +507,8 @@ describe("picker-month fold", () => {
         notes: "",
         target: addMonthly(50_000),
         kind: "spending",
+        incomeRole: "other",
+        expectedMonthlyIncomeCents: null,
         isIncome: false,
         bill: null,
       },

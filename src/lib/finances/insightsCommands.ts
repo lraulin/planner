@@ -14,7 +14,7 @@ export function insightsCommands(options: {
   return [
     {
       id: "finances.reclassify",
-      label: "Reclassify…",
+      label: "Rebuild transaction classifications",
       group: "view",
       menu: "tools",
       keywords: "transactions payees merchants flows rebuild repair classifier",

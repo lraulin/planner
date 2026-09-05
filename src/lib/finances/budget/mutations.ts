@@ -804,6 +804,8 @@ export async function createBudgetCategory(
 }
 
 export type BudgetCategoryEdit = {
+  incomeRole?: "regular" | "other";
+  expectedMonthlyIncomeCents?: number | null;
   name?: string;
   hidden?: boolean;
   notes?: string;
@@ -818,6 +820,26 @@ export async function updateBudgetCategory(
 ): Promise<void> {
   const category = await requireCategory(userId, categoryId);
   const nextKind = edit.kind ?? category.kind;
+  if (
+    edit.incomeRole !== undefined &&
+    !["regular", "other"].includes(edit.incomeRole)
+  ) {
+    throw new Error("Choose Regular or Other income.");
+  }
+  if (
+    edit.expectedMonthlyIncomeCents != null &&
+    (!Number.isSafeInteger(edit.expectedMonthlyIncomeCents) ||
+      edit.expectedMonthlyIncomeCents < 0 ||
+      edit.expectedMonthlyIncomeCents > 2147483647)
+  ) {
+    throw new Error("Expected income must be a nonnegative amount in cents.");
+  }
+  if (
+    nextKind !== "income" &&
+    (edit.incomeRole !== undefined || edit.expectedMonthlyIncomeCents !== undefined)
+  ) {
+    throw new Error("Income planning fields belong to income envelopes.");
+  }
   let groupId = edit.groupId;
 
   /*
@@ -868,6 +890,14 @@ export async function updateBudgetCategory(
       ...(movedSortKey === undefined ? {} : { sortKey: movedSortKey }),
       ...(edit.kind === undefined ? {} : { kind: edit.kind }),
       ...(edit.kind === "income" ? { target: null } : {}),
+      ...(nextKind !== "income"
+        ? { incomeRole: "other" as const, expectedMonthlyIncomeCents: null }
+        : {
+            ...(edit.incomeRole === undefined ? {} : { incomeRole: edit.incomeRole }),
+            ...(edit.expectedMonthlyIncomeCents === undefined
+              ? {}
+              : { expectedMonthlyIncomeCents: edit.expectedMonthlyIncomeCents }),
+          }),
       ...(becomingBill ? DEFAULT_BILL_FACET : {}),
       ...(leavingBill
         ? {

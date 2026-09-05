@@ -62,12 +62,12 @@ export type BudgetExportInput = {
   accountPoolCents?: number;
   income: readonly BudgetRow[];
   receivedCents: number;
-  expectedIncomeCents: number;
+  expectedIncomeCents: number | null;
   /** Bills + regular spending — the one combined figure the page footers. */
   spendingTotals: BudgetTotals;
   /** Regular spending, Bills, Savings, already flattened by {@link gridExportSection}. */
   tables: readonly BudgetExportSection[];
-  forecast: {
+  forecast?: {
     months: readonly ForwardBucket[];
     comparison: SpendingVsIncome;
   };
@@ -129,8 +129,12 @@ export function budgetExportDocument(input: BudgetExportInput): BudgetExportDocu
       summarySection(input),
       incomeSection(input),
       ...input.tables,
-      comparisonSection(forecast.comparison),
-      forwardSection(forecast.months, input.formatDate),
+      ...(forecast
+        ? [
+            comparisonSection(forecast.comparison),
+            forwardSection(forecast.months, input.formatDate),
+          ]
+        : []),
     ],
   };
 }
@@ -179,9 +183,7 @@ function accountPoolCaption(month: BudgetMonth, poolCents: number): string {
 function incomeSection(input: BudgetExportInput): BudgetExportSection {
   return {
     title: "Income",
-    caption: `Received ${formatUsd(input.receivedCents)} · Expected ${formatUsd(
-      input.expectedIncomeCents,
-    )}/mo`,
+    caption: `Received ${formatUsd(input.receivedCents)} · Expected regular income ${input.expectedIncomeCents === null ? "Estimate missing" : formatUsd(input.expectedIncomeCents) + "/mo"}`,
     columns: [{ label: "Envelope" }, { label: "Activity", align: MONEY }],
     rows: input.income.map((envelope) =>
       row(envelope.name, formatUsd(envelope.activityCents)),

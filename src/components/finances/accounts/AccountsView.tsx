@@ -1,6 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import type { BankLinkRow } from "@/lib/banksync/queries";
+import {
+  operationalAccountRows,
+  type OperationalAccount,
+} from "@/lib/finances/accountOperations";
+import type { DashboardData } from "@/lib/finances/dashboardQueries";
+import { accountPoolBreakdown } from "@/lib/finances/accountPool";
+import { formatUsd } from "@/lib/finances/money";
+import { customFilter } from "@/lib/grid/customFilter";
+import { RefreshBanksButton, BankSnapshotPaste } from "./AccountOperations";
 import type { GridRow } from "@/lib/tree/slice";
 import type { FinanceAccountRow } from "@/lib/finances/types";
 import { deleteAccountAction, listAccountsAction } from "@/app/finances/actions";
@@ -29,11 +40,18 @@ import {
   type AccountColumnCtx,
 } from "./accountColumns";
 
-const ACCOUNT_VIEWS = [{ id: "all", label: "All Accounts" }] as const;
+const ACCOUNT_VIEWS = [
+  { id: "open", label: "Open accounts" },
+  { id: "all", label: "All accounts" },
+] as const;
 
-function viewDefaults(): GridDefaults {
+function viewDefaults(viewId: string): GridDefaults {
   return {
     order: [...ACCOUNT_COLUMN_IDS],
+    filters:
+      viewId === "open"
+        ? { closed: customFilter("and", [{ op: "blank", value: "" }]) }
+        : {},
     sorts: [{ columnId: "name", direction: "asc" }],
   };
 }
@@ -44,10 +62,18 @@ function deleteMessage(account: FinanceAccountRow): string {
 
 export function AccountsView({
   initialAccounts,
+  operations,
+  links,
+  todayKey,
 }: {
   initialAccounts: FinanceAccountRow[];
+  operations: DashboardData;
+  links: BankLinkRow[];
+  todayKey: string;
 }) {
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
   const [rows, setRows] = useState(initialAccounts);
+  const position = accountPoolBreakdown(rows, operations.pending);
   const [seenServerRows, setSeenServerRows] = useState(initialAccounts);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
@@ -72,15 +98,23 @@ export function AccountsView({
   const views = useModuleViews({
     moduleId: "finance-accounts",
     builtIn: ACCOUNT_VIEWS,
-    defaultViewId: "all",
+    defaultViewId: "open",
     columns: accountColumns,
     defaultsFor: viewDefaults,
   });
   const gridState = views.grid;
 
-  const gridRows: GridRow<FinanceAccountRow>[] = useMemo(
-    () => rows.map((node) => ({ kind: "node" as const, id: node.id, node, depth: 0 })),
-    [rows],
+  const gridRows: GridRow<OperationalAccount>[] = useMemo(
+    () =>
+      operationalAccountRows(
+        rows,
+        operations.pending,
+        new Set(operations.withheldBrowserPendingAccountIds),
+        links,
+        operations.connections,
+        todayKey,
+      ).map((node) => ({ kind: "node" as const, id: node.id, node, depth: 0 })),
+    [rows, operations, links, todayKey],
   );
   const distinctValues = useMemo(
     () =>
@@ -127,7 +161,7 @@ export function AccountsView({
       const row = rows.find((entry) => entry.id === id);
       if (row) setPendingDelete(row);
     },
-    [rows],
+    [rows, setPendingDelete],
   );
 
   const confirmDelete = useCallback(() => {
@@ -144,7 +178,7 @@ export function AccountsView({
       if (openId === target.id) closeDrawer();
       else refresh();
     });
-  }, [pendingDelete, openId, closeDrawer, refresh]);
+  }, [pendingDelete, openId, closeDrawer, refresh, setPendingDelete]);
 
   const capabilitiesFor = useCallback(
     (rowId: string | null, count: number) =>
@@ -193,10 +227,71 @@ export function AccountsView({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [openId, pendingDelete, move]);
 
-  const openAccount = openId ? (rows.find((row) => row.id === openId) ?? null) : null;
+  const openAccount = gridRows.find((row) => row.kind === "node" && row.id === openId);
+  const accountDetail = openAccount?.kind === "node" ? openAccount.node : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
+      <div className="flex shrink-0 flex-wrap items-start gap-2 border-b border-rule p-3">
+        <RefreshBanksButton />
+        <button
+          type="button"
+          className="min-h-tap rounded border border-rule px-2 py-1 text-sm md:min-h-0"
+          onClick={() => setSnapshotOpen(!snapshotOpen)}
+        >
+          Paste bank snapshot
+        </button>
+        <button
+          type="button"
+          className="min-h-tap rounded border border-rule px-2 py-1 text-sm md:min-h-0"
+          onClick={openImport}
+        >
+          Import transactions
+        </button>
+        <Link href="/finances/budget" className="ml-auto px-2 py-1 text-sm underline">
+          Budget
+        </Link>
+      </div>
+      {snapshotOpen && (
+        <div className="max-h-[45dvh] shrink-0 overflow-auto p-3">
+          <BankSnapshotPaste
+            staleAccountNames={rows
+              .filter((row) =>
+                operations.withheldBrowserPendingAccountIds.includes(row.id),
+              )
+              .map((row) => row.name)}
+          />
+        </div>
+      )}
+      <div className="tabular flex shrink-0 flex-wrap gap-x-5 gap-y-1 border-b border-rule px-3 py-2 text-xs text-ink-muted">
+        <span>
+          Checking & cash{" "}
+          <b className="text-ink">{formatUsd(position.checkingCashCents)}</b>
+        </span>
+        <span>
+          Savings <b className="text-ink">{formatUsd(position.savingsCents)}</b>
+        </span>
+        <span>
+          Card debt <b className="text-ink">{formatUsd(position.cardDebtCents)}</b>
+        </span>
+        <span>
+          Budget pool <b className="text-ink">{formatUsd(position.accountPoolCents)}</b>
+        </span>
+      </div>
+      {operations.connections
+        .filter(
+          (connection) =>
+            connection.reauthRequiredAt || connection.unmatchedAccountCount > 0,
+        )
+        .map((connection) => (
+          <p key={connection.id} className="px-3 py-1 text-xs text-priority-a">
+            {connection.label}:{" "}
+            {connection.reauthRequiredAt ? "Reconnect bank" : "Match accounts"} in{" "}
+            <Link className="underline" href="/settings">
+              Settings
+            </Link>
+          </p>
+        ))}
       <GridToolbar
         grid={gridState}
         gridLabel="Accounts"
@@ -208,11 +303,15 @@ export function AccountsView({
         commandCapabilities={commandCapabilities}
       />
 
-      <DataGrid<AccountColumnCtx, FinanceAccountRow>
+      <DataGrid<AccountColumnCtx, OperationalAccount>
         rows={gridRows}
         columns={gridState.columns}
         allColumns={accountColumns}
-        columnCtx={{}}
+        columnCtx={{
+          pending: operations.pending,
+          staleIds: new Set(operations.withheldBrowserPendingAccountIds),
+          onSnapshot: () => setSnapshotOpen(true),
+        }}
         selectedId={selectedId}
         selectedIds={selectedIds}
         selectAllState={headerState}
@@ -261,7 +360,35 @@ export function AccountsView({
         <FinanceImportPanel embedded />
       </FileImportDialog>
 
-      <AccountDrawer account={openAccount} onClose={closeDrawer} onChanged={refresh} />
+      <AccountDrawer
+        account={accountDetail}
+        onClose={closeDrawer}
+        onChanged={refresh}
+        summary={
+          accountDetail ? (
+            <section className="mb-3 space-y-2 rounded border border-rule p-3 text-xs">
+              <p className="tabular">
+                Working {formatUsd(accountDetail.workingCents)} · Posted / headline{" "}
+                {formatUsd(accountDetail.postedCents)} · Pending added{" "}
+                {formatUsd(accountDetail.pendingCents)}
+              </p>
+              <p>
+                {accountDetail.balanceSourceLabel} · {accountDetail.freshness}
+              </p>
+              {accountDetail.url ? (
+                <a
+                  className="inline-block min-h-tap underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  href={accountDetail.url}
+                >
+                  Open banking site
+                </a>
+              ) : null}
+            </section>
+          ) : null
+        }
+      />
       <ConfirmDialog
         open={pendingDelete !== null}
         title="Delete this account?"

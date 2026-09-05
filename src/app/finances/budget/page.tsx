@@ -5,12 +5,9 @@ import { BudgetSetup } from "@/components/finances/budget/BudgetSetup";
 import { BudgetView } from "@/components/finances/budget/BudgetView";
 import { monthKeyFromParam } from "@/lib/finances/budget/envelope";
 import { loadBudget, loadBillAnchors } from "@/lib/finances/budget/queries";
-import {
-  loadBillForecast,
-  loadReviewCandidates,
-} from "@/lib/finances/dashboardQueries";
+import { loadInsightsRows } from "@/lib/finances/dashboardQueries";
+import { paydaysFrom } from "@/lib/finances/analytics";
 import { listPayees } from "@/lib/finances/payees/queries";
-import { localDateKey } from "@/lib/schedule/geometry";
 
 export const dynamic = "force-dynamic";
 
@@ -28,12 +25,10 @@ export default async function FinancesBudgetPage({
 }) {
   const userId = await getCurrentUserId();
   const { month } = await searchParams;
-  const todayKey = localDateKey(new Date());
-  const [data, review, payees, forecast] = await Promise.all([
+  const [data, payees, incomeRows] = await Promise.all([
     loadBudget(userId, monthKeyFromParam(month ?? null)),
-    loadReviewCandidates(userId),
     listPayees(userId),
-    loadBillForecast(userId, todayKey),
+    loadInsightsRows(userId),
   ]);
   const anchors = data.configured
     ? await loadBillAnchors(userId, data.categories, data.todayKey)
@@ -48,7 +43,6 @@ export default async function FinancesBudgetPage({
         {data.configured ? (
           <BudgetView
             data={data}
-            review={review}
             nextDueKeys={anchors.nextDueKeys}
             expectedKeys={anchors.expectedKeys}
             payees={payees.map(({ id, name, claim }) => ({
@@ -56,7 +50,7 @@ export default async function FinancesBudgetPage({
               name,
               budgetCategoryId: claim?.id ?? null,
             }))}
-            forecast={forecast}
+            paydays={paydaysFrom(incomeRows)}
           />
         ) : (
           <div className="min-h-0 flex-1 overflow-auto p-3">

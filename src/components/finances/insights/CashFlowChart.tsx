@@ -43,6 +43,8 @@ export function CashFlowChart({
   mode,
   onSelect,
   selectedKey,
+  incomeLabel = "Money in",
+  spendingLabel = "Money out",
 }: {
   points: CashFlowPoint[];
   /** What one bucket is — "month" or "pay period" — for the accessible description. */
@@ -50,6 +52,8 @@ export function CashFlowChart({
   mode: InsightsChartMode;
   onSelect?: (bucketKey: string, startKey: string, endKey: string) => void;
   selectedKey?: string | null;
+  incomeLabel?: string;
+  spendingLabel?: string;
 }) {
   const compact = useIsCompact() ?? false;
   const [hovered, setHovered] = useState<Hovered | null>(null);
@@ -452,7 +456,7 @@ export function CashFlowChart({
               ]
             : split
               ? [
-                  { color: "var(--chart-income)", label: "Money in" },
+                  { color: "var(--chart-income)", label: incomeLabel },
                   { color: "var(--chart-spend)", label: "Bills" },
                   {
                     color: "var(--chart-spend)",
@@ -461,16 +465,16 @@ export function CashFlowChart({
                   },
                   {
                     color: "var(--chart-average)",
-                    label: "Trailing average out",
+                    label: `Average ${spendingLabel.toLowerCase()}`,
                     line: true,
                   },
                 ]
               : [
-                  { color: "var(--chart-income)", label: "Money in" },
-                  { color: "var(--chart-spend)", label: "Money out" },
+                  { color: "var(--chart-income)", label: incomeLabel },
+                  { color: "var(--chart-spend)", label: spendingLabel },
                   {
                     color: "var(--chart-average)",
-                    label: "Trailing average out",
+                    label: `Average ${spendingLabel.toLowerCase()}`,
                     line: true,
                   },
                 ]

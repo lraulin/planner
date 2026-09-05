@@ -1,5 +1,7 @@
 "use client";
 
+import { useGridState } from "@/components/grid/useGridState";
+import type { regularIncomePlan } from "@/lib/finances/budget/incomePlan";
 import { DateText } from "@/components/date/DateText";
 import { formatUsd } from "@/lib/finances/money";
 import type { projectForwardMonths } from "@/lib/finances/commitments";
@@ -16,21 +18,37 @@ import type { SpendingVsIncome } from "@/lib/finances/expectedSpending";
 export function ForecastDetails({
   months,
   comparison,
+  incomePlan,
 }: {
   months: ReturnType<typeof projectForwardMonths>;
   comparison: SpendingVsIncome;
+  incomePlan: ReturnType<typeof regularIncomePlan>;
 }) {
+  const disclosure = useGridState("bills-forecasts", [], { order: [] });
   return (
     <>
-      <details className="shrink-0 rounded border border-rule">
+      <details
+        open={disclosure.switches.comparison ?? false}
+        onToggle={(event) =>
+          disclosure.setSwitch("comparison", event.currentTarget.open)
+        }
+        className="shrink-0 rounded border border-rule"
+      >
         <summary className="cursor-pointer px-3 py-2 text-[0.9375rem] font-medium text-ink">
-          Expected vs income
+          Bill commitments vs regular income
         </summary>
         <div className="border-t border-rule px-3 py-2">
-          <ExpectedVsIncome comparison={comparison} />
+          <ExpectedVsIncome
+            comparison={comparison}
+            complete={incomePlan.expectedCents !== null}
+          />
         </div>
       </details>
-      <details className="shrink-0 rounded border border-rule">
+      <details
+        open={disclosure.switches.forward ?? false}
+        onToggle={(event) => disclosure.setSwitch("forward", event.currentTarget.open)}
+        className="shrink-0 rounded border border-rule"
+      >
         <summary className="cursor-pointer px-3 py-2 text-[0.9375rem] font-medium text-ink">
           Next 12 months
         </summary>
@@ -42,14 +60,25 @@ export function ForecastDetails({
   );
 }
 
-function ExpectedVsIncome({ comparison }: { comparison: SpendingVsIncome }) {
+function ExpectedVsIncome({
+  comparison,
+  complete,
+}: {
+  comparison: SpendingVsIncome;
+  complete: boolean;
+}) {
   const leftover = comparison.remainder.monthlyCents;
   return (
     <>
       <p className="mb-2 text-[0.75rem] text-ink-muted">
-        What active bills cost, against typical monthly income. Amount on a bill is left
-        out — a yearly $72 and a monthly $72 are not the same number.
+        What active bills cost, against expected regular income. Per-charge amounts are
+        left out — a yearly $72 and a monthly $72 are not the same number.
       </p>
+      {!complete ? (
+        <p className="mb-2 text-xs text-priority-b">
+          Regular income estimates are incomplete. Set them on Budget to compare.
+        </p>
+      ) : null}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[20rem] text-[0.8125rem]">
           <thead>
@@ -66,12 +95,14 @@ function ExpectedVsIncome({ comparison }: { comparison: SpendingVsIncome }) {
               annual={comparison.bills.annualCents}
             />
             <ComparisonRow
-              label="Expected income"
+              label="Expected regular income"
+              unknown={!complete}
               monthly={comparison.income.monthlyCents}
               annual={comparison.income.annualCents}
             />
             <ComparisonRow
-              label={leftover >= 0 ? "Left after bills" : "Overcommitted"}
+              label="After bills, before other expenses"
+              unknown={!complete}
               monthly={comparison.remainder.monthlyCents}
               annual={comparison.remainder.annualCents}
               strong
@@ -90,12 +121,14 @@ function ComparisonRow({
   annual,
   strong,
   tone,
+  unknown = false,
 }: {
   label: string;
   monthly: number;
   annual: number;
   strong?: boolean;
   tone?: "income" | "spend";
+  unknown?: boolean;
 }) {
   const color =
     tone === "income"
@@ -108,10 +141,10 @@ function ComparisonRow({
     <tr className="border-b border-rule last:border-b-0">
       <td className={`py-1.5 pr-2 ${weight} text-ink`}>{label}</td>
       <td className={`tabular py-1.5 pr-2 text-right ${weight} ${color}`}>
-        {formatUsd(monthly)}
+        {unknown ? "Unknown" : formatUsd(monthly)}
       </td>
       <td className={`tabular py-1.5 text-right ${weight} ${color}`}>
-        {formatUsd(annual)}
+        {unknown ? "Unknown" : formatUsd(annual)}
       </td>
     </tr>
   );
@@ -149,8 +182,8 @@ function ForwardPanel({ months }: { months: ReturnType<typeof projectForwardMont
             </div>
             {bucket.items.length > 0 && (
               <ul className="mt-0.5 flex flex-wrap gap-x-3 text-[0.75rem] text-ink-muted">
-                {bucket.items.map((item) => (
-                  <li key={`${item.name}:${item.dateKey ?? "rate"}`}>
+                {bucket.items.map((item, index) => (
+                  <li key={`${item.name}:${item.dateKey ?? "rate"}:${index}`}>
                     {item.name} {formatUsd(item.cents)}
                     {item.dateKey && (
                       <>

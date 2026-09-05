@@ -231,19 +231,21 @@ export function nestedBudgetGridRows<T extends BudgetRow>(
     "id" | "groupId" | "name" | "sortKey" | "hidden"
   >[],
   rows: readonly T[],
-  options: { showHidden: boolean } = { showHidden: false },
+  options: { showHidden: boolean; revealIds?: ReadonlySet<string> } = {
+    showHidden: false,
+  },
 ): GridRow<T>[] {
   const groupById = new Map(groups.map((group) => [group.id, group]));
   const rowById = new Map(rows.map((row) => [row.id, row]));
   const visibleGroups = options.showHidden
     ? groups
-    : groups.filter((group) => !group.hidden);
+    : groups.filter((group) => !group.hidden || options.revealIds?.has(group.id));
   const visibleGroupIds = new Set(visibleGroups.map((group) => group.id));
   const visibleCategories = categories.filter((category) => {
     if (category.groupId !== null && !visibleGroupIds.has(category.groupId)) {
       return false;
     }
-    if (options.showHidden) return true;
+    if (options.showHidden || options.revealIds?.has(category.id)) return true;
     if (category.hidden) return false;
     const row = rowById.get(category.id);
     return row === undefined || !isQuietCancelledBill(row);

@@ -104,11 +104,11 @@ describeDb("finance mutations", () => {
   });
 
   it("writes only the fields supplied", async () => {
-    await updateTransaction(userId, transactionId, { eventLabel: "Baby" });
+    await updateTransaction(userId, transactionId, { flowOverride: "refund" });
     await updateTransaction(userId, transactionId, { notes: "nappies" });
 
     expect(await getTransaction(userId, transactionId)).toMatchObject({
-      eventLabel: "Baby",
+      flowOverride: "refund",
       notes: "nappies",
     });
   });
@@ -243,7 +243,7 @@ describeDb("finance user isolation", () => {
   });
 });
 
-describeDb("event labels", () => {
+describeDb("transaction notes", () => {
   let userId: string;
   let transactionId: string;
 
@@ -252,25 +252,25 @@ describeDb("event labels", () => {
     ({ transactionId } = await seed(userId));
   });
 
-  it("names a one-off and trims the label", async () => {
+  it("stores event context in notes", async () => {
     expect(
       await updateTransaction(userId, transactionId, {
-        eventLabel: "  Handgun  ",
+        notes: "Handgun",
       }),
     ).toBeUndefined();
-    expect((await getTransaction(userId, transactionId))?.eventLabel).toBe("Handgun");
+    expect((await getTransaction(userId, transactionId))?.notes).toBe("Handgun");
   });
 
-  it("clears the label when it is set blank", async () => {
-    await updateTransaction(userId, transactionId, { eventLabel: "Handgun" });
-    await updateTransaction(userId, transactionId, { eventLabel: "" });
-    expect((await getTransaction(userId, transactionId))?.eventLabel).toBe("");
+  it("clears notes when set blank", async () => {
+    await updateTransaction(userId, transactionId, { notes: "Handgun" });
+    await updateTransaction(userId, transactionId, { notes: "" });
+    expect((await getTransaction(userId, transactionId))?.notes).toBe("");
   });
 
-  it("leaves an existing label alone when the edit does not mention it", async () => {
-    await updateTransaction(userId, transactionId, { eventLabel: "Handgun" });
-    await updateTransaction(userId, transactionId, { notes: "unrelated" });
-    expect((await getTransaction(userId, transactionId))?.eventLabel).toBe("Handgun");
+  it("preserves notes when changing the flow override", async () => {
+    await updateTransaction(userId, transactionId, { notes: "Handgun" });
+    await updateTransaction(userId, transactionId, { flowOverride: "spend" });
+    expect((await getTransaction(userId, transactionId))?.notes).toBe("Handgun");
   });
 });
 
@@ -283,7 +283,7 @@ describeDb("event label isolation", () => {
     ownerId = await makeUser();
     intruderId = await makeUser();
     ({ transactionId } = await seed(ownerId));
-    await updateTransaction(ownerId, transactionId, { eventLabel: "Handgun" });
+    await updateTransaction(ownerId, transactionId, { notes: "Handgun" });
   });
 
   it("does not let a second user read the label", async () => {
@@ -293,16 +293,16 @@ describeDb("event label isolation", () => {
 
   it("does not let a second user change the label", async () => {
     await expect(
-      updateTransaction(intruderId, transactionId, { eventLabel: "" }),
+      updateTransaction(intruderId, transactionId, { notes: "" }),
     ).rejects.toThrow("Transaction not found.");
-    expect((await getTransaction(ownerId, transactionId))?.eventLabel).toBe("Handgun");
+    expect((await getTransaction(ownerId, transactionId))?.notes).toBe("Handgun");
   });
 
   it("does not let a second user delete the row the label sits on", async () => {
     await expect(deleteTransaction(intruderId, transactionId)).rejects.toThrow(
       "Transaction not found.",
     );
-    expect((await getTransaction(ownerId, transactionId))?.eventLabel).toBe("Handgun");
+    expect((await getTransaction(ownerId, transactionId))?.notes).toBe("Handgun");
   });
 });
 
@@ -665,6 +665,8 @@ describeDb("next due keys for the bills grid", () => {
         hidden: false,
         notes: "",
         kind: "bill",
+        incomeRole: "other",
+        expectedMonthlyIncomeCents: null,
         isIncome: false,
         target: null,
         bill: {

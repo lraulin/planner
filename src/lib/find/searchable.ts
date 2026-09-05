@@ -496,7 +496,6 @@ export function searchCorpus(
           name("Description", transaction.description),
           detail("Notes", transaction.notes),
           detail("Source category", transaction.sourceCategory),
-          detail("Event", transaction.eventLabel),
         ],
       });
     }

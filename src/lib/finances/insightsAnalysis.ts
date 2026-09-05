@@ -15,7 +15,6 @@ import { buildPayPeriods } from "@/lib/finances/classify/payPeriods";
 import {
   accountContributions,
   assetDebtSeries,
-  baselineSplit,
   cadenceCandidates,
   cashFlow,
   debtToAssetRatio,
@@ -23,7 +22,6 @@ import {
   incomeCentsOf,
   monthBuckets,
   monthlyIncome,
-  oneOffSuggestions,
   paydaysFrom,
   payPeriodBuckets,
   recurringMerchants,
@@ -36,7 +34,6 @@ import {
   upcomingBills,
   type AnalyticsRow,
   type AssetDebtPoint,
-  type BaselineSplit,
   type Bucket,
   type CadenceCandidate,
   type CashFlowPoint,
@@ -44,7 +41,6 @@ import {
   type DateRange,
   type IncomeBreakdown,
   type MerchantTotal,
-  type OneOffSuggestion,
   type RecurringMerchant,
   type UpcomingBill,
 } from "./analytics";
@@ -89,13 +85,11 @@ export type InsightsAnalysisReady = {
   windowed: AnalyticsRow[];
   buckets: Bucket[];
   flow: CashFlowPoint[];
-  split: BaselineSplit;
   income: IncomeBreakdown;
   categories: CategoryTotal[];
   payees: MerchantTotal[];
   trends: ReturnType<typeof spendByCategoryPerBucket>;
   recurring: RecurringMerchant[];
-  suggestions: OneOffSuggestion[];
   candidates: CadenceCandidate[];
   upcoming: UpcomingBill[];
   assetDebt: AssetDebtPoint[];
@@ -191,11 +185,6 @@ export function analyzeInsights(
   // Detection runs on the window; declared bills read their amounts from the whole
   // history, so a commitment does not vanish from the table when the window narrows.
   const recurring = recurringMerchants(windowed, bills, filtered);
-  const split = baselineSplit(windowed, buckets.length, {
-    levelRecurring,
-    bills: recurring,
-    buckets,
-  });
   const trends = spendByCategoryPerBucket(windowed, buckets);
   const assetDebt = assetDebtSeries(filtered, buckets);
   const latest = assetDebt[assetDebt.length - 1];
@@ -240,16 +229,11 @@ export function analyzeInsights(
     windowed,
     buckets,
     flow,
-    split,
     income,
     categories: spendByCategory(windowed),
     payees: spendByMerchant(windowed),
     trends,
     recurring,
-    suggestions: oneOffSuggestions(windowed, {
-      bills,
-      suppressPayeeIds: options.suppressPayeeIds,
-    }),
     // Both of these read the **whole** filtered history, not the window. The two charges
     // that make a semi-annual pattern are eight months apart, and the anchor a forecast
     // walks from is the most recent charge — a window that hides either produces a

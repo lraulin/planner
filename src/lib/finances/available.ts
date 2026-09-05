@@ -25,6 +25,7 @@ import { cadenceDaysApprox, type Cadence } from "./recurringBills";
  * arrive here as one series rather than two that each look half-paid.
  */
 export type BillCharge = {
+  billId?: string;
   name: string;
   /** `YYYY-MM-DD`. */
   dateKey: string;

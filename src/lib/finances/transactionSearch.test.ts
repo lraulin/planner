@@ -16,8 +16,6 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     derivedFlow: "spend",
     flowOverride: null,
     transferGroupId: null,
-    excludeFromBaseline: false,
-    eventLabel: "",
 
     payeeId: null,
     payeeName: null,

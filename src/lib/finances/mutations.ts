@@ -86,8 +86,6 @@ export type TransactionEdit = {
   notes?: string;
   /** Null defers to the classifier again. */
   flowOverride?: FinanceFlowKind | null;
-  excludeFromBaseline?: boolean;
-  eventLabel?: string;
 };
 
 const TRANSACTION_AUDIT_COLUMNS = {
@@ -99,7 +97,6 @@ const TRANSACTION_AUDIT_COLUMNS = {
   budgetCategoryId: financeTransactions.budgetCategoryId,
   derivedFlow: financeTransactions.derivedFlow,
   flowOverride: financeTransactions.flowOverride,
-  excludeFromBaseline: financeTransactions.excludeFromBaseline,
   isParent: financeTransactions.isParent,
   parentId: financeTransactions.parentId,
 } as const;
@@ -119,7 +116,6 @@ function transactionAuditFields(row: TransactionAuditRow) {
     budgetCategoryId: row.budgetCategoryId,
     derivedFlow: row.derivedFlow,
     flowOverride: row.flowOverride,
-    excludeFromBaseline: row.excludeFromBaseline,
     isParent: row.isParent,
     parentId: row.parentId,
   };
@@ -147,17 +143,11 @@ export async function updateTransaction(
   const values: {
     notes?: string;
     flowOverride?: FinanceFlowKind | null;
-    excludeFromBaseline?: boolean;
-    eventLabel?: string;
     updatedAt: Date;
   } = { updatedAt: new Date() };
 
   if (edit.notes !== undefined) values.notes = edit.notes;
   if (edit.flowOverride !== undefined) values.flowOverride = edit.flowOverride;
-  if (edit.excludeFromBaseline !== undefined) {
-    values.excludeFromBaseline = edit.excludeFromBaseline;
-  }
-  if (edit.eventLabel !== undefined) values.eventLabel = edit.eventLabel.trim();
 
   await db.transaction(async (tx) => {
     const [before] = await tx
@@ -174,10 +164,7 @@ export async function updateTransaction(
 
     const flowOverrideAfter =
       values.flowOverride !== undefined ? values.flowOverride : before.flowOverride;
-    const excludedAfter = values.excludeFromBaseline ?? before.excludeFromBaseline;
-    const moneyChanged =
-      flowOverrideAfter !== before.flowOverride ||
-      excludedAfter !== before.excludeFromBaseline;
+    const moneyChanged = flowOverrideAfter !== before.flowOverride;
     const scope = transactionAuditScope([before]);
     const beforeCheckpoint = moneyChanged
       ? await captureFinanceMoneyCheckpoint(userId, scope, tx)
@@ -208,11 +195,9 @@ export async function updateTransaction(
           entityIdentity: transactionId,
           before: {
             flowOverride: before.flowOverride,
-            excludeFromBaseline: before.excludeFromBaseline,
           },
           after: {
             flowOverride: flowOverrideAfter,
-            excludeFromBaseline: excludedAfter,
           },
         },
       ],
@@ -482,7 +467,7 @@ export type ReclassifySummary = {
  * the sharpest test available for this whole layer, and it is written down as one.
  *
  * Only `derived_*`, `transfer_group_id` and the recomputable `payee_id` are written.
- * `flow_override`, `exclude_from_baseline` and `event_label` belong to the user
+ * `flow_override` and `notes` belong to the user
  * and are not in the update statement at all, so no amount of re-running can erase a
  * correction.
  */
@@ -703,73 +688,6 @@ export async function reclassifyTransactions(
   };
 }
 
-/**
- * Flag or unflag a set of transactions as one-off spending, optionally naming the event.
- *
- * Bulk, because the review flow confirms a screen of suggestions at once — and never
- * automatic: an annual insurance premium looks exactly like a one-off to any statistic, and
- * excluding it every year would quietly understate what a year costs.
- */
-export async function setOneOff(
-  userId: string,
-  transactionIds: readonly string[],
-  edit: { excludeFromBaseline: boolean; eventLabel?: string },
-): Promise<number> {
-  if (transactionIds.length === 0) return 0;
-
-  const values: {
-    excludeFromBaseline: boolean;
-    eventLabel?: string;
-    updatedAt: Date;
-  } = { excludeFromBaseline: edit.excludeFromBaseline, updatedAt: new Date() };
-  // Clearing the flag clears the label with it: an event name on a row that is back in the
-  // baseline would show up in the events breakdown with nothing behind it.
-  if (edit.eventLabel !== undefined) values.eventLabel = edit.eventLabel.trim();
-  else if (!edit.excludeFromBaseline) values.eventLabel = "";
-
-  return db.transaction(async (tx) => {
-    const owned = await tx
-      .select(TRANSACTION_AUDIT_COLUMNS)
-      .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          inArray(financeTransactions.id, [...transactionIds]),
-        ),
-      );
-    if (owned.length !== transactionIds.length) {
-      throw new Error("Transaction not found.");
-    }
-    const scope = transactionAuditScope(owned);
-    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
-    await tx
-      .update(financeTransactions)
-      .set(values)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          inArray(financeTransactions.id, [...transactionIds]),
-        ),
-      );
-    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
-    await writeFinanceAuditEvent(tx, userId, {
-      kind: "transaction_change",
-      origin: "Register",
-      summary: `${edit.excludeFromBaseline ? "Excluded" : "Restored"} ${owned.length} transaction${owned.length === 1 ? "" : "s"} ${edit.excludeFromBaseline ? "from" : "to"} the baseline.`,
-      scope,
-      beforeCheckpoint,
-      afterCheckpoint,
-      changes: owned.map((row) => ({
-        entityType: "transaction",
-        entityIdentity: row.id,
-        before: { excludeFromBaseline: row.excludeFromBaseline },
-        after: { excludeFromBaseline: edit.excludeFromBaseline },
-      })),
-    });
-    return owned.length;
-  });
-}
-
 /** Delete an account and, by cascade, every transaction on it. */
 export async function deleteAccount(userId: string, accountId: string): Promise<void> {
   await db.transaction(async (tx) => {
@@ -841,7 +759,9 @@ export async function deleteAccount(userId: string, accountId: string): Promise<
 }
 
 export type BillEnvelopeEdit = {
-  /** The user's name for the bill, and the upsert key. */
+  /** Existing bills are always edited by stable envelope ID. */
+  id?: string;
+  /** Display name; legacy creation callers may resolve an unambiguous name. */
   name: string;
   /** Stable payees whose transactions belong to this bill. Omitted leaves claims alone. */
   payeeIds?: readonly string[];
@@ -876,14 +796,13 @@ export type BillEnvelopeEdit = {
  * row and, once imported, a second `finance_budget_categories` row pointing at it. One row now
  * carries both facets, so declaring a bill *is* creating its envelope.
  *
- * Keyed on the **name** rather than an id, because the caller is often the one-off review row
- * and it knows what it is declaring, not whether a declaration already exists. That makes the
- * operation naturally idempotent: declaring Geico semi-annual twice is one declaration, and
- * correcting it to yearly is the same call with a different number.
+ * Existing records resolve by **envelope ID and owner**. Discovery callers can still supply
+ * a name, but a non-unique name is rejected: nested groups legitimately contain duplicate
+ * bill names and must never share edits or charge histories.
  *
  * **This is the canonical bill-envelope write.** Agent tools, the payee-claim picker, and
  * cadence edits on an existing bill call it directly. Transaction-backed Track as bill /
- * New bill… / Review / Insights go through `trackTransactionAsBill`, which isolates the
+ * New bill… / Review go through `trackTransactionAsBill`, which isolates the
  * merchant (and, when amounts are mixed, this amount) then lands here. Claiming payees
  * files those charges (including history) here, not in each caller.
  *
@@ -893,6 +812,14 @@ export type BillEnvelopeEdit = {
 function requireValidBillEnvelope(edit: BillEnvelopeEdit): string {
   const name = edit.name.trim();
   if (name === "") throw new Error("A bill needs a name.");
+  if (
+    edit.expectedCents !== undefined &&
+    edit.expectedCents !== null &&
+    (!Number.isSafeInteger(edit.expectedCents) ||
+      edit.expectedCents < 0 ||
+      edit.expectedCents > 2147483647)
+  )
+    throw new Error("A bill amount must be a nonnegative whole number of cents.");
   if (!Number.isInteger(edit.cadence.n)) {
     throw new Error("A cadence must be a whole number.");
   }
@@ -1010,17 +937,23 @@ export async function upsertBillEnvelope(
 
   let categoryId: string | undefined;
   await db.transaction(async (tx) => {
-    const [existing] = await tx
+    const matches = await tx
       .select({ id: financeBudgetCategories.id })
       .from(financeBudgetCategories)
       .where(
         and(
           eq(financeBudgetCategories.userId, userId),
-          eq(financeBudgetCategories.name, name),
+          edit.id
+            ? eq(financeBudgetCategories.id, edit.id)
+            : eq(financeBudgetCategories.name, name),
           eq(financeBudgetCategories.kind, "bill"),
         ),
       )
-      .limit(1);
+      .limit(2);
+    if (edit.id && matches.length === 0) throw new Error("Bill not found.");
+    if (matches.length > 1)
+      throw new Error("More than one bill has this name. Use its envelope ID.");
+    const existing = matches[0];
     if (existing) {
       categoryId = existing.id;
       if (edit.anchorDate !== undefined) {
@@ -1126,7 +1059,7 @@ export async function upsertBillEnvelope(
 /**
  * Pause, cancel, dismiss, or revive a bill.
  *
- * A dedicated write rather than another `upsertBillEnvelope` so the dashboard's "still
+ * A dedicated write rather than another `upsertBillEnvelope` so the Bills page's "still
  * active?" prompt cannot accidentally clear the amount or cadence on the way through — it
  * sends a status and, when the answer is *still active*, a new anchor, and nothing else.
  *
@@ -1212,8 +1145,6 @@ const SPLIT_PARENT_COLUMNS = {
   derivedFlow: financeTransactions.derivedFlow,
   flowOverride: financeTransactions.flowOverride,
   transferGroupId: financeTransactions.transferGroupId,
-  excludeFromBaseline: financeTransactions.excludeFromBaseline,
-  eventLabel: financeTransactions.eventLabel,
   budgetCategoryId: financeTransactions.budgetCategoryId,
   isParent: financeTransactions.isParent,
   parentId: financeTransactions.parentId,
@@ -1387,8 +1318,6 @@ async function writeSplitChildren(
         payeeId: parent.payeeId,
         derivedFlow: parent.derivedFlow,
         flowOverride: parent.flowOverride,
-        excludeFromBaseline: parent.excludeFromBaseline,
-        eventLabel: parent.eventLabel,
         // `externalSource` / `externalId` stay null: a child is not a bank row (D4), so it
         // sits outside the partial unique index that dedups re-imports and can neither be
         // created nor resurrected by one.

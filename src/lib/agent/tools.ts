@@ -513,14 +513,13 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("get_cash_flow", {
     domain: "finances",
-    summary:
-      "Income, spend, net, trailing-12 overlay, and the baseline vs one-off split.",
+    summary: "Total inflows, outflows, net movement, and statement reconciliation.",
     useWhen:
-      "Use to answer whether cash flow is positive, whether a stretch is typical, or whether one-off events are hiding the baseline.",
+      "Use to inspect all recorded money movement, including gifts and Savings purchases. Use spending breakdown for cost of living.",
     avoidWhen:
-      "Do not blend baselineCents and oneOffCents. Do not report netCents alone as 'cash flow' when externalTransferCents is large: netCents is earned minus spent, and the three terms reconcile as netCents + externalTransferCents = statementNetCents + residualCents. External transfers are refunds, reimbursements, liquidations and gifts — they fund a period without being income, so they belong in the answer but not in netCents. Only residualCents is a data-quality signal; a large statementNetCents minus netCents gap is usually just external transfers, not an error. Do not treat a window that overlaps coverage.holes as complete. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.",
+      "Transfers inside the account pool are excluded. Net movement includes external transfers; externalTransferCents is an informational subset, not another amount to add to net. Compare netCents to statementNetCents; residualCents is the unexplained difference. Read coverage before treating history as complete.",
     returns:
-      "Per-bucket income/spend/fixed/variable/net, signed external transfers, trailing averages, statement-anchored position and net, the residual the identity leaves unexplained, window totals, typical monthly income, and the named one-off split.",
+      "Per-bucket income/spend/fixed/variable/net, signed external transfers, trailing averages, statement-anchored position and net, the residual the identity leaves unexplained, window totals and historical income details.",
     effects: read,
     exposure: "domain",
     examples: [{ title: "Last two years", arguments: { window: "24m" } }],
@@ -528,12 +527,12 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("get_spending_breakdown", {
     domain: "finances",
-    summary: "Ranked spend by category or merchant for a window.",
+    summary: "Envelope spending ranked by stable category, group or payee IDs.",
     useWhen: "Use after get_finance_overview when asking where the money went.",
     avoidWhen:
       "Category totals skip statement holes and unitemized unpaired payments. Read get_finance_overview coverage before treating an all-time chart as complete.",
     returns:
-      "Ranked { name, cents, share, count }, total spend, leftover otherCents, and optional per-bucket trends.",
+      "Ranked { id, name, groupId, parentGroupId, cents, share, count }, total spend, otherCents, and optional monthly spending vs actual regular income. Cost of living is the default; Savings and all spending are explicit scopes.",
     effects: read,
     exposure: "domain",
     examples: [
@@ -550,7 +549,7 @@ const definitions: AgentToolDefinition[] = [
     useWhen:
       "Use to find the actual levers — subscriptions and bills whose annual cost is a decision.",
     avoidWhen:
-      "Do not use it to list one-off merchants. Use get_cash_flow for the baseline split and search_transactions for a named charge.",
+      "Use get_spending_breakdown for envelope and group spending, get_cash_flow for total movement, and search_transactions for a named charge.",
     returns:
       "Recurring merchants with typical/low/high/annual cents, declared vs detected, the annual total, and upcoming due dates.",
     effects: read,

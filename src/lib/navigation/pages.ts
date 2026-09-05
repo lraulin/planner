@@ -232,20 +232,21 @@ const PAGES = {
    */
   finances: [
     {
-      id: "dashboard",
-      label: "Dashboard",
-      segment: "dashboard",
-      status: "built",
-      isDefault: true,
-      keywords: "available to spend payday balances envelopes budget now",
-    },
-    {
       id: "budget",
       label: "Budget",
       segment: "budget",
       status: "built",
+      isDefault: true,
       keywords:
         "envelope zero-based ready to assign assign categories ynab actual carryover rollover schedules recurring bills upcoming subscriptions commitments spend pizza set aside cadence review",
+    },
+    {
+      id: "bills",
+      label: "Bills",
+      segment: "bills",
+      status: "built",
+      keywords:
+        "recurring next charge due soon subscriptions commitments forecast review",
     },
     {
       id: "supplies",
@@ -260,7 +261,7 @@ const PAGES = {
       label: "Insights",
       segment: "insights",
       status: "built",
-      keywords: "spending baseline lumpy cashflow charts reports",
+      keywords: "cost of living envelope balances spending cashflow charts reports",
     },
     {
       id: "register",

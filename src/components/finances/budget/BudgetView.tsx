@@ -59,7 +59,6 @@ import {
   nextMonthKey,
   prevMonthKey,
   type BudgetMonth,
-  type MonthKey,
 } from "@/lib/finances/budget/envelope";
 import {
   budgetExportDocument,
@@ -109,27 +108,29 @@ import {
 } from "@/lib/finances/budget/hierarchy";
 import { formatUsd } from "@/lib/finances/money";
 import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
-import type { RecurringMerchant } from "@/lib/finances/analytics";
 import { cadenceOf } from "@/lib/finances/recurringBills";
-import type { BillForecast } from "@/lib/finances/dashboardQueries";
+import type { Payday } from "@/lib/finances/classify/income";
+import { nextPayday } from "@/lib/finances/available";
+import { monthlyFundingPlan } from "@/lib/finances/budget/incomePlan";
+import { useSetting } from "@/components/settings/SettingsProvider";
+import { PAYDAY_SCOPE } from "@/lib/settings/scopes";
+import { PAYDAY_CODEC } from "../paydaySetting";
+import {
+  budgetReturnContext,
+  revealBudgetGroups,
+} from "@/lib/finances/budget/returnContext";
+import { IncomeSection, FundingPlanSummary } from "./IncomeSection";
 import { AssignDialog, AssignPreviewDialog } from "./AssignDialog";
 import { FixThisDialog } from "./FixThisDialog";
-import {
-  ActivityAmountLink,
-  billColumns,
-  envelopeColumns,
-  type BudgetColumnCtx,
-} from "./budgetColumns";
+import { billColumns, envelopeColumns, type BudgetColumnCtx } from "./budgetColumns";
 import { BudgetInspector } from "./BudgetInspector";
 import { BudgetSummary } from "./BudgetSummary";
 import { CommitmentPayeeDialog } from "./CommitmentPayeeDialog";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { PayeeMergeDialog } from "@/components/finances/payees/PayeeMergeDialog";
 import { withScheme } from "./UrlCell";
-import { ForecastDetails } from "./ForwardPanel";
 import { MoveMoneyDialog } from "./MoveMoneyDialog";
 import { TargetDrawer } from "./TargetDrawer";
-import { ReviewDrawer } from "./ReviewDrawer";
 import { StructureComposer, type ComposerTarget } from "./StructureComposer";
 
 /**
@@ -173,26 +174,26 @@ const SECTION_CHOICES: { kind: EnvelopeKind; label: string }[] = [
  */
 export function BudgetView({
   data,
-  review,
   nextDueKeys,
   expectedKeys,
   payees,
-  forecast,
+  paydays,
 }: {
   data: BudgetData;
-  /** Detected recurring merchants no envelope has claimed yet. */
-  review: readonly RecurringMerchant[];
   /** Next charge per bill envelope id, from `loadBillAnchors`. */
   nextDueKeys: ReadonlyMap<string, string>;
   /** Charge being waited for, which may be in the past. */
   expectedKeys: ReadonlyMap<string, string>;
   /** Every payee, with its current bill/envelope claim if any — for the payees dialog. */
   payees: readonly { id: string; name: string; budgetCategoryId: string | null }[];
-  /** Next 12 months and Expected vs income — collapsed-by-default reference panels (D8). */
-  forecast: BillForecast;
+  paydays: readonly Payday[];
 }) {
   const router = useRouter();
   const params = useSearchParams();
+  const returnContext = useMemo(
+    () => budgetReturnContext(params.get("detail"), data.categories, data.groups),
+    [params, data.categories, data.groups],
+  );
   const compact = useIsCompact();
   const inspectorTitleId = useId();
   // The export writes dates the way the rest of the app does, not a second format.
@@ -200,14 +201,16 @@ export function BudgetView({
   const [pending, startTransition] = useTransition();
   const [, startEvidenceLoad] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [inspecting, setInspecting] = useState(false);
+  const [inspecting, setInspecting] = useState(Boolean(returnContext));
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(
     null,
   );
   const [move, setMove] = useState<{ from: BudgetRow; targets: BudgetRow[] } | null>(
     null,
   );
-  const [focusedTable, setFocusedTable] = useState<BudgetTable>("envelopes");
+  const [focusedTable, setFocusedTable] = useState<BudgetTable>(
+    returnContext?.table ?? "envelopes",
+  );
   const [editing, setEditing] = useState<string | null>(null);
   const [editingPayeesFor, setEditingPayeesFor] = useState<BudgetRow | null>(null);
   // Both are stamped with the envelope they belong to, so selecting another row shows an
@@ -229,7 +232,8 @@ export function BudgetView({
   const [fixing, setFixing] = useState(false);
   const [preview, setPreview] = useState<AssignResult | null>(null);
   const [previewScope, setPreviewScope] = useState<readonly string[] | undefined>();
-  const [reviewing, setReviewing] = useState(false);
+  const { value: paydayOverride } = useSetting(PAYDAY_SCOPE, PAYDAY_CODEC);
+  const payday = nextPayday(paydays, paydayOverride, data.todayKey);
   // Structure editing, all of it inline: which `+` strip is open, which name is an input,
   // and which delete is waiting to be confirmed.
   const [composer, setComposer] = useState<ComposerTarget | null>(null);
@@ -282,17 +286,42 @@ export function BudgetView({
     [data.groups, data.categories, month, data.goals, nextDueKeys, expectedKeys],
   );
   const sections = useMemo(() => budgetSections(rows), [rows]);
+  const fundingPlan = useMemo(
+    () =>
+      monthlyFundingPlan(
+        rows,
+        data.month,
+        findMonth(data.months, prevMonthKey(data.month)),
+      ),
+    [rows, data.month, data.months],
+  );
+  const revealIds = useMemo(
+    () =>
+      returnContext
+        ? new Set([returnContext.id, ...returnContext.ancestors])
+        : new Set<string>(),
+    [returnContext],
+  );
   const billGridRows = useMemo(
-    () => sectionGridRows(data.groups, "bill", sections.bills, { showHidden }),
-    [data.groups, sections.bills, showHidden],
+    () =>
+      sectionGridRows(data.groups, "bill", sections.bills, { showHidden, revealIds }),
+    [data.groups, sections.bills, showHidden, revealIds],
   );
   const envelopeGridRows = useMemo(
-    () => sectionGridRows(data.groups, "spending", sections.envelopes, { showHidden }),
-    [data.groups, sections.envelopes, showHidden],
+    () =>
+      sectionGridRows(data.groups, "spending", sections.envelopes, {
+        showHidden,
+        revealIds,
+      }),
+    [data.groups, sections.envelopes, showHidden, revealIds],
   );
   const savingsGridRows = useMemo(
-    () => sectionGridRows(data.groups, "savings", sections.savings, { showHidden }),
-    [data.groups, sections.savings, showHidden],
+    () =>
+      sectionGridRows(data.groups, "savings", sections.savings, {
+        showHidden,
+        revealIds,
+      }),
+    [data.groups, sections.savings, showHidden, revealIds],
   );
   const billRowIds = useMemo(() => billGridRows.map((row) => row.id), [billGridRows]);
   const envelopeRowIds = useMemo(
@@ -303,9 +332,36 @@ export function BudgetView({
     () => savingsGridRows.map((row) => row.id),
     [savingsGridRows],
   );
-  const billSelect = useMultiSelect(billRowIds, null, { allowEmpty: true });
-  const envelopeSelect = useMultiSelect(envelopeRowIds, null, { allowEmpty: true });
-  const savingsSelect = useMultiSelect(savingsRowIds, null, { allowEmpty: true });
+  const billSelect = useMultiSelect(
+    billRowIds,
+    returnContext?.table === "bills" ? returnContext.id : null,
+    { allowEmpty: true },
+  );
+  const envelopeSelect = useMultiSelect(
+    envelopeRowIds,
+    returnContext?.table === "envelopes" ? returnContext.id : null,
+    { allowEmpty: true },
+  );
+  const savingsSelect = useMultiSelect(
+    savingsRowIds,
+    returnContext?.table === "savings" ? returnContext.id : null,
+    { allowEmpty: true },
+  );
+
+  const [seenReturnId, setSeenReturnId] = useState(returnContext?.id ?? null);
+  if ((returnContext?.id ?? null) !== seenReturnId) {
+    setSeenReturnId(returnContext?.id ?? null);
+    if (returnContext) {
+      setFocusedTable(returnContext.table);
+      setInspecting(true);
+      (returnContext.table === "bills"
+        ? billSelect
+        : returnContext.table === "savings"
+          ? savingsSelect
+          : envelopeSelect
+      ).select(returnContext.id);
+    }
+  }
 
   const selectedRow = useMemo(() => {
     const id =
@@ -584,7 +640,7 @@ export function BudgetView({
         data.month === monthKeyOf(data.todayKey) ? data.accountPoolCents : undefined,
       income: sections.income,
       receivedCents: receivedThisMonthCents,
-      expectedIncomeCents: forecast.comparison.income.monthlyCents,
+      expectedIncomeCents: fundingPlan.income.expectedCents,
       spendingTotals: totals,
       tables: [
         gridExportSection(
@@ -606,7 +662,6 @@ export function BudgetView({
           savingsGridRows.filter((row) => row.kind === "node"),
         ),
       ],
-      forecast,
       formatDate,
     });
   }, [
@@ -616,7 +671,7 @@ export function BudgetView({
     data.accountPoolCents,
     sections.income,
     receivedThisMonthCents,
-    forecast,
+    fundingPlan.income.expectedCents,
     totals,
     envelopeTotals,
     billTotals,
@@ -857,17 +912,6 @@ export function BudgetView({
     return [
       ...structureCommands,
       {
-        id: "budget.review",
-        label: review.length > 0 ? `Review… (${review.length})` : "Review…",
-        group: "view",
-        menu: "tools",
-        section: "Setup",
-        icon: "convert",
-        keywords: "detect recurring merchant candidates bills",
-        title: "Detected recurring merchants no envelope has claimed yet",
-        run: () => setReviewing(true),
-      },
-      {
         id: "budget.fix-this",
         label: "Fix This",
         group: "view",
@@ -886,7 +930,6 @@ export function BudgetView({
   }, [
     assignPlans,
     bannerScope,
-    review.length,
     startAssign,
     selectedRow,
     data.month,
@@ -906,6 +949,8 @@ export function BudgetView({
   const ctx: BudgetColumnCtx = {
     pending,
     indicators,
+    todayKey: data.todayKey,
+    paydayKey: payday.dateKey,
     month: data.month,
     onAssign: (row, cents) =>
       run(() =>
@@ -932,6 +977,7 @@ export function BudgetView({
       // rewriting the schedule.
       run(() =>
         setRecurringBillAction({
+          id: row.id,
           name: row.name,
           cadence:
             patch.cadence ??
@@ -1518,6 +1564,17 @@ export function BudgetView({
           }}
         />
 
+        <nav className="flex flex-wrap gap-4 text-xs text-ink-muted">
+          <Link className="underline" href="/finances/accounts">
+            Accounts
+          </Link>
+          <Link className="underline" href="/finances/bills?view=due-soon">
+            Due soon · next 14 days
+          </Link>
+          {data.month === monthKeyOf(data.todayKey) && payday.dateKey ? (
+            <span>Next payday {formatDate(payday.dateKey)}</span>
+          ) : null}
+        </nav>
         <BudgetSummary
           month={month}
           accountPoolCents={
@@ -1563,7 +1620,8 @@ export function BudgetView({
             rows={sections.income}
             month={data.month}
             receivedCents={receivedThisMonthCents}
-            expectedCents={forecast.comparison.income.monthlyCents}
+            pending={pending}
+            onEdit={(id, edit) => run(() => updateBudgetCategoryAction(id, edit))}
             onNew={() => openComposer("envelope", "income", null)}
             composer={composerFor("income")}
           />
@@ -1684,7 +1742,10 @@ export function BudgetView({
                 onResizeColumn={envelopeGrid.setWidth}
                 onResetColumnWidth={envelopeGrid.clearWidth}
                 columnControls={envelopeGrid.columnControls}
-                collapsedGroups={envelopeGrid.collapsedGroups}
+                collapsedGroups={revealBudgetGroups(
+                  envelopeGrid.collapsedGroups,
+                  returnContext?.ancestors,
+                )}
                 onToggleGroup={envelopeGrid.toggleGroup}
                 density={envelopeGrid.density}
                 autoHeight
@@ -1731,12 +1792,15 @@ export function BudgetView({
                   return row ? rowMenuItems(row) : [];
                 }}
                 ariaLabel={`Bills for ${monthLabel(data.month)}`}
-                empty="No bills yet — Review proposes them from what actually charges you."
+                empty="No bills yet — open Bills to add or discover recurring charges."
                 widths={billGrid.widths}
                 onResizeColumn={billGrid.setWidth}
                 onResetColumnWidth={billGrid.clearWidth}
                 columnControls={billGrid.columnControls}
-                collapsedGroups={billGrid.collapsedGroups}
+                collapsedGroups={revealBudgetGroups(
+                  billGrid.collapsedGroups,
+                  returnContext?.ancestors,
+                )}
                 onToggleGroup={billGrid.toggleGroup}
                 density={billGrid.density}
                 autoHeight
@@ -1746,6 +1810,8 @@ export function BudgetView({
               />
             </BudgetSection>
           </section>
+
+          <FundingPlanSummary plan={fundingPlan} />
 
           <BudgetSection
             title="Savings"
@@ -1791,7 +1857,10 @@ export function BudgetView({
               onResizeColumn={savingsGrid.setWidth}
               onResetColumnWidth={savingsGrid.clearWidth}
               columnControls={savingsGrid.columnControls}
-              collapsedGroups={savingsGrid.collapsedGroups}
+              collapsedGroups={revealBudgetGroups(
+                savingsGrid.collapsedGroups,
+                returnContext?.ancestors,
+              )}
               onToggleGroup={savingsGrid.toggleGroup}
               density={savingsGrid.density}
               autoHeight
@@ -1800,8 +1869,6 @@ export function BudgetView({
               groupChrome={(header) => groupChromeFor(header.id, "savings")}
             />
           </BudgetSection>
-
-          <ForecastDetails months={forecast.months} comparison={forecast.comparison} />
         </div>
 
         <aside
@@ -1953,17 +2020,6 @@ export function BudgetView({
           );
         }}
       />
-      {reviewing ? (
-        <ReviewDrawer
-          review={review}
-          todayKey={data.todayKey}
-          onClose={() => setReviewing(false)}
-          onSaved={(message) => {
-            setNotice(message);
-            router.refresh();
-          }}
-        />
-      ) : null}
       {mergingPayees ? (
         <PayeeMergeDialog
           payees={mergingPayees}
@@ -2257,65 +2313,3 @@ function BudgetSection({
  * series and is deliberately not assignable — you assign money you have, which is why the
  * caption says so rather than leaving the two figures to be read as interchangeable.
  */
-function IncomeSection({
-  rows,
-  month,
-  receivedCents,
-  expectedCents,
-  onNew,
-  composer,
-}: {
-  rows: readonly BudgetRow[];
-  /** The month on screen; each amount links to its own envelope's rows for it. */
-  month: MonthKey;
-  receivedCents: number;
-  expectedCents: number;
-  /** Income is a list, not a grid, but it creates envelopes the same way the tables do. */
-  onNew: () => void;
-  composer?: ReactNode;
-}) {
-  return (
-    <section className="rounded border border-rule bg-surface px-3 py-2">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="text-[0.9375rem] font-medium text-ink">Income</h2>
-        <span className="tabular flex flex-wrap gap-x-4 text-[0.8125rem]">
-          <span className="text-ink-muted">
-            Received <span className="text-ink">{formatUsd(receivedCents)}</span>
-          </span>
-          <span
-            className="text-ink-muted"
-            title="A forecast from your payday series, not money you have."
-          >
-            Expected <span className="text-ink">{formatUsd(expectedCents)}</span>/mo
-          </span>
-          <button
-            type="button"
-            onClick={onNew}
-            className="rounded border border-rule px-2 py-0.5 text-[0.75rem] text-ink hover:bg-surface-raised"
-          >
-            + Envelope
-          </button>
-        </span>
-      </header>
-      {rows.length > 0 ? (
-        <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[0.75rem] text-ink-muted">
-          {rows.map((row) => (
-            <li key={row.id}>
-              {row.name}{" "}
-              <ActivityAmountLink
-                categoryId={row.id}
-                month={month}
-                cents={row.activityCents}
-              />
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <p className="mt-1 text-[0.7rem] text-ink-faint">
-        Ready to Assign is unassigned money from every on-budget account, including
-        income already received. Moving money to a savings account does not assign it.
-      </p>
-      {composer}
-    </section>
-  );
-}

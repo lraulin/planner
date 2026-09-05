@@ -38,6 +38,7 @@ import type { BillSnapshot } from "./targets/derive";
 import { ASSIGN_AVERAGE_MONTHS } from "./assign/types";
 import type { ActivityPoint } from "./assign/fromBudget";
 import { moneyRows } from "../splitRows";
+import { budgetContributionSql } from "./contributionSql";
 import { listBudgetMovementAudit } from "../audit/queries";
 
 /**
@@ -92,6 +93,8 @@ export type BudgetCategoryRow = {
   isIncome: boolean;
   bill: BillFacet | null;
   target: Target | null;
+  incomeRole: "regular" | "other";
+  expectedMonthlyIncomeCents: number | null;
 };
 
 export type BudgetEnvelopeOption = {
@@ -204,6 +207,8 @@ function categoriesOf(userId: string, executor: FinanceExecutor = db) {
       hidden: financeBudgetCategories.hidden,
       notes: financeBudgetCategories.notes,
       target: financeBudgetCategories.target,
+      incomeRole: financeBudgetCategories.incomeRole,
+      expectedMonthlyIncomeCents: financeBudgetCategories.expectedMonthlyIncomeCents,
       kind: financeBudgetCategories.kind,
       status: financeBudgetCategories.status,
       cancelledOn: financeBudgetCategories.cancelledOn,
@@ -231,6 +236,8 @@ function parsedCategories(
     hidden: row.hidden,
     notes: row.notes,
     target: parseNullableTargetOrThrow(row.target),
+    incomeRole: row.incomeRole,
+    expectedMonthlyIncomeCents: row.expectedMonthlyIncomeCents,
     kind: row.kind,
     isIncome: row.kind === "income",
     bill:
@@ -285,26 +292,9 @@ async function activitySince(
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
     .where(
       and(
-        eq(financeTransactions.userId, userId),
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.offBudget, false),
-        // Money: leaves. A parent is excluded by the envelope test above anyway — it holds
-        // none by design — but saying so explicitly is what stops a later edit to that test
-        // silently double-counting every split.
-        moneyRows,
-        notSupersededPending(supersededPendingIds),
+        budgetContributionSql(userId, supersededPendingIds),
         isNotNull(financeTransactions.budgetCategoryId),
         gte(financeTransactions.transactionDate, since),
-        sql`not exists (
-          select 1
-            from ${financeTransactions} as other
-            join ${financeAccounts} as other_account
-              on other_account.id = other.account_id
-           where other.transfer_group_id = ${financeTransactions.transferGroupId}
-             and other.id <> ${financeTransactions.id}
-             and other.user_id = ${userId}
-             and other_account.off_budget = false
-        )`,
       ),
     )
     .groupBy(sql`1`, financeTransactions.budgetCategoryId);
@@ -341,31 +331,9 @@ async function backlogSince(
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
     .where(
       and(
-        eq(financeTransactions.userId, userId),
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.offBudget, false),
-        // The sharp one. A split parent has a null envelope *by design*, and the count of
-        // null envelopes is the size of the discrepancy the Budget page reports — so without
-        // this filter the budget would claim to be out of balance by exactly the value of
-        // every split. The children carry the real answer and are counted instead.
-        moneyRows,
-        notSupersededPending(supersededPendingIds),
+        budgetContributionSql(userId, supersededPendingIds),
         sql`${financeTransactions.budgetCategoryId} is null`,
         gte(financeTransactions.transactionDate, since),
-        sql`(
-          ${financeTransactions.transferGroupId} is not null
-          or coalesce(${financeTransactions.flowOverride}::text, ${financeTransactions.derivedFlow}::text, '') <> 'internal_transfer'
-        )`,
-        sql`not exists (
-          select 1
-            from ${financeTransactions} as other
-            join ${financeAccounts} as other_account
-              on other_account.id = other.account_id
-           where other.transfer_group_id = ${financeTransactions.transferGroupId}
-             and other.id <> ${financeTransactions.id}
-             and other.user_id = ${userId}
-             and other_account.off_budget = false
-        )`,
       ),
     );
 

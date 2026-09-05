@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { loadInsightsRows } from "../dashboardQueries";
 import { recordSourceState } from "../sourceStateWrite";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
@@ -690,6 +691,12 @@ describeDb("budget mutations", () => {
     expect(data.uncategorizedCount).toBe(1);
     expect(data.uncategorizedCents).toBe(-6_000);
     expect(august.uncategorizedActivityCents).toBe(-6_000);
+    const report = await loadInsightsRows(userId);
+    expect(
+      report
+        .filter((row) => row.budgetCategoryId === discretionaryId)
+        .reduce((sum, row) => sum + row.amountCents, 0),
+    ).toBe(-27663);
   });
 
   it("only assigns a Category to the on-budget side of a boundary transfer", async () => {

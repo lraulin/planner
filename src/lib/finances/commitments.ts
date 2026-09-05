@@ -492,7 +492,7 @@ export function upcomingBillOccurrences(
     if (bill.expectedCents === null || bill.expectedCents <= 0) continue;
     for (const dateKey of billOccurrences(
       bill,
-      chargesByName.get(bill.name) ?? [],
+      chargesByName.get(bill.id) ?? chargesByName.get(bill.name) ?? [],
       todayKey,
       horizonKey,
     )) {
@@ -536,7 +536,7 @@ export function projectForwardMonths(
 
     for (const dateKey of billOccurrences(
       bill,
-      chargesByName.get(bill.name) ?? [],
+      chargesByName.get(bill.id) ?? chargesByName.get(bill.name) ?? [],
       todayKey,
       horizonKey,
     )) {

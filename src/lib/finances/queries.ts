@@ -74,8 +74,6 @@ const TRANSACTION_LIST_COLUMNS = {
   derivedFlow: financeTransactions.derivedFlow,
   transferGroupId: financeTransactions.transferGroupId,
   flowOverride: financeTransactions.flowOverride,
-  excludeFromBaseline: financeTransactions.excludeFromBaseline,
-  eventLabel: financeTransactions.eventLabel,
   notes: financeTransactions.notes,
   balanceAfter: financeTransactions.balanceAfter,
   budgetCategoryId: financeTransactions.budgetCategoryId,
@@ -191,6 +189,7 @@ export async function listAccounts(
       accountId: bankAccountLinks.accountId,
       balanceCents: bankAccountLinks.balanceCents,
       balanceAsOf: bankAccountLinks.balanceAsOf,
+      source: bankAccountLinks.balanceSource,
     })
     .from(bankAccountLinks)
     .where(eq(bankAccountLinks.userId, userId));
@@ -200,7 +199,11 @@ export async function listAccounts(
       .filter((row) => row.balanceCents !== null && row.balanceAsOf !== null)
       .map((row) => [
         row.accountId,
-        { cents: row.balanceCents as number, asOf: row.balanceAsOf as Date },
+        {
+          cents: row.balanceCents as number,
+          asOf: row.balanceAsOf as Date,
+          source: row.source,
+        },
       ]),
   );
   // Per-source currency, not the derived headline: pending authority is decided by ranking
@@ -237,6 +240,7 @@ export async function listAccounts(
       // which is the same as asking whether the register is complete.
       balanceMismatchCents: synced || latest ? ledgerBalanceCents - balanceCents : 0,
       syncedBalanceAsOf: synced?.asOf ?? null,
+      balanceSource: synced?.source ?? null,
       browserAsOf: stampsByAccount.get(row.id)?.browser ?? null,
       feedAsOf: stampsByAccount.get(row.id)?.feed ?? null,
       transactionCount: row.transactionCount,
@@ -305,8 +309,6 @@ function toTransactionListRow(row: {
   derivedFlow: TransactionListRow["derivedFlow"];
   transferGroupId: string | null;
   flowOverride: TransactionListRow["flowOverride"];
-  excludeFromBaseline: boolean;
-  eventLabel: string;
   notes: string;
   balanceAfter: string | null;
   budgetCategoryId: string | null;
@@ -332,8 +334,6 @@ function toTransactionListRow(row: {
     derivedFlow: row.derivedFlow,
     transferGroupId: row.transferGroupId,
     flowOverride: row.flowOverride,
-    excludeFromBaseline: row.excludeFromBaseline,
-    eventLabel: row.eventLabel,
     notes: row.notes,
     balanceAfterCents: numericStringToCents(row.balanceAfter),
     budgetCategoryId: row.budgetCategoryId,
@@ -394,7 +394,9 @@ export async function loadRegisterPrepared(
   const ledger = await listTransactions(
     userId,
     {},
-    query.viewId === "activity" ? { rowSet: "money" } : undefined,
+    query.viewId === "activity" || query.viewId === "report"
+      ? { rowSet: "money" }
+      : undefined,
   );
   return prepareRegister(ledger, query, ctx);
 }
@@ -416,7 +418,9 @@ export async function loadRegisterExportRows(
   const ledger = await listTransactions(
     userId,
     {},
-    query.viewId === "activity" ? { rowSet: "money" } : undefined,
+    query.viewId === "activity" || query.viewId === "report"
+      ? { rowSet: "money" }
+      : undefined,
   );
   const preparedLedger = annotateCategoryAssignability(ledger, ctx.offBudgetAccountIds);
   const prepared = prepareRegister(preparedLedger, query, ctx);

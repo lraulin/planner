@@ -12,7 +12,7 @@ import {
 } from "./dashboardQueries";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { createCategoryGroup } from "./budget/mutations";
-import { reclassifyTransactions, setOneOff, upsertBillEnvelope } from "./mutations";
+import { reclassifyTransactions, upsertBillEnvelope } from "./mutations";
 import { listTransactions } from "./queries";
 import { renamePayee } from "./payees/mutations";
 import { listPayees } from "./payees/queries";
@@ -117,21 +117,6 @@ describeDb("loadInsightsRows", () => {
     expect(rows.every((row) => row.payeeId !== null && row.payeeName !== null)).toBe(
       true,
     );
-  });
-
-  it("carries the user-owned fields the panels split baseline from one-off with", async () => {
-    const [first] = await listTransactions(userId);
-    await setOneOff(userId, [first.id], {
-      excludeFromBaseline: true,
-      eventLabel: "House move",
-    });
-
-    const rows = await loadInsightsRows(userId);
-    const flagged = rows.find((row) => row.id === first.id);
-    expect(flagged).toMatchObject({
-      excludeFromBaseline: true,
-      eventLabel: "House move",
-    });
   });
 
   it("windows on the date when asked", async () => {

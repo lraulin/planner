@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { type ReactNode, useId, useState, useTransition } from "react";
 import { updateAccountAction } from "@/app/finances/actions";
 import type { AccountEdit } from "@/lib/finances/mutations";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
@@ -46,10 +46,12 @@ export function AccountDrawer({
   account,
   onClose,
   onChanged,
+  summary,
 }: {
   account: FinanceAccountRow | null;
   onClose: () => void;
   onChanged: () => void;
+  summary?: ReactNode;
 }) {
   const titleId = useId();
 
@@ -59,6 +61,7 @@ export function AccountDrawer({
     <AccountForm
       key={account.id}
       account={account}
+      summary={summary}
       titleId={titleId}
       onClose={onClose}
       onChanged={onChanged}
@@ -71,11 +74,13 @@ function AccountForm({
   titleId,
   onClose,
   onChanged,
+  summary,
 }: {
   account: FinanceAccountRow;
   titleId: string;
   onClose: () => void;
   onChanged: () => void;
+  summary?: ReactNode;
 }) {
   const today = useToday();
   const [draft, setDraft] = useState(() => draftOf(account));
@@ -139,6 +144,7 @@ function AccountForm({
           onClose={requestClose}
         />
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {summary}
           <div className="flex flex-col gap-6">
             <Section title="Account">
               <FieldGrid>
@@ -178,7 +184,7 @@ function AccountForm({
                 label="Closed"
                 checked={draft.closed}
                 onChange={(checked) => patch("closed", checked)}
-                hint="Closed accounts stay in the register and drop off the dashboard."
+                hint="Closed accounts stay in the register and remain in All accounts."
               />
               {isCoreBudgetKind(draft.kind) ? (
                 <p className="text-[0.8125rem] leading-snug text-ink-muted">

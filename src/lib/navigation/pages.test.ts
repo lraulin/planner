@@ -59,8 +59,8 @@ describe("hasPageBar", () => {
     // Finances is ordered by how often a page is opened, not by when it was built. Activity
     // sits beside Register because it explains the mutations the register reflects.
     expect(builtPagesForModule("finances").map((page) => page.id)).toEqual([
-      "dashboard",
       "budget",
+      "bills",
       "supplies",
       "insights",
       "register",
@@ -234,7 +234,7 @@ describe("defaultPageFor and builtPageById", () => {
     expect(defaultPageFor("schedule")?.id).toBe("calendar");
     expect(defaultPageFor("fitness")?.id).toBe("sessions");
     expect(defaultPageFor("notes")?.id).toBe("grid");
-    expect(defaultPageFor("finances")?.id).toBe("dashboard");
+    expect(defaultPageFor("finances")?.id).toBe("budget");
     expect(defaultPageFor("library")?.id).toBe("contacts");
   });
 

@@ -209,6 +209,7 @@ export type FinanceAccountRow = {
   balanceMismatchCents: number;
   /** When the live balance was read, or null for an account with no bank connection. */
   syncedBalanceAsOf: Date | null;
+  balanceSource?: string | null;
   /**
    * When the latest complete browser capture was taken, and when the feed's own figure was
    * true. The dashboard prefers browser pending while the capture is the more current of
@@ -223,8 +224,7 @@ export type FinanceAccountRow = {
  * One register row.
  *
  * Carries both halves of the classification split: `derived*` is what the classifier worked
- * out and is rewritten by every reclassify, while `flowOverride`, `excludeFromBaseline`
- * and `eventLabel` are yours and survive one. The register shows the effective value of
+ * out and is rewritten by every reclassify, while `flowOverride` and `notes` are yours and survive one. The register shows the effective value of
  * each and marks which is which.
  */
 export type TransactionListRow = {
@@ -256,8 +256,6 @@ export type TransactionListRow = {
   /** Derived by the Register from the whole ledger; absent on general finance reads. */
   categoryAssignable?: boolean;
   flowOverride: FinanceFlowKind | null;
-  excludeFromBaseline: boolean;
-  eventLabel: string;
   notes: string;
   balanceAfterCents: number | null;
   /**

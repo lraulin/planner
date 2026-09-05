@@ -45,6 +45,8 @@ function envelope(name: string, activityCents: number): BudgetRow {
     groupId: null,
     sortKey: name,
     name,
+    incomeRole: "other",
+    expectedMonthlyIncomeCents: null,
     isIncome: true,
     hidden: false,
     notes: "",
@@ -217,7 +219,9 @@ describe("budgetExportDocument", () => {
       "Envelope",
       "Activity",
     ]);
-    expect(income?.caption).toBe("Received $2,000.00 · Expected $2,100.00/mo");
+    expect(income?.caption).toBe(
+      "Received $2,000.00 · Expected regular income $2,100.00/mo",
+    );
     expect(income?.rows.map((row) => row.cells)).toEqual([["Paycheck", "$2,000.00"]]);
   });
 

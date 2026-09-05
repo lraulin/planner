@@ -10,6 +10,11 @@ import { asRecordId } from "@/lib/url/viewState";
 import { effectiveFlow } from "./analytics";
 import { monthKeyFromParam, type MonthKey } from "./budget/envelope";
 import { categoryAssignableIds, categoryEligibleIds } from "./categoryEligibility";
+import {
+  parseReportDrill,
+  reportContributionIds,
+  type ReportDrill,
+} from "./reportDrill";
 import { activityContributionIds } from "./registerActivity";
 import { asFinanceGroupBy, groupTransactions } from "./grouping";
 import {
@@ -39,10 +44,11 @@ export const REGISTER_BLOCK_SIZE = 100;
 export const REGISTER_SEARCH_MAX = 200;
 export const REGISTER_PREFETCH = 25;
 
-export type RegisterViewId = "all" | "uncategorized" | "activity";
+export type RegisterViewId = "all" | "uncategorized" | "activity" | "report";
 
 export type RegisterQuery = {
   viewId: RegisterViewId;
+  report?: ReportDrill | null;
   /** Envelope id when `viewId` is `activity`; otherwise null. */
   category: string | null;
   /** Budget month (`YYYY-MM-01`) when `viewId` is `activity`; otherwise null. */
@@ -95,12 +101,18 @@ export type RegisterPrepared = {
   block: RegisterRowBlock<RegisterTransactionRow>;
 };
 
-const VIEW_IDS: ReadonlySet<string> = new Set(["all", "uncategorized", "activity"]);
+const VIEW_IDS: ReadonlySet<string> = new Set([
+  "all",
+  "uncategorized",
+  "activity",
+  "report",
+]);
 const FIELD_KINDS = registerFieldKinds();
 
 export function registerQueryKey(query: RegisterQuery): string {
   return JSON.stringify({
     viewId: query.viewId,
+    report: query.report ?? null,
     category: query.category,
     month: query.month,
     search: query.search,
@@ -211,8 +223,11 @@ export function parseRegisterQuery(value: unknown): RegisterQuery {
     typeof record.month === "string" ? record.month : null,
   );
   if (viewId === "activity" && (!category || !month)) viewId = "all";
+  const report = parseReportDrill(record.report);
+  if (viewId === "report" && !report) viewId = "all";
   return {
     viewId,
+    report: viewId === "report" ? report : null,
     category: viewId === "activity" ? category : null,
     month: viewId === "activity" ? month : null,
     search: asSearch(record.search),
@@ -261,6 +276,15 @@ function viewRows(
   query: RegisterQuery,
   ctx: RegisterQueryContext,
 ): TransactionListRow[] {
+  if (query.viewId === "report" && query.report) {
+    const ids = reportContributionIds(
+      ledger,
+      query.report,
+      ctx.offBudgetAccountIds,
+      ctx.supersededPendingIds ?? new Set(),
+    );
+    return ledger.filter((row) => ids.has(row.id));
+  }
   if (query.viewId === "uncategorized") {
     const eligible = categoryEligibleIds(
       ledger.map((row) => ({

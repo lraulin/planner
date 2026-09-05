@@ -569,37 +569,37 @@ Orient on accounts, imported history, coverage gaps, and carrying cost.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
 - Arguments: `{  }`
-- Output: `{ accounts*, history*, unclassifiedCount*, coverage*, categories*, merchants*, carryingCost* }`
+- Output: `{ envelopes*, groups*, accounts*, history*, unclassifiedCount*, coverage*, categories*, merchants*, carryingCost* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
 
 ### `get_cash_flow`
 
-Income, spend, net, trailing-12 overlay, and the baseline vs one-off split.
+Total inflows, outflows, net movement, and statement reconciliation.
 
-- Use when: Use to answer whether cash flow is positive, whether a stretch is typical, or whether one-off events are hiding the baseline.
-- Avoid when: Do not blend baselineCents and oneOffCents. Do not report netCents alone as 'cash flow' when externalTransferCents is large: netCents is earned minus spent, and the three terms reconcile as netCents + externalTransferCents = statementNetCents + residualCents. External transfers are refunds, reimbursements, liquidations and gifts — they fund a period without being income, so they belong in the answer but not in netCents. Only residualCents is a data-quality signal; a large statementNetCents minus netCents gap is usually just external transfers, not an error. Do not treat a window that overlaps coverage.holes as complete. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.
-- Returns: Per-bucket income/spend/fixed/variable/net, signed external transfers, trailing averages, statement-anchored position and net, the residual the identity leaves unexplained, window totals, typical monthly income, and the named one-off split.
+- Use when: Use to inspect all recorded money movement, including gifts and Savings purchases. Use spending breakdown for cost of living.
+- Avoid when: Transfers inside the account pool are excluded. Net movement includes external transfers; externalTransferCents is an informational subset, not another amount to add to net. Compare netCents to statementNetCents; residualCents is the unexplained difference. Read coverage before treating history as complete.
+- Returns: Per-bucket income/spend/fixed/variable/net, signed external transfers, trailing averages, statement-anchored position and net, the residual the identity leaves unexplained, window totals and historical income details.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
 - Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants* }`
-- Output: `{ range*, axis*, window*, levelRecurring*, points*, totals*, income*, baseline* }`
+- Output: `{ range*, axis*, window*, levelRecurring*, points*, totals*, income* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
 
 ### `get_spending_breakdown`
 
-Ranked spend by category or merchant for a window.
+Envelope spending ranked by stable category, group or payee IDs.
 
 - Use when: Use after get_finance_overview when asking where the money went.
 - Avoid when: Category totals skip statement holes and unitemized unpaired payments. Read get_finance_overview coverage before treating an all-time chart as complete.
-- Returns: Ranked { name, cents, share, count }, total spend, leftover otherCents, and optional per-bucket trends.
+- Returns: Ranked { id, name, groupId, parentGroupId, cents, share, count }, total spend, otherCents, and optional monthly spending vs actual regular income. Cost of living is the default; Savings and all spending are explicit scopes.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants*, by*, limit*, trend* }`
-- Output: `{ range*, by*, items*, totalSpendCents*, otherCents*, returned*, total*, trends? }`
+- Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants*, by*, scope*, categoryIds*, payeeIds*, limit*, trend* }`
+- Output: `{ range*, by*, scope*, items*, totalSpendCents*, otherCents*, returned*, total*, trends? }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
@@ -609,7 +609,7 @@ complete input/output JSON Schemas.
 Detected and declared recurring commitments, annualized.
 
 - Use when: Use to find the actual levers — subscriptions and bills whose annual cost is a decision.
-- Avoid when: Do not use it to list one-off merchants. Use get_cash_flow for the baseline split and search_transactions for a named charge.
+- Avoid when: Use get_spending_breakdown for envelope and group spending, get_cash_flow for total movement, and search_transactions for a named charge.
 - Returns: Recurring merchants with typical/low/high/annual cents, declared vs detected, the annual total, and upcoming due dates.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain

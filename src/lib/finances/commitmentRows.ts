@@ -68,9 +68,14 @@ export type BillRow = StoredBillRow & {
 };
 
 /** The last posted charge for a bill, or null. */
-function lastChargeOn(name: string, charges: readonly BillCharge[]): string | null {
+function lastChargeOn(
+  bill: StoredBillRow,
+  charges: readonly BillCharge[],
+): string | null {
   const mine = charges
-    .filter((charge) => charge.name === name)
+    .filter((charge) =>
+      charge.billId ? charge.billId === bill.id : charge.name === bill.name,
+    )
     .map((charge) => charge.dateKey)
     .sort();
   return mine.length > 0 ? mine[mine.length - 1] : null;
@@ -89,7 +94,7 @@ export function billRows(
 ): BillRow[] {
   return bills.map((bill) => {
     const amountCents = bill.expectedCents ?? 0;
-    const lastPosted = lastChargeOn(bill.name, charges);
+    const lastPosted = lastChargeOn(bill, charges);
     const annualCostCents =
       amountCents > 0 ? annualCents(amountCents, cadenceOf(bill)) : 0;
     const anchor =
@@ -106,7 +111,8 @@ export function billRows(
       nextDueKey: anchor?.nextDueKey ?? null,
       amountRange: observedAmountRange(
         charges.flatMap((charge) =>
-          charge.name === bill.name && charge.costCents !== undefined
+          (charge.billId ? charge.billId === bill.id : charge.name === bill.name) &&
+          charge.costCents !== undefined
             ? [charge.costCents]
             : [],
         ),

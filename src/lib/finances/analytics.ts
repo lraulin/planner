@@ -1,15 +1,14 @@
 /**
- * Turning classified transactions into the figures the dashboard reports.
+ * Shared transaction bucketing, cost and account-position arithmetic.
  *
- * Two distortions shape every function here, and both were the reason for the feature:
+ * Cash flow can be bucketed by calendar month or detected pay period:
  *
  * - **Biweekly pay makes calendar months lie.** 26 paychecks over 12 months means some
  *   months hold three and look wildly positive while the next looks broke. That is a
  *   bucketing artifact, so the bucket is a parameter — `monthBuckets` and
  *   `payPeriodBuckets` are interchangeable and everything downstream takes whichever.
- * - **Averaging lies in the other direction.** A $20k wedding is real money that says
- *   nothing about what next month costs. So baseline and one-off spend are always two
- *   numbers here; nothing in this file ever blends them into one average.
+ *
+ * Envelope-scoped spending and regular-income comparisons live in reports.ts.
  *
  * **Sign convention.** Stored amounts follow the module rule — positive is money into the
  * account. Spending is reported here as a **positive magnitude**, because every figure it
@@ -69,8 +68,6 @@ export type AnalyticsRow = {
   flowOverride: FinanceFlowKind | null;
   /** Set when the classifier found this movement's other leg. Null means it never did. */
   transferGroupId: string | null;
-  excludeFromBaseline: boolean;
-  eventLabel: string;
   /** Stable identity assigned by reclassification; null means the row cannot be claimed. */
   payeeId: string | null;
   payeeName: string | null;
@@ -605,8 +602,7 @@ function allocateAcross(
  * **An unscheduled bill is a bill with no span.** Propane is not discretionary, so it belongs
  * on the bills side — but spreading it would double-count: two deliveries in one cold winter
  * would each claim the twelve months the declaration names, and the chart would show the money
- * twice. It lands whole where it happened instead. The baseline is unaffected, because that
- * accrues the declared yearly cost rather than the charges.
+ * twice. It lands whole where it happened instead.
  */
 type ChargeKind = { bill: boolean; spanDays: number | null };
 
@@ -752,126 +748,6 @@ export function cashFlow(
     trailingIncomeCents: trailingIncome[index],
     trailingNetCents: trailingNet[index],
   }));
-}
-
-// — Baseline and one-offs ————————————————————————————————————————————————————
-
-export type SpendEvent = {
-  label: string;
-  cents: number;
-  count: number;
-};
-
-export type BaselineSplit = {
-  /** Ongoing spend — what next month is likely to cost. */
-  baselineCents: number;
-  /** Spend the user has marked as not repeating. */
-  oneOffCents: number;
-  /** `baselineCents` per bucket, which is the figure worth planning against. */
-  baselinePerBucketCents: number;
-  bucketCount: number;
-  /** Named one-offs, largest first. Unlabelled ones are collected under one entry. */
-  events: SpendEvent[];
-  /** True when bills were accrued at their cadence rate rather than counted as posted. */
-  levelled: boolean;
-  /** The part of `baselineCents` contributed by bills. Zero unless `levelled`. */
-  billsCents: number;
-};
-
-const UNNAMED_EVENT = "Unnamed one-off";
-
-export type BaselineOptions = {
-  /**
-   * Accrue bills at their cadence rate instead of counting the charges that happened to post
-   * inside the window. Shares the `levelRecurring` setting with the cash-flow chart.
-   */
-  levelRecurring?: boolean;
-  /**
-   * The merged recurring table from `recurringMerchants` — detected and declared alike. Only
-   * read when levelling.
-   */
-  bills?: readonly RecurringMerchant[];
-  /** The window's buckets, which is how a rate becomes an amount. Required to level. */
-  buckets?: readonly Bucket[];
-};
-
-/**
- * Split spending into what repeats and what does not.
- *
- * These are reported as two numbers everywhere, never blended: the wedding happened, and
- * saying "you spend $6,800 a month" because of it answers a question nobody asked.
- *
- * **Levelling here accrues, where the chart redistributes, and the difference is deliberate.**
- * `cashFlow` moves a charge between buckets and preserves the total, because a chart is a
- * record of money that moved. This figure answers "what does an ongoing month cost", so a
- * bill contributes its *rate* — a $2,825/year premium is $706 of a three-month window whether
- * or not the charge landed inside it. Counting the charge instead would say $1,412 in the
- * quarter it posts and nothing in the other three, which is the distortion, not the answer.
- * The consequence is that `baselineCents` is no longer the sum of the rows in the window; the
- * caller has to say which mode is showing, and `levelled` is how it knows.
- */
-export function baselineSplit(
-  rows: readonly AnalyticsRow[],
-  bucketCount: number,
-  options: BaselineOptions = {},
-): BaselineSplit {
-  const { levelRecurring = false, bills = [], buckets = [] } = options;
-  const windowDays = buckets.reduce(
-    (total, bucket) => total + daysBetweenKeys(bucket.startKey, bucket.endKey) + 1,
-    0,
-  );
-  const levelled = levelRecurring && bills.length > 0 && windowDays > 0;
-  const levelledBills = bills.filter((entry) => entry.status !== "cancelled");
-  const billMerchants = levelled
-    ? new Set(levelledBills.map((entry) => entry.merchant))
-    : new Set<string>();
-
-  let baselineCents = 0;
-  let oneOffCents = 0;
-  const events = new Map<string, SpendEvent>();
-
-  for (const row of rows) {
-    const cost = spendCentsOf(row);
-    if (cost === 0) continue;
-    if (!row.excludeFromBaseline) {
-      // A charge at a levelled bill is replaced by that bill's accrual below. A credit is
-      // not: a refund has no span to spread over, the same exception `cashFlow` makes.
-      if (cost > 0 && billMerchants.has(effectiveMerchant(row))) continue;
-      baselineCents += cost;
-      continue;
-    }
-    oneOffCents += cost;
-    const label = row.eventLabel.trim() || UNNAMED_EVENT;
-    const event = events.get(label) ?? { label, cents: 0, count: 0 };
-    event.cents += cost;
-    event.count += 1;
-    events.set(label, event);
-  }
-
-  // 365, matching the definition of `annualCents` itself, so a calendar year of window
-  // accrues exactly the figure the commitments table prints and the two reconcile by
-  // inspection. A leap year over-accrues by a day, which is the cheaper of the two errors.
-  const billsCents = levelled
-    ? levelledBills.reduce(
-        (total, entry) => total + Math.round((entry.annualCents * windowDays) / 365),
-        0,
-      )
-    : 0;
-  baselineCents += billsCents;
-
-  return {
-    baselineCents,
-    oneOffCents,
-    baselinePerBucketCents:
-      bucketCount > 0 ? Math.round(baselineCents / bucketCount) : 0,
-    bucketCount,
-    events: [...events.values()].sort(
-      (left, right) =>
-        right.cents - left.cents || left.label.localeCompare(right.label),
-    ),
-    levelled,
-    billsCents,
-  };
 }
 
 // — Categories ————————————————————————————————————————————————————————————————
@@ -1673,94 +1549,6 @@ export function upcomingBills(
         left.dueOn.localeCompare(right.dueOn) ||
         left.merchant.localeCompare(right.merchant),
     );
-}
-
-// — One-off suggestions ——————————————————————————————————————————————————————
-
-export type OneOffSuggestion = {
-  row: AnalyticsRow;
-  cents: number;
-  merchant: string;
-  category: string;
-  /** How many times the typical spending row this is. */
-  multiple: number;
-};
-
-export type OneOffOptions = {
-  limit?: number;
-  /**
-   * Bills the user has declared. Their charges are withheld permanently — a declaration is
-   * the answer to this list's question, and continuing to ask is the bug being fixed.
-   */
-  bills?: readonly DeclaredBill[];
-  /**
-   * Extra merchants to withhold — typically payees already claimed by recurring spend, so
-   * pizza does not keep showing up as a one-off after it has been grouped.
-   */
-  suppressMerchants?: readonly string[];
-  suppressPayeeIds?: readonly string[];
-};
-
-/** How far above a typical row a charge has to sit before it is worth asking about. */
-const OUTLIER_MULTIPLE = 12;
-/** Nothing under this is worth a review row however unusual it looks. */
-const OUTLIER_FLOOR_CENTS = 50_000;
-
-/**
- * Charges large enough that they might be an event rather than a month.
- *
- * **Suggestions only.** Auto-excluding these would be wrong in a way that compounds: an
- * annual insurance premium is a genuine recurring cost, and dropping it every year would
- * quietly understate what a year costs. So the statistic proposes and the user disposes —
- * `setOneOff` is a confirmation, never a consequence of running this.
- *
- * Rows on a recurring merchant are withheld for the same reason, whether that merchant was
- * detected or declared. Detection alone was not enough: it cannot see a cadence longer than
- * 100 days, so the semi-annual and yearly bills it misses had no way to leave this list at
- * all — the only offers were to exclude them, which is the compounding error above, or to
- * keep seeing them forever.
- */
-export function oneOffSuggestions(
-  rows: readonly AnalyticsRow[],
-  options: OneOffOptions = {},
-): OneOffSuggestion[] {
-  const {
-    limit = 20,
-    bills = [],
-    suppressMerchants = [],
-    suppressPayeeIds = [],
-  } = options;
-  const spending = rows.filter((row) => spendCentsOf(row) > 0);
-  if (spending.length === 0) return [];
-
-  const typical = median(spending.map(spendCentsOf));
-  const threshold = Math.max(typical * OUTLIER_MULTIPLE, OUTLIER_FLOOR_CENTS);
-  const recurring = new Set(
-    recurringMerchants(rows, bills).map((entry) => entry.merchant),
-  );
-  const claimedPayees = new Set([
-    ...bills.flatMap((bill) => billPayeeIds(bill)),
-    ...suppressPayeeIds,
-  ]);
-  // A declared bill with no charge in this window is absent from the table above but is
-  // still declared, and its charge must not resurface the moment the window narrows.
-  // Cancelled and ignored claims suppress the same way: the answer has been given.
-  for (const merchant of suppressMerchants) recurring.add(merchant);
-
-  return spending
-    .filter((row) => !row.excludeFromBaseline)
-    .filter((row) => spendCentsOf(row) >= threshold)
-    .filter((row) => !row.payeeId || !claimedPayees.has(row.payeeId))
-    .filter((row) => !recurring.has(effectiveMerchant(row)))
-    .map((row) => ({
-      row,
-      cents: spendCentsOf(row),
-      merchant: effectiveMerchant(row),
-      category: effectiveCategory(row),
-      multiple: typical > 0 ? spendCentsOf(row) / typical : 0,
-    }))
-    .sort((left, right) => right.cents - left.cents)
-    .slice(0, limit);
 }
 
 // — Balances over time ————————————————————————————————————————————————————————

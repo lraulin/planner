@@ -18,8 +18,6 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     derivedFlow: "spend",
     flowOverride: null,
     transferGroupId: null,
-    excludeFromBaseline: false,
-    eventLabel: "",
 
     payeeId: description,
     payeeName: null,
@@ -98,65 +96,6 @@ describe("analyzeInsights", () => {
     });
     expect(analysis.windowed.some((entry) => entry.description === "GEICO *AUTO")).toBe(
       false,
-    );
-  });
-
-  it("does not let a pizza habit change the baseline split (D7)", () => {
-    // Recurring spend is a view on baseline spend. If it were passed in as a bill, pizza
-    // would be levelled out of the baseline and accrued again — double-counted. The pin is
-    // that analyzeInsights has no spend input, and pizza merchants stay in baselineCents.
-    const pizza = Array.from({ length: 14 }, (_, step) => {
-      const monthIndex = 1 + step;
-      const year = monthIndex <= 11 ? 2025 : 2026;
-      const month = monthIndex <= 11 ? monthIndex + 1 : monthIndex - 11;
-      return row({
-        transactionDate: `${monthKey(year, month)}-07`,
-        description: step % 2 === 0 ? "PIZZA HUT #1" : "DOMINOS 99",
-        amountCents: -6000,
-        derivedCategory: "Dining",
-      });
-    });
-    const without = analyzeInsights(groceryHistory(pizza), [], {
-      window: "3m",
-      today: "2026-03-31",
-      levelRecurring: true,
-    });
-    const withSuppress = analyzeInsights(groceryHistory(pizza), [], {
-      window: "3m",
-      today: "2026-03-31",
-      levelRecurring: true,
-      suppressPayeeIds: ["PIZZA HUT #1", "DOMINOS 99"],
-    });
-    expect(without.empty).toBe(false);
-    expect(withSuppress.empty).toBe(false);
-    if (without.empty || withSuppress.empty) return;
-
-    expect(without.split.baselineCents).toBe(withSuppress.split.baselineCents);
-    expect(without.split.billsCents).toBe(0);
-    expect(withSuppress.split.billsCents).toBe(0);
-    expect(without.split.baselineCents).toBeGreaterThan(0);
-  });
-
-  it("keeps baseline and one-off as two numbers", () => {
-    const wedding = row({
-      description: "VENUE DEPOSIT",
-      transactionDate: "2026-02-10",
-      amountCents: -600000,
-      derivedCategory: "Entertainment",
-      excludeFromBaseline: true,
-      eventLabel: "Wedding",
-    });
-    const analysis = analyzeInsights(groceryHistory([wedding]), [], {
-      window: "3m",
-      today: "2026-03-31",
-    });
-    expect(analysis.empty).toBe(false);
-    if (analysis.empty) return;
-
-    expect(analysis.split.oneOffCents).toBe(600000);
-    expect(analysis.split.baselineCents).toBe(30000);
-    expect(analysis.split.events).toContainEqual(
-      expect.objectContaining({ label: "Wedding", cents: 600000 }),
     );
   });
 

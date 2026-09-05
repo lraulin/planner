@@ -4,7 +4,11 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
-import { createCategoryGroup } from "@/lib/finances/budget/mutations";
+import {
+  createBudgetCategory,
+  setTransactionBudgetCategory,
+  createCategoryGroup,
+} from "@/lib/finances/budget/mutations";
 import {
   reclassifyTransactions,
   updateTransaction,
@@ -91,6 +95,11 @@ async function seed(userId: string): Promise<void> {
   );
   if (gift) {
     await updateTransaction(userId, gift.id, { flowOverride: "income" });
+    const envelope = await createBudgetCategory(userId, {
+      name: "Gifts",
+      kind: "income",
+    });
+    await setTransactionBudgetCategory(userId, gift.id, envelope);
   }
   await createCategoryGroup(userId, { name: "Household", kind: "spending" });
   await upsertBillEnvelope(userId, {
@@ -127,7 +136,7 @@ describeDb("finance agent tools", () => {
     });
   });
 
-  it("returns cash-flow points and keeps baseline vs one-off as two numbers", async () => {
+  it("returns total cash movement including gifts", async () => {
     const flow = (await dispatchAgentTool(
       "get_cash_flow",
       { window: "all" },
@@ -135,19 +144,17 @@ describeDb("finance agent tools", () => {
     )) as {
       range: { startKey: string; endKey: string };
       totals: { spendCents: number; incomeCents: number };
-      baseline: { baselineCents: number; oneOffCents: number };
     };
     expect(flow.range).toEqual({ startKey: "2026-03-02", endKey: "2026-04-09" });
     expect(flow.totals.incomeCents).toBe(50000);
     expect(flow.totals.spendCents).toBe(8412 + 3471 + 3471);
-    expect(flow.baseline.oneOffCents).toBe(0);
-    expect(flow.baseline.baselineCents).toBe(8412 + 3471 + 3471);
+    expect(flow).not.toHaveProperty("baseline");
   });
 
   it("ranks spend and totals the whole search match, not the page", async () => {
     const spend = (await dispatchAgentTool(
       "get_spending_breakdown",
-      { window: "all", by: "merchant", limit: 1 },
+      { window: "all", scope: "all", by: "merchant", limit: 1 },
       ownerId,
     )) as {
       items: { name: string; cents: number }[];

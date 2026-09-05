@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import {
   useCallback,
@@ -18,7 +19,12 @@ import {
   type ClaimedPayee,
 } from "@/lib/finances/registerBillDraft";
 import { monthLabel } from "@/lib/finances/budget/envelope";
+import { parseReportDrill } from "@/lib/finances/reportDrill";
+import { insightsCommands } from "@/lib/finances/insightsCommands";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { reclassifyAction } from "@/app/finances/actions";
 import {
+  budgetEnvelopeHref,
   activityEmptyCopy,
   activityViewFilters,
   parseActivityRegisterParams,
@@ -104,13 +110,15 @@ function viewDefaults(
     sorts: [{ columnId: "date", direction: "desc" }],
     // Year then month so a skipped statement is a missing header, not a hole in a flat list.
     groupBy: ["year", "month"],
-    collapsedGroups: collapsedYears,
+    collapsedGroups: viewId === "report" ? [] : collapsedYears,
     filters:
-      viewId === "uncategorized"
-        ? { category: optionsFilter(["Uncategorized"]) }
-        : viewId === "activity" && extras.envelopeName && extras.month
-          ? activityViewFilters(extras.envelopeName, extras.month)
-          : { date: THIS_MONTH_DATE_FILTER },
+      viewId === "report"
+        ? {}
+        : viewId === "uncategorized"
+          ? { category: optionsFilter(["Uncategorized"]) }
+          : viewId === "activity" && extras.envelopeName && extras.month
+            ? activityViewFilters(extras.envelopeName, extras.month)
+            : { date: THIS_MONTH_DATE_FILTER },
   };
 }
 
@@ -240,6 +248,26 @@ export function FinancesView({
     keywords: "csv statement bank card chase capital one pdf coinbase paypal",
   });
   const [, startTransition] = useTransition();
+  const [reclassifying, startReclassify] = useTransition();
+  const reclassify = useCallback(
+    () =>
+      startReclassify(async () => {
+        const result = await reclassifyAction();
+        if (!result.ok) setError(result.error);
+        else window.location.reload();
+      }),
+    [],
+  );
+  const rebuildCommands = useMemo(
+    () =>
+      insightsCommands({
+        hasRows: initialPrepared.index.total > 0,
+        reclassifying,
+        reclassify,
+      }),
+    [initialPrepared.index.total, reclassifying, reclassify],
+  );
+  useRegisterCommands(rebuildCommands);
   const isClient = useIsClient();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
   const router = useRouter();
@@ -248,6 +276,11 @@ export function FinancesView({
   // subscribe to searchParams — that subscription reloaded every transaction
   // whenever the drawer wrote `?detail=`.
   const searchParams = useSearchParams();
+  const reportView = useMemo(
+    () => parseReportDrill(searchParams.get("report")),
+    [searchParams],
+  );
+  const reportActive = searchParams.get("view") === "report" && reportView !== null;
   const activityView = useMemo(
     () =>
       parseActivityRegisterParams({
@@ -273,16 +306,18 @@ export function FinancesView({
   const collapsedYears = defaultCollapsedGroups;
   const financeViews = useMemo(
     () =>
-      activityActive && activityView && activityEnvelopeName
-        ? [
-            ...FINANCE_VIEW_CORE,
-            {
-              id: "activity",
-              label: `${activityEnvelopeName} · ${monthLabel(activityView.month)}`,
-            },
-          ]
-        : [...FINANCE_VIEW_CORE],
-    [activityActive, activityEnvelopeName, activityView],
+      reportActive
+        ? [...FINANCE_VIEW_CORE, { id: "report", label: "Report transactions" }]
+        : activityActive && activityView && activityEnvelopeName
+          ? [
+              ...FINANCE_VIEW_CORE,
+              {
+                id: "activity",
+                label: `${activityEnvelopeName} · ${monthLabel(activityView.month)}`,
+              },
+            ]
+          : [...FINANCE_VIEW_CORE],
+    [reportActive, activityActive, activityEnvelopeName, activityView],
   );
   const defaultsFor = useCallback(
     (viewId: string) =>
@@ -297,7 +332,11 @@ export function FinancesView({
     [activityEnvelopeName, activityView, collapsedYears],
   );
   const views = useModuleViews({
-    moduleId: "finances",
+    moduleId: reportActive
+      ? "finances-report"
+      : activityActive
+        ? "finances-activity"
+        : "finances",
     builtIn: financeViews,
     defaultViewId: "all",
     columns: financeColumns,
@@ -305,7 +344,7 @@ export function FinancesView({
   });
   const gridState = views.grid;
   useEffect(() => {
-    if (views.base === "uncategorized" || views.base === "activity") {
+    if (reportActive || views.base === "uncategorized" || views.base === "activity") {
       gridState.clearViewState();
     }
     // Deep links are task entry points: they must open on their exact row set rather than
@@ -348,7 +387,8 @@ export function FinancesView({
   const registerQuery = useMemo(
     () =>
       parseRegisterQuery({
-        viewId: views.base,
+        viewId: reportActive ? "report" : views.base,
+        report: reportView,
         category: activityView?.categoryId ?? null,
         month: activityView ? searchParams.get("month") : null,
         search: gridState.search,
@@ -363,6 +403,8 @@ export function FinancesView({
     [
       views.base,
       activityView,
+      reportView,
+      reportActive,
       searchParams,
       gridState.search,
       gridState.filters,
@@ -382,6 +424,7 @@ export function FinancesView({
   const {
     index,
     gridRows,
+    queryPending,
     pendingRowIds,
     distinctValues,
     counts,
@@ -717,6 +760,22 @@ export function FinancesView({
         groupIds={groupIds}
       />
 
+      {activityActive && activityView ? (
+        <Link
+          className="border-b border-rule px-3 py-2 text-xs underline"
+          href={budgetEnvelopeHref(activityView.categoryId, activityView.month)}
+        >
+          Return to Budget · {activityEnvelopeName} · {monthLabel(activityView.month)}
+        </Link>
+      ) : null}
+      {reportActive ? (
+        <Link
+          className="border-b border-rule px-3 py-2 text-xs underline"
+          href="/finances/insights"
+        >
+          Return to Insights · report settings preserved
+        </Link>
+      ) : null}
       <AccountBalances accounts={accounts} />
 
       {upcoming.length > 0 ? (
@@ -780,6 +839,10 @@ export function FinancesView({
         empty={
           !isClient ? (
             <div className="min-h-0 flex-1" />
+          ) : queryPending ? (
+            <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
+              Loading transactions…
+            </p>
           ) : views.base === "uncategorized" ? (
             <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
               Everything eligible has a Category.

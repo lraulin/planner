@@ -30,6 +30,8 @@ export type BudgetRow = {
   /** This month's target ask is silenced. See `finance_budget_allocations.snoozed`. */
   snoozed: boolean;
   target: BudgetCategoryRow["target"];
+  incomeRole: "regular" | "other";
+  expectedMonthlyIncomeCents: number | null;
   /**
    * Charge being waited for, which may be in the past. Distinct from `nextDueKey`.
    * Null for ordinary envelopes and bills with no anchor yet.
@@ -103,6 +105,8 @@ export function budgetRows(
         hidden: category.hidden,
         notes: category.notes,
         target: category.target,
+        incomeRole: category.incomeRole,
+        expectedMonthlyIncomeCents: category.expectedMonthlyIncomeCents,
         goalCents: goals[`${month.month}|${category.id}`] ?? null,
         assignedCents: cell.assignedCents,
         activityCents: cell.activityCents,
@@ -179,7 +183,9 @@ export function sectionGridRows<T extends BudgetRow>(
   groups: readonly BudgetGroupRow[],
   kind: EnvelopeKind,
   rows: readonly T[],
-  options: { showHidden: boolean } = { showHidden: false },
+  options: { showHidden: boolean; revealIds?: ReadonlySet<string> } = {
+    showHidden: false,
+  },
 ): GridRow<T>[] {
   return nestedBudgetGridRows(
     groups.filter((group) => group.kind === kind),

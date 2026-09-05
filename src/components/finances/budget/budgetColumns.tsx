@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 
 import Link from "next/link";
+import { DateText } from "@/components/date/DateText";
+import { billDueCue } from "@/lib/finances/budget/dueCue";
 import { AmountCell } from "@/components/grid/cells";
 import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
 import type { MonthKey } from "@/lib/finances/budget/envelope";
@@ -30,6 +32,8 @@ export type BillPatch = Omit<BillEnvelopeEdit, "name" | "cadence"> & {
 };
 
 export type BudgetColumnCtx = {
+  todayKey: string;
+  paydayKey: string | null;
   /** Commit an inline assignment. Cents, absolute. */
   onAssign: (row: BudgetRow, cents: number) => void;
   /** Open the row's menu at the Available cell, where the cover/move actions belong. */
@@ -243,6 +247,16 @@ function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnC
                 {row.node.name}
               </span>
             )}
+            {row.node.nextDueKey && row.node.bill?.status !== "cancelled" ? (
+              <span className="shrink-0 text-[0.6875rem] text-ink-muted">
+                <DateText dateKey={row.node.nextDueKey} className="inline" />
+                {billDueCue(row.node, ctx.month, ctx.todayKey, ctx.paydayKey) ? (
+                  <span className="ml-1 text-priority-b">
+                    {billDueCue(row.node, ctx.month, ctx.todayKey, ctx.paydayKey)}
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
             {row.node.carryover ? (
               <span
                 title="Overspending rolls into this envelope instead of onto Ready to Assign"

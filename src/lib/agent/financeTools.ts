@@ -34,6 +34,18 @@ import {
 } from "@/lib/finances/payees/mutations";
 import { listPayees, type PayeeRow } from "@/lib/finances/payees/queries";
 import { normalizeMerchant } from "@/lib/finances/classify/merchant";
+import { loadBudget } from "@/lib/finances/budget/queries";
+import {
+  spendingComparisonRows,
+  migrateReportNames,
+  applyReportFilters,
+  spendingContributions,
+  rankedReportSpending,
+  reportMonthlySeries,
+  reportRange,
+  cashReportPoints,
+  type SpendingScope,
+} from "@/lib/finances/reports";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
 import {
   insightsFilterOptions,
@@ -56,16 +68,6 @@ const EMPTY_INCOME = {
   totalMonthlyCents: 0,
   medianPaycheckCents: 0,
   paydayCount: 0,
-};
-
-const EMPTY_BASELINE = {
-  baselineCents: 0,
-  oneOffCents: 0,
-  baselinePerBucketCents: 0,
-  bucketCount: 0,
-  events: [] as { label: string; cents: number; count: number }[],
-  levelled: false,
-  billsCents: 0,
 };
 
 type FinanceWindow = {
@@ -170,16 +172,32 @@ function flattenFlowPoint(point: {
 }
 
 export async function getFinanceOverviewTool(userId: string) {
-  const [accounts, rows, unclassified, carrying, statements] = await Promise.all([
-    listAccounts(userId),
-    loadInsightsRows(userId),
-    unclassifiedCount(userId),
-    loadCarryingCost(userId),
-    listStatements(userId),
-  ]);
+  const [accounts, rows, unclassified, carrying, statements, budget] =
+    await Promise.all([
+      listAccounts(userId),
+      loadInsightsRows(userId),
+      unclassifiedCount(userId),
+      loadCarryingCost(userId),
+      listStatements(userId),
+      loadBudget(userId, null),
+    ]);
   const history = rowsRange(rows);
   const options = insightsFilterOptions(rows);
   return {
+    envelopes: budget.categories.map((row) => ({
+      id: row.id,
+      name: row.name,
+      groupId: row.groupId,
+      kind: row.kind,
+      incomeRole: row.incomeRole,
+      expectedMonthlyIncomeCents: row.expectedMonthlyIncomeCents,
+    })),
+    groups: budget.groups.map((row) => ({
+      id: row.id,
+      name: row.name,
+      parentGroupId: row.parentGroupId,
+      kind: row.kind,
+    })),
     accounts: accounts.map((account) => ({
       id: account.id,
       name: account.name,
@@ -229,11 +247,11 @@ export async function getCashFlowTool(userId: string, args: Record<string, unkno
         residualCents: null,
       },
       income: EMPTY_INCOME,
-      baseline: EMPTY_BASELINE,
     };
   }
 
-  const totals = analysis.flow.reduce(
+  const reportPoints = cashReportPoints(analysis.windowed, analysis.flow);
+  const totals = reportPoints.reduce(
     (sum, point) => ({
       incomeCents: sum.incomeCents + point.incomeCents,
       spendCents: sum.spendCents + point.spendCents,
@@ -267,18 +285,9 @@ export async function getCashFlowTool(userId: string, args: Record<string, unkno
     axis: parsed.axis,
     window: parsed.from || parsed.to ? "custom" : parsed.window,
     levelRecurring: parsed.levelRecurring,
-    points: analysis.flow.map(flattenFlowPoint),
+    points: reportPoints.map(flattenFlowPoint),
     totals,
     income: analysis.income,
-    baseline: {
-      baselineCents: analysis.split.baselineCents,
-      oneOffCents: analysis.split.oneOffCents,
-      baselinePerBucketCents: analysis.split.baselinePerBucketCents,
-      bucketCount: analysis.split.bucketCount,
-      events: analysis.split.events,
-      levelled: analysis.split.levelled,
-      billsCents: analysis.split.billsCents,
-    },
   };
 }
 
@@ -286,58 +295,83 @@ export async function getSpendingBreakdownTool(
   userId: string,
   args: Record<string, unknown>,
 ) {
-  const { analysis } = await loadAnalyzed(userId, args);
-  const by = args.by === "merchant" ? "merchant" : "category";
+  const [rows, data] = await Promise.all([
+    loadInsightsRows(userId),
+    loadBudget(userId, null),
+  ]);
+  const parsed = parseFinanceWindow(args);
+  const by = args.by === "merchant" || args.by === "group" ? args.by : "category";
+  const scope: SpendingScope =
+    args.scope === "savings" || args.scope === "all" ? args.scope : "living";
+  const range =
+    explicitRange(parsed, rowsRange(rows)) ??
+    reportRange(parsed.window, data.todayKey, rows[0]?.transactionDate ?? null);
+  const categoryMigration = migrateReportNames(
+    parsed.filter.categories,
+    data.categories,
+  );
+  const payeeMigration = migrateReportNames(parsed.filter.merchants, [
+    ...new Map(
+      rows.flatMap((row) =>
+        row.payeeId && row.payeeName
+          ? [[row.payeeId, { id: row.payeeId, name: row.payeeName }] as const]
+          : [],
+      ),
+    ).values(),
+  ]);
+  if (categoryMigration.unresolved.length || payeeMigration.unresolved.length)
+    throw new Error(
+      `Name filters are ambiguous or missing: ${[...categoryMigration.unresolved, ...payeeMigration.unresolved].join(", ")}. Use IDs from get_finance_overview.`,
+    );
+  const filtered = applyReportFilters(rows, {
+    accountIds: parsed.filter.accountIds,
+    categoryIds:
+      args.categoryIds === undefined
+        ? categoryMigration.ids
+        : asStringArray(args.categoryIds),
+    payeeIds:
+      args.payeeIds === undefined ? payeeMigration.ids : asStringArray(args.payeeIds),
+  });
+  const contributing = spendingContributions(filtered, scope).filter(
+    (row) =>
+      row.transactionDate >= range.startKey && row.transactionDate <= range.endKey,
+  );
+  const ranked = rankedReportSpending(contributing, data, by);
   const limit = Math.min(Math.max(optionalNumber(args, "limit") ?? 20, 1), 100);
-  if (analysis.empty) {
-    return {
-      range: null,
-      by,
-      items: [],
-      totalSpendCents: 0,
-      otherCents: 0,
-      returned: 0,
-      total: 0,
-      ...(args.trend === true ? { trends: [] } : {}),
-    };
-  }
-
-  const ranked =
-    by === "merchant"
-      ? analysis.payees.map((entry) => ({
-          name: entry.merchant,
-          cents: entry.cents,
-          share: entry.share,
-          count: entry.count,
-        }))
-      : analysis.categories.map((entry) => ({
-          name: entry.category,
-          cents: entry.cents,
-          share: entry.share,
-          count: entry.count,
-        }));
   const items = ranked.slice(0, limit);
-  const otherCents = ranked
-    .slice(limit)
-    .reduce((total, entry) => total + entry.cents, 0);
-  const totalSpendCents = ranked.reduce((total, entry) => total + entry.cents, 0);
-
   return {
-    range: analysis.range,
+    range,
     by,
+    scope,
     items,
-    totalSpendCents,
-    otherCents,
+    totalSpendCents: ranked.reduce((sum, row) => sum + row.cents, 0),
+    otherCents: ranked.slice(limit).reduce((sum, row) => sum + row.cents, 0),
     returned: items.length,
     total: ranked.length,
     ...(args.trend === true
       ? {
-          trends: analysis.trends.points.map((point) => ({
+          trends: reportMonthlySeries(
+            spendingComparisonRows(rows, {
+              accountIds: parsed.filter.accountIds,
+              categoryIds:
+                args.categoryIds === undefined
+                  ? categoryMigration.ids
+                  : asStringArray(args.categoryIds),
+              payeeIds:
+                args.payeeIds === undefined
+                  ? payeeMigration.ids
+                  : asStringArray(args.payeeIds),
+            }),
+            scope,
+            range,
+            data.todayKey,
+          ).map((point) => ({
             key: point.bucket.key,
             label: point.bucket.label,
             startKey: point.bucket.startKey,
             endKey: point.bucket.endKey,
-            byName: point.byCategory,
+            spendingCents: point.spendCents,
+            regularIncomeCents: point.incomeCents,
           })),
         }
       : {}),
@@ -471,8 +505,6 @@ export async function searchTransactionsTool(
       amountCents: row.amountCents,
       category: effectiveCategory(row),
       flow: effectiveFlow(row),
-      excludeFromBaseline: row.excludeFromBaseline,
-      eventLabel: row.eventLabel,
     })),
     pageInfo: page.pageInfo,
     matchedIncomeCents: found.matchedIncomeCents,

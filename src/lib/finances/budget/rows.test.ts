@@ -48,6 +48,8 @@ function category(
     notes: "",
     target: null,
     kind,
+    incomeRole: "other",
+    expectedMonthlyIncomeCents: null,
     isIncome: kind === "income",
     bill: null,
   };
@@ -66,6 +68,8 @@ function august(): BudgetMonth {
     categories: CATEGORIES.map((row) => ({
       id: row.id,
       groupId: row.groupId,
+      incomeRole: "other",
+      expectedMonthlyIncomeCents: null,
       isIncome: row.kind === "income",
     })),
     allocations: [

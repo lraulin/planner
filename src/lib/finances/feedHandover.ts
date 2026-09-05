@@ -25,8 +25,6 @@ export type CarriedState = {
   budgetCategoryId: string | null;
   notes: string;
   flowOverride: FinanceFlowKind | null;
-  excludeFromBaseline: boolean;
-  eventLabel: string;
 };
 
 export type RetiringRow = CarriedState & {
@@ -67,9 +65,7 @@ export function hasUserState(row: CarriedState): boolean {
   return (
     row.budgetCategoryId !== null ||
     row.notes.trim() !== "" ||
-    row.flowOverride !== null ||
-    row.excludeFromBaseline ||
-    row.eventLabel.trim() !== ""
+    row.flowOverride !== null
   );
 }
 
@@ -92,12 +88,6 @@ function carryableFields(
   }
   if (retiring.flowOverride !== null && replacement.flowOverride === null) {
     carry.flowOverride = retiring.flowOverride;
-  }
-  if (retiring.excludeFromBaseline && !replacement.excludeFromBaseline) {
-    carry.excludeFromBaseline = true;
-  }
-  if (retiring.eventLabel.trim() !== "" && replacement.eventLabel.trim() === "") {
-    carry.eventLabel = retiring.eventLabel;
   }
   return carry;
 }

@@ -2244,9 +2244,7 @@ export const financeTransactions = pgTable(
      * money that says nothing about what next month costs; averaging them in answers a
      * question nobody asked. Never set by the classifier — only suggested, then confirmed.
      */
-    excludeFromBaseline: boolean("exclude_from_baseline").notNull().default(false),
     /** Names the one-off — "Wedding", "House move" — so it totals as an event, not a blip. */
-    eventLabel: text("event_label").notNull().default(""),
     /**
      * Which envelope this row spends from, in the zero-based budget
      * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D6).
@@ -2625,6 +2623,28 @@ export const financeCategoryGroups = pgTable(
  * bill with no stored target derives one from its own cadence (`targets/derive.ts`). Every
  * other column above still means the same thing it means for an ordinary envelope.
  */
+/** Historical exclusion metadata retired by envelope reporting. No product writes. */
+export const financeReportingArchive = pgTable(
+  "finance_reporting_archive",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    transactionId: uuid("transaction_id").notNull(),
+    fields: jsonb("fields")
+      .$type<{ excludeFromBaseline: boolean; eventLabel: string; notes: string }>()
+      .notNull(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_reporting_archive_user_transaction_uq").on(
+      table.userId,
+      table.transactionId,
+    ),
+  ],
+);
+
 export const financeBudgetCategories = pgTable(
   "finance_budget_categories",
   {
@@ -2658,6 +2678,12 @@ export const financeBudgetCategories = pgTable(
     target: jsonb("target").$type<unknown>(),
     /** Free text on the envelope. Not the template store. */
     notes: text("notes").notNull().default(""),
+    /** Planning metadata only; every income receipt still feeds Ready to Assign. */
+    incomeRole: text("income_role")
+      .$type<"regular" | "other">()
+      .notNull()
+      .default("other"),
+    expectedMonthlyIncomeCents: integer("expected_monthly_income_cents"),
     /** Which section this envelope belongs to — income, spending, bill, or savings. */
     kind: text("kind").$type<EnvelopeKind>().notNull().default("spending"),
     /**
@@ -2742,6 +2768,14 @@ export const financeBudgetCategories = pgTable(
     check(
       "finance_budget_categories_kind",
       sql`${table.kind} in ('income', 'spending', 'bill', 'savings')`,
+    ),
+    check(
+      "finance_budget_categories_income_role",
+      sql`${table.incomeRole} in ('regular', 'other')`,
+    ),
+    check(
+      "finance_budget_categories_income_facet",
+      sql`(${table.kind} = 'income' or (${table.incomeRole} = 'other' and ${table.expectedMonthlyIncomeCents} is null)) and (${table.expectedMonthlyIncomeCents} is null or ${table.expectedMonthlyIncomeCents} >= 0)`,
     ),
     check(
       "finance_budget_categories_status",

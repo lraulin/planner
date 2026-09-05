@@ -7,7 +7,6 @@ import { importFinanceCsvFiles, type ImportFile } from "./import";
 import {
   reclassifyTransactions,
   previewDerivedChanges,
-  setOneOff,
   updateTransaction,
 } from "./mutations";
 import { addAlias, removeAlias } from "./payees/mutations";
@@ -210,10 +209,6 @@ describeDb("reclassifyTransactions", () => {
       flowOverride: "refund",
       notes: "returned half of it",
     });
-    await setOneOff(userId, [walmart.id], {
-      excludeFromBaseline: true,
-      eventLabel: "House move",
-    });
 
     const second = await reclassifyTransactions(userId);
     expect(second.updated).toBe(0);
@@ -222,8 +217,7 @@ describeDb("reclassifyTransactions", () => {
       .select({
         notes: financeTransactions.notes,
         flowOverride: financeTransactions.flowOverride,
-        excludeFromBaseline: financeTransactions.excludeFromBaseline,
-        eventLabel: financeTransactions.eventLabel,
+
         derivedFlow: financeTransactions.derivedFlow,
       })
       .from(financeTransactions)
@@ -232,8 +226,7 @@ describeDb("reclassifyTransactions", () => {
     expect(row).toMatchObject({
       notes: "returned half of it",
       flowOverride: "refund",
-      excludeFromBaseline: true,
-      eventLabel: "House move",
+
       // The classifier still records what it thinks; the override sits beside it.
       derivedFlow: "spend",
     });
@@ -255,27 +248,6 @@ describeDb("reclassifyTransactions", () => {
     expect(applied.normalizedMonthlyIncomeCents).toBe(
       preview.income.after.normalizedMonthlyIncomeCents,
     );
-  });
-
-  it("clears the event label when a row goes back into the baseline", async () => {
-    const [rent] = (await listTransactions(userId)).filter((row) =>
-      row.description.includes("RENT:RAULI"),
-    );
-    await setOneOff(userId, [rent.id], {
-      excludeFromBaseline: true,
-      eventLabel: "House move",
-    });
-    await setOneOff(userId, [rent.id], { excludeFromBaseline: false });
-
-    const [row] = await db
-      .select({
-        excludeFromBaseline: financeTransactions.excludeFromBaseline,
-        eventLabel: financeTransactions.eventLabel,
-      })
-      .from(financeTransactions)
-      .where(eq(financeTransactions.id, rent.id));
-
-    expect(row).toMatchObject({ excludeFromBaseline: false, eventLabel: "" });
   });
 });
 
@@ -315,16 +287,13 @@ describeDb("reclassify user isolation", () => {
     expect(await classifiedRows(ownerId)).toEqual(before);
   });
 
-  it("does not let a second user flag another user's transaction as a one-off", async () => {
+  it("does not let a second user overwrite another user's transaction notes", async () => {
     const [row] = await listTransactions(ownerId);
     await expect(
-      setOneOff(intruderId, [row.id], { excludeFromBaseline: true }),
-    ).rejects.toThrow("Transaction not found.");
-
-    const [stored] = await db
-      .select({ excludeFromBaseline: financeTransactions.excludeFromBaseline })
-      .from(financeTransactions)
-      .where(eq(financeTransactions.id, row.id));
-    expect(stored.excludeFromBaseline).toBe(false);
+      updateTransaction(intruderId, row.id, { notes: "Changed by intruder" }),
+    ).rejects.toThrow();
+    expect(
+      (await listTransactions(ownerId)).find((entry) => entry.id === row.id)?.notes,
+    ).toBe("");
   });
 });

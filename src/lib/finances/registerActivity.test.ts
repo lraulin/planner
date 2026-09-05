@@ -26,8 +26,7 @@ function tx(
     derivedCategory: null,
     derivedFlow: "spend",
     flowOverride: null,
-    excludeFromBaseline: false,
-    eventLabel: "",
+
     notes: "",
     balanceAfterCents: null,
     budgetCategoryId: "groceries",

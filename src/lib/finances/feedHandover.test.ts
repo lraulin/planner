@@ -17,8 +17,7 @@ function retiring(over: Partial<RetiringRow> = {}): RetiringRow {
     budgetCategoryId: null,
     notes: "",
     flowOverride: null,
-    excludeFromBaseline: false,
-    eventLabel: "",
+
     ...over,
   };
 }
@@ -33,8 +32,7 @@ function replacement(over: Partial<ReplacementRow> = {}): ReplacementRow {
     budgetCategoryId: null,
     notes: "",
     flowOverride: null,
-    excludeFromBaseline: false,
-    eventLabel: "",
+
     ...over,
   };
 }
@@ -147,8 +145,6 @@ describe("hasUserState", () => {
         budgetCategoryId: null,
         notes: "  ",
         flowOverride: null,
-        excludeFromBaseline: false,
-        eventLabel: "",
       }),
     ).toBe(false);
   });
@@ -158,13 +154,10 @@ describe("hasUserState", () => {
       budgetCategoryId: null,
       notes: "",
       flowOverride: null,
-      excludeFromBaseline: false,
-      eventLabel: "",
     };
     expect(hasUserState({ ...empty, budgetCategoryId: "x" })).toBe(true);
     expect(hasUserState({ ...empty, notes: "n" })).toBe(true);
     expect(hasUserState({ ...empty, flowOverride: "refund" })).toBe(true);
-    expect(hasUserState({ ...empty, excludeFromBaseline: true })).toBe(true);
-    expect(hasUserState({ ...empty, eventLabel: "Trip" })).toBe(true);
+    expect(hasUserState({ ...empty, notes: "Trip" })).toBe(true);
   });
 });

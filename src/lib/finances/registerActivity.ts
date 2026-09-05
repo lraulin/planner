@@ -29,6 +29,10 @@ export type ActivityRegisterParams = {
   month: MonthKey;
 };
 
+export function budgetEnvelopeHref(categoryId: string, month: MonthKey): string {
+  return `/finances/budget?${new URLSearchParams({ month: monthParamOf(month), detail: categoryId })}`;
+}
+
 /** `/finances/register?view=activity&category=<id>&month=YYYY-MM`. */
 export function activityRegisterHref(categoryId: string, month: MonthKey): string {
   const params = new URLSearchParams({

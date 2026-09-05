@@ -15,7 +15,7 @@ describe("insightsCommands", () => {
     expect(commands).toHaveLength(1);
     expect(commands[0]).toMatchObject({
       id: "finances.reclassify",
-      label: "Reclassify…",
+      label: "Rebuild transaction classifications",
       group: "view",
       menu: "tools",
       disabled: false,
