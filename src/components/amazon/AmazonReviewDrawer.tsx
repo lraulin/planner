@@ -4,6 +4,7 @@ import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { formatUsd } from "@/lib/finances/money";
+import { DateText } from "@/components/date/DateText";
 import {
   approveAmazonChargeMatchAction,
   listAmazonChargeCandidatesAction,
@@ -273,8 +274,8 @@ export function AmazonReviewDrawer({
                     className="mt-1"
                   />
                   <span>
-                    {row.transactionDate} · {row.description} ·{" "}
-                    {formatUsd(row.amountCents)}
+                    <DateText dateKey={row.transactionDate} className="inline" /> ·{" "}
+                    {row.description} · {formatUsd(row.amountCents)}
                     {row.dateMismatch ? " · date differs" : ""}
                   </span>
                 </label>
