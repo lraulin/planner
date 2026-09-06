@@ -36,11 +36,48 @@ export function buildGridTemplate(
   columns: readonly TrackColumn[],
   widths?: Record<string, number>,
 ): string {
-  const tracks = columns.map((column) => {
-    const override = widths?.[column.id];
-    return override === undefined ? definiteTrack(column.width) : `${override}px`;
-  });
-  return [...tracks, FILLER_TRACK].join(" ");
+  return [...columns.map((column) => resolvedTrack(column, widths)), FILLER_TRACK].join(
+    " ",
+  );
+}
+
+/**
+ * The track a column actually lays out as: a stored override wins over the declared width.
+ *
+ * One function because two callers need the answer — the template and the tree drop
+ * indicator's offset — and the indicator having its own copy that read only the *declared*
+ * width is why the drop line landed in the wrong place as soon as any column before the name
+ * had been resized.
+ */
+function resolvedTrack(column: TrackColumn, widths?: Record<string, number>): string {
+  const override = widths?.[column.id];
+  return override === undefined ? definiteTrack(column.width) : `${override}px`;
+}
+
+/**
+ * Where the name column's text starts, as a CSS length — the offset the tree drop line and
+ * the child-drop marker indent from.
+ *
+ * The handle track, then every track before the name column, each followed by the cell gap.
+ * Indentation lives inside the name cell, so an indicator that marks depth has to begin
+ * where that cell's content does. A track that is not a plain length (nothing declares one
+ * now, but a `minmax` would collapse to something this cannot add up) gives up and measures
+ * from the row edge rather than guessing.
+ */
+export function nameColumnOffset(
+  columns: readonly TrackColumn[],
+  handleWidth: string,
+  gap: string,
+  widths?: Record<string, number>,
+): string {
+  const parts = [handleWidth, gap];
+  for (const column of columns) {
+    if (column.id === "name") break;
+    const track = resolvedTrack(column, widths);
+    if (!/^[\d.]+(rem|px|em)$/.test(track)) return `calc(${handleWidth} + ${gap})`;
+    parts.push(track, gap);
+  }
+  return `calc(${parts.join(" + ")})`;
 }
 
 /**

@@ -34,7 +34,7 @@ import {
   type CrossColumnFilter,
 } from "@/lib/grid/crossFilter";
 import { withAncestors } from "@/lib/grid/ancestors";
-import { buildGridTemplate } from "@/lib/grid/template";
+import { buildGridTemplate, nameColumnOffset } from "@/lib/grid/template";
 import { collectColumnValues, distinctValuesOf } from "@/lib/grid/distinct";
 import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
 import type { GridFilterValue } from "@/lib/grid/filterValue";
@@ -130,6 +130,11 @@ const EMPTY_EXPORT_COMMANDS: Command[] = [];
  * offsets (`nameColumnLeft`) and the header/body templates do not have to care which.
  */
 const HANDLE_WIDTH = "1.75rem";
+/**
+ * The gap between two cells. Named because the drop indicator's offset has to add up the
+ * same gaps the row actually lays out — three copies of a literal is how that drifts.
+ */
+const CELL_GAP = "0.75rem";
 
 /** Dwell on a collapsed row before it opens under a drag. */
 const HOLD_EXPAND_MS = 500;
@@ -529,6 +534,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   // never apply to it. Prepended on desktop only; compact rows have no gutter.
   const bodyTemplate = buildGridTemplate(columns, widths);
   const gridTemplate = `${handleWidth} ${bodyTemplate}`;
+  // Computed here rather than per row: this is the one place `widths` is in scope, which is
+  // the whole point — the old per-row call could only see declared widths.
+  const nameLeft = nameColumnOffset(columns, handleWidth, CELL_GAP, widths);
 
   const compact = useIsCompact();
 
@@ -1102,7 +1110,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
             ? undefined
             : {
                 gridTemplateColumns: gridTemplate,
-                columnGap: "0.75rem",
+                columnGap: CELL_GAP,
                 height: "var(--row-height)",
               }
         }
@@ -1333,7 +1341,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                         columns={columns}
                         columnCtx={columnCtx}
                         gridTemplate={gridTemplate}
-                        handleWidth={handleWidth}
+                        nameColumnLeft={nameLeft}
                         gutter={gutter}
                         selected={isSelected}
                         focused={isFocus}
@@ -1416,7 +1424,8 @@ type DataRowProps<TCtx, TRow> = {
   columns: ColumnDef<TCtx, TRow>[];
   columnCtx: TCtx;
   gridTemplate: string;
-  handleWidth: string;
+  /** Where the name cell's content starts, so a depth indicator can indent from it. */
+  nameColumnLeft: string;
   gutter: "checkbox" | "handle";
   selected: boolean;
   /** Keyboard-focus row — the one that scrolls into view. Defaults to `selected`. */
@@ -1450,7 +1459,7 @@ const DataRow = memo(
     columns,
     columnCtx,
     gridTemplate,
-    handleWidth,
+    nameColumnLeft,
     gutter,
     selected,
     focused = selected,
@@ -1604,7 +1613,7 @@ const DataRow = memo(
         ].join(" ")}
         style={{
           gridTemplateColumns: gridTemplate,
-          columnGap: "0.75rem",
+          columnGap: CELL_GAP,
           height: "var(--row-height)",
         }}
       >
@@ -1636,15 +1645,12 @@ const DataRow = memo(
 
         {drag?.hint &&
           (drag.hint.zone === "inside" ? (
-            <ChildDropMark
-              depth={drag.hint.depth}
-              nameColumnLeft={nameColumnLeft(columns, handleWidth)}
-            />
+            <ChildDropMark depth={drag.hint.depth} nameColumnLeft={nameColumnLeft} />
           ) : (
             <DropLine
               zone={drag.hint.zone}
               depth={drag.hint.depth}
-              nameColumnLeft={nameColumnLeft(columns, handleWidth)}
+              nameColumnLeft={nameColumnLeft}
             />
           ))}
       </div>
@@ -1656,7 +1662,7 @@ const DataRow = memo(
       prev.columns === next.columns &&
       prev.columnCtx === next.columnCtx &&
       prev.gridTemplate === next.gridTemplate &&
-      prev.handleWidth === next.handleWidth &&
+      prev.nameColumnLeft === next.nameColumnLeft &&
       prev.gutter === next.gutter &&
       prev.selected === next.selected &&
       prev.focused === next.focused &&
@@ -1824,27 +1830,6 @@ function ChildDropMark({
   );
 }
 
-/**
- * Where the name column starts, as a CSS length: the handle track (always present on
- * desktop), then every fixed track before the name. Indentation lives in the name cell, so
- * the drop line has to start there too. Any non-fixed track before the name gives up and
- * measures from the row edge.
- */
-function nameColumnLeft(
-  columns: { id: string; width: string }[],
-  handleWidth: string,
-): string {
-  const parts = [handleWidth, "0.75rem"];
-  for (const column of columns) {
-    if (column.id === "name") break;
-    if (!/^[\d.]+(rem|px|em)$/.test(column.width)) {
-      return `calc(${handleWidth} + 0.75rem)`;
-    }
-    parts.push(column.width, "0.75rem");
-  }
-  return `calc(${parts.join(" + ")})`;
-}
-
 const GroupHeader = memo(function GroupHeader({
   row,
   gridTemplate,
@@ -1922,7 +1907,7 @@ const GroupHeader = memo(function GroupHeader({
           ? {}
           : {
               gridTemplateColumns: gridTemplate,
-              columnGap: "0.75rem",
+              columnGap: CELL_GAP,
               height: "var(--row-height)",
             }),
       }}

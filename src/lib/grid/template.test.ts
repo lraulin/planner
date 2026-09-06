@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@/lib/settings/grid";
-import { buildGridTemplate, FILLER_TRACK, resizedColumnWidth } from "./template";
+import {
+  buildGridTemplate,
+  FILLER_TRACK,
+  nameColumnOffset,
+  resizedColumnWidth,
+} from "./template";
 
 const COLUMNS = [
   { id: "name", width: "18rem" },
@@ -58,5 +63,50 @@ describe("resizedColumnWidth", () => {
 
   it("rounds, so a fractional measured width does not persist a fractional override", () => {
     expect(resizedColumnWidth(160.4, 20.2)).toBe(181);
+  });
+});
+
+describe("nameColumnOffset", () => {
+  const TREE = [
+    { id: "state", width: "4rem" },
+    { id: "pri", width: "3rem" },
+    { id: "name", width: "30rem" },
+    { id: "deadline", width: "8rem" },
+  ];
+
+  it("adds the handle, every track before the name, and a gap after each", () => {
+    expect(nameColumnOffset(TREE, "1.75rem", "0.75rem")).toBe(
+      "calc(1.75rem + 0.75rem + 4rem + 0.75rem + 3rem + 0.75rem)",
+    );
+  });
+
+  it("counts a resized column at the width it is actually drawn", () => {
+    // The bug this closes: the offset read declared widths only, so resizing any column
+    // before the name left the tree drop line pointing at the wrong depth.
+    expect(nameColumnOffset(TREE, "1.75rem", "0.75rem", { pri: 120 })).toBe(
+      "calc(1.75rem + 0.75rem + 4rem + 0.75rem + 120px + 0.75rem)",
+    );
+  });
+
+  it("ignores an override for a column after the name, which cannot move it", () => {
+    expect(nameColumnOffset(TREE, "1.75rem", "0.75rem", { deadline: 400 })).toBe(
+      nameColumnOffset(TREE, "1.75rem", "0.75rem"),
+    );
+  });
+
+  it("stops at the name column, so nothing after it is added in", () => {
+    expect(
+      nameColumnOffset([{ id: "name", width: "30rem" }], "1.75rem", "0.75rem"),
+    ).toBe("calc(1.75rem + 0.75rem)");
+  });
+
+  it("measures from the row edge rather than guessing at a track it cannot add", () => {
+    expect(
+      nameColumnOffset(
+        [{ id: "odd", width: "fit-content" }, ...TREE],
+        "1.75rem",
+        "0.75rem",
+      ),
+    ).toBe("calc(1.75rem + 0.75rem)");
   });
 });
