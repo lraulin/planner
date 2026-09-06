@@ -1,4 +1,5 @@
 import {
+  compareGroupText,
   knownGroupBy,
   type CalendarNoteGroupBy,
   type GridGroupBy,
@@ -100,14 +101,6 @@ function partOf(row: TransactionListRow, dimension: FinanceGroupBy): GroupPart |
   return { key: name, label: name, sort: name };
 }
 
-function compareText(left: string, right: string): number {
-  const readable = left.localeCompare(right, undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
-  return readable || left.localeCompare(right, undefined, { numeric: true });
-}
-
 function compareParts(
   left: GroupPart | null,
   right: GroupPart | null,
@@ -121,7 +114,7 @@ function compareParts(
     // and November rather than buried at the bottom of a flat date sort.
     return isCalendar(dimension) ? right.sort - left.sort : left.sort - right.sort;
   }
-  const compared = compareText(String(left.sort), String(right.sort));
+  const compared = compareGroupText(String(left.sort), String(right.sort));
   return isCalendar(dimension) ? -compared : compared;
 }
 

@@ -1,4 +1,4 @@
-import { knownGroupBy, type GridGroupBy } from "@/lib/grid/grouping";
+import { compareGroupText, knownGroupBy, type GridGroupBy } from "@/lib/grid/grouping";
 import type { GridRow } from "@/lib/tree/slice";
 import { transactionDatePart } from "./grouping";
 import type { StatementViewRow } from "./types";
@@ -58,7 +58,12 @@ export function groupStatements(
             : rightPart.sort - leftPart.sort;
         if (compared !== 0) return compared;
       } else {
-        const compared = String(leftPart.sort).localeCompare(String(rightPart.sort));
+        // The same comparator the register uses, so one account name cannot sort one way
+        // on this grid and another way on the one beside it.
+        const compared = compareGroupText(
+          String(leftPart.sort),
+          String(rightPart.sort),
+        );
         if (compared !== 0) return dimension === "account" ? compared : -compared;
       }
     }

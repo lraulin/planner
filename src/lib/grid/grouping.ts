@@ -81,6 +81,25 @@ export const GROUP_BY_LABELS: Record<GridGroupBy, string> = {
 /** How many dimensions may be stacked before the headers overwhelm the rows. */
 export const MAX_GROUP_LEVELS = 3;
 
+/**
+ * Order two categorical group keys — an account, a subject, a category name.
+ *
+ * Numeric-aware so `Account 10` follows `Account 9`, and base-sensitive so case and accents
+ * do not split what a reader sees as one name. A base-sensitive comparison may call
+ * differently-cased keys equal, though, and equal keys would interleave two headers instead
+ * of leaving each bucket contiguous — hence the exact-key tiebreaker.
+ *
+ * Shared because a grid that sorts its account names differently from the grid beside it is
+ * a difference the reader has to explain to themselves.
+ */
+export function compareGroupText(left: string, right: string): number {
+  const readable = left.localeCompare(right, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+  return readable || left.localeCompare(right, undefined, { numeric: true });
+}
+
 /** Narrow persisted strings to dimensions the caller actually knows how to render. */
 export function knownGroupBy<T extends string>(
   values: readonly string[],

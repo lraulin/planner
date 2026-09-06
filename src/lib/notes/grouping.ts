@@ -1,5 +1,6 @@
 import {
   NOTE_GROUP_BY_VALUES,
+  compareGroupText,
   knownGroupBy,
   type CalendarNoteGroupBy,
   type NoteGroupBy,
@@ -104,7 +105,7 @@ export function formatNoteDate(
 /** Contexts form a set: normalize their display order before using the set as a bucket. */
 export function noteContextsLabel(contexts: readonly string[]): string {
   return [...new Set(contexts.map((context) => context.trim()).filter(Boolean))]
-    .sort(compareText)
+    .sort(compareGroupText)
     .join(", ");
 }
 
@@ -171,16 +172,6 @@ function isCalendarDimension(dimension: NoteGroupBy): boolean {
   );
 }
 
-function compareText(left: string, right: string): number {
-  const readable = left.localeCompare(right, undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
-  // A base-sensitive comparison may call differently-cased keys equal. The exact-key
-  // tiebreaker keeps every bucket contiguous instead of interleaving two headers.
-  return readable || left.localeCompare(right, undefined, { numeric: true });
-}
-
 function compareParts(
   left: NoteGroupPart | null,
   right: NoteGroupPart | null,
@@ -196,7 +187,7 @@ function compareParts(
       : left.sort - right.sort;
   }
 
-  const compared = compareText(String(left.sort), String(right.sort));
+  const compared = compareGroupText(String(left.sort), String(right.sort));
   return isCalendarDimension(dimension) ? -compared : compared;
 }
 

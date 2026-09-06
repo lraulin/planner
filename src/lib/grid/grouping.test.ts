@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   asGridGroupBy,
+  compareGroupText,
   knownGroupBy,
   MAX_GROUP_LEVELS,
   NOTE_GROUP_BY_VALUES,
@@ -56,5 +57,29 @@ describe("setGroupLevel", () => {
     );
     expect(three).toHaveLength(MAX_GROUP_LEVELS);
     expect(setGroupLevel(three, 3, "project")).toEqual(three);
+  });
+});
+
+describe("compareGroupText", () => {
+  it("reads numbers as numbers, so 9 comes before 10", () => {
+    expect(["Account 10", "Account 9", "Account 1"].sort(compareGroupText)).toEqual([
+      "Account 1",
+      "Account 9",
+      "Account 10",
+    ]);
+  });
+
+  it("sorts case and accents together rather than splitting one name in two", () => {
+    expect(["checking", "Brokerage", "Checking"].sort(compareGroupText)).toEqual([
+      "Brokerage",
+      "checking",
+      "Checking",
+    ]);
+  });
+
+  it("never calls two different keys equal, so their buckets stay contiguous", () => {
+    // Base sensitivity alone reports 0 here, which would let the sort interleave the two
+    // headers and scatter each bucket's rows through the other's.
+    expect(compareGroupText("checking", "Checking")).not.toBe(0);
   });
 });
