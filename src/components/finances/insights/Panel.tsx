@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 
 /**
- * The shared chrome every insights panel wears, and the stat tile it is often made of.
+ * The shared chrome every insights panel wears.
  *
  * One component rather than a `<section>` copied nine times: the panels differ in what they
  * report, not in how they are framed, and a heading that drifts between panels is the thing
@@ -36,53 +36,6 @@ export function Panel({
       </header>
       <div className="min-w-0 flex-1 p-3">{children}</div>
     </section>
-  );
-}
-
-/**
- * One headline figure.
- *
- * `tone` colours the number and nothing else. Text stays in ink tokens even beside a
- * coloured chart — a figure painted in a series colour reads as a fourth series.
- */
-export function StatTile({
-  label,
-  value,
-  detail,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  detail?: ReactNode;
-  tone?: "neutral" | "income" | "spend";
-}) {
-  const valueClass =
-    tone === "income"
-      ? "text-[var(--chart-income)]"
-      : tone === "spend"
-        ? "text-[var(--chart-spend)]"
-        : "text-ink";
-  return (
-    <div className="min-w-0 rounded border border-rule bg-surface-raised px-3 py-2">
-      <div className="truncate text-[0.75rem] text-ink-muted">{label}</div>
-      <div className={`tabular text-[1.25rem] leading-tight font-medium ${valueClass}`}>
-        {value}
-      </div>
-      {detail && (
-        <div className="mt-0.5 text-[0.75rem] leading-snug text-ink-muted">
-          {detail}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** A responsive row of tiles — one column on a phone, up to four on a desktop. */
-export function StatRow({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-      {children}
-    </div>
   );
 }
 

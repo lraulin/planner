@@ -488,7 +488,7 @@ export function CashFlowChart({
  * Identity is never colour alone — the legend is always present for more than one series,
  * and its text wears ink tokens so the swatch is the only thing carrying the hue.
  */
-export function ChartLegend({
+function ChartLegend({
   items,
 }: {
   items: {
