@@ -703,7 +703,7 @@ Create or correct a subscription or bill.
 - Returns: The saved bill's name, matchers, and status.
 - Effects: write; destructive=false; retry=safe; confirmation=user_intent
 - Exposure: legacy; replaced by `save_subscription`
-- Arguments: `{ name*, matchers?, cadenceMonths?, cadenceDays?, expectedCents?, anchorDate?, status?, url?, scheduled?, dueDay?, notes? }`
+- Arguments: `{ name*, matchers?, cadenceMonths?, cadenceDays?, expectedCents?, anchorDate?, status?, url?, scheduled?, dueDay?, leadDays?, notes? }`
 - Output: `{ name*, matchers*, status* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -763,7 +763,7 @@ Create or correct a bill using stable payee ids.
 - Returns: The saved bill id, name, payees, and status.
 - Effects: write; destructive=false; retry=safe; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ name*, payeeIds?, cadenceMonths?, cadenceDays?, expectedCents?, anchorDate?, status?, url?, scheduled?, dueDay?, notes? }`
+- Arguments: `{ name*, payeeIds?, cadenceMonths?, cadenceDays?, expectedCents?, anchorDate?, status?, url?, scheduled?, dueDay?, leadDays?, notes? }`
 - Output: `{ id*, name*, payees*, status* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
