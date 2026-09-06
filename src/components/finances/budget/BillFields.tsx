@@ -1,6 +1,7 @@
 "use client";
 import { CadenceSelect } from "@/components/finances/CadenceSelect";
-import { AmountCell, DateKeyCell, DateKeyText } from "@/components/grid/cells";
+import { AmountCell, DateKeyCell } from "@/components/grid/cells";
+import { DateText } from "@/components/date/DateText";
 import type { EnvelopeStatus } from "@/db/schema";
 import {
   billCadence,
@@ -121,13 +122,17 @@ export function BillFields({
           <div className={labelClass}>
             <span>Next charge</span>
             <p className="text-[0.8125rem] text-ink">
-              <DateKeyText value={bill.nextDueKey} className="text-[0.8125rem]" />
+              <DateText
+                dateKey={bill.nextDueKey}
+                fallback="—"
+                className="inline text-[0.8125rem]"
+              />
               {bill.dueKey === null ? null : (
                 <span className="text-ink-muted">
                   {" · due "}
-                  <DateKeyText
-                    value={bill.dueKey}
-                    className="text-[0.8125rem] text-ink-muted"
+                  <DateText
+                    dateKey={bill.dueKey}
+                    className="inline text-[0.8125rem] text-ink-muted"
                   />
                 </span>
               )}

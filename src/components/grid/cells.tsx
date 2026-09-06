@@ -488,40 +488,6 @@ export function DeadlineCell({
  * above does. Callers on a Postgres `date` column (jobs, residences, life events) pass their
  * stored value straight through, because it already is the key.
  */
-/**
- * A date key the grid only displays — the read-only twin of {@link DateKeyCell}.
- *
- * It exists because a column that renders one or the other per row was printing the raw
- * `YYYY-MM-DD` for its read-only half: a bill whose due day is declared showed `2026-09-24`
- * in the same column where the row beneath it showed `10/2/2026`. Both halves have to go
- * through the workspace date format, so the read-only half needs somewhere to call the hook
- * from — a column's `render` is not a component and cannot.
- */
-export function DateKeyText({
-  value,
-  title,
-  className = "text-xs",
-  empty = "—",
-}: {
-  /** `YYYY-MM-DD`, or null/empty when unset. */
-  value: string | null | undefined;
-  title?: string;
-  className?: string;
-  /** Shown when there is no date. */
-  empty?: string;
-}) {
-  const formatDate = useDateFormatter();
-  const formatted = formatDate(value);
-  return (
-    <span
-      className={formatted ? className : `${className} text-ink-muted`}
-      title={title}
-    >
-      {formatted || empty}
-    </span>
-  );
-}
-
 export function DateKeyCell({
   value,
   ariaLabel,
