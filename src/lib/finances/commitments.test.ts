@@ -10,6 +10,7 @@ import {
   unclaimedMerchants,
   type StoredBillRow,
 } from "./commitments";
+import { type Cadence } from "./recurringBills";
 
 function bill(overrides: Partial<StoredBillRow> = {}): StoredBillRow {
   return {
@@ -379,30 +380,412 @@ describe("billAnchor", () => {
       ).toBeNull();
     }
   });
+
+  it("a charge that posted a day early retires the date predicted for it", () => {
+    // Dropbox: yearly, predicted 2026-09-06, charged 2026-09-05.
+    expect(
+      billAnchor(
+        bill({ cadenceMonths: 12, anchorDate: "2026-09-06" }),
+        "2026-09-05",
+        "2026-09-06",
+      ),
+    ).toMatchObject({ expectedKey: "2027-09-05", nextDueKey: "2027-09-05" });
+  });
+
+  it("a charge a month before a monthly anchor does not", () => {
+    // Claude (31 days) and Chewy (27): half a cadence is ~15 days, so these keep
+    // the stored date. A tuned-constant band would have made Chewy a coin flip.
+    expect(
+      billAnchor(
+        bill({ cadenceMonths: 1, anchorDate: "2026-09-08" }),
+        "2026-08-08",
+        "2026-09-06",
+      ).expectedKey,
+    ).toBe("2026-09-08");
+    expect(
+      billAnchor(
+        bill({ cadenceMonths: 1, anchorDate: "2026-10-01" }),
+        "2026-09-04",
+        "2026-09-06",
+      ).expectedKey,
+    ).toBe("2026-10-01");
+  });
+
+  it("a stray charge nowhere near the anchor retires nothing", () => {
+    // A $12 CVS row hand-filed onto Geico must not retire the December prediction.
+    expect(
+      billAnchor(
+        bill({ cadenceMonths: 6, anchorDate: "2026-12-26" }),
+        "2026-08-20",
+        "2026-09-06",
+      ).expectedKey,
+    ).toBe("2026-12-26");
+  });
+
+  it("a bill with no anchor still walks", () => {
+    const undeclared = bill({ cadenceMonths: 1, anchorDate: null });
+    expect(billAnchor(undeclared, "2026-08-26", "2026-09-06")).toEqual(
+      billAnchor(
+        { ...undeclared, anchorDate: "2026-01-01" },
+        "2026-08-26",
+        "2026-09-06",
+      ),
+    );
+  });
+});
+
+/**
+ * Production, 2026-09-06, 33 non-cancelled bill envelopes. `lastCharge` is what the
+ * payee-claim reader returned that day — Task 3 changes the basis, not these dates.
+ * `shown` is `expectedKey` under the old "anchor later than last charge" rule.
+ */
+const LIVE_BILLS_2026_09_06: readonly {
+  name: string;
+  cadenceMonths: number;
+  cadenceDays?: number | null;
+  scheduled: boolean;
+  anchorDate: string | null;
+  lastCharge: string | null;
+  shown: string | null;
+}[] = [
+  {
+    name: "Amazon Prime Membership",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-18",
+    lastCharge: null,
+    shown: "2026-09-18",
+  },
+  {
+    name: "CVS ExtraCare",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-21",
+    lastCharge: null,
+    shown: "2026-09-21",
+  },
+  {
+    name: "Car Insurance (Geico)",
+    cadenceMonths: 6,
+    scheduled: true,
+    anchorDate: "2024-12-26",
+    lastCharge: "2026-06-26",
+    shown: "2026-12-26",
+  },
+  {
+    name: "ChatGPT",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-05",
+    lastCharge: "2026-09-05",
+    shown: "2026-10-05",
+  },
+  {
+    name: "Chewy",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-10-01",
+    lastCharge: "2026-09-04",
+    shown: "2026-10-01",
+  },
+  {
+    name: "Claude",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-08",
+    lastCharge: "2026-08-08",
+    shown: "2026-09-08",
+  },
+  {
+    name: "Curiosity Stream",
+    cadenceMonths: 12,
+    scheduled: true,
+    anchorDate: "2027-01-09",
+    lastCharge: "2026-01-09",
+    shown: "2027-01-09",
+  },
+  {
+    name: "Dante's Meds (VetSource)",
+    cadenceMonths: 1,
+    cadenceDays: 28,
+    scheduled: true,
+    anchorDate: "2026-09-10",
+    lastCharge: "2026-08-13",
+    shown: "2026-09-10",
+  },
+  {
+    name: "Domain Name (Go Daddy)",
+    cadenceMonths: 12,
+    scheduled: true,
+    anchorDate: "2027-08-22",
+    lastCharge: "2026-08-24",
+    shown: "2027-08-22",
+  },
+  {
+    name: "Dropbox",
+    cadenceMonths: 12,
+    scheduled: true,
+    anchorDate: "2026-09-06",
+    lastCharge: "2026-09-05",
+    shown: "2026-09-06",
+  },
+  {
+    name: "Electricity (SMECO)",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-08-31",
+    lastCharge: "2026-09-01",
+    shown: "2026-10-01",
+  },
+  {
+    name: "GRAY MIRROR",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-06",
+    lastCharge: "2026-08-06",
+    shown: "2026-09-06",
+  },
+  {
+    name: "Grok",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-08-27",
+    lastCharge: "2026-08-28",
+    shown: "2026-09-28",
+  },
+  {
+    name: "Home Security (SimpliSafe)",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-17",
+    lastCharge: "2026-08-17",
+    shown: "2026-09-17",
+  },
+  {
+    name: "Huel",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-10-01",
+    lastCharge: null,
+    shown: "2026-10-01",
+  },
+  {
+    name: "Internet (Comcast)",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-21",
+    lastCharge: "2026-08-21",
+    shown: "2026-09-21",
+  },
+  {
+    name: "Lotus Eaters",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-22",
+    lastCharge: "2026-08-24",
+    shown: "2026-09-22",
+  },
+  {
+    name: "Neon Database",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-10-01",
+    lastCharge: "2026-09-01",
+    shown: "2026-10-01",
+  },
+  {
+    name: "Paste",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-07",
+    lastCharge: null,
+    shown: "2026-09-07",
+  },
+  {
+    name: "Pet Insurance (MetLife)",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-21",
+    lastCharge: "2026-08-21",
+    shown: "2026-09-21",
+  },
+  {
+    name: "Phone (Mint Mobile)",
+    cadenceMonths: 3,
+    scheduled: true,
+    anchorDate: "2026-10-21",
+    lastCharge: null,
+    shown: "2026-10-21",
+  },
+  {
+    name: "Propane (Taylor Gas)",
+    cadenceMonths: 12,
+    scheduled: false,
+    anchorDate: null,
+    lastCharge: "2025-10-24",
+    shown: null,
+  },
+  {
+    name: "Rent",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-05",
+    lastCharge: "2026-08-26",
+    shown: "2026-09-05",
+  },
+  {
+    name: "Rent Reporting",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-09",
+    lastCharge: "2026-08-09",
+    shown: "2026-09-09",
+  },
+  {
+    name: "Renter's Insurance (Sure)",
+    cadenceMonths: 12,
+    scheduled: true,
+    anchorDate: "2026-12-12",
+    lastCharge: "2025-12-12",
+    shown: "2026-12-12",
+  },
+  {
+    name: "Robokiller",
+    cadenceMonths: 12,
+    scheduled: true,
+    anchorDate: "2026-09-20",
+    lastCharge: null,
+    shown: "2026-09-20",
+  },
+  {
+    name: "SimpleFIN",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-17",
+    lastCharge: "2026-08-17",
+    shown: "2026-09-17",
+  },
+  {
+    name: "Sky Tonight",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-20",
+    lastCharge: null,
+    shown: "2026-09-20",
+  },
+  {
+    name: "Spotify",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-13",
+    lastCharge: "2026-08-13",
+    shown: "2026-09-13",
+  },
+  {
+    name: "Trash (Evergreen Disposal)",
+    cadenceMonths: 3,
+    scheduled: true,
+    anchorDate: "2026-10-05",
+    lastCharge: "2026-07-05",
+    shown: "2026-10-05",
+  },
+  {
+    name: "Water & Sewer (St Mary's County)",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-22",
+    lastCharge: "2026-08-25",
+    shown: "2026-09-22",
+  },
+  {
+    name: "YouTube",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-19",
+    lastCharge: "2026-08-19",
+    shown: "2026-09-19",
+  },
+  {
+    name: "iCloud+",
+    cadenceMonths: 1,
+    scheduled: true,
+    anchorDate: "2026-09-11",
+    lastCharge: null,
+    shown: "2026-09-11",
+  },
+];
+
+describe("billAnchor over the 33 live bills", () => {
+  it("retires only Dropbox and Rent", () => {
+    const todayKey = "2026-09-06";
+    const moved: string[] = [];
+    for (const row of LIVE_BILLS_2026_09_06) {
+      const after = row.scheduled
+        ? billAnchor(
+            bill({
+              name: row.name,
+              cadenceMonths: row.cadenceMonths,
+              cadenceDays: row.cadenceDays,
+              scheduled: row.scheduled,
+              anchorDate: row.anchorDate,
+            }),
+            row.lastCharge,
+            todayKey,
+          ).expectedKey
+        : null;
+      if (after !== row.shown) moved.push(row.name);
+    }
+    expect(moved).toEqual(["Dropbox", "Rent"]);
+    expect(
+      billAnchor(
+        bill({ cadenceMonths: 12, scheduled: true, anchorDate: "2026-09-06" }),
+        "2026-09-05",
+        todayKey,
+      ).expectedKey,
+    ).toBe("2027-09-05");
+    expect(
+      billAnchor(
+        bill({ cadenceMonths: 1, scheduled: true, anchorDate: "2026-09-05" }),
+        "2026-08-26",
+        todayKey,
+      ).expectedKey,
+    ).toBe("2026-09-26");
+  });
 });
 
 describe("nextChargeWriteError", () => {
+  const monthly: Cadence = { unit: "month", n: 1 };
+  const yearly: Cadence = { unit: "month", n: 12 };
+  const semiAnnual: Cadence = { unit: "month", n: 6 };
+
   it("allows any date when nothing has posted yet", () => {
-    expect(nextChargeWriteError("2026-01-01", null)).toBeNull();
+    expect(nextChargeWriteError("2026-01-01", null, monthly)).toBeNull();
   });
 
   it("allows clearing the override whether or not there is a last charge", () => {
-    expect(nextChargeWriteError(null, null)).toBeNull();
-    expect(nextChargeWriteError(null, "2026-08-04")).toBeNull();
+    expect(nextChargeWriteError(null, null, monthly)).toBeNull();
+    expect(nextChargeWriteError(null, "2026-08-04", monthly)).toBeNull();
   });
 
-  it("allows a date after the last posted charge", () => {
-    expect(nextChargeWriteError("2026-08-05", "2026-08-04")).toBeNull();
+  it("allows a date a full cadence out", () => {
+    expect(nextChargeWriteError("2026-09-04", "2026-08-04", monthly)).toBeNull();
+    expect(nextChargeWriteError("2027-09-05", "2026-09-05", yearly)).toBeNull();
   });
 
-  it("refuses a date on the last posted charge, not only one before it", () => {
-    // `billAnchor` treats equal as "already had", so storing the same day would
-    // look like the save bounced. `<` instead of `<=` would let that through.
-    expect(nextChargeWriteError("2026-08-04", "2026-08-04")).toBe(
-      "Next charge must be after the last posted charge (2026-08-04).",
+  it("refuses a date the last posted charge already covers", () => {
+    expect(nextChargeWriteError("2026-08-04", "2026-08-04", monthly)).toBe(
+      "The charge on 2026-08-04 already covers that date.",
     );
-    expect(nextChargeWriteError("2026-08-03", "2026-08-04")).toBe(
-      "Next charge must be after the last posted charge (2026-08-04).",
+    expect(nextChargeWriteError("2026-08-03", "2026-08-04", monthly)).toBe(
+      "The charge on 2026-08-04 already covers that date.",
+    );
+    // Dropbox: typing the predicted date after a charge that posted a day early.
+    expect(nextChargeWriteError("2026-09-06", "2026-09-05", yearly)).toBe(
+      "The charge on 2026-09-05 already covers that date.",
+    );
+    // A Next charge nine days after a semi-annual bill's posted charge.
+    expect(nextChargeWriteError("2026-08-10", "2026-08-01", semiAnnual)).toBe(
+      "The charge on 2026-08-01 already covers that date.",
     );
   });
 });

@@ -601,7 +601,7 @@ describeDb("bill next charge against posted history", () => {
     accountId = account.id;
   });
 
-  it("refuses a next charge on or before the last claimed payee charge", async () => {
+  it("refuses a next charge the last posted charge already covers", async () => {
     const geico = await createPayee(userId, { name: "GEICO" });
     await db.insert(financeTransactions).values({
       userId,
@@ -616,7 +616,7 @@ describeDb("bill next charge against posted history", () => {
       payeeIds: [geico],
       cadence: { unit: "month", n: 6 },
       expectedCents: 59498,
-      anchorDate: "2026-09-03",
+      anchorDate: "2027-02-04",
     });
 
     await expect(
@@ -625,30 +625,27 @@ describeDb("bill next charge against posted history", () => {
         cadence: { unit: "month", n: 6 },
         anchorDate: "2026-08-04",
       }),
-    ).rejects.toThrow("Next charge must be after the last posted charge (2026-08-04).");
+    ).rejects.toThrow("The charge on 2026-08-04 already covers that date.");
     await expect(
       upsertBillEnvelope(userId, {
         name: "Geico",
         cadence: { unit: "month", n: 6 },
-        anchorDate: "2026-08-03",
+        anchorDate: "2026-08-13",
       }),
-    ).rejects.toThrow("Next charge must be after the last posted charge (2026-08-04).");
+    ).rejects.toThrow("The charge on 2026-08-04 already covers that date.");
 
-    expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2026-09-03");
+    expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2027-02-04");
 
     await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
-      anchorDate: "2026-08-05",
+      anchorDate: "2027-02-04",
     });
-    expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2026-08-05");
+    expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2027-02-04");
   });
 
-  it("does not treat a recategorised charge as the last posted charge", async () => {
-    // Last charge is the payee claim. A later row filed onto the envelope by hand
-    // belongs to a different merchant and must not move the due-date floor.
+  it("refuses a next charge nine days after a semi-annual posted charge", async () => {
     const geico = await createPayee(userId, { name: "GEICO" });
-    const cvs = await createPayee(userId, { name: "CVS" });
     await db.insert(financeTransactions).values({
       userId,
       accountId,
@@ -663,23 +660,14 @@ describeDb("bill next charge against posted history", () => {
       cadence: { unit: "month", n: 6 },
       expectedCents: 59498,
     });
-    const [bill] = await loadRecurringBills(userId);
-    await db.insert(financeTransactions).values({
-      userId,
-      accountId,
-      transactionDate: "2026-08-20",
-      description: "CVS/PHARMACY",
-      amount: "-12.00",
-      payeeId: cvs,
-      budgetCategoryId: bill.id,
-    });
 
-    await upsertBillEnvelope(userId, {
-      name: "Geico",
-      cadence: { unit: "month", n: 6 },
-      anchorDate: "2026-08-10",
-    });
-    expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2026-08-10");
+    await expect(
+      upsertBillEnvelope(userId, {
+        name: "Geico",
+        cadence: { unit: "month", n: 6 },
+        anchorDate: "2026-08-10",
+      }),
+    ).rejects.toThrow("The charge on 2026-08-01 already covers that date.");
   });
 });
 

@@ -117,13 +117,14 @@ export type CommitmentCharge = {
  * defensible and the column cannot hold both, so a future anchor accruing from itself would
  * have run the accrual window backwards.
  *
- * The rule settled here: **an anchor later than the last posted charge is the charge being
- * waited for**, and the period it accrues over is the cadence ending on it. Everything else
- * walks from the last charge on file, which is an observed fact and the better anchor whenever
- * there is one.
+ * A stored date is one predicted posting. It is the charge being waited for only while no
+ * posted charge has paid it — later than the last charge is not the same as still ahead. A
+ * charge that lands nearer to the prediction than to the neighbouring occurrence retires it
+ * ({@link chargeCoversAnchor}), and the bill walks from that charge. An undeclared bill is a
+ * walk; the calendar series is what a declared due day is for. See `billSchedule.ts`.
  *
  * None of that applies to a bill that **declares a due day** — there the dates come from the
- * calendar and `anchorDate` supplies only the series' phase. See `billSchedule.ts`.
+ * calendar and `anchorDate` supplies only the series' phase.
  */
 export type BillAnchor = {
   /** Where the current accrual period began. Null when nothing anchors it. */
@@ -178,6 +179,24 @@ function declaredAnchor(
   };
 }
 
+/**
+ * Whether a posted charge has paid a predicted posting.
+ *
+ * Same "nearest, not the next one after" rule `nearestOccurrence` uses for a declared series:
+ * a charge a day early is that occurrence's charge, and calling it the previous one's late
+ * payment is the error the walk made. Half a cadence rather than a tuned constant — the
+ * cadence already defines the buckets.
+ */
+export function chargeCoversAnchor(
+  chargeKey: string,
+  anchorDate: string,
+  cadence: Cadence,
+): boolean {
+  return (
+    Math.abs(daysBetweenKeys(chargeKey, anchorDate)) < cadenceDaysApprox(cadence) / 2
+  );
+}
+
 export function billAnchor(
   bill: StoredBill,
   lastCharge: string | null,
@@ -190,7 +209,9 @@ export function billAnchor(
 
   if (
     bill.anchorDate !== null &&
-    (lastCharge === null || bill.anchorDate > lastCharge)
+    (lastCharge === null ||
+      (bill.anchorDate > lastCharge &&
+        !chargeCoversAnchor(lastCharge, bill.anchorDate, cadence)))
   ) {
     return {
       periodStartKey: shiftByCadence(bill.anchorDate, cadence, -1),
@@ -223,18 +244,23 @@ export function billAnchor(
 /**
  * Whether a typed next-charge date can be stored as `anchorDate`.
  *
- * `billAnchor` ignores an override on or before the last posted charge and walks from
- * that charge instead — storing such a date would look like the save bounced. Clearing
- * (`null`) always goes through: that is how the column returns to the derived date.
- * No last charge yet means any date is the charge being waited for.
+ * `billAnchor` ignores a date the last posted charge already covers — on or before that
+ * charge, or nearer to it than to the neighbouring occurrence — and walks from the charge
+ * instead. Storing such a date would look like the save bounced. Clearing (`null`) always
+ * goes through: that is how the column returns to the derived date. No last charge yet
+ * means any date is the charge being waited for.
  */
 export function nextChargeWriteError(
   anchorDate: string | null,
   lastChargeKey: string | null,
+  cadence: Cadence,
 ): string | null {
   if (anchorDate === null || lastChargeKey === null) return null;
-  if (anchorDate <= lastChargeKey) {
-    return `Next charge must be after the last posted charge (${lastChargeKey}).`;
+  if (
+    anchorDate <= lastChargeKey ||
+    chargeCoversAnchor(lastChargeKey, anchorDate, cadence)
+  ) {
+    return `The charge on ${lastChargeKey} already covers that date.`;
   }
   return null;
 }
