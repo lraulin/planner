@@ -22,9 +22,17 @@ export function taskRatio(projectId: string, nodes: readonly OutlineNode[]): str
     list.push(node);
     byParent.set(node.parentId, list);
   }
+  // Cycle insurance, the same the rest of the tree walks carry (`walkUp`, `derive`'s rollup
+  // pass): `moveNode` refuses to build a parent cycle but a corrupt import can, and a project
+  // inside one is reachable here — `taskRatio` is called with that project's own id, so the
+  // walk enters the cycle at the top. Unguarded this is not a crash but a *hang*: the stack
+  // never empties, and being synchronous it takes the request with it.
   const stack = [...(byParent.get(projectId) ?? [])];
+  const seen = new Set<string>([projectId]);
   while (stack.length) {
     const node = stack.pop()!;
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
     if (node.type === "task") {
       total += 1;
       if (!isSettled(node.state)) active += 1;

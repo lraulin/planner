@@ -55,4 +55,21 @@ describe("taskRatio", () => {
     const task = node({ id: "t", type: "task", parentId: "p" });
     expect(taskRatio("p", [project, wish, task])).toBe("1/1");
   });
+
+  it("terminates on a parent cycle instead of walking it forever", () => {
+    // `moveNode` refuses to build one, but a corrupt import can. A project inside a cycle is
+    // reachable because this is called with that project's own id. Note the shape of the
+    // regression: unguarded, the stack never empties and the walk hangs synchronously, so
+    // this test does not fail — the suite stops.
+    const a = node({ id: "a", type: "project", parentId: "b" });
+    const b = node({ id: "b", type: "project", parentId: "a" });
+    const task = node({ id: "t", type: "task", parentId: "a", state: "not_started" });
+    expect(taskRatio("a", [a, b, task])).toBe("1/1");
+  });
+
+  it("counts a task reached twice only once", () => {
+    const project = node({ id: "p", type: "project" });
+    const task = node({ id: "t", type: "task", parentId: "p", state: "not_started" });
+    expect(taskRatio("p", [project, task, task])).toBe("1/1");
+  });
 });
