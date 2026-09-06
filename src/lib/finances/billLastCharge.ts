@@ -3,37 +3,42 @@ import { db } from "@/db";
 import {
   amazonCharges,
   amazonReceiptAllocations,
-  financePayees,
   financeTransactions,
 } from "@/db/schema";
+import { moneyRows } from "./splitRows";
+
+/** Outflows only — a credit filed to the envelope is not the charge a bill is waiting for. */
+const outflows = sql`${financeTransactions.amount}::numeric < 0`;
 
 /**
  * The last posted charge date per bill envelope, keyed by envelope id — what `billAnchor`
- * needs to compute a next-due date. Joined through the payee claim, which is what routes a
- * charge to a bill (`finance_payees.claimed_budget_category_id`), not through the
- * transaction's own `budget_category_id` — a hand-recategorised charge should not move the
- * due-date anchor.
+ * needs to compute a next-due date.
+ *
+ * A bill's charges are what is filed to its envelope (`budget_category_id`). A payee claim
+ * is how they get there, not the definition of what a charge is. Leaves only (`moneyRows`):
+ * a split parent holds no envelope. Outflows only: a refund is not the charge being waited
+ * for. The Amazon-receipt union is unchanged.
  */
 export async function lastChargeByEnvelope(
   userId: string,
 ): Promise<Map<string, string>> {
   const rows = await db
     .select({
-      envelopeId: financePayees.claimedBudgetCategoryId,
+      envelopeId: financeTransactions.budgetCategoryId,
       lastChargeKey: sql<string>`max(${financeTransactions.transactionDate})`,
     })
     .from(financeTransactions)
-    .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
     .where(
       and(
         eq(financeTransactions.userId, userId),
-        eq(financePayees.userId, userId),
-        isNotNull(financePayees.claimedBudgetCategoryId),
+        isNotNull(financeTransactions.budgetCategoryId),
+        moneyRows,
+        outflows,
       ),
     )
-    .groupBy(financePayees.claimedBudgetCategoryId);
+    .groupBy(financeTransactions.budgetCategoryId);
 
-  const fromPayees = new Map(
+  const fromEnvelopes = new Map(
     rows
       .filter((row): row is { envelopeId: string; lastChargeKey: string } =>
         Boolean(row.envelopeId),
@@ -42,16 +47,15 @@ export async function lastChargeByEnvelope(
   );
   const fromReceipts = await receiptLastChargeByEnvelope(userId);
   for (const [envelopeId, dateKey] of fromReceipts) {
-    const current = fromPayees.get(envelopeId);
-    if (!current || dateKey > current) fromPayees.set(envelopeId, dateKey);
+    const current = fromEnvelopes.get(envelopeId);
+    if (!current || dateKey > current) fromEnvelopes.set(envelopeId, dateKey);
   }
-  return fromPayees;
+  return fromEnvelopes;
 }
 
 /**
- * The same join as {@link lastChargeByEnvelope}, for one envelope. Null when nothing has
- * posted through a claimed payee — a recategorised charge on a different payee does not
- * count.
+ * The same basis as {@link lastChargeByEnvelope}, for one envelope. Null when nothing has
+ * posted to it.
  */
 export async function lastChargeOnBill(
   userId: string,
@@ -62,19 +66,19 @@ export async function lastChargeOnBill(
       lastChargeKey: sql<string | null>`max(${financeTransactions.transactionDate})`,
     })
     .from(financeTransactions)
-    .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
     .where(
       and(
         eq(financeTransactions.userId, userId),
-        eq(financePayees.userId, userId),
-        eq(financePayees.claimedBudgetCategoryId, envelopeId),
+        eq(financeTransactions.budgetCategoryId, envelopeId),
+        moneyRows,
+        outflows,
       ),
     );
-  const fromPayee = row?.lastChargeKey ?? null;
+  const fromEnvelope = row?.lastChargeKey ?? null;
   const fromReceipt = await receiptLastChargeOnBill(userId, envelopeId);
-  if (!fromPayee) return fromReceipt;
-  if (!fromReceipt) return fromPayee;
-  return fromReceipt > fromPayee ? fromReceipt : fromPayee;
+  if (!fromEnvelope) return fromReceipt;
+  if (!fromReceipt) return fromEnvelope;
+  return fromReceipt > fromEnvelope ? fromReceipt : fromEnvelope;
 }
 
 async function receiptLastChargeByEnvelope(

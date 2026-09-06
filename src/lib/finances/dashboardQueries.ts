@@ -30,6 +30,13 @@ import {
   type StoredBillRow,
   type UpcomingBillRow,
 } from "./commitments";
+
+/** Envelope id → the bill it is. The route from a filed row to a bill charge. */
+function billEnvelopeIndex(
+  bills: readonly StoredBillRow[],
+): Map<string, { id: string; name: string }> {
+  return new Map(bills.map((bill) => [bill.id, { id: bill.id, name: bill.name }]));
+}
 import {
   billRows as billRowsOf,
   type BillRow,
@@ -261,11 +268,11 @@ export async function loadUpcomingBills(
     loadRecurringBills(userId),
     listTransactions(userId),
   ]);
-  const claims = payeeClaimIndex(bills);
+  const envelopes = billEnvelopeIndex(bills);
   const chargesByName = new Map<string, CommitmentCharge[]>();
   for (const row of transactions) {
-    if (row.payeeId === null || effectiveFlow(row) !== "spend") continue;
-    const ref = claims.get(row.payeeId);
+    if (effectiveFlow(row) !== "spend") continue;
+    const ref = row.budgetCategoryId ? envelopes.get(row.budgetCategoryId) : undefined;
     if (!ref) continue;
     const list = chargesByName.get(ref.id) ?? [];
     list.push({ dateKey: row.transactionDate, costCents: spendCentsOf(row) });
@@ -303,13 +310,12 @@ export async function loadBillForecast(
     loadInsightsRows(userId),
     loadRecurringBills(userId),
   ]);
-  const claims = payeeClaimIndex(bills);
-  const billNames = new Set(bills.map((bill) => bill.name));
+  const envelopes = billEnvelopeIndex(bills);
   const flatCharges: BillCharge[] = [];
   const chargesByName = new Map<string, CommitmentCharge[]>();
   for (const row of rows) {
-    const ref = row.payeeId ? claims.get(row.payeeId) : undefined;
-    if (ref === undefined || !billNames.has(ref.name)) continue;
+    const ref = row.budgetCategoryId ? envelopes.get(row.budgetCategoryId) : undefined;
+    if (ref === undefined || spendCentsOf(row) <= 0) continue;
     const charge = { dateKey: row.transactionDate, costCents: spendCentsOf(row) };
     flatCharges.push({ billId: ref.id, name: ref.name, ...charge });
     const list = chargesByName.get(ref.id) ?? [];
@@ -410,10 +416,13 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
   ]);
   const pendingSelection = await loadWorkingPendingSelection(userId, accounts);
 
-  // One index, built once, and the only route from a bank string to a bill envelope. Resolving
-  // per panel is how a merchant ends up folded into a bill on one surface and not another.
+  // A bill's charges are what is filed to its envelope; a payee claim is how they get
+  // there. Routing by `budgetCategoryId` keeps the dashboard, the 12-month projection,
+  // and the grid on one answer. The claim index is still the route from a bank string
+  // to an envelope for Review — resolving that per panel is how a merchant ends up
+  // folded into a bill on one surface and not another.
   const index = payeeClaimIndex(bills);
-  const billNames = new Set(bills.map((bill) => bill.name));
+  const envelopes = billEnvelopeIndex(bills);
   const dismissed = new Set(dismissedPayeeIds.map((row) => row.id));
 
   const billCharges: BillCharge[] = [];
@@ -422,8 +431,8 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
   for (const row of rows) {
     const merchant = effectiveMerchant(row);
     if (merchant !== "") merchantSet.add(merchant);
-    const ref = row.payeeId ? index.get(row.payeeId) : undefined;
-    if (ref === undefined || !billNames.has(ref.name)) continue;
+    const ref = row.budgetCategoryId ? envelopes.get(row.budgetCategoryId) : undefined;
+    if (ref === undefined || spendCentsOf(row) <= 0) continue;
 
     billCharges.push({
       name: ref.name,

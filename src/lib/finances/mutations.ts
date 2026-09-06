@@ -973,8 +973,9 @@ export async function upsertBillEnvelope(
     if (existing) {
       categoryId = existing.id;
       if (edit.anchorDate !== undefined) {
-        // A date the last posted charge already covers is one `billAnchor` would ignore,
-        // so storing it would look like the save bounced. Same predicate the reader uses.
+        // Last charge is what is filed to this envelope — `billLastCharge.ts`. A date
+        // that charge already covers is one `billAnchor` would ignore, so storing it
+        // would look like the save bounced. Same predicate the reader uses.
         const error = nextChargeWriteError(
           edit.anchorDate,
           await lastChargeOnBill(userId, categoryId),

@@ -20,6 +20,7 @@ import {
 } from "./budget/queries";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
+import { lastChargeByEnvelope, lastChargeOnBill } from "./billLastCharge";
 import { loadRecurringBills } from "./dashboardQueries";
 import {
   deleteAccount,
@@ -644,7 +645,7 @@ describeDb("bill next charge against posted history", () => {
     expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2027-02-04");
   });
 
-  it("refuses a next charge nine days after a semi-annual posted charge", async () => {
+  it("treats a hand-filed charge as this bill's last posted charge", async () => {
     const geico = await createPayee(userId, { name: "GEICO" });
     await db.insert(financeTransactions).values({
       userId,
@@ -660,14 +661,117 @@ describeDb("bill next charge against posted history", () => {
       cadence: { unit: "month", n: 6 },
       expectedCents: 59498,
     });
+    const [bill] = await loadRecurringBills(userId);
+    const cvs = await createPayee(userId, { name: "CVS" });
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId,
+      transactionDate: "2026-08-20",
+      description: "CVS/PHARMACY",
+      amount: "-12.00",
+      payeeId: cvs,
+      budgetCategoryId: bill.id,
+    });
 
+    expect(await lastChargeOnBill(userId, bill.id)).toBe("2026-08-20");
     await expect(
       upsertBillEnvelope(userId, {
         name: "Geico",
         cadence: { unit: "month", n: 6 },
-        anchorDate: "2026-08-10",
+        anchorDate: "2026-08-29",
       }),
-    ).rejects.toThrow("The charge on 2026-08-01 already covers that date.");
+    ).rejects.toThrow("The charge on 2026-08-20 already covers that date.");
+  });
+
+  it("does not let a stray row of the wrong shape retire a distant anchor", async () => {
+    const geico = await createPayee(userId, { name: "GEICO" });
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId,
+      transactionDate: "2026-06-26",
+      description: "GEICO *AUTO",
+      amount: "-594.98",
+      payeeId: geico,
+    });
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
+      payeeIds: [geico],
+      cadence: { unit: "month", n: 6 },
+      expectedCents: 59498,
+      anchorDate: "2026-12-26",
+    });
+    const [bill] = await loadRecurringBills(userId);
+    const cvs = await createPayee(userId, { name: "CVS" });
+    await db.insert(financeTransactions).values([
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-20",
+        description: "CVS/PHARMACY",
+        amount: "-12.00",
+        payeeId: cvs,
+        budgetCategoryId: bill.id,
+      },
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-21",
+        description: "COMCAST CREDIT",
+        amount: "1.20",
+        budgetCategoryId: bill.id,
+      },
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-22",
+        description: "SPLIT PARENT",
+        amount: "-50.00",
+        isParent: true,
+        budgetCategoryId: bill.id,
+      },
+    ]);
+
+    // The $12 CVS row is a charge (it is filed here) but sits nowhere near December, so
+    // it does not cover the stored date. A credit and a split parent are not charges.
+    expect(await lastChargeOnBill(userId, bill.id)).toBe("2026-08-20");
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
+      cadence: { unit: "month", n: 6 },
+      anchorDate: "2026-12-26",
+    });
+    expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2026-12-26");
+  });
+
+  it("does not let a second user read the first user's last charge", async () => {
+    const otherId = await makeUser();
+    const geico = await createPayee(userId, { name: "GEICO" });
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId,
+      transactionDate: "2026-08-04",
+      description: "GEICO *AUTO",
+      amount: "-594.98",
+      payeeId: geico,
+    });
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
+      payeeIds: [geico],
+      cadence: { unit: "month", n: 6 },
+      expectedCents: 59498,
+    });
+    const [bill] = await loadRecurringBills(userId);
+
+    expect(await lastChargeOnBill(userId, bill.id)).toBe("2026-08-04");
+    expect(await lastChargeOnBill(otherId, bill.id)).toBeNull();
+    expect((await lastChargeByEnvelope(otherId)).size).toBe(0);
+    await expect(
+      upsertBillEnvelope(otherId, {
+        id: bill.id,
+        name: "Geico",
+        cadence: { unit: "month", n: 6 },
+        anchorDate: "2026-12-26",
+      }),
+    ).rejects.toThrow("Bill not found.");
   });
 });
 
