@@ -259,6 +259,7 @@ export function scheduleStatusById(
   }
 
   const result = new Map<string, ScheduleStatus>();
+  const visiting = new Set<string>();
 
   function visit(id: string): ScheduleStatus | null {
     const cached = result.get(id);
@@ -268,6 +269,16 @@ export function scheduleStatusById(
     // Result Areas deliberately terminate status rollup: their children keep their own
     // statuses, but an enduring role never becomes Overdue because work beneath it did.
     if (!own) return null;
+
+    // A parent cycle cannot be built through `moveNode`, but a corrupt import can, and
+    // `derive` tolerates one — its rollup pass skips a child it has not reached, and every
+    // upward walk goes through `walkUp`. So the nodes reach here, and this recursion is the
+    // one downward walk with no insurance of its own: re-entering an open node returned no
+    // cached status, so A→B→A recursed until the stack gave out and took down every grid
+    // showing a Status column. A cycle costs a truncated rollup instead.
+    if (visiting.has(id)) return null;
+    visiting.add(id);
+
     let best = own;
     for (const childId of childIds.get(id) ?? []) {
       const childStatus = visit(childId);
@@ -275,6 +286,8 @@ export function scheduleStatusById(
         best = moreUrgent(best, childStatus);
       }
     }
+
+    visiting.delete(id);
     result.set(id, best);
     return best;
   }

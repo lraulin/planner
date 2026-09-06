@@ -157,6 +157,37 @@ describe("scheduleStatus — hydration", () => {
 });
 
 describe("scheduleStatusById — propagation", () => {
+  it("survives a parent cycle rather than exhausting the stack", () => {
+    // `moveNode` refuses to build one, but a corrupt import can, and `derive` is written to
+    // tolerate it — so these nodes reach the rollup. The recursion used to re-enter an open
+    // node, which took down every grid with a Status column.
+    const nodes = derive([
+      row({ id: "a", type: "project", parentId: "b", name: "A", sortKey: "a" }),
+      row({ id: "b", type: "project", parentId: "a", name: "B", sortKey: "b" }),
+    ]);
+    const map = scheduleStatusById(nodes, TODAY);
+    expect(map.get("a")).toBe("not_scheduled");
+    expect(map.get("b")).toBe("not_scheduled");
+  });
+
+  it("still rolls a cycle's urgent child up to the node that reached it", () => {
+    const nodes = derive([
+      row({ id: "a", type: "project", parentId: "b", name: "A", sortKey: "a" }),
+      row({ id: "b", type: "project", parentId: "a", name: "B", sortKey: "b" }),
+      row({
+        id: "t",
+        type: "task",
+        parentId: "a",
+        name: "T",
+        sortKey: "a",
+        deadline: day(-1),
+      }),
+    ]);
+    const map = scheduleStatusById(nodes, TODAY);
+    expect(map.get("t")).toBe("overdue");
+    expect(map.get("a")).toBe("overdue");
+  });
+
   it("rolls overdue from child to parent", () => {
     const nodes = derive([
       row({ id: "p", type: "project", name: "P", sortKey: "a" }),
