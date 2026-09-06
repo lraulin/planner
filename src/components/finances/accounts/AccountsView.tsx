@@ -59,7 +59,8 @@ function viewDefaults(viewId: string): GridDefaults {
 }
 
 function deleteMessage(account: FinanceAccountRow): string {
-  return `Delete ${account.name} and its ${account.transactionCount} transactions?`;
+  const count = account.transactionCount;
+  return `Delete ${account.name} and its ${count} transaction${count === 1 ? "" : "s"}?`;
 }
 
 export function AccountsView({

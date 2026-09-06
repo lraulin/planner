@@ -44,7 +44,9 @@ function deleteMessage(payee: PayeeRow): string {
   // the transactions survive. Only the pointer goes.
   return payee.transactionCount === 0
     ? `Delete ${payee.name}?`
-    : `Delete ${payee.name}? Its ${payee.transactionCount} charges stay in the register and lose their payee until the next rebuild.`;
+    : payee.transactionCount === 1
+      ? `Delete ${payee.name}? Its one charge stays in the register and loses its payee until the next rebuild.`
+      : `Delete ${payee.name}? Its ${payee.transactionCount} charges stay in the register and lose their payee until the next rebuild.`;
 }
 
 export function PayeesView({

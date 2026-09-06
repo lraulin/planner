@@ -164,7 +164,10 @@ export function FundingPlanSummary({
       ) : null}
       {plan.missing.length > 0 ? (
         <details className="mt-1 text-ink-muted">
-          <summary>Incomplete funding plan · {plan.missing.length} details</summary>
+          <summary>
+            Incomplete funding plan · {plan.missing.length} detail
+            {plan.missing.length === 1 ? "" : "s"}
+          </summary>
           <ul>
             {plan.missing.map((row, index) => (
               <li key={`${row.id}-${index}`}>

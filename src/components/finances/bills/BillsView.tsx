@@ -355,7 +355,10 @@ export function BillsView({
       <div className="max-h-[35dvh] shrink-0 space-y-2 overflow-auto p-3">
         {reviewDates.length > 0 ? (
           <details className="rounded border border-rule px-3 py-2 text-xs">
-            <summary>Still active? · {reviewDates.length} dates to review</summary>
+            <summary>
+              Still active? · {reviewDates.length} date
+              {reviewDates.length === 1 ? "" : "s"} to review
+            </summary>
             <p className="py-1 text-ink-muted">
               An expected date has passed. This asks for review; it does not prove a
               payment was missed.

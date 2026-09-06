@@ -107,7 +107,11 @@ function deleteCopy(
         };
   }
   return {
-    title: `Delete ${itemCount} items and ${offerCount} offers?`,
+    // Both counts are at least one here, and either can be exactly one — the branches above
+    // only cover the cases where the other side is zero.
+    title: `Delete ${itemCount} item${itemCount === 1 ? "" : "s"} and ${offerCount} offer${
+      offerCount === 1 ? "" : "s"
+    }?`,
     message:
       "Selected items (with every offer under them) and the extra selected offers will be removed from the worksheet.",
   };

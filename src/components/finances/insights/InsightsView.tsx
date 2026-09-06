@@ -510,7 +510,8 @@ export function InsightsView({
               className="underline"
               href={drill([], range, { uncategorized: true })}
             >
-              Uncategorized: {uncategorized.length} rows ·{" "}
+              Uncategorized: {uncategorized.length} row
+              {uncategorized.length === 1 ? "" : "s"} ·{" "}
               {formatUsd(-sumReportActivity(uncategorized))}
             </Link>
             {uncategorized.length ? (

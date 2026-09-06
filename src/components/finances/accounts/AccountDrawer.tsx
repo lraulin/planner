@@ -211,7 +211,8 @@ function AccountForm({
                 {" · "}
                 {formatUsd(account.balanceCents)}
                 {" · "}
-                {account.transactionCount} transactions
+                {account.transactionCount} transaction
+                {account.transactionCount === 1 ? "" : "s"}
               </p>
               <p className="text-[0.75rem] text-ink-faint">
                 Importers match on the last four and the feed, never the name. Changing
