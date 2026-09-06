@@ -1,6 +1,6 @@
 # A pile spent on its own purpose does not ask again
 
-**Status: active**
+**Status: frozen / complete** (2026-09-06)
 Spec folder: `agent-os/specs/2026-09-06-1301-pile-spent-is-not-a-raid/`
 
 ## Spec relationships
@@ -123,32 +123,37 @@ keep the Available fill, because that is still their ask.
 `lastChargeByEnvelope` advances a bill's anchor only through a **claimed** payee
 (`billLastCharge.ts`), so a charge categorised by hand leaves `expectedKey` pointing at a
 charge that has already been paid. The $190.62 reproduction needs `monthsLeft = 0`, which
-means Dropbox's anchor is very likely stale — but D1 gives $63.54 in **either** anchor state,
+means Dropbox's anchor is very likely stale — but D1 leaves no phantom ask in **either**
+anchor state,
 so this is a Bills-page display question, not an ask question. Task 6 checks it on the
 deployed app; if it is real it gets its own spec.
 
+**Task 6 confirmed it is real.** The Bills page reads Dropbox's next charge as **September
+2026** — the charge that has already been paid. The ask is right regardless, so nothing here
+changes; the stale anchor is a wrong _date_ on the Bills page and is listed under Follow-ups.
+
 ## Acceptance criteria
 
-- [ ] **Dropbox** — derived `upTo` + `schedule` $127.08 yearly bill, September 2026, carry-in
+- [x] **Dropbox** — derived `upTo` + `schedule` $127.08 yearly bill, September 2026, carry-in
       $63.54, activity −$127.08 — asks **$63.54**, with the expected charge at 2026-09 _and_
       at 2027-09. Assigning $63.54 leaves $0 Available and reads **Fully Spent**.
-- [ ] At the $190.62 assigned today, the same envelope reads **"$127.08 extra"**
+- [x] At the $190.62 assigned today, the same envelope reads **"$127.08 extra"**
       (`overassigned`), so Reduce Overfunding hands it back to Ready to Assign.
-- [ ] **Propane** `upTo` + year $1,200, October: August still **$400**, November still
+- [x] **Propane** `upTo` + year $1,200, October: August still **$400**, November still
       **$100**, and October after the charge posts is **$0**, not $1,200.
-- [ ] The month a pile is emptied asks nothing more, and the next month restarts the
+- [x] The month a pile is emptied asks nothing more, and the next month restarts the
       installments. Propane paid in November asks **$0** in November and **$109.09/month**
       from December. This **reverses** `targets/demand.test.ts:168` ("asks a raided pile for
       it back: $100/month once the year's propane is spent"), deliberately — Lee's rule is
       "start saving up again… starting next month."
-- [ ] A raided **`balance` + `none`** $100,000 floor with $94,970 Available still asks
+- [x] A raided **`balance` + `none`** $100,000 floor with $94,970 Available still asks
       **$5,030 this month** (`target-refill-basis` D3 intact), and `balance` + `by` is
       unchanged in every month, before and after its deadline.
-- [ ] A raid on an `upTo` pile in an accumulation month is asked for through **carry-in the
+- [x] A raid on an `upTo` pile in an accumulation month is asked for through **carry-in the
       following month** — a test named for it, because it is D2's accepted cost and the thing
       a later reader will most want to see stated.
-- [ ] Overspend still floors: Available −$500 asks at least $500 whatever the target says.
-- [ ] The Budget header's "still needed", the per-row amber pills, Assign → Underfunded and
+- [x] Overspend still floors: Available −$500 asks at least $500 whatever the target says.
+- [x] The Budget header's "still needed", the per-row amber pills, Assign → Underfunded and
       Apply Targets all move together. None of them gains a second opinion.
 
 ## Changes from original plan
@@ -161,9 +166,31 @@ polish.
 | 1   | The Dropbox acceptance figure is **$63.54 with a stale anchor and $4.89/month with a rolled one**, not $63.54 in both.            | D4's claim that D1 "gives $63.54 in either anchor state" was arithmetic that had not been run. A rolled anchor puts the charge 12 months out, so the same $63.54 hole is spread over thirteen months. The point D4 was making survives intact — the phantom $127.08 is gone either way, and the anchor is still a display question — but the number is not the same one, so the test pins both figures rather than asserting a shared one. |
 | 2   | D3's bar change applies to the **`floor` horizon as well as `sinking`** — the fill basis follows the behaviour in both pile arms. | `horizonOf` calls a pile `floor` whenever `monthsLeft` is 0, which is exactly the charge month the bug was reported in: an `upTo` pile paying its own bill lands in `floor`, not `sinking`. Restricting the change to `sinking` would have left the reported envelope's bar reading Available while its ask read carry-in — the second opinion D3 exists to prevent.                                                                       |
 
+| 3 | D4 resolved: the bill anchor **is** stale. | The deployed Bills page reads Dropbox's next charge as September 2026 — the charge already paid — confirming that `lastChargeByEnvelope` does not advance through a hand-categorised charge. It changes nothing here, because the ask is correct in either anchor state, so it leaves this spec as a follow-up rather than reopening it. |
+| 4 | Verified on the deployed app, and the gap this leaves is named: a **one-time savings goal**. | Task 6's walk passed on every envelope. Lee then asked whether a `balance` savings goal behaves the same, and it does not and should not: wiring $5,000 of a $100,000 down-payment fund for its own purpose still asks for it back, because `balance` is a floor and this spec deliberately kept it one. The missing shape is a goal that is _completed_ by being spent — see Follow-ups. |
+
 > **While this spec is active:** a material change to requirements, design or scope — including
 > feedback on what was actually built — updates the sections above and appends a row here.
 > Skip pure implementation details. Freeze when verified.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **A one-time savings goal.** `balance` is a floor you refill (medical, car repairs) and
+  `upTo` is a pile you spend and rebuild on a cycle (propane, a yearly bill). Neither is "save
+  $100,000 once for a house, spend it, done" — the shape Lee's down-payment envelope actually
+  is. Switching it to the carry-in basis does **not** fix it: with $95,000 carried in against a
+  $100,000 cap it asks $5,000 every month forever, because a one-time goal has no next cycle
+  and no month-local basis can answer it. What it measures is **cumulative assigned since
+  `target.since`**, summable from `finance_budget_allocations`
+  (`src/db/schema.ts:2974`) with no schema change — a third basis, and a design question about
+  what "done" is and what the envelope does afterward. Its own spec.
+- **The stale bill anchor** (D4, confirmed). `lastChargeByEnvelope` advances `expectedKey` only
+  through a claimed payee, so a charge categorised by hand leaves the Bills page showing a
+  next-charge date that has already passed. Display-only; owned by
+  `agent-os/specs/2026-09-05-1401-bill-due-dates-and-lead-time/`'s code.
+- **Delete the dead parallel demand engine** — `budget/templates/demand.ts` and
+  `templates/schedule.ts`'s `billFundingDemand`, reachable only from their own tests since
+  `targets/derive.ts` retired them, and now disagreeing with the live engine. Its own commit.
 
 ## Task 1: Save spec documentation
 

@@ -1172,9 +1172,12 @@ period)` so money already spent stops being held twice and only going over bites
   cap, `upTo` asks it less carry-in, and Activity is nowhere in it — spending money that was
   already assigned for that spending cannot ask for it again. Verified against YNAB with the
   same target, the same four charges and the same money assigned. A pile (`year`, `by`,
-  `none`, a quarterly or yearly bill) keeps the Available basis, because raiding a pile has to
+  `none`, a quarterly or yearly bill) kept the Available basis, because raiding a pile has to
   ask for it back — including a deadline-free floor, which now asks this month instead of
-  saying "needed eventually", ranked after everything with a date on it. The month's cap no
+  saying "needed eventually", ranked after everything with a date on it. That pile rule was
+  half right and is corrected by the entry below: it survives for `balance` floors and was
+  reversed for `upTo` piles, which could not tell a raid from the pile being spent on its own
+  purpose. The month's cap no
   longer shrinks as anchors pass; what trims it is `since`, the day the target started,
   stamped on the envelope's first target and preserved through every later edit.
   ✅ **Target snooze shipped 2026-08-28.**
@@ -1198,6 +1201,18 @@ period)` so money already spent stops being held twice and only going over bites
   Savings stays in the total, because a deadline-free floor is a real ask, but a large house
   fund is separable at a glance — and ends by subtracting Ready to Assign to state what has
   still to arrive. Answers "will the next paycheck cover it", which the per-row view cannot.
+  ✅ **A pile spent on its own purpose no longer asks again, 2026-09-06.**
+  `agent-os/specs/2026-09-06-1301-pile-spent-is-not-a-raid/`. September asked $190.62 for
+  Dropbox — a $127.08 yearly bill already charged that month — and would not read Funded
+  until it was assigned; every yearly and quarterly envelope did this in its charge month.
+  The **behaviour** now picks the basis and the cadence only picks the spread: `upTo` is a
+  spending target and measures **carry-in**, so paying the bill the pile was saving for is the
+  pile working rather than a raid, while `balance` stays a floor on the Available basis and a
+  raided one still nags. The bar follows the ask. The accepted cost, stated rather than
+  discovered: a genuine raid on an `upTo` pile in an accumulation month surfaces through the
+  next month's carry-in instead of the same day. What this leaves open is a **one-time savings
+  goal** — a down payment saved once and then spent, which is neither a floor to refill nor a
+  pile on a cycle, and is the next spec.
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
   budget states a shortfall per bill envelope rather than as one collapsed number, and
   Assign → Underfunded names which envelopes will not be funded. The scan layer makes those

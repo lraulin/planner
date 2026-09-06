@@ -1,6 +1,6 @@
 # A pile spent on its own purpose does not ask again — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-06)
 
 ## Scope
 
@@ -38,6 +38,12 @@ ask.
 - **A deferred raid is acceptable; a doubled ask is not.** Raiding an `upTo` pile in an
   accumulation month is caught through next month's carry-in rather than the same day. Stated
   as an accepted consequence with a test, not discovered later as a regression.
+- **`balance` stays a floor, and that is now a known gap rather than an oversight.** Keeping
+  Available for `balance` is right for the shape it models — keep $2,000 for car repairs,
+  spend it, put it back. It is wrong for the shape Lee has been using it for, a $100,000
+  down payment saved once and then wired away, which is neither a floor nor a cycle. That is
+  a missing third shape, not a reason to move `balance`'s basis; it is written up under
+  Follow-ups in `plan.md` and gets its own spec.
 - **One frozen number is deliberately reversed**: `demand.test.ts:168` asserts that propane
   spent in November asks $100 that same November. It now asks $0 in November and $109.09 from
   December, which is Lee's stated rule — "start saving up again… starting next month."
