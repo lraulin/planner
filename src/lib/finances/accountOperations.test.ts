@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
 import { operationalAccountRows } from "./accountOperations";
 import type { FinanceAccountRow } from "./types";
+
+/** Most cases are not about formatting; this keeps the key visible in the assertion. */
+const identity = (key: string | null | undefined) => key ?? "";
 const account: FinanceAccountRow = {
   id: "a",
   name: "Checking",
@@ -30,6 +33,7 @@ it("keeps working, posted and pending separate and identifies the selected headl
     [],
     [],
     "2026-09-05",
+    identity,
   );
   expect(row).toMatchObject({
     workingCents: 7000,
@@ -45,6 +49,7 @@ it("keeps working, posted and pending separate and identifies the selected headl
     [],
     [],
     "2026-09-05",
+    identity,
   );
   expect(ledger).toMatchObject({
     workingCents: 10000,
@@ -83,9 +88,25 @@ it("puts a connection failure only beside its linked account, and stale captures
     links,
     connections,
     "2026-09-05",
+    identity,
   );
   expect(rows.map((row) => row.freshness)).toEqual([
     "Reconnect bank",
     "Paste fresh snapshot",
   ]);
+});
+
+it("prints a stale balance's date in the workspace format, not as a raw key", () => {
+  // The Freshness cell sits beside Balance as of, which formats. Printing the key here read
+  // as `As of 2026-09-04` next to `9/4/2026` for the same instant.
+  const [row] = operationalAccountRows(
+    [account],
+    [],
+    new Set(),
+    [],
+    [],
+    "2026-09-06",
+    (key) => (key ? "5 Sep 2026" : ""),
+  );
+  expect(row.freshness).toBe("As of 5 Sep 2026 · refresh or import");
 });

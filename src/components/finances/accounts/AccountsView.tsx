@@ -17,6 +17,7 @@ import type { FinanceAccountRow } from "@/lib/finances/types";
 import { deleteAccountAction, listAccountsAction } from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import {
   FileImportDialog,
   useFileImportCommand,
@@ -104,6 +105,7 @@ export function AccountsView({
     defaultsFor: viewDefaults,
   });
   const gridState = views.grid;
+  const formatDate = useDateFormatter();
 
   const gridRows: GridRow<OperationalAccount>[] = useMemo(
     () =>
@@ -114,8 +116,9 @@ export function AccountsView({
         links,
         operations.connections,
         todayKey,
+        formatDate,
       ).map((node) => ({ kind: "node" as const, id: node.id, node, depth: 0 })),
-    [rows, operations, links, todayKey],
+    [rows, operations, links, todayKey, formatDate],
   );
   const distinctValues = useMemo(
     () =>
