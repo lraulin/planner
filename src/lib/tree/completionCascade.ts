@@ -107,10 +107,17 @@ function settleDescendants(
 
   const out: StateChange[] = [];
   const queue = [...(childrenOf.get(nodeId) ?? [])];
+  // The descending twin of `walkAncestors`' guard below. A parent cycle is reachable here
+  // because the walk starts at the settling node's own children, so a node inside one is
+  // already in the queue — and unguarded this does not merely loop, it enqueues faster than
+  // it drains and exhausts the heap in seconds.
+  const seen = new Set<string>([nodeId]);
 
   while (queue.length > 0) {
     const node = queue.shift();
     if (!node) continue;
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
     // Descend through a settled node anyway: it may sit above open work, and leaving that
     // work open under a settled parent is the state this whole rule exists to prevent.
     if (node.state !== null && !isSettled(node.state)) {

@@ -245,4 +245,18 @@ describe("openDescendantCount", () => {
     const settled = tree({ project: "completed", "task-a": "completed" });
     expect(openDescendantCount(settled, "project", "in_progress")).toBe(0);
   });
+
+  it("terminates on a parent cycle instead of exhausting the heap", () => {
+    // `moveNode` refuses to build one, but a corrupt import can, and the descent starts at
+    // the settling node's own children — so a node inside a cycle is already in the queue.
+    // Unguarded this enqueues faster than it drains: it OOMs the process in about eight
+    // seconds rather than failing, so a regression stops the suite rather than reddening it.
+    const cyclic: CascadeNode[] = [
+      { id: "a", parentId: "b", state: "not_started" },
+      { id: "b", parentId: "a", state: "not_started" },
+      { id: "t", parentId: "a", state: "not_started" },
+    ];
+    expect(openDescendantCount(cyclic, "a", "completed")).toBe(2);
+    expect(cascadeStateChange(cyclic, "a", "completed")).toHaveLength(3);
+  });
 });
