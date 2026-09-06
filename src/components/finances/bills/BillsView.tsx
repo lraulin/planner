@@ -17,7 +17,12 @@ import {
   billsGridRows,
 } from "@/lib/finances/billsView";
 import { billCadence } from "@/lib/finances/budget/inspector";
-import { billsNeedingReview, type BillAnchor } from "@/lib/finances/commitments";
+import {
+  billsNeedingAmountReview,
+  billsNeedingReview,
+  type BillAnchor,
+} from "@/lib/finances/commitments";
+import { formatUsd } from "@/lib/finances/money";
 import { billDueSoon } from "@/lib/finances/budget/dueCue";
 import { budgetEnvelopeLabel } from "@/lib/finances/budget/hierarchy";
 import {
@@ -291,6 +296,15 @@ export function BillsView({
     })),
     data.todayKey,
   );
+  const amountReviews = billsNeedingAmountReview(
+    rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      status: row.bill.status,
+      expectedCents: row.bill.expectedCents,
+    })),
+    forecast.chargesByBill,
+  );
   const rowById = new Map(rows.map((row) => [row.id, row]));
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -398,6 +412,42 @@ export function BillsView({
                     onClick={() => row && ctx.patch(row, { status: "cancelled" })}
                   >
                     Cancelled
+                  </button>
+                </div>
+              );
+            })}
+          </details>
+        ) : null}
+        {amountReviews.length > 0 ? (
+          <details className="rounded border border-rule px-3 py-2 text-xs">
+            <summary>
+              Amount changed? · {amountReviews.length} bill
+              {amountReviews.length === 1 ? "" : "s"}
+            </summary>
+            <p className="py-1 text-ink-muted">
+              Recent charges have settled at a new figure. This offers it; it does not
+              change the declared amount until you set it.
+            </p>
+            {amountReviews.map((item) => {
+              const row = rowById.get(item.billId);
+              return (
+                <div className="flex flex-wrap gap-3 py-1" key={item.billId}>
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => setDetail(item.billId)}
+                  >
+                    {item.name} · {formatUsd(item.declaredCents)} →{" "}
+                    {formatUsd(item.observedCents)}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending || !row}
+                    onClick={() =>
+                      row && ctx.patch(row, { expectedCents: item.observedCents })
+                    }
+                  >
+                    Set {formatUsd(item.observedCents)}
                   </button>
                 </div>
               );

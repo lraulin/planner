@@ -19,7 +19,7 @@
  * Spec: `agent-os/specs/2026-08-29-1228-feed-ownership-watermark/` D5.
  */
 
-import { amountMatches } from "../amountMatch";
+import { amountMatches, medianCents } from "../amountMatch";
 import { cadenceDaysApprox, cadenceOf, type Cadence } from "../recurringBills";
 
 /** The bill facet, as `finance_budget_categories` holds it. */
@@ -53,15 +53,6 @@ function daysApart(a: string, b: string): number {
   return (
     Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000
   );
-}
-
-function medianCents(values: readonly number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[middle]
-    : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
 }
 
 /**

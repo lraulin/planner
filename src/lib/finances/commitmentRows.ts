@@ -1,31 +1,9 @@
 import type { BillCharge } from "./available";
+import { observedAmountRange } from "./amountMatch";
 import { billAnchor, type StoredBillRow } from "./commitments";
 import { annualCents, cadenceOf } from "./recurringBills";
 
-/**
- * Same 25% band the recurring detector uses (`analytics.ts`). A range is an admission that
- * the stated amount is soft; printing one for MetLife ($100.24 twelve times) would argue
- * with a figure that is already a fact.
- */
-const AMOUNT_SPREAD_RATIO = 0.25;
-
-/**
- * Observed min–max of a bill's charges, or null when the spread is too tight to mention.
- *
- * `(high − low) / high` rather than standard deviation: two fills of $336 and $540 should
- * show as a range even though n=2 makes stddev a poor story, and a 16% Geico swing stays
- * under the band.
- */
-export function observedAmountRange(
-  amounts: readonly number[],
-): { lowCents: number; highCents: number } | null {
-  if (amounts.length < 2) return null;
-  const lowCents = Math.min(...amounts);
-  const highCents = Math.max(...amounts);
-  if (highCents <= 0) return null;
-  if ((highCents - lowCents) / highCents <= AMOUNT_SPREAD_RATIO) return null;
-  return { lowCents, highCents };
-}
+export { observedAmountRange };
 
 /**
  * A bill envelope with its cost columns and next-due date resolved — what the budget grid's

@@ -288,6 +288,12 @@ export type BillForecast = {
    * offer a payment lead when a due day is declared. Already loaded for the projection.
    */
   chargeKeys: Map<string, string[]>;
+  /**
+   * Posted charges per bill envelope id — what `billsNeedingAmountReview` reads to offer a
+   * new declared amount. Same series as `chargeKeys`, with the cents the projection already
+   * loaded.
+   */
+  chargesByBill: Map<string, CommitmentCharge[]>;
   months: ReturnType<typeof projectForwardMonths>;
   comparison: SpendingVsIncome;
   incomePlan: ReturnType<typeof regularIncomePlan>;
@@ -343,6 +349,7 @@ export async function loadBillForecast(
         charges.map((charge) => charge.dateKey).sort(),
       ]),
     ),
+    chargesByBill: chargesByName,
     months: projectForwardMonths(bills, chargesByName, todayKey),
     incomePlan,
     comparison: {

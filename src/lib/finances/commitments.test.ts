@@ -6,6 +6,7 @@ import {
   projectForwardMonths,
   upcomingBillOccurrences,
   billsNeedingReview,
+  billsNeedingAmountReview,
   suggestCommitmentName,
   unclaimedMerchants,
   type StoredBillRow,
@@ -144,6 +145,75 @@ describe("billsNeedingReview", () => {
     // reported the 2026-09-24 charge as never having arrived.
     const rent = bill({ name: "Rent", cadenceMonths: 1, dueDay: 1, leadDays: 7 });
     expect(reviews([rent], "2026-08-26", "2026-09-05")).toEqual([]);
+  });
+});
+
+describe("billsNeedingAmountReview", () => {
+  const charges = (
+    billId: string,
+    amounts: readonly { dateKey: string; costCents: number }[],
+  ) => new Map([[billId, amounts]]);
+
+  it("proposes SimpliSafe's settled $34.97 against a declared $31.79", () => {
+    const simplisafe = bill({
+      id: "simplisafe",
+      name: "Home Security (SimpliSafe)",
+      cadenceMonths: 1,
+      expectedCents: 3179,
+    });
+    const [row] = billsNeedingAmountReview(
+      [simplisafe],
+      charges("simplisafe", [
+        { dateKey: "2026-04-17", costCents: 3497 },
+        { dateKey: "2026-05-17", costCents: 3497 },
+        { dateKey: "2026-06-17", costCents: 3497 },
+        { dateKey: "2026-07-17", costCents: 3497 },
+        { dateKey: "2026-08-17", costCents: 3497 },
+      ]),
+    );
+    expect(row).toMatchObject({
+      billId: "simplisafe",
+      declaredCents: 3179,
+      observedCents: 3497,
+    });
+  });
+
+  it("does not propose a SMECO-shaped disagreement", () => {
+    const smeco = bill({
+      id: "smeco",
+      name: "Electricity (SMECO)",
+      cadenceMonths: 1,
+      expectedCents: 17794,
+    });
+    expect(
+      billsNeedingAmountReview(
+        [smeco],
+        charges("smeco", [
+          { dateKey: "2026-06-01", costCents: 12000 },
+          { dateKey: "2026-07-01", costCents: 21000 },
+          { dateKey: "2026-08-01", costCents: 8900 },
+        ]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not propose a bill that declares no amount", () => {
+    const open = bill({
+      id: "open",
+      name: "Open",
+      cadenceMonths: 1,
+      expectedCents: null,
+    });
+    expect(
+      billsNeedingAmountReview(
+        [open],
+        charges("open", [
+          { dateKey: "2026-06-01", costCents: 1000 },
+          { dateKey: "2026-07-01", costCents: 1000 },
+          { dateKey: "2026-08-01", costCents: 1000 },
+        ]),
+      ),
+    ).toEqual([]);
   });
 });
 

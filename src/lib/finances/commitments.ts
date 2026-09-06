@@ -25,6 +25,7 @@
 
 import type { EnvelopeStatus } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
+import { amountMatches, medianCents, observedAmountRange } from "./amountMatch";
 import {
   declaredSeries,
   firstOccurrenceFrom,
@@ -345,6 +346,55 @@ export function billsNeedingReview(
   }
 
   return reviews.sort((left, right) => right.overdueDays - left.overdueDays);
+}
+
+/** How many recent charges must agree before we offer their median as a new amount. */
+const AMOUNT_REVIEW_CHARGES = 3;
+
+/** A bill whose recent charges have settled at a figure the declaration does not match. */
+export type BillAmountReview = {
+  billId: string;
+  name: string;
+  declaredCents: number;
+  observedCents: number;
+};
+
+/**
+ * Active bills whose last three charges agree with each other and sit outside the
+ * declared amount's approximate band.
+ *
+ * Agreement, not distance: a genuinely variable bill (SMECO) must not nag every month; a
+ * bill that has quietly settled at a new price should. `observedAmountRange` already
+ * encodes that distinction. Propose, never apply.
+ */
+export function billsNeedingAmountReview(
+  bills: readonly Pick<ReviewableBill, "id" | "name" | "status" | "expectedCents">[],
+  chargesByBill: ReadonlyMap<string, readonly CommitmentCharge[]>,
+): BillAmountReview[] {
+  const reviews: BillAmountReview[] = [];
+
+  for (const bill of bills) {
+    if (bill.status !== "active") continue;
+    if (bill.expectedCents === null) continue;
+    const recent = [...(chargesByBill.get(bill.id) ?? [])]
+      .filter((charge) => (charge.costCents ?? 0) > 0)
+      .sort((left, right) => right.dateKey.localeCompare(left.dateKey))
+      .slice(0, AMOUNT_REVIEW_CHARGES);
+    if (recent.length < AMOUNT_REVIEW_CHARGES) continue;
+    const amounts = recent.map((charge) => charge.costCents ?? 0);
+    if (observedAmountRange(amounts) !== null) continue;
+    const observedCents = medianCents(amounts);
+    if (observedCents === null || observedCents <= 0) continue;
+    if (amountMatches(observedCents, bill.expectedCents)) continue;
+    reviews.push({
+      billId: bill.id,
+      name: bill.name,
+      declaredCents: bill.expectedCents,
+      observedCents,
+    });
+  }
+
+  return reviews.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 // — Twelve-month forward view ————————————————————————————————————————————————
