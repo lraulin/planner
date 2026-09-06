@@ -1,7 +1,12 @@
 "use client";
 import { useRef, useState } from "react";
 import type { ColumnDef } from "@/components/grid/columns";
-import { TextCell, AmountCell, DateKeyCell } from "@/components/grid/cells";
+import {
+  TextCell,
+  AmountCell,
+  DateKeyCell,
+  DateKeyText,
+} from "@/components/grid/cells";
 import { CadenceSelect } from "../CadenceSelect";
 import { UrlCell } from "../budget/UrlCell";
 import {
@@ -155,12 +160,10 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
       ) : declaresBillSchedule(row.node.bill) ? (
         // Derived, not typed: two writable sources for one date is how `anchorDate`
         // acquired three meanings (D5).
-        <span
-          className="text-xs"
+        <DateKeyText
+          value={row.node.nextDueKey}
           title={`Set by the due day (${row.node.bill.dueDay}) and a ${row.node.bill.leadDays}-day payment lead. Clear the due day to type a date.`}
-        >
-          {row.node.nextDueKey ?? "—"}
-        </span>
+        />
       ) : (
         <DateKeyCell
           value={row.node.nextDueKey ?? ""}
@@ -181,12 +184,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     sortValue: (row) => row.node.dueKey,
     // The contract date, as distinct from Next charge, which stays the posting date the
     // envelope funds. Only a bill that declares a due day has one to show.
-    render: (row) =>
-      row.node.dueKey === null ? (
-        <span className="text-xs text-ink-muted">—</span>
-      ) : (
-        <span className="text-xs">{row.node.dueKey}</span>
-      ),
+    render: (row) => <DateKeyText value={row.node.dueKey} />,
   },
   {
     id: "amount",
