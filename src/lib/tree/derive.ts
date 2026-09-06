@@ -26,8 +26,10 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     }
   }
 
-  // Inherited priority: walk up until a node carries one. Memoized, so a deep tree costs
-  // one pass rather than one walk per node.
+  // Inherited priority: walk up until a node carries one. Memoized per node asked about —
+  // the walk does not reuse an ancestor's answer, so the cost is one short walk per row
+  // rather than one pass over the tree. That is fine at outline depths and is the reason
+  // not to reach for this cache as evidence the walk is free.
   const lapCache = new Map<
     string,
     { letter: OutlineRow["priorityLetter"]; rank: number | null }
