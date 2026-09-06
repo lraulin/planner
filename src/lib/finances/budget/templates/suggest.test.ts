@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AssignHistoryMonth } from "../assign/types";
 import { shiftMonthKey } from "../envelope";
 import { suggestWeeklyAmountCents } from "./suggest";
-import { countWeekdayInMonth } from "./weekly";
+import { countWeekdayInMonth } from "../targets/cadence";
 
 const FOOD = "food";
 const SUNDAY = 0;

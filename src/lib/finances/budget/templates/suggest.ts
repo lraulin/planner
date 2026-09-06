@@ -5,7 +5,7 @@
  * per occurrence (spec D5). The divisor is therefore the summed weekday occurrences across
  * the same months the total was drawn from, not a count of months — averaging dollars per
  * month and then multiplying by weeks would smear 4- and 5-occurrence months together, which
- * is the whole reason the `weekly` type exists.
+ * is the whole reason a weekly cadence is counted rather than averaged.
  *
  * The total is **all** spending in the category, not only the anchor-day transactions. The
  * mid-week milk run is real demand on the same envelope; dividing only the Sunday receipts
@@ -16,7 +16,7 @@
 
 import type { MonthKey } from "../envelope";
 import type { AssignHistoryMonth } from "../assign/types";
-import { countWeekdayInMonth } from "./weekly";
+import { countWeekdayInMonth } from "../targets/cadence";
 
 /** Longest window considered, in months. */
 const MAX_WINDOW_MONTHS = 12;
