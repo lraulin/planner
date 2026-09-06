@@ -1,6 +1,6 @@
 # A bill's expected charge follows its charges — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-06)
 
 ## Scope
 

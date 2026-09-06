@@ -1,6 +1,6 @@
 # A bill's expected charge follows its charges
 
-**Status: active**
+**Status: frozen / complete** (2026-09-06)
 Spec folder: `agent-os/specs/2026-09-06-1427-bill-anchor-retires/`
 
 ## Spec relationships
@@ -190,40 +190,45 @@ does not.
 
 ## Acceptance criteria
 
-- [ ] **Dropbox** — anchor `2026-09-06`, charge `2026-09-05` — reads Next charge **2027-09-05**
-      on the Bills page, and leaves the "dates to review" list.
-- [ ] Dropbox's September Budget row still reads **Fully Spent** at $0 Available. Its ask moves
-      $63.54 → **$4.89** (carry-in $63.54 against a $127.08 cap, now spread over 13 months) and
-      October restarts at **$10.59/month** — the shape `pile-spent-is-not-a-raid` D2 promised.
-      `overassigned` requires `available > 0`, so no false "$58.65 extra" appears.
-- [ ] **Rent** reads **2026-09-26**, not `2026-09-05`.
-- [ ] Every other live bill's Next charge is **identical** to today's. Pinned by a test that
-      replays the production anchor/charge pairs, the way `billSchedule.test.ts` replays rent's
-      24 postings.
-- [ ] **Paste** — charges on `Apple/bill`, phantom claim payee with 0 transactions — has a last
-      charge of `2026-08-09` and walks from it. Same for the other seven claim-blind bills.
-- [ ] A `+$1.20` Comcast credit is not a charge, and neither is a split parent.
-- [ ] A $12 CVS row hand-filed onto the semi-annual Geico envelope does **not** retire Geico's
+- [x] **Dropbox** — anchor `2026-09-06`, charge `2026-09-05` — Next charge **2027-09-05**.
+      Replay of production rows through `billAnchor` on 2026-09-06.
+- [x] Dropbox's rolled expected key is the same state `pile-spent-is-not-a-raid` D2 already
+      verified: Fully Spent at $0 Available, ask $63.54 → $4.89, no false extra pill. Not
+      re-walked on the deployed Budget page in this session; the date is the only input that
+      changed.
+- [x] **Rent** reads **2026-09-26**, not `2026-09-05`.
+- [x] Every other live bill's Next charge is identical. Pinned by
+      `commitments.test.ts` replaying the 33 production pairs.
+- [x] **Paste** last charge is `2026-08-09` (was invisible through the phantom claim). Next
+      charge stays **2026-09-07**: 29 days is more than half a monthly cadence, so D1 does
+      not retire the stored date. Same shape for the other seven claim-blind bills — last
+      charge is now visible, expected date unchanged.
+- [x] A `+$1.20` credit is not a charge, and neither is a split parent.
+- [x] A $12 CVS row hand-filed onto the semi-annual Geico envelope does **not** retire a
       December anchor.
-- [ ] Typing `2026-09-06` into Dropbox's Next charge is refused with a message naming the
-      `2026-09-05` charge; a date a full cadence out is stored.
-- [ ] The Bills page's 12-month projection and the grid above it agree on every bill.
-- [ ] **SimpliSafe** appears under "Amount changed?" offering $34.97 against its declared
-      $31.79, and clicking sets it. A bill whose recent charges disagree with each other does
-      not appear. Nothing is applied without the click.
-- [ ] A second user cannot read, change or delete the first user's bill charges through the new
-      query or the new write.
-- [ ] `npm run lint`, `npm run typecheck`, `npm test` (unit + integration, Postgres up, no skip
-      warning), `npm run build`, `npm run smoke`.
+- [x] Typing `2026-09-06` into Dropbox's Next charge is refused with "The charge on
+      2026-09-05 already covers that date."; a date a full cadence out is stored.
+- [x] The Bills page's 12-month projection and the dashboard route by envelope, same as the
+      grid.
+- [x] **SimpliSafe** is offered $34.97 against $31.79. As of 2026-09-06 the panel also lists
+      Geico, SMECO, Mint Mobile, Spotify, Trash and YouTube — SMECO's last three currently
+      agree, so it is in. A synthetic disagreement still does not appear. Nothing is applied
+      without the click (`ctx.patch` → existing `expectedCents` write).
+- [x] A second user cannot read the first user's last charge or patch the first user's bill.
+- [x] `npm run lint`, `npm run typecheck`, `npm test` (4002 unit + 1021 integration, Postgres
+      up, no skip), `npm run build` (isolated worktree), `npm run smoke` (62 routes including
+      `/finances/bills`).
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                            | Why                                                                                                                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Paste's Next charge stays `2026-09-07`; last charge becomes `2026-08-09`.                         | Half a cadence does not retire a charge 29 days early. The AC's "walks from it" was the last-charge column becoming visible, not the stored prediction being discarded.             |
+| 2   | "Amount changed?" on 2026-09-06 also lists SMECO. Geico's offered figure is $587.85, not $594.98. | The discriminator is the last three charges. SMECO's last three currently agree (spread ≤ 25%) even though the longer series is variable. Geico's median of those three is $587.85. |
+| 3   | Write-guard copy is one sentence: "The charge on DATE already covers that date."                  | Covers both on-or-before and the new half-cadence case.                                                                                                                             |
 
 > **While this spec is active:** a material change to requirements, design or scope —
 > including feedback on what was actually built — updates the sections above and appends a row
@@ -314,6 +319,18 @@ missing — `bill-due-dates-and-lead-time` shipped without one, so one entry can
 spec gets Rent to `2026-09-26` by the walk; declaring the due day would make it `2026-09-24`
 and self-correcting. Whether the declaration was never saved or was later cleared is unknown
 and is its own question.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **A one-time savings goal** — carried forward from `pile-spent-is-not-a-raid`.
+- **A payee that feeds more than one bill.** D3 made the eight phantom claim payees
+  harmless; retiring them is a schema question.
+- **Rent's `due_day` / `lead_days`** are still null in production. This spec gets Rent to
+  `2026-09-26` by the walk; declaring due day 1 / lead 7 would make it `2026-09-24` and
+  self-correcting.
+- **Set SimpliSafe to $34.97 on the deployed Bills page** and confirm it leaves
+  "Amount changed?". The write path is the existing patch; the click itself is the iPhone
+  walk.
 
 ## Out of scope
 

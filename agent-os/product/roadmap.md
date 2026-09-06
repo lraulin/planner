@@ -1213,6 +1213,14 @@ period)` so money already spent stops being held twice and only going over bites
   next month's carry-in instead of the same day. What this leaves open is a **one-time savings
   goal** — a down payment saved once and then spent, which is neither a floor to refill nor a
   pile on a cycle, and is the next spec.
+  ✅ **A bill's expected charge follows its charges, 2026-09-06.**
+  `agent-os/specs/2026-09-05-1401-bill-due-dates-and-lead-time/` (declared bills) and
+  `agent-os/specs/2026-09-06-1427-bill-anchor-retires/` (undeclared). A posted charge is
+  assigned to its nearest occurrence rather than becoming the next walk; a stored Next
+  charge retires when a charge pays it (Dropbox 2026-09-05 → 2027-09-05, Rent → 2026-09-26).
+  A bill's charges are what is filed to its envelope, not the payee claim that routed them.
+  Stale declared amounts surface as "Amount changed?" and are proposed, never applied.
+  Neither spec had a roadmap entry until this one.
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
   budget states a shortfall per bill envelope rather than as one collapsed number, and
   Assign → Underfunded names which envelopes will not be funded. The scan layer makes those
