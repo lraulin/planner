@@ -218,25 +218,3 @@ export function parseInsightsDrill(value: unknown): InsightsDrill | null {
   }
   return null;
 }
-
-export function serializeInsightsDrill(drill: InsightsDrill | null): unknown {
-  return drill;
-}
-
-export function drillLabel(drill: InsightsDrill): string {
-  switch (drill.kind) {
-    case "category":
-      return drill.id;
-    case "merchant":
-      return drill.id;
-    case "bucket":
-      return `${drill.startKey} – ${drill.endKey}`;
-    case "account":
-      return "One account";
-    case "sankey":
-      if (drill.role === "spent") return "Spent";
-      if (drill.role === "kept") return "Kept";
-      if (drill.role === "from-savings") return "From savings";
-      return drill.id;
-  }
-}
