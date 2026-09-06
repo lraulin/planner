@@ -1,6 +1,6 @@
 # Still needed this month — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete — 2026-09-06**
 
 ## Scope
 

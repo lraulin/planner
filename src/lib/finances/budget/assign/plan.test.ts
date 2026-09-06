@@ -6,6 +6,8 @@ import {
   planAssign,
   neededAssigned,
   needsAssignPreview,
+  stillNeeded,
+  stillNeededGroups,
   underfundedGapCents,
 } from "./plan";
 import type { AssignEnvelope, AssignHistoryMonth } from "./types";
@@ -571,5 +573,121 @@ describe("snoozed", () => {
       const asleep = run(option, [pizza({ snoozed: true })], { history });
       expect(asleep.lines).toEqual(awake.lines);
     }
+  });
+});
+
+describe("stillNeeded", () => {
+  it("totals the rows, and underfundedGapCents agrees", () => {
+    const rent = bill({ nextDueKey: "2026-08-01" });
+    const groceries = envelope({ target: addMonthly(50_000), assignedCents: 20_000 });
+    const bills = new Map([["rent", snapshot("rent", 210_000, "2026-08-01")]]);
+
+    const result = stillNeeded(MONTH, [groceries, rent], bills);
+
+    expect(result.rows.map((row) => [row.id, row.gapCents])).toEqual([
+      ["rent", 210_000],
+      ["food", 30_000],
+    ]);
+    expect(result.totalCents).toBe(240_000);
+    expect(result.totalCents).toBe(
+      result.rows.reduce((sum, row) => sum + row.gapCents, 0),
+    );
+    expect(underfundedGapCents(MONTH, [groceries, rent], bills)).toBe(240_000);
+  });
+
+  it("clamps per envelope, so overassigning one does not offset another", () => {
+    const overfunded = envelope({
+      id: "fun",
+      name: "Fun",
+      target: addMonthly(10_000),
+      assignedCents: 90_000,
+    });
+    const short = envelope({ target: addMonthly(50_000), assignedCents: 20_000 });
+
+    const result = stillNeeded(MONTH, [overfunded, short], new Map());
+
+    expect(result.rows.map((row) => row.id)).toEqual(["food"]);
+    expect(result.totalCents).toBe(30_000);
+  });
+
+  it("excludes income, hidden, paused and cancelled envelopes", () => {
+    const asking = (overrides: Partial<AssignEnvelope>) =>
+      envelope({ target: addMonthly(50_000), assignedCents: 0, ...overrides });
+
+    const result = stillNeeded(
+      MONTH,
+      [
+        asking({ id: "pay", name: "Paycheck", kind: "income" }),
+        asking({ id: "hid", name: "Hidden", hidden: true }),
+        asking({ id: "pau", name: "Paused", status: "paused" }),
+        asking({ id: "can", name: "Cancelled", kind: "bill", status: "cancelled" }),
+        asking({}),
+      ],
+      new Map(),
+    );
+
+    expect(result.rows.map((row) => row.id)).toEqual(["food"]);
+    expect(result.totalCents).toBe(50_000);
+  });
+
+  it("asks a snoozed envelope only for its overspend floor", () => {
+    const snoozedOverspent = envelope({
+      id: "pizza",
+      name: "Pizza",
+      target: addMonthly(10_000),
+      snoozed: true,
+      assignedCents: 0,
+      activityCents: -40_000,
+      balanceCents: -40_000,
+    });
+
+    const result = stillNeeded(MONTH, [snoozedOverspent], new Map());
+
+    expect(result.rows).toEqual([
+      { id: "pizza", name: "Pizza", kind: "spending", gapCents: 40_000 },
+    ]);
+  });
+
+  it("carries the kind each row was grouped under", () => {
+    const rent = bill({ nextDueKey: "2026-08-01" });
+    const bills = new Map([["rent", snapshot("rent", 210_000, "2026-08-01")]]);
+
+    expect(stillNeeded(MONTH, [rent], bills).rows[0]).toEqual({
+      id: "rent",
+      name: "Rent",
+      kind: "bill",
+      gapCents: 210_000,
+    });
+  });
+});
+
+describe("stillNeededGroups", () => {
+  it("subtotals Bills, Regular spending and Savings, and drops empty sections", () => {
+    const rent = bill({ nextDueKey: "2026-08-01" });
+    const groceries = envelope({ target: addMonthly(50_000) });
+    const house = envelope({
+      id: "house",
+      name: "House fund",
+      kind: "savings",
+      target: { behavior: "balance", cadence: { unit: "none" }, amountCents: 500_00 },
+    });
+    const bills = new Map([["rent", snapshot("rent", 210_000, "2026-08-01")]]);
+
+    const groups = stillNeededGroups(
+      stillNeeded(MONTH, [groceries, house, rent], bills),
+    );
+
+    expect(
+      groups.map((group) => [group.label, group.totalCents, group.rows.length]),
+    ).toEqual([
+      ["Bills", 210_000, 1],
+      ["Regular spending", 50_000, 1],
+      ["Savings", 50_000, 1],
+    ]);
+  });
+
+  it("returns nothing when every envelope has what it asked for", () => {
+    const funded = envelope({ target: addMonthly(50_000), assignedCents: 50_000 });
+    expect(stillNeededGroups(stillNeeded(MONTH, [funded], new Map()))).toEqual([]);
   });
 });

@@ -83,7 +83,11 @@ import {
   templateCarryIn,
   type EnvelopeApplyInput,
 } from "@/lib/finances/budget/templates/apply";
-import { needsAssignPreview, planAssign } from "@/lib/finances/budget/assign/plan";
+import {
+  needsAssignPreview,
+  planAssign,
+  stillNeeded,
+} from "@/lib/finances/budget/assign/plan";
 import {
   assignBillsFromRows,
   assignEnvelopeFromRow,
@@ -593,6 +597,12 @@ export function BudgetView({
   }, [rows, previous, data.months, data.preStartActivity, data.settings.startMonth]);
   const indicators = useMemo(
     () => indicatorsFromAssign(data.month, assignInputs.envelopes, assignInputs.bills),
+    [data.month, assignInputs.envelopes, assignInputs.bills],
+  );
+  // The header figure reads the same inputs as the grid beneath it, so the two cannot
+  // disagree (`still-needed-this-month` D3).
+  const stillNeededThisMonth = useMemo(
+    () => stillNeeded(data.month, assignInputs.envelopes, assignInputs.bills),
     [data.month, assignInputs.envelopes, assignInputs.bills],
   );
 
@@ -1566,6 +1576,7 @@ export function BudgetView({
         </nav>
         <BudgetSummary
           month={month}
+          stillNeeded={stillNeededThisMonth}
           accountPoolCents={
             data.month === monthKeyOf(data.todayKey) ? data.accountPoolCents : undefined
           }

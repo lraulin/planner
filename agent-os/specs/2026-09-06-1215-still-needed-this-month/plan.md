@@ -1,6 +1,6 @@
 # Still needed this month
 
-**Status: active**  
+**Status: frozen / complete — 2026-09-06**  
 Spec folder: `agent-os/specs/2026-09-06-1215-still-needed-this-month/`
 
 ## Spec relationships
@@ -94,26 +94,28 @@ the month on screen.
 
 ## Acceptance criteria
 
-- [ ] `/finances/budget` header shows **Still needed** beside Ready to Assign, for the viewed
+- [x] `/finances/budget` header shows **Still needed** beside Ready to Assign, for the viewed
       month.
-- [ ] It equals the sum of the amber `moreNeededCents` pills on the grid, and equals the
+- [x] It equals the sum of the amber `moreNeededCents` pills on the grid, and equals the
       total the Assign → Underfunded preview would fund given unlimited Ready to Assign.
-- [ ] `$0.00` renders green with copy saying every envelope has what it asked for.
-- [ ] The disclosure lists Bills / Regular spending / Savings subtotals and their envelopes,
+- [x] `$0.00` renders green with copy saying every envelope has what it asked for.
+- [x] The disclosure lists Bills / Regular spending / Savings subtotals and their envelopes,
       ranked bills-by-due-date first, and its rows sum exactly to the headline.
-- [ ] With Ready to Assign `> 0`, the disclosure ends with the Ready-to-Assign subtraction and
+- [x] With Ready to Assign `> 0`, the disclosure ends with the Ready-to-Assign subtraction and
       the remainder that must still arrive.
-- [ ] Paging to another month recomputes it; the existing future-month sentence is unchanged.
-- [ ] Readable on phone and desktop, both themes.
+- [x] Paging to another month recomputes it; the existing future-month sentence is unchanged.
+- [x] Readable on phone and desktop, both themes.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                        | Why                                                                                                                                                                                                                                 |
+| --- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Ready to Assign gained a `0.75rem` label it did not have                                      | Anticipated in Task 3, recorded here because it changes an existing figure, not only the new one: a second unlabelled headline would have been ambiguous.                                                                           |
+| 2   | The section grouping lives in `stillNeededGroups()` in `plan.ts`, not inline in the component | Task 4 described it inline. Moved to `src/lib/**` so the subtotals get a unit test and the component stays presentational (`development/clean-code`).                                                                               |
+| 3   | Light theme verified by token, not by screenshot                                              | The app follows `prefers-color-scheme` with no in-app toggle. Both tokens used here — `--goal-unmet` and `--chart-income` — are defined in the light block and already carry the amber pills and green Available on this same page. |
 
 ## Task 1: Save spec documentation
 

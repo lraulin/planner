@@ -1189,11 +1189,21 @@ period)` so money already spent stops being held twice and only going over bites
   Bills are deliberately excluded — a variable bill whose charge has posted already stops
   asking, a sinking bill's yellow is a wanted reminder, and a bill can already be paused,
   cancelled, or re-dated.
+  ✅ **Still needed this month shipped 2026-09-06.**
+  `agent-os/specs/2026-09-06-1215-still-needed-this-month/`. The Budget header states the
+  month's remaining ask — total needed minus total assigned — beside Ready to Assign, in
+  amber, for the month on screen. It is `underfundedGapCents` itemised rather than a second
+  formula, so it sums exactly to the amber per-row pills and to Assign → Underfunded. A
+  collapsed **What's still asking** disclosure subtotals Bills / Regular spending / Savings —
+  Savings stays in the total, because a deadline-free floor is a real ask, but a large house
+  fund is separable at a glance — and ends by subtracting Ready to Assign to state what has
+  still to arrive. Answers "will the next paycheck cover it", which the per-row view cannot.
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
   budget states a shortfall per bill envelope rather than as one collapsed number, and
   Assign → Underfunded names which envelopes will not be funded. The scan layer makes those
-  holes visible on the grid. What is still missing is the guided step from a red envelope
-  to "cancel or skip this" as an action, not just a number to read.
+  holes visible on the grid, and the header now states their total. What is still missing is
+  the guided step from a red envelope to "cancel or skip this" as an action, not just a
+  number to read.
 - **✅ Period result — "living within my means", shipped 2026-08-18; retired 2026-08-24.**
   `agent-os/specs/2026-08-18-2005-period-result/` shipped the scorecard.
   `agent-os/specs/2026-08-24-2206-single-pool-budget/` D6 deleted it. Its premise — savings

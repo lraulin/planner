@@ -2,6 +2,7 @@
 
 import { formatUsd } from "@/lib/finances/money";
 import { readyToAssignNote, type BudgetMonth } from "@/lib/finances/budget/envelope";
+import { stillNeededGroups, type StillNeeded } from "@/lib/finances/budget/assign/plan";
 
 /**
  * Ready to Assign, the backlog that explains it, and the arithmetic behind it.
@@ -17,6 +18,11 @@ import { readyToAssignNote, type BudgetMonth } from "@/lib/finances/budget/envel
  *
  * Zero is the target and gets its own tone: in zero-based budgeting a green surplus is not
  * success, it is money without a job.
+ *
+ * Beside it, **Still needed** answers the opposite question — total needed minus total
+ * assigned for the month on screen, the sum of the amber per-row pills. It arrives computed
+ * (`stillNeeded()`), for the same reason the terms do
+ * (`agent-os/specs/2026-09-06-1215-still-needed-this-month/`).
  */
 export function BudgetSummary({
   month,
@@ -26,6 +32,7 @@ export function BudgetSummary({
   uncategorizedCount = 0,
   uncategorizedCents = 0,
   uncategorizedSinceLabel,
+  stillNeeded,
 }: {
   month: BudgetMonth;
   /** When viewing the current month, the live on-budget working pool. */
@@ -38,6 +45,8 @@ export function BudgetSummary({
   uncategorizedCents?: number;
   /** Month the budget starts, already formatted; omitted when the budget has no start. */
   uncategorizedSinceLabel?: string;
+  /** The viewed month's remaining ask, computed beside the grid it must agree with. */
+  stillNeeded: StillNeeded;
 }) {
   const ready = month.readyToAssignCents;
   const tone =
@@ -47,13 +56,25 @@ export function BudgetSummary({
         ? "text-[var(--chart-income)]"
         : "text-ink";
   const fixThis = action === "fix-this";
+  const needed = stillNeeded.totalCents;
+  const neededTone =
+    needed > 0 ? "text-[var(--goal-unmet)]" : "text-[var(--chart-income)]";
+  // Short of an ask is not an overspend, so amber, never `--chart-spend` (D6).
+  const groups = stillNeededGroups(stillNeeded);
+  // Both readings of the one question: what is unassigned, and what has still to arrive.
+  const toArrive = Math.max(0, needed - Math.max(0, ready));
 
   return (
     <section className="rounded border border-rule bg-surface p-3">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className={`tabular text-[2.25rem] leading-none font-medium ${tone}`}>
-          {formatUsd(ready)}
-        </span>
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <div>
+          <span className={`tabular text-[2.25rem] leading-none font-medium ${tone}`}>
+            {formatUsd(ready)}
+          </span>
+          <span className="mt-0.5 block text-[0.75rem] text-ink-muted">
+            Ready to Assign
+          </span>
+        </div>
         {onAction ? (
           <button
             type="button"
@@ -67,6 +88,18 @@ export function BudgetSummary({
             {fixThis ? "Fix This" : "Assign"}
           </button>
         ) : null}
+        {/* No vertical rule between the pair: it would not survive the wrap on phone, and
+            the labels already carry the separation. */}
+        <div>
+          <span
+            className={`tabular text-[1.5rem] leading-none font-medium ${neededTone}`}
+          >
+            {formatUsd(needed)}
+          </span>
+          <span className="mt-0.5 block text-[0.75rem] text-ink-muted">
+            Still needed
+          </span>
+        </div>
         {accountPoolCents !== undefined ? (
           <span className="ml-auto text-[0.75rem] text-ink-muted">
             Account pool{" "}
@@ -145,6 +178,68 @@ export function BudgetSummary({
           </p>
         ) : null}
       </details>
+
+      {needed > 0 ? (
+        <details className="group mt-2 border-t border-rule pt-2">
+          <summary className="flex min-h-tap cursor-pointer list-none items-center gap-1.5 text-[0.8125rem] text-ink-muted marker:content-none hover:text-ink md:min-h-0">
+            <span aria-hidden="true" className="inline-block group-open:rotate-90">
+              ▸
+            </span>
+            What&rsquo;s still asking
+          </summary>
+          <dl className="mt-2 max-w-sm text-[0.8125rem]">
+            {groups.map((group) => (
+              <div key={group.label}>
+                <div className="flex items-baseline justify-between gap-4">
+                  <dt className="text-ink">{group.label}</dt>
+                  <dd className="tabular text-ink">{formatUsd(group.totalCents)}</dd>
+                </div>
+                {group.rows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex items-baseline justify-between gap-4 pl-3"
+                  >
+                    <dt className="text-ink-muted">{row.name}</dt>
+                    <dd className="tabular text-ink-muted">
+                      {formatUsd(row.gapCents)}
+                    </dd>
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div className="mt-1 flex items-baseline justify-between gap-4 border-t border-rule pt-1">
+              <dt className="text-ink">Still needed</dt>
+              <dd className={`tabular font-medium ${neededTone}`}>
+                {formatUsd(needed)}
+              </dd>
+            </div>
+            {ready > 0 ? (
+              <>
+                <div className="flex items-baseline justify-between gap-4">
+                  <dt className="text-ink-muted">Ready to Assign</dt>
+                  <dd className="tabular text-ink-muted">&minus;{formatUsd(ready)}</dd>
+                </div>
+                <div className="mt-1 flex items-baseline justify-between gap-4 border-t border-rule pt-1">
+                  <dt className="text-ink">Still to arrive</dt>
+                  <dd
+                    className={`tabular font-medium ${
+                      toArrive > 0
+                        ? "text-[var(--goal-unmet)]"
+                        : "text-[var(--chart-income)]"
+                    }`}
+                  >
+                    {formatUsd(toArrive)}
+                  </dd>
+                </div>
+              </>
+            ) : null}
+          </dl>
+        </details>
+      ) : (
+        <p className="mt-2 border-t border-rule pt-2 text-[0.8125rem] text-ink-muted">
+          Every envelope has what it asked for this month.
+        </p>
+      )}
     </section>
   );
 }

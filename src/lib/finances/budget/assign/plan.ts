@@ -13,8 +13,10 @@
  * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D3.
  */
 
+import type { EnvelopeKind } from "@/db/schema";
 import { formatUsd } from "@/lib/finances/money";
 import { monthName, prevMonthKey, type MonthKey } from "../envelope";
+import { pageSectionOf } from "../rows";
 import { monthsLeft } from "../targets/cadence";
 import { targetDemand } from "../targets/demand";
 import type { BillSnapshot } from "../targets/derive";
@@ -42,6 +44,27 @@ export type PlanAssignParams = {
   history: readonly AssignHistoryMonth[];
   /** When set, only these ids. Hidden envelopes join only when listed here. */
   categoryIds?: readonly string[];
+};
+
+/** One envelope's remaining ask, for the Budget header's derivation. */
+export type StillNeededRow = {
+  id: string;
+  name: string;
+  kind: EnvelopeKind;
+  gapCents: number;
+};
+
+/** The header figure and the rows it is the sum of. */
+export type StillNeeded = {
+  totalCents: number;
+  rows: readonly StillNeededRow[];
+};
+
+/** One section of the derivation, subtotalled. */
+export type StillNeededGroup = {
+  label: string;
+  totalCents: number;
+  rows: readonly StillNeededRow[];
 };
 
 function onDay(todayKey: string): string {
@@ -108,18 +131,89 @@ function gapOf(envelope: AssignEnvelope, needed: number): number {
   return Math.max(0, needed - envelope.assignedCents);
 }
 
+/**
+ * What every eligible envelope still asks for this month, itemised.
+ *
+ * The headline the Budget header states — total needed minus total assigned — and the rows
+ * behind it, so the figure and the amber per-row pills cannot disagree. `totalCents` is the
+ * sum of `rows` by construction; the clamp is per envelope, so an overassigned envelope
+ * contributes `0` rather than offsetting an underfunded one (that money is not available
+ * without moving it).
+ *
+ * Spec: `agent-os/specs/2026-09-06-1215-still-needed-this-month/` D1–D3.
+ */
+export function stillNeeded(
+  month: MonthKey,
+  envelopes: readonly AssignEnvelope[],
+  bills: ReadonlyMap<string, BillSnapshot>,
+): StillNeeded {
+  const eligibleEnvelopes = envelopes.filter((envelope) =>
+    eligible(envelope, undefined),
+  );
+  const indexOf = new Map(
+    eligibleEnvelopes.map((envelope, index) => [envelope.id, index] as const),
+  );
+
+  const rows = eligibleEnvelopes
+    .map((envelope) => ({
+      envelope,
+      gapCents: gapOf(envelope, neededAssigned(envelope, month, bills).needed),
+    }))
+    .filter((entry) => entry.gapCents > 0)
+    .sort((left, right) =>
+      compareUnderfunded(left.envelope, right.envelope, month, indexOf),
+    )
+    .map(({ envelope, gapCents }) => ({
+      id: envelope.id,
+      name: envelope.name,
+      kind: envelope.kind,
+      gapCents,
+    }));
+
+  return {
+    totalCents: rows.reduce((sum, row) => sum + row.gapCents, 0),
+    rows,
+  };
+}
+
+/**
+ * The derivation groups, in page order: Bills, Regular spending, Savings.
+ *
+ * A deadline-free savings floor asks its whole remaining amount this month
+ * (`target-refill-basis` D3), so a house fund can dominate the headline. It stays in the
+ * total — excluding it would fork the math — but subtotalling makes it separable at a
+ * glance (`still-needed-this-month` D4). Rows keep the `compareUnderfunded` order they
+ * arrived in, so bills read by due date.
+ */
+export function stillNeededGroups(result: StillNeeded): StillNeededGroup[] {
+  const bills: StillNeededRow[] = [];
+  const spending: StillNeededRow[] = [];
+  const savings: StillNeededRow[] = [];
+  for (const row of result.rows) {
+    if (row.kind === "bill") bills.push(row);
+    else if (pageSectionOf(row.kind) === "savings") savings.push(row);
+    else spending.push(row);
+  }
+
+  return [
+    { label: "Bills", rows: bills },
+    { label: "Regular spending", rows: spending },
+    { label: "Savings", rows: savings },
+  ]
+    .filter((group) => group.rows.length > 0)
+    .map((group) => ({
+      ...group,
+      totalCents: group.rows.reduce((sum, row) => sum + row.gapCents, 0),
+    }));
+}
+
 /** Total remaining ask on the current month — the month-ahead note, not a gate. */
 export function underfundedGapCents(
   month: MonthKey,
   envelopes: readonly AssignEnvelope[],
   bills: ReadonlyMap<string, BillSnapshot>,
 ): number {
-  let gap = 0;
-  for (const envelope of envelopes) {
-    if (!eligible(envelope, undefined)) continue;
-    gap += gapOf(envelope, neededAssigned(envelope, month, bills).needed);
-  }
-  return gap;
+  return stillNeeded(month, envelopes, bills).totalCents;
 }
 
 function sinkingCadence(target: Target | null): boolean {
