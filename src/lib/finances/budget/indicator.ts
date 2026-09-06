@@ -8,8 +8,9 @@
  *
  * Spec: `agent-os/specs/2026-08-25-1310-budget-funding-indicators/` D3–D6, as
  * amended by `agent-os/specs/2026-08-28-1000-ynab-target-engine/` Task 8,
- * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1–D3, and
- * `agent-os/specs/2026-08-29-2129-overassigned-available/` D1–D4.
+ * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1–D3,
+ * `agent-os/specs/2026-08-29-2129-overassigned-available/` D1–D4, and
+ * `agent-os/specs/2026-09-06-1301-pile-spent-is-not-a-raid/` D3.
  */
 
 import { formatUsd } from "@/lib/finances/money";
@@ -52,16 +53,19 @@ export type EnvelopeIndicator = {
 /**
  * What the envelope is being measured against, and therefore what its bar fills toward.
  *
- * A **period** refill fills with `carry-in + assigned` toward the month's cap, because that is
- * exactly the comparison the ask makes; spending is drawn as the spent overlay, not as a
- * shortfall. A **pile** — sinking while it still has months, a floor once it does not — fills
- * with what is actually in it.
+ * The bar must not invent a second demand (`budget-funding-indicators` D3), so `fill` is
+ * whatever the ask itself reads. A **period** refill and an **`upTo` pile** both measure what
+ * came *in* — `carry-in + assigned` — and draw spending as the spent overlay rather than as a
+ * shortfall; only a **`balance` floor** measures what is still sitting there
+ * (`pile-spent-is-not-a-raid` D3).
  */
+type BarFill = "funded" | "available";
+
 type Horizon =
   | { kind: "none" }
   | { kind: "period"; capCents: number }
-  | { kind: "sinking"; targetCents: number }
-  | { kind: "floor"; amountCents: number };
+  | { kind: "sinking"; targetCents: number; fill: BarFill }
+  | { kind: "floor"; amountCents: number; fill: BarFill };
 
 function clamp01(value: number): number {
   if (value <= 0) return 0;
@@ -97,9 +101,10 @@ function horizonOf(
   }
 
   const left = monthsLeft(target.cadence, month, bill ?? undefined);
+  const fill: BarFill = target.behavior === "balance" ? "available" : "funded";
   return left !== null && left > 0
-    ? { kind: "sinking", targetCents: target.amountCents }
-    : { kind: "floor", amountCents: target.amountCents };
+    ? { kind: "sinking", targetCents: target.amountCents, fill }
+    : { kind: "floor", amountCents: target.amountCents, fill };
 }
 
 function barToward(funded: number, target: number, spent: number): EnvelopeBar {
@@ -132,12 +137,14 @@ export function envelopeIndicator(
         : horizon.kind === "floor"
           ? horizon.amountCents
           : envelope.carryInCents + needed;
-  // A refill's bar answers the ask's own question — is the month's cap assigned? A pile's
-  // answers whether the pile is full.
-  const askBar =
-    horizon.kind === "period"
-      ? barToward(funded, Math.max(periodTarget, 1), spent)
-      : barToward(available, Math.max(periodTarget, 1), spent);
+  // The bar answers the ask's own question. A refill and an `upTo` pile ask whether enough has
+  // been put in, so they fill with `funded` and the spending shows as the overlay; a `balance`
+  // floor asks whether the money is still there, so it fills with Available.
+  const barBasis =
+    horizon.kind === "period" || (horizon.kind !== "none" && horizon.fill === "funded")
+      ? funded
+      : available;
+  const askBar = barToward(barBasis, Math.max(periodTarget, 1), spent);
 
   if (available < 0) {
     return {

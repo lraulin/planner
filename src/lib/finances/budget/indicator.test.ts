@@ -363,6 +363,40 @@ describe("envelopeIndicator", () => {
     expect(indicator.copy).toBe("$240.00 more needed this month");
   });
 
+  it("fills a sinking `upTo` pile's bar with what was put in, not what is left", () => {
+    // The bar must not be a second opinion (`budget-funding-indicators` D3): the ask reads
+    // carry-in, so the bar does too. $400 saved toward $1,200 with $200 of it spent shows a
+    // third full, not a sixth — and the ask is the ordinary installment on the remaining $800,
+    // because the raid surfaces through next month's carry-in (`pile-spent-is-not-a-raid` D2).
+    const row = envelope({
+      target: yearlyUpTo(120_000, 12),
+      carryInCents: 40_000,
+      activityCents: -20_000,
+      assignedCents: 0,
+      balanceCents: 20_000,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("underfunded");
+    expect(indicator.moreNeededCents).toBe(16_000);
+    expect(indicator.bar?.fill01).toBeCloseTo(1 / 3, 3);
+  });
+
+  it("calls a yearly pile spent on its own charge Fully Spent, asking nothing more", () => {
+    // August is the charge month and the year's propane has posted: $0 Available is the pile
+    // working, so the state chain lands on Fully Spent rather than asking for the year again.
+    const row = envelope({
+      target: yearlyUpTo(120_000, 8),
+      carryInCents: 120_000,
+      activityCents: -120_000,
+      assignedCents: 0,
+      balanceCents: 0,
+    });
+    const indicator = indicate(row);
+    expect(indicator.moreNeededCents).toBe(0);
+    expect(indicator.state).toBe("fully-spent");
+    expect(indicator.copy).toBe("Fully Spent");
+  });
+
   it("funds a by-date envelope that already holds the full target", () => {
     const row = envelope({
       target: byDate(120_000, "2026-12"),

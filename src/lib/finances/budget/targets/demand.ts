@@ -9,23 +9,31 @@
  * The engine returns *needed assigned*, so `gap = max(0, needed − assigned)` is unchanged from
  * `budget-assign-options` D3.
  *
- * **The load-bearing claim: two families, two bases.** The line is whether the money is spent
- * inside the month it is asked for or held for a later one.
+ * **The load-bearing claim: two families, two spreads; the behaviour picks the basis.**
  *
- * - A **period refill** (`week`, `month`, a bill that charges inside the month) is an
- *   assignment question. Activity is consumption of funding, not a new demand for it: spending
- *   money that was already assigned for that spending cannot ask for it again. `add` asks the
- *   whole cap, `upTo` asks the cap less what carried in. This is YNAB's answer, verified
- *   empirically — same target, same four charges, same money assigned, "You've met your target".
- * - A **pile** (`year`, `by`, `none`, a quarterly or yearly bill) is a savings question. What is
- *   actually in the pile is the right measure, so it reads Available and raiding one asks for it
- *   back.
+ * The **cadence** decides the spread. A **period refill** (`week`, `month`, a bill that charges
+ * inside the month) asks its whole cap now; a **pile** (`year`, `by`, `none`, a quarterly or
+ * yearly bill) spreads the hole across the months it has left.
+ *
+ * The **behaviour** decides what the hole is measured against:
+ *
+ * - `add` is a contribution — it asks the whole cap, whatever is in the envelope.
+ * - `upTo` is a **spending** target: the money is meant to leave, so what came *in* is the
+ *   measure. It asks the cap less **carry-in**, and activity is consumption of funding rather
+ *   than a new demand for it — spending money that was already assigned for that spending
+ *   cannot ask for it again. That holds for the last pizza of the month and equally for the
+ *   yearly bill in the month it is charged.
+ * - `balance` is a **floor**: what is sitting in the envelope is the whole point, so it asks the
+ *   amount less **Available**, and raiding one asks for it back.
  *
  * `assignedToZeroBalance` (`assign/plan.ts`) still floors every ask, which is what keeps
- * overspend visible without putting Activity back into a refill's basis.
+ * overspend visible without putting Activity back into an `upTo` basis. The cost of the `upTo`
+ * basis is that a raid in an accumulation month is asked for through the *next* month's
+ * carry-in rather than the same day (`pile-spent-is-not-a-raid` D2).
  *
  * Spec: `agent-os/specs/2026-08-28-1000-ynab-target-engine/` D3, D4, as superseded by
- * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1–D3.
+ * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1–D3 and
+ * `agent-os/specs/2026-09-06-1301-pile-spent-is-not-a-raid/` D1.
  */
 
 import type { MonthKey } from "../envelope";
@@ -51,7 +59,10 @@ export type TargetDemand = {
   errors: string[];
 };
 
-/** Available **excluding** this month's Assigned — the figure every *pile* ask reads. */
+/**
+ * Available **excluding** this month's Assigned — the **floor** basis, read by `balance`
+ * targets alone (`pile-spent-is-not-a-raid` D1).
+ */
 export function availableBefore(envelope: {
   carryInCents: number;
   activityCents: number;
@@ -119,10 +130,17 @@ function periodDemand(
 function pileDemand(
   target: Target,
   month: MonthKey,
-  before: number,
+  envelope: { carryInCents: number; activityCents: number },
   bill: ScheduleBill | null,
 ): number {
   const amount = assertCents(target.amountCents, "target amount");
+  // A `balance` pile is a floor, so it measures Available and a raid asks for it back. An
+  // `upTo` pile is saving toward a spend, so it measures carry-in — paying the bill the pile
+  // was for must not demand the whole year back in the charge month.
+  const before =
+    target.behavior === "balance"
+      ? availableBefore(envelope)
+      : assertCents(envelope.carryInCents, "carry-in");
   const left = monthsLeft(target.cadence, month, bill ?? undefined);
   // No deadline is not no ask. A floor you have raided has to nag now, or the one shape whose
   // whole job is to stay full is the one shape that never asks (`target-refill-basis` D3).
@@ -139,7 +157,7 @@ export function demandForTarget(
 ): number {
   return isPeriodFamily(target, bill)
     ? periodDemand(target, month, envelope.carryInCents, bill)
-    : pileDemand(target, month, availableBefore(envelope), bill);
+    : pileDemand(target, month, envelope, bill);
 }
 
 /** What this envelope asks for this month — the one ask the whole Budget page reads. */

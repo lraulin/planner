@@ -165,9 +165,71 @@ describe("a yearly upTo sinks toward its anchor month", () => {
     expect(targetDemand(e, "2026-10-01", NO_BILLS).amount).toBe(40_000);
   });
 
-  it("asks a raided pile for it back: $100/month once the year's propane is spent", () => {
+  it("asks nothing more the month the pile is emptied", () => {
+    // Reverses `target-refill-basis`'s $100 here. Spending the pile on the thing it was saving
+    // for is the pile working, not a raid: the year's propane went out, so November's ask is
+    // met (`pile-spent-is-not-a-raid` D1).
     const e = envelope(propane, { carryInCents: 120_000, activityCents: -120_000 });
-    expect(targetDemand(e, "2026-11-01", NO_BILLS).amount).toBe(10_000);
+    expect(targetDemand(e, "2026-11-01", NO_BILLS).amount).toBe(0);
+  });
+
+  it("restarts the installments the next month, at $109.09 over the eleven left", () => {
+    // Lee's rule: "start saving up again... starting next month." December through the
+    // following October is eleven payments toward $1,200.
+    const e = envelope(propane, { carryInCents: 0 });
+    expect(targetDemand(e, "2026-12-01", NO_BILLS).amount).toBe(10_909);
+  });
+
+  it("asks a raid back through next month's carry-in, not the same day", () => {
+    // D2's accepted cost, stated. $400 saved and $200 of it spent on something else in August:
+    // August still asks its ordinary third of the remaining $800, blind to the raid.
+    const raidedInAugust = envelope(propane, {
+      carryInCents: 40_000,
+      activityCents: -20_000,
+    });
+    expect(targetDemand(raidedInAugust, "2026-08-01", NO_BILLS).amount).toBe(26_667);
+
+    // September carries in the $200 that is actually there, so the hole surfaces one month
+    // late — deferred, not lost.
+    const september = envelope(propane, { carryInCents: 20_000 });
+    expect(targetDemand(september, "2026-09-01", NO_BILLS).amount).toBe(50_000);
+  });
+
+  it("asks the charge month nothing once the bill it saved for is paid", () => {
+    // The reported class of bug, in the pile family's own shape: October with the $1,200 saved
+    // and the charge posted asked $1,200 again.
+    const paid = envelope(propane, { carryInCents: 120_000, activityCents: -120_000 });
+    expect(targetDemand(paid, "2026-10-01", NO_BILLS).amount).toBe(0);
+  });
+});
+
+describe("a raided floor still asks this month", () => {
+  it("keeps the Available basis for `balance`, deadline or not", () => {
+    // The guard on D1's blast radius: `balance` is a floor, so what is sitting in it is the
+    // point and a raid nags now (`target-refill-basis` D3).
+    const floor: Target = {
+      behavior: "balance",
+      cadence: { unit: "none" },
+      amountCents: 10_000_000,
+    };
+    const raided = envelope(floor, {
+      carryInCents: 10_000_000,
+      activityCents: -503_000,
+    });
+    expect(targetDemand(raided, "2026-08-01", NO_BILLS).amount).toBe(503_000);
+
+    const byDeadline: Target = {
+      behavior: "balance",
+      cadence: { unit: "by", month: "2026-06" },
+      amountCents: 10_000_000,
+    };
+    const spentAfterDeadline = envelope(byDeadline, {
+      carryInCents: 10_000_000,
+      activityCents: -503_000,
+    });
+    expect(targetDemand(spentAfterDeadline, "2026-08-01", NO_BILLS).amount).toBe(
+      503_000,
+    );
   });
 });
 

@@ -156,9 +156,10 @@ deployed app; if it is real it gets its own spec.
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                            | Why                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | The Dropbox acceptance figure is **$63.54 with a stale anchor and $4.89/month with a rolled one**, not $63.54 in both.            | D4's claim that D1 "gives $63.54 in either anchor state" was arithmetic that had not been run. A rolled anchor puts the charge 12 months out, so the same $63.54 hole is spread over thirteen months. The point D4 was making survives intact — the phantom $127.08 is gone either way, and the anchor is still a display question — but the number is not the same one, so the test pins both figures rather than asserting a shared one. |
+| 2   | D3's bar change applies to the **`floor` horizon as well as `sinking`** — the fill basis follows the behaviour in both pile arms. | `horizonOf` calls a pile `floor` whenever `monthsLeft` is 0, which is exactly the charge month the bug was reported in: an `upTo` pile paying its own bill lands in `floor`, not `sinking`. Restricting the change to `sinking` would have left the reported envelope's bar reading Available while its ask read carry-in — the second opinion D3 exists to prevent.                                                                       |
 
 > **While this spec is active:** a material change to requirements, design or scope — including
 > feedback on what was actually built — updates the sections above and appends a row here.

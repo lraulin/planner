@@ -184,6 +184,49 @@ describe("yearly and quarterly bills still sink", () => {
     );
   });
 
+  it("asks nothing more once the charge has posted in its own month", () => {
+    // October with the whole $1,200 saved and the propane charge posted asked $1,200 again:
+    // the pile spending itself on its own purpose looked exactly like a raid
+    // (`pile-spent-is-not-a-raid` D1).
+    const paid = p({ carryInCents: 120_000, activityCents: -120_000 });
+    expect(targetDemand(paid, "2026-10-01", bills).amount).toBe(0);
+  });
+
+  it("does not ask a paid yearly bill to be saved for again this month", () => {
+    // The reported bug: Dropbox, $127.08 a year, charged in September with $63.54 carried in,
+    // demanded $190.62 before it would read Funded. The real shortfall was the $63.54 that was
+    // never saved; the other $127.08 was the year being asked for a second time.
+    const dropbox = (expectedKey: string) =>
+      billsOf(
+        bill({
+          id: "d2",
+          name: "Dropbox",
+          cadenceMonths: 12,
+          cadenceDays: null,
+          expectedCents: 12_708,
+          nextDueKey: expectedKey,
+          expectedKey,
+        }),
+      );
+    const september = envelope({
+      id: "d2",
+      name: "Dropbox",
+      carryInCents: 6354,
+      activityCents: -12_708,
+    });
+
+    // Anchor still on the charge that was paid by hand: the month asks only the half that was
+    // never saved.
+    expect(targetDemand(september, "2026-09-01", dropbox("2026-09-15")).amount).toBe(
+      6354,
+    );
+    // Anchor rolled to next year's charge: the same $63.54 hole, spread over the thirteen
+    // months to it. Either way the phantom $127.08 is gone.
+    expect(targetDemand(september, "2026-09-01", dropbox("2027-09-15")).amount).toBe(
+      489,
+    );
+  });
+
   it("sinks a quarterly bill over its three months", () => {
     const quarterly = billsOf(
       bill({
