@@ -145,6 +145,21 @@ describe("nearestOccurrence", () => {
     expect(nearestOccurrence(monthly, "2026-01-30").dueKey).toBe("2026-01-15");
   });
 
+  it("breaks an exact tie toward the occurrence already owed", () => {
+    const monthly = declaredSeries(bill({ dueDay: 15 }), "2026-01-15")!;
+    // February is 28 days long, so 2026-03-01 sits exactly 14 days from the occurrence
+    // either side of it. Crediting the charge forward leaves February's reading as never
+    // paid and starts expecting March's twice.
+    expect(nearestOccurrence(monthly, "2026-03-01").dueKey).toBe("2026-02-15");
+  });
+
+  it("breaks an exact tie toward the earlier occurrence when a lead shifts the postings", () => {
+    // Due the 1st, posting five days ahead: expected dates are 2026-03-27 and 2026-04-26,
+    // and 2026-04-11 is 15 days from each.
+    const monthly = declaredSeries(bill({ dueDay: 1, leadDays: 5 }), "2026-01-27")!;
+    expect(nearestOccurrence(monthly, "2026-04-11").dueKey).toBe("2026-04-01");
+  });
+
   it("reaches an occurrence years from the seed", () => {
     const series = declaredSeries(RENT, "2026-08-26")!;
     expect(nearestOccurrence(series, "2019-03-02").dueKey).toBe("2019-03-01");

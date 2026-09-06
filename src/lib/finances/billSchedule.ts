@@ -166,14 +166,17 @@ export function nearestOccurrence(series: BillSeries, dateKey: string): Occurren
   let best = occurrenceAt(series, Math.round(monthsOut / series.cadenceMonths));
 
   // The month estimate is off by at most one step (day clamping, a partial month), but walk
-  // until it stops improving rather than assuming a direction.
+  // until it stops improving rather than assuming a direction. Backward wins an equal gap,
+  // which is the whole of the tie rule: the estimate lands on whichever side the month
+  // arithmetic happened to round to, so a strict comparison in both directions would credit
+  // an exactly-halfway charge forward to an occurrence that is not owed yet.
   for (let step = 0; step < MAX_SETTLE_STEPS; step++) {
     const gap = Math.abs(daysBetweenKeys(best.expectedKey, dateKey));
     const forward = occurrenceAt(series, best.index + 1);
     const backward = occurrenceAt(series, best.index - 1);
     if (Math.abs(daysBetweenKeys(forward.expectedKey, dateKey)) < gap) {
       best = forward;
-    } else if (Math.abs(daysBetweenKeys(backward.expectedKey, dateKey)) < gap) {
+    } else if (Math.abs(daysBetweenKeys(backward.expectedKey, dateKey)) <= gap) {
       best = backward;
     } else {
       return best;
