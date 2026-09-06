@@ -53,6 +53,7 @@ import {
 } from "@/lib/finances/commitments";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import {
   FileImportDialog,
   useFileImportCommand,
@@ -142,15 +143,16 @@ function useIsClient() {
 
 /** Balance strip above the register — statement-anchored when a snapshot exists. */
 function AccountBalances({ accounts }: { accounts: FinanceAccountRow[] }) {
+  const formatDate = useDateFormatter();
   if (accounts.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-rule bg-surface-raised px-3 py-1.5">
       {accounts.map((account) => {
         const mismatch = account.balanceMismatchCents !== 0;
         const title = mismatch
-          ? `Statement ${formatUsd(account.statementClosingCents ?? 0)} as of ${account.statementPeriodEnd}. Ledger sum ${formatUsd(account.ledgerBalanceCents)}.`
+          ? `Statement ${formatUsd(account.statementClosingCents ?? 0)} as of ${formatDate(account.statementPeriodEnd)}. Ledger sum ${formatUsd(account.ledgerBalanceCents)}.`
           : account.statementPeriodEnd
-            ? `Statement ${formatUsd(account.statementClosingCents ?? 0)} as of ${account.statementPeriodEnd}.`
+            ? `Statement ${formatUsd(account.statementClosingCents ?? 0)} as of ${formatDate(account.statementPeriodEnd)}.`
             : "Sum of imported transactions.";
         return (
           <span
