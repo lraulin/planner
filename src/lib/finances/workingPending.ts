@@ -27,9 +27,7 @@ export type WorkingPendingRow = {
   source: string;
 };
 
-function browserAccountIds(
-  accounts: readonly WorkingPendingAccount[],
-): Set<string> {
+function browserAccountIds(accounts: readonly WorkingPendingAccount[]): Set<string> {
   return new Set(
     accounts
       .filter((account) => browserOwnsPending(account.browserAsOf, account.feedAsOf))
