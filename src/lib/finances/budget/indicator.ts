@@ -10,7 +10,8 @@
  * amended by `agent-os/specs/2026-08-28-1000-ynab-target-engine/` Task 8,
  * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1–D3,
  * `agent-os/specs/2026-08-29-2129-overassigned-available/` D1–D4, and
- * `agent-os/specs/2026-09-06-1301-pile-spent-is-not-a-raid/` D3.
+ * `agent-os/specs/2026-09-06-1301-pile-spent-is-not-a-raid/` D3, and
+ * `agent-os/specs/2026-09-07-0804-one-time-savings-goal/` D3, D4.
  */
 
 import { formatUsd } from "@/lib/finances/money";
@@ -56,10 +57,12 @@ export type EnvelopeIndicator = {
  * The bar must not invent a second demand (`budget-funding-indicators` D3), so `fill` is
  * whatever the ask itself reads. A **period** refill and an **`upTo` pile** both measure what
  * came *in* — `carry-in + assigned` — and draw spending as the spent overlay rather than as a
- * shortfall; only a **`balance` floor** measures what is still sitting there
- * (`pile-spent-is-not-a-raid` D3).
+ * shortfall; a **`balance` floor** measures what is still sitting there
+ * (`pile-spent-is-not-a-raid` D3); and a **`save` goal** measures everything ever put in, so its
+ * bar stays full once the goal is met and the purposeful spend shows only as the overlay
+ * (`one-time-savings-goal` D3).
  */
-type BarFill = "funded" | "available";
+type BarFill = "funded" | "available" | "contributed";
 
 type Horizon =
   | { kind: "none" }
@@ -79,6 +82,16 @@ function spentCents(envelope: AssignEnvelope): number {
 
 function fundedCents(envelope: AssignEnvelope): number {
   return envelope.carryInCents + envelope.assignedCents;
+}
+
+/**
+ * Everything ever put in, **including** this month's Assigned — the bar's version of the `save`
+ * basis. The ask reads `contributedBeforeCents` and subtracts Assigned itself; a bar that did
+ * the same would empty the moment money was assigned. Exactly the relationship `fundedCents`
+ * has to the `upTo` carry-in basis.
+ */
+function contributedCents(envelope: AssignEnvelope): number {
+  return envelope.contributedBeforeCents + envelope.assignedCents;
 }
 
 function isInactive(envelope: AssignEnvelope): boolean {
@@ -101,10 +114,37 @@ function horizonOf(
   }
 
   const left = monthsLeft(target.cadence, month, bill ?? undefined);
-  const fill: BarFill = target.behavior === "balance" ? "available" : "funded";
+  // Both arms, not just `sinking`: a deadline-free goal has no months left and lands in `floor`
+  // (`pile-spent-is-not-a-raid` Changes #2), and that is the arm House sits in.
+  const fill: BarFill =
+    target.behavior === "balance"
+      ? "available"
+      : target.behavior === "save"
+        ? "contributed"
+        : "funded";
   return left !== null && left > 0
     ? { kind: "sinking", targetCents: target.amountCents, fill }
     : { kind: "floor", amountCents: target.amountCents, fill };
+}
+
+/** The bar basis this horizon reads — `null` when there is no target, or a period cap. */
+function fillOf(horizon: Horizon): BarFill | null {
+  return horizon.kind === "sinking" || horizon.kind === "floor" ? horizon.fill : null;
+}
+
+function fillsWith(
+  horizon: Horizon,
+  bases: { funded: number; available: number; contributed: number },
+): number {
+  switch (fillOf(horizon)) {
+    case "available":
+      return bases.available;
+    case "contributed":
+      return bases.contributed;
+    // A period cap and a target-less envelope both answer "was enough put in".
+    default:
+      return bases.funded;
+  }
 }
 
 function barToward(funded: number, target: number, spent: number): EnvelopeBar {
@@ -123,6 +163,7 @@ export function envelopeIndicator(
   const available = envelope.balanceCents;
   const spent = spentCents(envelope);
   const funded = fundedCents(envelope);
+  const contributed = contributedCents(envelope);
   const { needed } = isInactive(envelope)
     ? { needed: 0 }
     : neededAssigned(envelope, month, bills);
@@ -139,11 +180,11 @@ export function envelopeIndicator(
           : envelope.carryInCents + needed;
   // The bar answers the ask's own question. A refill and an `upTo` pile ask whether enough has
   // been put in, so they fill with `funded` and the spending shows as the overlay; a `balance`
-  // floor asks whether the money is still there, so it fills with Available.
-  const barBasis =
-    horizon.kind === "period" || (horizon.kind !== "none" && horizon.fill === "funded")
-      ? funded
-      : available;
+  // floor asks whether the money is still there, so it fills with Available; a `save` goal asks
+  // whether enough has ever gone in, so it fills with contribution. Without that last one the
+  // bar would drop to 95% the month after the down payment went out while the ask said $0 — the
+  // second opinion D3 exists to prevent.
+  const barBasis = fillsWith(horizon, { funded, available, contributed });
   const askBar = barToward(barBasis, Math.max(periodTarget, 1), spent);
 
   if (available < 0) {
@@ -211,22 +252,29 @@ export function envelopeIndicator(
     };
   }
 
-  if (asked && horizon.kind === "sinking" && funded < horizon.targetCents) {
+  // On Track reads the same basis as the ask and the bar: a half-saved goal is on track against
+  // what has gone in, never against what this month funded.
+  if (asked && horizon.kind === "sinking" && barBasis < horizon.targetCents) {
     return {
       state: "on-track",
       moreNeededCents: 0,
       copy: "On Track",
       pill: "green",
       icon: "pie",
-      bar: barToward(funded, horizon.targetCents, spent),
+      bar: barToward(barBasis, horizon.targetCents, spent),
     };
   }
 
   if (asked) {
+    // A finished goal says so on the existing `funded` state rather than earning a rung of its
+    // own. Nothing is stored, so it expires by itself in both directions: take the money back
+    // out and it is no longer met (`one-time-savings-goal` D4).
     const copy =
-      spent > 0 && available > 0
-        ? `Funded. Spent ${formatUsd(spent)} of ${formatUsd(Math.max(periodTarget, spent))}`
-        : "Funded";
+      fillOf(horizon) === "contributed" && barBasis >= periodTarget
+        ? `Goal met — ${formatUsd(periodTarget)} saved`
+        : spent > 0 && available > 0
+          ? `Funded. Spent ${formatUsd(spent)} of ${formatUsd(Math.max(periodTarget, spent))}`
+          : "Funded";
     return {
       state: "funded",
       moreNeededCents: 0,

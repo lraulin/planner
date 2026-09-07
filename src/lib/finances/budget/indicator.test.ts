@@ -54,6 +54,7 @@ function envelope(overrides: Partial<AssignEnvelope> = {}): AssignEnvelope {
     balanceCents: 0,
     carryInCents: 0,
     snoozed: false,
+    contributedBeforeCents: 0,
     nextDueKey: null,
     ...overrides,
   };
@@ -674,5 +675,92 @@ describe("snoozed", () => {
       }),
     );
     expect(scan.moreNeededCents).toBe(4_000);
+  });
+});
+
+describe("a goal you finish reads contribution, and the bar agrees with the ask", () => {
+  // `one-time-savings-goal` D3 and D4: the bar mirrors the ask, and "done" is derived rather
+  // than stored, so it corrects itself in both directions.
+  const goal = (cadence: Target["cadence"]): Target => ({
+    behavior: "save",
+    cadence,
+    amountCents: 10_000_000,
+  });
+  const NO_DEADLINE = { unit: "none" } as const;
+
+  it("says Goal met with a full bar while the money that was spent is gone", () => {
+    // House: $100,000 saved, $5,000 wired for earnest money and categorised House. Without D3
+    // the bar would sit at 95% while the ask said $0 — the second opinion it exists to prevent.
+    const row = envelope({
+      name: "House",
+      kind: "savings",
+      target: goal(NO_DEADLINE),
+      carryInCents: 10_000_000,
+      activityCents: -500_000,
+      assignedCents: 0,
+      balanceCents: 9_500_000,
+      contributedBeforeCents: 10_000_000,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("funded");
+    expect(indicator.moreNeededCents).toBe(0);
+    expect(indicator.copy).toBe("Goal met — $100,000.00 saved");
+    expect(indicator.bar?.fill01).toBe(1);
+  });
+
+  it("re-opens the ask the month money is assigned back out", () => {
+    const row = envelope({
+      name: "House",
+      kind: "savings",
+      target: goal(NO_DEADLINE),
+      carryInCents: 10_000_000,
+      assignedCents: -200_000,
+      balanceCents: 9_800_000,
+      contributedBeforeCents: 10_000_000,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("underfunded");
+    expect(indicator.moreNeededCents).toBe(200_000);
+    expect(indicator.copy).toBe("$2,000.00 more needed this month");
+  });
+
+  it("reads On Track against contribution once the installment is assigned", () => {
+    // $100,000 by March 2027, nothing saved: August 2026 through March is eight months, so the
+    // installment is $12,500. Assigning it must read On Track, not Overassigned — which is what
+    // comparing against `funded` instead of contribution would produce as the goal filled up.
+    const byMarch = {
+      name: "House",
+      kind: "savings" as const,
+      target: goal({ unit: "by", month: "2027-03" } as const),
+    };
+    const untouched = envelope({ ...byMarch, contributedBeforeCents: 0 });
+    expect(indicate(untouched).moreNeededCents).toBe(1_250_000);
+
+    const assigned = envelope({
+      ...byMarch,
+      assignedCents: 1_250_000,
+      balanceCents: 1_250_000,
+      contributedBeforeCents: 0,
+    });
+    const indicator = indicate(assigned);
+    expect(indicator.state).toBe("on-track");
+    expect(indicator.bar?.fill01).toBeCloseTo(0.125, 3);
+  });
+
+  it("falls through to Fully Spent once the goal has been spent to zero", () => {
+    // The honest end of a down-payment fund, and it needs no new state (D4).
+    const row = envelope({
+      name: "House",
+      kind: "savings",
+      target: goal(NO_DEADLINE),
+      carryInCents: 10_000_000,
+      activityCents: -10_000_000,
+      assignedCents: 0,
+      balanceCents: 0,
+      contributedBeforeCents: 10_000_000,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("fully-spent");
+    expect(indicator.copy).toBe("Fully Spent");
   });
 });
