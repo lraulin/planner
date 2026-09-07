@@ -105,7 +105,7 @@ function cadenceOf(draft: Draft): Cadence | null {
 }
 
 function behaviorsFor(unit: CadenceChoice): TargetBehavior[] {
-  return (["add", "upTo", "balance"] as const).filter((behavior) =>
+  return (["add", "upTo", "balance", "save"] as const).filter((behavior) =>
     isLegalPairing(behavior, unit),
   );
 }
@@ -123,9 +123,15 @@ function sentence(behavior: TargetBehavior, unit: CadenceChoice): string {
     case "year":
       return "Have this amount available each year";
     case "by":
-      return "Have this amount available by a month";
+      // "in total" is what distinguishes a goal you finish from the floor listed above it:
+      // the measure is everything put in, not what is sitting there.
+      return behavior === "save"
+        ? "Save this amount in total, then it's done"
+        : "Have this amount available by a month";
     case "none":
-      return "Have this amount available (no deadline)";
+      return behavior === "save"
+        ? "Save this amount in total, then it's done"
+        : "Have this amount available (no deadline)";
   }
 }
 
@@ -180,7 +186,18 @@ export function TargetDrawer({
   const parsed = draftTarget
     ? { ...draftTarget, ...(since ? { since } : {}) }
     : draftTarget;
-  const previewing = { ...envelope, target: overriding ? parsed : envelope.target };
+  // The contribution basis the preview reads. With a stored target the row's number already
+  // counts from the `since` this save preserves, so it is the truth. With none, the target
+  // starts today: what it has contributed is exactly this envelope's carry-in, and Assigned is
+  // added by the bar rather than the basis. Same rule as `since` above, for the same reason.
+  const contributedBeforeCents = envelope.target
+    ? envelope.contributedBeforeCents
+    : envelope.carryInCents;
+  const previewing = {
+    ...envelope,
+    contributedBeforeCents,
+    target: overriding ? parsed : envelope.target,
+  };
   const demand = targetDemand(previewing, month, bills);
   const resolved = resolveTarget(previewing, bills);
 
