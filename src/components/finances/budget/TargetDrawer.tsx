@@ -110,28 +110,63 @@ function behaviorsFor(unit: CadenceChoice): TargetBehavior[] {
   );
 }
 
-function sentence(behavior: TargetBehavior, unit: CadenceChoice): string {
+type Job = { label: string; hint: string };
+
+/**
+ * What each job is, and what happens to the envelope once the money is spent.
+ *
+ * The hint is not decoration. Between a floor and a goal it is the *whole* difference, and the
+ * labels alone could not carry it: they used to read "Have this amount available **by a month**"
+ * against "Save this amount in total, then it's done", so the pair looked like a choice about
+ * timing. It is not — "How often" sits directly above and its deadline applies to either job.
+ * Naming the deadline on one option and not the other is what hid that `save` + `by` exists at
+ * all, which is the combination someone saving for a dated trip actually wants.
+ *
+ * So neither `by` nor `none` mentions its cadence, and the two share their strings.
+ *
+ * Spec: `agent-os/specs/2026-09-07-1210-the-job-names-what-happens-after/` D1, D2, superseding
+ * `agent-os/specs/2026-09-07-0804-one-time-savings-goal/` D1's wording.
+ */
+function job(behavior: TargetBehavior, unit: CadenceChoice): Job {
+  // `add` and `upTo` keep the labels they already had — nobody has found those unclear, and the
+  // hint is enough to make the set uniform.
   switch (unit) {
     case "week":
       return behavior === "add"
-        ? "Add this amount each weekday"
-        : "Have this amount available each weekday";
+        ? {
+            label: "Add this amount each weekday",
+            hint: "On top of whatever is already there",
+          }
+        : {
+            label: "Have this amount available each weekday",
+            hint: "What is left over counts toward it, so you top up the difference",
+          };
     case "month":
       return behavior === "add"
-        ? "Add this amount every month"
-        : "Have this amount available each month";
+        ? {
+            label: "Add this amount every month",
+            hint: "On top of whatever is already there",
+          }
+        : {
+            label: "Have this amount available each month",
+            hint: "What is left over counts toward it, so you top up the difference",
+          };
     case "year":
-      return "Have this amount available each year";
+      return {
+        label: "Have this amount available each year",
+        hint: "Saves toward it a month at a time, then starts over for next year",
+      };
     case "by":
-      // "in total" is what distinguishes a goal you finish from the floor listed above it:
-      // the measure is everything put in, not what is sitting there.
-      return behavior === "save"
-        ? "Save this amount in total, then it's done"
-        : "Have this amount available by a month";
     case "none":
       return behavior === "save"
-        ? "Save this amount in total, then it's done"
-        : "Have this amount available (no deadline)";
+        ? {
+            label: "Save this amount, then spend it",
+            hint: "Spending it completes the goal — a trip, a down payment",
+          }
+        : {
+            label: "Keep this amount available",
+            hint: "Spending it asks for it back — a car-repair or medical fund",
+          };
   }
 }
 
@@ -351,22 +386,29 @@ export function TargetDrawer({
               </label>
             ) : null}
 
-            <fieldset className="flex flex-col gap-1">
+            <fieldset className="flex flex-col gap-2">
               <legend className="text-[0.75rem] text-ink-muted">The job</legend>
-              {behaviorsFor(draft.unit).map((behavior) => (
-                <label
-                  key={behavior}
-                  className="flex items-center gap-2 text-[0.8125rem] text-ink"
-                >
-                  <input
-                    type="radio"
-                    name="target-job"
-                    checked={draft.behavior === behavior}
-                    onChange={() => patch({ behavior })}
-                  />
-                  {sentence(behavior, draft.unit)}
-                </label>
-              ))}
+              {behaviorsFor(draft.unit).map((behavior) => {
+                const { label, hint } = job(behavior, draft.unit);
+                return (
+                  <label
+                    key={behavior}
+                    className="flex items-start gap-2 text-[0.8125rem] text-ink"
+                  >
+                    <input
+                      type="radio"
+                      name="target-job"
+                      className="mt-[0.2rem]"
+                      checked={draft.behavior === behavior}
+                      onChange={() => patch({ behavior })}
+                    />
+                    <span className="flex flex-col">
+                      <span>{label}</span>
+                      <span className="text-[0.75rem] text-ink-faint">{hint}</span>
+                    </span>
+                  </label>
+                );
+              })}
             </fieldset>
 
             <label className={labelClass}>
