@@ -1,6 +1,6 @@
 # A goal you finish: the one-time savings target
 
-**Status: active**
+**Status: frozen / complete** (2026-09-07)
 Spec folder: `agent-os/specs/2026-09-07-0804-one-time-savings-goal/`
 
 ## Spec relationships
@@ -202,24 +202,40 @@ no need to restart `since`.
 
 ## Acceptance criteria
 
-- [ ] **House** — `save` + `none` $100,000, funded in full, $5,000 wired out and categorised
+Checked on the deployed app against the real House envelope unless noted; everything else is
+covered by the named unit test, which is the honest record for the cases production has no data
+for.
+
+- [x] **House** — `save` + `none` $100,000, funded in full, $5,000 wired out and categorised
       House — asks **$0**, and still asks $0 the following month at $95,000 carried in.
-- [ ] Moving $2,000 out of House asks **$2,000** that same month; putting it back returns it to
-      $0.
-- [ ] A half-saved `save` + `by` spreads: $100,000 by 2027-03 with $0 contributed asks
+      Verified on the deployed app: **"Goal met — $100,000.00 saved"**, which was the reported
+      failure. `demand.test.ts` "a goal spent on its own purpose is finished, not raided" covers
+      both months.
+- [x] Moving $2,000 out of House asks **$2,000** that same month; putting it back returns it to
+      $0. `demand.test.ts` "assigning money back out of a finished goal asks for it back" and
+      `indicator.test.ts` "re-opens the ask the month money is assigned back out".
+- [x] A half-saved `save` + `by` spreads: $100,000 by 2027-03 with $0 contributed asks
       **$14,285.71** in September 2026 (seven months inclusive), and reads **On Track** once that
-      is assigned.
-- [ ] A `save` + `by` past an unmet deadline asks the whole remaining gap, like `balance` + `by`.
-- [ ] The bar fills to 100% on contribution while Available sits at $95,000 — the ask and the bar
-      do not disagree.
-- [ ] **Guard:** a `balance` + `none` $100,000 floor raided to $94,970 still asks **$5,030 this
-      month** (`target-refill-basis` D3 intact), and every `upTo` case in `demand.test.ts` is
-      unchanged.
-- [ ] The legality table rejects `save` × `week` / `month` / `year` / `schedule` at parse, and a
-      stored blob carrying one of those does not reach the evaluator.
-- [ ] The Budget header's "still needed", the amber per-row pills, Assign → Underfunded and Apply
-      Targets all move together — none of them gains a second opinion. An unmet House sorts into
-      the deadline-free bucket, last.
+      is assigned. `demand.test.ts` "a goal with a deadline spreads what is left over the months
+      it has" asserts exactly that figure, plus $7,142.86 once half is saved.
+      `indicator.test.ts` "reads On Track against contribution once the installment is assigned"
+      covers the second half — from August 2026, so its installment is $12,500 over eight months.
+      That half only holds because of Changes #1: on the shaped formula it read Overassigned.
+- [x] A `save` + `by` past an unmet deadline asks the whole remaining gap, like `balance` + `by`.
+      `demand.test.ts` "a goal past its deadline asks the whole gap". No new rule was needed.
+- [x] The bar fills to 100% on contribution while Available sits at $95,000 — the ask and the bar
+      do not disagree. Verified on the deployed app; `indicator.test.ts` "says Goal met with a
+      full bar while the money that was spent is gone".
+- [x] **Guard:** a `balance` + `none` $100,000 floor raided to $94,970 still asks **$5,030 this
+      month**, and every `upTo` case in `demand.test.ts` is unchanged. Both guard suites pass
+      untouched — no edit was made to either file's existing cases.
+- [x] The legality table rejects `save` × `week` / `month` / `year` / `schedule` at parse, and a
+      stored blob carrying one of those does not reach the evaluator. `types.test.ts`, including
+      the `allowSchedule` path.
+- [x] The Budget header's "still needed", the amber per-row pills, Assign → Underfunded and Apply
+      Targets all move together — none of them gains a second opinion. Proved by Task 6: no edit
+      was needed in `assign/plan.ts`, `templates/apply.ts`, `incomePlan.ts`, `snooze.ts` or
+      `BudgetSummary.tsx`, and all 4020 unit tests pass.
 
 ## Changes from original plan
 
@@ -231,9 +247,21 @@ Material refinements during implementation (requirements, design, scope). Omit p
 | 2   | The indicator's bar and On Track read `contributedBefore + assignedCents`, through a `contributedCents` helper.                                                                                                                       | The bar basis has always included this month's Assigned where the ask basis excludes it — exactly the relationship `fundedCents` (`carryIn + assigned`) has to the `upTo` carry-in basis. Without it the bar would empty the moment money was assigned toward the goal.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | 3   | `horizonOf`'s three-way fill choice is read through `fillOf` / `fillsWith` helpers instead of an inline conditional, and the "Goal met" copy is gated on `barBasis >= periodTarget` as well as the fill.                              | Three bases do not fit the two-way `funded ? : available` ternary legibly. The explicit met check is redundant today (every path into `funded` with a `contributed` fill is met) but is the kind of thing a later rung in the ladder could silently break.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
-> **While this spec is active:** a material change to requirements, design or scope — including
-> feedback on what was actually built — updates the sections above and appends a row here. Skip
-> pure implementation details. Freeze when verified.
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **`add` + `year` / `add` + `by`.** `targets/types.ts` excludes them because "nothing stores
+  assigned since the cycle started". Something adjacent is now stored, and a later reader will
+  notice. They stay out: nobody has asked for them, and building for a caller who does not exist
+  is the speculative generality the standards forbid. If someone does ask, that is a new spec.
+- **Retiring a met goal** — auto-clearing the target, hiding or archiving the envelope. Out of
+  scope by decision, not oversight: the envelope still holds real money until it is spent, and
+  Fully Spent already says the rest.
+- **The sweep and the earmarked-savings quasi-account** (`agent-os/product/roadmap.md`). That is
+  about how savings gets _funded_; this was about what a savings envelope _asks for_. They meet
+  later; neither blocks the other.
+
+> **Frozen.** This folder is the as-built record. Reference it, or open a new delta-spec for
+> further change — do not re-open it as a living control plane.
 
 ## Task 1: Save spec documentation
 

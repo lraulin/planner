@@ -1213,6 +1213,23 @@ period)` so money already spent stops being held twice and only going over bites
   next month's carry-in instead of the same day. What this leaves open is a **one-time savings
   goal** — a down payment saved once and then spent, which is neither a floor to refill nor a
   pile on a cycle, and is the next spec.
+  ✅ **A goal you finish, shipped 2026-09-07.**
+  `agent-os/specs/2026-09-07-0804-one-time-savings-goal/`. The follow-up the entry above named.
+  A $100,000 House down payment set as a `balance` floor asked for $5,030 back after $5,000 was
+  wired for earnest money and categorised House — the money doing exactly the job it was saved
+  for. A fourth behaviour, **`save`**, answers that: a floor is money that has to be _there_ and
+  must come back after a raid, a pile is money meant to _leave_ on a cycle, and a one-time goal
+  is neither — it has an amount and no cycle, and spending it is **completion**. Its basis is
+  cumulative **contribution** since the target started, so one signed formula gives both halves
+  of what was asked for: spending never reduces it, assigning money back out does. A met goal
+  asks $0 for good and reads "Goal met"; move $2,000 out and it asks for exactly $2,000, that
+  same month rather than through next month's carry-in.
+  **No month-local basis could answer it** — carry-in would see $95,000 against a $100,000 cap
+  and ask $5,000 every month forever — which is why this needed history and a third basis rather
+  than a fourth arm on an existing one. The ledger already had it: no query, no schema change, no
+  migration, and "done" is derived every render rather than stored, so it expires by itself in
+  both directions. `balance` and `upTo` are untouched; existing targets are re-picked by hand,
+  because a floor and a finished goal are indistinguishable from the outside.
   ✅ **A bill's expected charge follows its charges, 2026-09-06.**
   `agent-os/specs/2026-09-05-1401-bill-due-dates-and-lead-time/` (declared bills) and
   `agent-os/specs/2026-09-06-1427-bill-anchor-retires/` (undeclared). A posted charge is

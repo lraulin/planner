@@ -1,6 +1,6 @@
 # A goal you finish — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-07)
 
 ## Scope
 
