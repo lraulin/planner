@@ -23,7 +23,7 @@ import {
   type BillAnchor,
 } from "@/lib/finances/commitments";
 import { formatUsd } from "@/lib/finances/money";
-import { billDueSoon } from "@/lib/finances/budget/dueCue";
+import { billDueSoon, billDaysRemaining } from "@/lib/finances/budget/dueCue";
 import { budgetEnvelopeLabel } from "@/lib/finances/budget/hierarchy";
 import {
   budgetEnvelopeHref,
@@ -57,7 +57,15 @@ function defaultsFor(
   id: string,
 ): import("@/components/grid/useGridState").GridDefaults {
   return {
-    order: ["name", "budgetGroup", "next", "amount", "cadence", "status"],
+    order: [
+      "name",
+      "budgetGroup",
+      "next",
+      "daysRemaining",
+      "amount",
+      "cadence",
+      "status",
+    ],
     sorts: [
       { columnId: "next", direction: "asc" as const },
       { columnId: "name", direction: "asc" as const },
@@ -107,6 +115,7 @@ export function BillsView({
           .filter((payee) => payee.budgetCategoryId === row.id)
           .map((payee) => payee.name)
           .join(", "),
+        daysRemaining: billDaysRemaining(row, data.todayKey),
       })),
     [data, anchors, lastCharges, payees],
   );

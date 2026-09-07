@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { billDueCue, billDueSoon } from "./dueCue";
+import { billDueCue, billDueSoon, billDaysRemaining } from "./dueCue";
 import type { BillFacet } from "./queries";
 import type { BudgetRow } from "./rows";
 import type { IndicatorState } from "./indicator";
@@ -110,5 +110,24 @@ describe("billDueSoon", () => {
     expect(billDueSoon(row(TODAY, facet({ scheduled: false })), TODAY)).toBe(false);
     expect(billDueSoon(row(null), TODAY)).toBe(false);
     expect(billDueSoon(row(TODAY, null), TODAY)).toBe(false);
+  });
+});
+
+describe("billDaysRemaining", () => {
+  it("is 0 on the charge date, 1 tomorrow, and negative once the charge has passed", () => {
+    expect(billDaysRemaining(row(TODAY), TODAY)).toBe(0);
+    expect(billDaysRemaining(row("2026-09-06"), TODAY)).toBe(1);
+    expect(billDaysRemaining(row("2026-09-04"), TODAY)).toBe(-1);
+  });
+
+  it("is null when there is no posting date to count from", () => {
+    expect(
+      billDaysRemaining(row(TODAY, facet({ scheduled: false })), TODAY),
+    ).toBeNull();
+    expect(
+      billDaysRemaining(row(TODAY, facet({ status: "cancelled" })), TODAY),
+    ).toBeNull();
+    expect(billDaysRemaining(row(null), TODAY)).toBeNull();
+    expect(billDaysRemaining(row(TODAY, null), TODAY)).toBeNull();
   });
 });

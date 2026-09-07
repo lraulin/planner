@@ -20,6 +20,8 @@ export type BillGridRow = BudgetBillRow & {
   groupName: string;
   lastCharge: string | null;
   payeeNames: string;
+  /** Whole days to next charge, from `data.todayKey`. Null when there is no date. */
+  daysRemaining: number | null;
 };
 export type BillColumnCtx = {
   pending: boolean;
@@ -34,6 +36,14 @@ export type BillColumnCtx = {
   /** Escape. */
   onCancelRename: () => void;
 };
+
+/** Hover prose for the integer — Agenda's display, kept here so the helpers stay apart. */
+function daysRemainingTitle(days: number): string {
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days === -1) return "Yesterday";
+  return days > 0 ? `In ${days} days` : `${Math.abs(days)} days ago`;
+}
 
 /**
  * The name cell while it is being renamed.
@@ -171,6 +181,33 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
           onChange={(anchorDate) => ctx.patch(row.node, { anchorDate })}
         />
       ),
+  },
+  {
+    id: "daysRemaining",
+    label: "Days remaining",
+    width: "7rem",
+    compact: "meta",
+    align: "right",
+    filterKind: "number",
+    filterValue: (row) =>
+      row.node.daysRemaining === null ? null : String(row.node.daysRemaining),
+    sortValue: (row) => row.node.daysRemaining,
+    compactText: (row) =>
+      row.node.daysRemaining === null ? "—" : String(row.node.daysRemaining),
+    render: (row) => {
+      const days = row.node.daysRemaining;
+      if (days === null) return <span className="text-xs text-ink-muted">—</span>;
+      return (
+        <span
+          title={daysRemainingTitle(days)}
+          className={`tabular block text-right text-xs ${
+            days < 0 ? "text-ink-faint" : days === 0 ? "text-ink" : "text-ink-muted"
+          }`}
+        >
+          {days}
+        </span>
+      );
+    },
   },
   {
     id: "due",

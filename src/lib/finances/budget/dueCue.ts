@@ -1,7 +1,7 @@
 import { monthKeyOf } from "./envelope";
 import type { IndicatorState } from "./indicator";
 import type { BudgetRow } from "./rows";
-import { shiftDateKey } from "@/lib/schedule/geometry";
+import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 
 /**
  * The cue is urgent only while the envelope still needs money. A funded bill that lands
@@ -59,4 +59,26 @@ export function billDueSoon(
     row.nextDueKey >= today &&
     row.nextDueKey <= shiftDateKey(today, horizonDays)
   );
+}
+
+/**
+ * Whole days from today to the next posting. Null when there is no date to count from
+ * (unscheduled, cancelled, or no predicted charge) — same honesty as Upcoming used to
+ * have: inventing a countdown would read as knowledge.
+ *
+ * 0 is today, negative means the next charge already passed. Due soon stays a 14-day
+ * window of this same closeness; this is the number, not a filter.
+ */
+export function billDaysRemaining(
+  row: Pick<BudgetRow, "bill" | "nextDueKey">,
+  todayKey: string,
+): number | null {
+  if (
+    row.bill == null ||
+    row.bill.status === "cancelled" ||
+    !row.bill.scheduled ||
+    row.nextDueKey === null
+  )
+    return null;
+  return daysBetweenKeys(todayKey, row.nextDueKey);
 }
