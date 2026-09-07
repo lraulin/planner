@@ -164,8 +164,15 @@ function job(behavior: TargetBehavior, unit: CadenceChoice): Job {
             hint: "Spending it completes the goal — a trip, a down payment",
           }
         : {
+            // No use case named, deliberately. This hint used to say "a car-repair or medical
+            // fund" and that is the one case it has been shown wrong for: a $5,000 fund with a
+            // $2,000 repair charged to it asks the whole $2,000 back this month and puts it in
+            // the header's "still needed". A floor genuinely should be rebuilt — unlike a goal —
+            // but not necessarily all in one month, and there is no way to say how fast yet.
+            // Until there is, state the sharp edge rather than recommend the shape
+            // (`a-floor-rebuilds-all-at-once` D2).
             label: "Keep this amount available",
-            hint: "Spending it asks for it back — a car-repair or medical fund",
+            hint: "Spending it asks that money back the same month, all at once",
           };
   }
 }

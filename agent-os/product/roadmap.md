@@ -1244,6 +1244,24 @@ period)` so money already spent stops being held twice and only going over bites
   header. **That is what made the header honest:** "Still needed" fell to $2,224.74 — what the
   next paycheck actually has to cover this month, with a house fund and a handgun fund no longer
   demanding their totals from it.
+  🔜 **Next — a fund you rebuild over time (open question, not yet designed).**
+  `agent-os/specs/2026-09-07-1245-a-floor-rebuilds-all-at-once/` records the analysis and the
+  decision not to build on it yet. `balance` + `none` is the last shape that still reads money
+  spent on an envelope's own purpose as a shortfall: a $5,000 car-repair fund with a $2,000 repair
+  charged to it asks the whole $2,000 back **this month** and adds it to "still needed" — the
+  figure the specs above just made honest. Unlike a goal, a floor genuinely *should* be rebuilt,
+  so the `save` answer of never asking again is wrong too; the fault is that it asks for the whole
+  hole at once, with no way to say how fast.
+  What is missing is **set aside $X a month until the balance reaches $Y, then stop** — a rate and
+  a ceiling. No existing pairing expresses it: `add` + `month` never finishes, `upTo` + `month`
+  demands the hole next month, and both shapes that already spread a hole over time need a
+  deadline, which for an emergency fund is (Lee's words) "arbitrary and artificial — you don't
+  know how much you need or by when; that's the whole point". It needs a **second number on the
+  target**, which the model has never had, so it is a model change rather than a new pairing.
+  **Deliberately parked:** there is no such envelope on the budget yet, so nothing is being
+  worked around — the standards' own test for whether a model correction is real or speculative.
+  In the meantime the drawer stops recommending the floor for that use case and states its sharp
+  edge instead.
   ✅ **A bill's expected charge follows its charges, 2026-09-06.**
   `agent-os/specs/2026-09-05-1401-bill-due-dates-and-lead-time/` (declared bills) and
   `agent-os/specs/2026-09-06-1427-bill-anchor-retires/` (undeclared). A posted charge is
