@@ -1,5 +1,7 @@
 # References for Drop register upcoming strip; add bills days remaining
 
+**Status: frozen / complete** (2026-09-07)
+
 ## Governing specs
 
 ### `agent-os/specs/2026-09-05-1200-finances-envelope-workflow/`

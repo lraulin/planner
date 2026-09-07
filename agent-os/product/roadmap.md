@@ -981,8 +981,11 @@ period)` so money already spent stops being held twice and only going over bites
   `agent-os/specs/2026-08-22-2124-actual-schedules/`. Actual's Schedules, running
   beside the declared-bill list rather than replacing it: `finance_schedules` with
   Actual-shaped conditions, a date-key recurrence engine (rschedule is forbidden by
-  `dates.md`), skip / post-now / discover, and upcoming preview rows in the Register
-  that are not transactions. One click imports every active bill. Drift against the
+  `dates.md`), skip / post-now / discover. Upcoming preview rows in the Register
+  shipped with this spec and were retired 2026-09-07
+  (`agent-os/specs/2026-09-07-1216-bills-days-remaining/`) — they were not
+  transactions, and closeness now lives as Days remaining on `/finances/bills`.
+  One click imports every active bill. Drift against the
   source bill is visible, so the later merge-or-keep decision has evidence. Goal
   templates (`#template schedule <name>`) were waiting on this and are now unblocked.
   ✅ **Goal templates shipped 2026-08-23.**
@@ -1077,6 +1080,11 @@ period)` so money already spent stops being held twice and only going over bites
   text; Enter / double-click / compact tap open the overlay drawer; F2 /
   Shift+Enter rename. Amount, cadence, and status stay inline editors. Budget
   keeps its persistent inspector.
+  ✅ **Bills days remaining shipped 2026-09-07.**
+  `agent-os/specs/2026-09-07-1216-bills-days-remaining/`. Register no longer
+  prints a 14-day Upcoming occurrence strip. `/finances/bills` shows whole days
+  to Next charge (0 today, negative if already past, "—" when unscheduled or
+  cancelled), default after Next charge, including compact meta.
   ✅ **YNAB-shaped Assign shipped 2026-08-24.**
   `agent-os/specs/2026-08-24-1311-budget-assign-options/`. Apply / Overwrite / Copy last
   month / 3-month average / Set all to zero are gone. Ready to Assign has Assign (Auto:

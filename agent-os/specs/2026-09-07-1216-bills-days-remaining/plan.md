@@ -1,6 +1,6 @@
 # Drop register upcoming strip; add bills days remaining
 
-**Status: active**  
+**Status: frozen / complete** (2026-09-07)  
 Spec folder: `agent-os/specs/2026-09-07-1216-bills-days-remaining/`
 
 ## Spec relationships
@@ -30,20 +30,29 @@ Use `data.todayKey` already on BillsView (same clock as Due soon). Do not add `u
 
 ## Acceptance criteria
 
-- [ ] Register has no Upcoming strip. Categorizing a transaction no longer refreshes one.
-- [ ] Bills shows Days remaining after Next charge on Active, Due soon, and All. Phone compact list includes it.
-- [ ] A bill whose next charge is today reads `0`; six days out reads `6`; a charge already past is negative; unscheduled / cancelled read "—".
-- [ ] Unit tests cover `billDaysRemaining`. Lint, typecheck, `test:unit`. Touching `src/app/**` → start the app and `npm run smoke`.
-- [ ] Browser: Register (strip gone, grid unchanged) and Bills (column, sort, Due soon, compact).
+- [x] Register has no Upcoming strip. Categorizing a transaction no longer refreshes one.
+- [x] Bills shows Days remaining after Next charge on Active, Due soon, and All. Phone compact list includes it.
+- [x] A bill whose next charge is today reads `0`; six days out reads `6`; a charge already past is negative; unscheduled / cancelled read "—".
+- [x] Unit tests cover `billDaysRemaining`. Lint, typecheck, `test:unit`. Touching `src/app/**` → start the app and `npm run smoke`.
+- [x] Browser: Register (strip gone, grid unchanged) and Bills (column, sort, Due soon, compact).
+
+## As built
+
+- `billDaysRemaining` in `src/lib/finances/budget/dueCue.ts`; tests in `dueCue.test.ts`.
+- Column `daysRemaining` in `billColumns.tsx`. Default order in `BillsView.defaultsFor` inserts it after Next charge. `withNewColumns` shows it on saved layouts.
+- Integer is computed onto the grid row from `data.todayKey` so sort/filter can read it (`ColumnDef.sortValue` has no ctx). Hover titles live in the column file.
+- Register strip, `upcomingBillsAction`, `loadUpcomingBills`, `UPCOMING_HORIZON_DAYS`, and `upcomingBillOccurrences` are gone. `billOccurrences` / `projectForwardMonths` stay. `loadRecurringBills` still feeds `claimedPayeesOf`.
+
+Live file on 2026-09-07: Rent next charge 9/24 → 17, SMECO 9/30 → 23, Geico 12/26 → 110, Taylor Gas unscheduled → —, 1Password with no next date → —. Due soon is empty because the nearest posting is 17 days out (the 14-day window is unchanged, D7).
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                             | Why                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| 1   | Days remaining is closed over onto the grid row from `data.todayKey`, not read from `BillColumnCtx` in the column. | Sort and filter do not receive column context. The plan already allowed closing over the clock. |
 
 ## Task 1: Save Spec Documentation
 
@@ -78,4 +87,6 @@ Create `agent-os/specs/2026-09-07-1216-bills-days-remaining/` with:
 - Mark files **Status: frozen / complete** (date). Follow-ups as new work.
 - Update `agent-os/product/roadmap.md` if it still lists Register upcoming preview rows (`2026-08-22-2124` area).
 
-While this spec is **active**, when we make a material change to requirements, design, or scope (including from feedback on what was implemented), update the relevant sections and append to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+## Follow-ups (new work — not amendments to this frozen spec)
+
+None. Future closeness work is a new delta-spec.

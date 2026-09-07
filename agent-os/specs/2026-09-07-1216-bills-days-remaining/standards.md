@@ -1,5 +1,7 @@
 # Standards for Drop register upcoming strip; add bills days remaining
 
+**Status: frozen / complete** (2026-09-07)
+
 Applied as of standards commit `50d3a50dacc7cd282eab3240c81778b7c06506e1`. References, not
 copies — see AGENTS.md. `git show 50d3a50:agent-os/standards/<path>` recovers exactly what
 applied at shape time.

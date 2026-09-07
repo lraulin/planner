@@ -1,6 +1,6 @@
 # Drop register upcoming strip; add bills days remaining — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-07)
 
 ## Scope
 
