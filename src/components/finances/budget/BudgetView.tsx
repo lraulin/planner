@@ -110,6 +110,7 @@ import {
   moveDestinations,
   type BudgetStructureRef,
 } from "@/lib/finances/budget/hierarchy";
+import { isReadyToAssignDestination } from "@/lib/finances/budget/groupEnvelopeOptions";
 import { formatUsd } from "@/lib/finances/money";
 import type { PayeeEvidenceRow } from "@/lib/finances/payees/evidence";
 import { cadenceOf } from "@/lib/finances/recurringBills";
@@ -1918,10 +1919,22 @@ export function BudgetView({
           from={move.from}
           targets={move.targets}
           groups={data.groups}
+          readyToAssignCents={month?.readyToAssignCents ?? 0}
           onCancel={() => setMove(null)}
           onMove={(toId, cents) => {
-            const target = move.targets.find((row) => row.id === toId);
             setMove(null);
+            if (isReadyToAssignDestination(toId)) {
+              run(() =>
+                budgetOperationAction({
+                  kind: "unassign",
+                  month: data.month,
+                  from: { id: move.from.id, name: move.from.name },
+                  amountCents: cents,
+                }),
+              );
+              return;
+            }
+            const target = move.targets.find((row) => row.id === toId);
             if (!target) return;
             run(() =>
               budgetOperationAction({

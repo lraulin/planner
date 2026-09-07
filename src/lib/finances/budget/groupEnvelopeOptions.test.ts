@@ -4,6 +4,8 @@ import {
   categoryPickerSections,
   commitCategoryPicker,
   defaultCategoryPickerChoice,
+  isReadyToAssignDestination,
+  READY_TO_ASSIGN_DESTINATION,
   visibleEnvelopeCatalog,
   type EnvelopePickerGroup,
   type EnvelopePickerOption,
@@ -42,6 +44,7 @@ function outline(sections: ReturnType<typeof categoryPickerSections>) {
     type: entry.section.label,
     rows: entry.rows.map((row) => {
       if (row.kind === "create") return row.label;
+      if (row.kind === "readyToAssign") return `rta:${row.label}`;
       const mark = row.hidden ? " hidden" : "";
       return row.kind === "heading"
         ? `h${row.depth}:${row.label}${mark}`
@@ -339,6 +342,21 @@ describe("commitCategoryPicker", () => {
       action: "restore",
     });
   });
+
+  it("commits Ready to Assign when that row is highlighted", () => {
+    expect(
+      commitCategoryPicker(
+        "ready",
+        {
+          kind: "readyToAssign",
+          id: READY_TO_ASSIGN_DESTINATION,
+          label: "Ready to Assign",
+        },
+        false,
+        false,
+      ),
+    ).toEqual({ action: "readyToAssign" });
+  });
 });
 
 describe("categoryPickerSections — includeCreate: false", () => {
@@ -352,6 +370,58 @@ describe("categoryPickerSections — includeCreate: false", () => {
     expect(outline(sections)).toEqual([
       { type: "Bills", rows: ["h0:Bills", "e0:rent"] },
     ]);
+  });
+});
+
+describe("categoryPickerSections — includeReadyToAssign", () => {
+  const rent = envelope("rent", "bill", null, "A");
+
+  it("omits Ready to Assign unless opted in", () => {
+    const off = categoryPickerSections([], [rent], "", { includeCreate: false });
+    expect(off.map((entry) => entry.section.kind)).toEqual(["bill"]);
+    expect(isReadyToAssignDestination(READY_TO_ASSIGN_DESTINATION)).toBe(true);
+    expect(isReadyToAssignDestination("rent")).toBe(false);
+  });
+
+  it("sits first, above Income, and is the default choice", () => {
+    const sections = categoryPickerSections([], [rent], "", {
+      includeCreate: false,
+      includeReadyToAssign: true,
+      readyToAssignDetail: "-$7.41",
+    });
+    expect(outline(sections)).toEqual([
+      { type: "Ready to Assign", rows: ["rta:Ready to Assign"] },
+      { type: "Bills", rows: ["h0:Bills", "e0:rent"] },
+    ]);
+    const ready = sections[0]?.rows[0];
+    expect(ready).toMatchObject({
+      kind: "readyToAssign",
+      id: READY_TO_ASSIGN_DESTINATION,
+      label: "Ready to Assign",
+      detail: "-$7.41",
+    });
+    const choices = categoryPickerChoices(sections);
+    expect(choices[0]?.kind).toBe("readyToAssign");
+    expect(defaultCategoryPickerChoice(choices)).toBe(0);
+  });
+
+  it("matches the label, not the amount suffix, and drops when the query misses", () => {
+    const options = {
+      includeCreate: false,
+      includeReadyToAssign: true,
+      readyToAssignDetail: "$12.34",
+    };
+    expect(
+      outline(categoryPickerSections([], [rent], "ready", options)).map(
+        (entry) => entry.type,
+      ),
+    ).toEqual(["Ready to Assign"]);
+    expect(outline(categoryPickerSections([], [rent], "12.34", options))).toEqual([]);
+    expect(
+      outline(categoryPickerSections([], [rent], "rent", options)).map(
+        (entry) => entry.type,
+      ),
+    ).toEqual(["Bills"]);
   });
 });
 

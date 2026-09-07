@@ -102,15 +102,43 @@ export type CategoryPickerCreate = {
   envelopeKind: EnvelopeKind;
 };
 
+/**
+ * Move-money destination only — not an envelope, never a transaction Category.
+ * Spec: `agent-os/specs/2026-09-07-1314-move-to-ready-to-assign/`.
+ */
+export const READY_TO_ASSIGN_DESTINATION = "__ready_to_assign__";
+export const READY_TO_ASSIGN_LABEL = "Ready to Assign";
+
+export const READY_TO_ASSIGN_SECTION = {
+  kind: "readyToAssign",
+  label: READY_TO_ASSIGN_LABEL,
+} as const;
+
+export function isReadyToAssignDestination(id: string): boolean {
+  return id === READY_TO_ASSIGN_DESTINATION;
+}
+
+export type CategoryPickerReadyToAssign = {
+  kind: "readyToAssign";
+  id: typeof READY_TO_ASSIGN_DESTINATION;
+  label: typeof READY_TO_ASSIGN_LABEL;
+  /** Open-list suffix only; never part of the filter or the closed field. */
+  detail?: string;
+};
+
 export type CategoryPickerRow =
-  CategoryPickerHeading | CategoryPickerEnvelope | CategoryPickerCreate;
+  | CategoryPickerHeading
+  | CategoryPickerEnvelope
+  | CategoryPickerCreate
+  | CategoryPickerReadyToAssign;
 
 export type CategoryPickerSection = {
-  section: CategorySection;
+  section: CategorySection | typeof READY_TO_ASSIGN_SECTION;
   rows: CategoryPickerRow[];
 };
 
-export type CategoryPickerChoice = CategoryPickerEnvelope | CategoryPickerCreate;
+export type CategoryPickerChoice =
+  CategoryPickerEnvelope | CategoryPickerCreate | CategoryPickerReadyToAssign;
 
 export function categoryPickerChoices(
   sections: readonly CategoryPickerSection[],
@@ -118,15 +146,22 @@ export function categoryPickerChoices(
   return sections.flatMap((entry) =>
     entry.rows.filter(
       (row): row is CategoryPickerChoice =>
-        row.kind === "envelope" || row.kind === "create",
+        row.kind === "envelope" ||
+        row.kind === "create" ||
+        row.kind === "readyToAssign",
     ),
   );
 }
 
-/** First remaining envelope, or the first create row when no envelopes survive. */
+/**
+ * Ready to Assign (when present), else the first remaining envelope, else the
+ * first create row.
+ */
 export function defaultCategoryPickerChoice(
   choices: readonly CategoryPickerChoice[],
 ): number {
+  const ready = choices.findIndex((choice) => choice.kind === "readyToAssign");
+  if (ready >= 0) return ready;
   const envelope = choices.findIndex((choice) => choice.kind === "envelope");
   if (envelope >= 0) return envelope;
   return choices.length > 0 ? 0 : -1;
@@ -141,6 +176,7 @@ export function commitCategoryPicker(
   | { action: "clear" }
   | { action: "envelope"; id: string }
   | { action: "create"; envelopeKind: EnvelopeKind }
+  | { action: "readyToAssign" }
   | { action: "restore" } {
   if (draft.trim() === "") return { action: allowClear ? "clear" : "restore" };
   if (!highlighted) return { action: "restore" };
@@ -148,6 +184,9 @@ export function commitCategoryPicker(
     return allowCreate
       ? { action: "create", envelopeKind: highlighted.envelopeKind }
       : { action: "restore" };
+  }
+  if (highlighted.kind === "readyToAssign") {
+    return { action: "readyToAssign" };
   }
   return { action: "envelope", id: highlighted.id };
 }
@@ -159,18 +198,37 @@ export function commitCategoryPicker(
  * is false. Filter is a case-insensitive substring on envelope name, ancestor
  * group names, and the type label — not the `(hidden)` marker and not
  * `detail` — and does not re-rank.
+ *
+ * Ready to Assign is a move destination, not a category. It is omitted unless
+ * `includeReadyToAssign` is true, then it sits first, above Income, matching
+ * only its label (never `readyToAssignDetail`).
  */
 export function categoryPickerSections(
   groups: readonly EnvelopePickerGroup[],
   envelopes: readonly EnvelopePickerOption[],
   query = "",
-  options: { includeCreate?: boolean } = {},
+  options: {
+    includeCreate?: boolean;
+    includeReadyToAssign?: boolean;
+    readyToAssignDetail?: string;
+  } = {},
 ): CategoryPickerSection[] {
   const includeCreate = options.includeCreate !== false;
   const needle = query.trim().toLowerCase();
   const groupById = new Map(groups.map((group) => [group.id, group]));
 
   const sections: CategoryPickerSection[] = [];
+  if (options.includeReadyToAssign && matchesNeedle(READY_TO_ASSIGN_LABEL, needle)) {
+    const ready: CategoryPickerReadyToAssign = {
+      kind: "readyToAssign",
+      id: READY_TO_ASSIGN_DESTINATION,
+      label: READY_TO_ASSIGN_LABEL,
+      ...(options.readyToAssignDetail !== undefined
+        ? { detail: options.readyToAssignDetail }
+        : {}),
+    };
+    sections.push({ section: READY_TO_ASSIGN_SECTION, rows: [ready] });
+  }
   for (const section of CATEGORY_SECTIONS) {
     const ofKind = envelopes.filter((envelope) => envelope.kind === section.kind);
     const typeMatches = matchesNeedle(section.label, needle);

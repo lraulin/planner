@@ -8,17 +8,15 @@ import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
 import type { BudgetGroupRow } from "@/lib/finances/budget/queries";
 import type { BudgetRow } from "@/lib/finances/budget/rows";
 import {
-  categoryPickerChoices,
-  categoryPickerSections,
-  defaultCategoryPickerChoice,
+  READY_TO_ASSIGN_DESTINATION,
   visibleEnvelopeCatalog,
-  type EnvelopeCatalog,
   type EnvelopePickerGroup,
   type EnvelopePickerOption,
 } from "@/lib/finances/budget/groupEnvelopeOptions";
 
 /**
- * Rule 3, as a dialog: take money out of one envelope and put it in another.
+ * Rule 3, as a dialog: take money out of one envelope and put it in another
+ * envelope or back to Ready to Assign.
  *
  * The amount defaults to the whole balance and is capped at it. Moving more than an envelope
  * holds would fix one problem by making a second, and the server clamps it again — this is
@@ -47,26 +45,18 @@ function pickerEnvelopes(rows: readonly BudgetRow[]): EnvelopePickerOption[] {
   }));
 }
 
-function firstEnvelopeId(catalog: EnvelopeCatalog): string {
-  const sections = categoryPickerSections(catalog.groups, catalog.envelopes, "", {
-    includeCreate: false,
-  });
-  const choices = categoryPickerChoices(sections);
-  const index = defaultCategoryPickerChoice(choices);
-  const choice = index >= 0 ? choices[index] : undefined;
-  return choice?.kind === "envelope" ? choice.id : "";
-}
-
 export function MoveMoneyDialog({
   from,
   targets,
   groups,
+  readyToAssignCents,
   onCancel,
   onMove,
 }: {
   from: BudgetRow;
   targets: readonly BudgetRow[];
   groups: readonly BudgetGroupRow[];
+  readyToAssignCents: number;
   onCancel: () => void;
   onMove: (toId: string, cents: number) => void;
 }) {
@@ -79,7 +69,7 @@ export function MoveMoneyDialog({
       }),
     [groups, targets],
   );
-  const [toId, setToId] = useState(() => firstEnvelopeId(catalog));
+  const [toId, setToId] = useState(READY_TO_ASSIGN_DESTINATION);
   const [amount, setAmount] = useState((from.balanceCents / 100).toFixed(2));
 
   const cents = parseAmountEntryCents(amount);
@@ -126,6 +116,8 @@ export function MoveMoneyDialog({
               if (id) setToId(id);
             }}
             allowClear={false}
+            includeReadyToAssign
+            readyToAssignDetail={formatUsd(readyToAssignCents)}
             placeholder="To"
             ariaLabel="Move money to"
             className="rounded border border-rule bg-surface px-2 py-1 text-base text-ink md:text-[0.8125rem]"

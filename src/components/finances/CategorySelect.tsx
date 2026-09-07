@@ -7,6 +7,9 @@ import {
   categoryPickerSections,
   commitCategoryPicker,
   defaultCategoryPickerChoice,
+  isReadyToAssignDestination,
+  READY_TO_ASSIGN_DESTINATION,
+  READY_TO_ASSIGN_LABEL,
   type EnvelopeCatalog,
 } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind } from "@/db/schema";
@@ -34,6 +37,8 @@ export function CategorySelect({
   onChange,
   onCreate,
   allowClear = true,
+  includeReadyToAssign = false,
+  readyToAssignDetail,
   placeholder = "Categorize",
   disabled = false,
   ariaLabel,
@@ -46,6 +51,13 @@ export function CategorySelect({
   onCreate?: (kind: EnvelopeKind) => void;
   /** False on Move / Assign: empty draft restores the previous destination. */
   allowClear?: boolean;
+  /**
+   * Move-money destination only. Never pass this on a transaction Category
+   * picker — Ready to Assign is not a category.
+   */
+  includeReadyToAssign?: boolean;
+  /** Open-list suffix for Ready to Assign; not a filter token. */
+  readyToAssignDetail?: string;
   placeholder?: string;
   disabled?: boolean;
   ariaLabel: string;
@@ -76,8 +88,9 @@ export function CategorySelect({
 
   // The closed field shows the envelope's own name; the open list supplies the group
   // context, so the full `Food › Groceries` path would only be noise here.
-  const selectedName =
-    catalog.envelopes.find((envelope) => envelope.id === value)?.name ?? "";
+  const selectedName = isReadyToAssignDestination(value ?? "")
+    ? READY_TO_ASSIGN_LABEL
+    : (catalog.envelopes.find((envelope) => envelope.id === value)?.name ?? "");
 
   const sections = useMemo(
     () =>
@@ -86,10 +99,14 @@ export function CategorySelect({
             catalog.groups,
             catalog.envelopes,
             typed ? draft : "",
-            { includeCreate: onCreate !== undefined },
+            {
+              includeCreate: onCreate !== undefined,
+              includeReadyToAssign,
+              readyToAssignDetail,
+            },
           )
         : [],
-    [open, catalog, draft, typed, onCreate],
+    [open, catalog, draft, typed, onCreate, includeReadyToAssign, readyToAssignDetail],
   );
   const choices = useMemo(() => categoryPickerChoices(sections), [sections]);
 
@@ -186,6 +203,11 @@ export function CategorySelect({
         return;
       case "create":
         onCreate?.(result.envelopeKind);
+        return;
+      case "readyToAssign":
+        if (value !== READY_TO_ASSIGN_DESTINATION) {
+          onChange(READY_TO_ASSIGN_DESTINATION);
+        }
         return;
       case "restore":
         return;
@@ -339,7 +361,11 @@ export function CategorySelect({
                         if (row.id !== value) onChange(row.id);
                       }}
                       style={{
-                        paddingLeft: indent(row.kind === "create" ? 1 : row.depth + 1),
+                        paddingLeft: indent(
+                          row.kind === "create" || row.kind === "readyToAssign"
+                            ? 1
+                            : row.depth + 1,
+                        ),
                       }}
                       className={`flex min-h-tap w-full items-center pr-3 text-left text-[0.8125rem] md:min-h-0 md:py-1 ${
                         row.kind === "create" ? "text-ink-muted" : "text-ink"
@@ -349,7 +375,8 @@ export function CategorySelect({
                       {row.kind === "envelope" && row.hidden ? (
                         <span className="shrink-0 text-ink-faint"> (hidden)</span>
                       ) : null}
-                      {row.kind === "envelope" && row.detail ? (
+                      {(row.kind === "envelope" || row.kind === "readyToAssign") &&
+                      row.detail ? (
                         <span className="ml-auto shrink-0 pl-3 tabular-nums text-ink-muted">
                           {row.detail}
                         </span>
