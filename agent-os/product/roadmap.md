@@ -1220,16 +1220,30 @@ period)` so money already spent stops being held twice and only going over bites
   for. A fourth behaviour, **`save`**, answers that: a floor is money that has to be _there_ and
   must come back after a raid, a pile is money meant to _leave_ on a cycle, and a one-time goal
   is neither — it has an amount and no cycle, and spending it is **completion**. Its basis is
-  cumulative **contribution** since the target started, so one signed formula gives both halves
-  of what was asked for: spending never reduces it, assigning money back out does. A met goal
-  asks $0 for good and reads "Goal met"; move $2,000 out and it asks for exactly $2,000, that
-  same month rather than through next month's carry-in.
+  cumulative **contribution** since the target started: spending never reduces it, so a met goal
+  asks $0 for good and reads "Goal met". (Its other half — assigning money back out re-opening
+  the ask — was superseded the same day by the entry below.)
   **No month-local basis could answer it** — carry-in would see $95,000 against a $100,000 cap
   and ask $5,000 every month forever — which is why this needed history and a third basis rather
   than a fourth arm on an existing one. The ledger already had it: no query, no schema change, no
   migration, and "done" is derived every render rather than stored, so it expires by itself in
   both directions. `balance` and `upTo` are untouched; existing targets are re-picked by hand,
   because a floor and a finished goal are indistinguishable from the outside.
+  ✅ **A goal with no deadline never asks, 2026-09-07.**
+  `agent-os/specs/2026-09-07-1140-deadline-free-goal-never-asks/`. Reported within the day: a
+  $450 Handgun goal with nothing saved said "$450.00 more needed this month" and wanted the whole
+  amount at once. A monthly ask needs a denominator — `week`/`month`/`year` supply a cycle and
+  `by` supplies a horizon to divide by — and a goal with neither has **no month to be short in**.
+  The cause was inherited: `save` was added as a new basis underneath a "no deadline asks the
+  whole gap" line written for `balance` + `none`, where it is right, because a raided emergency
+  fund has to nag. Floors are untouched; only goals changed.
+  It reads **"$450.00 more needed eventually"** in green — YNAB's sentence for this shape, and
+  this app's own until `target-refill-basis` retired it *for floors*, where the soothing sentence
+  was a lie. For a goal it is the truth. Progress is still visible and the goal still stops
+  reading "Goal met" if money leaves it, but it never enters Underfunded, Apply Targets or the
+  header. **That is what made the header honest:** "Still needed" fell to $2,224.74 — what the
+  next paycheck actually has to cover this month, with a house fund and a handgun fund no longer
+  demanding their totals from it.
   ✅ **A bill's expected charge follows its charges, 2026-09-06.**
   `agent-os/specs/2026-09-05-1401-bill-due-dates-and-lead-time/` (declared bills) and
   `agent-os/specs/2026-09-06-1427-bill-anchor-retires/` (undeclared). A posted charge is
