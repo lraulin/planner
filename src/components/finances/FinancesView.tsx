@@ -43,14 +43,8 @@ import {
   getTransactionAction,
   listAccountsAction,
   setTransactionBudgetCategoriesAction,
-  upcomingBillsAction,
 } from "@/app/finances/actions";
-import { DateText } from "@/components/date/DateText";
 import { useToday } from "@/components/grid/useToday";
-import {
-  UPCOMING_HORIZON_DAYS,
-  type UpcomingBillRow,
-} from "@/lib/finances/commitments";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
@@ -199,7 +193,6 @@ export function FinancesView({
   initialAccounts,
   initialClaimed,
   catalog,
-  initialUpcoming = [],
   payees: _payees,
   todayKey,
   defaultCollapsedGroups,
@@ -209,8 +202,6 @@ export function FinancesView({
   initialClaimed: readonly ClaimedPayee[];
   /** Budget groups and envelopes, in budget order. Empty until a budget exists. */
   catalog: EnvelopeCatalog;
-  /** Unposted schedule occurrences. Not transactions; never mixed into `rows`. */
-  initialUpcoming?: UpcomingBillRow[];
   payees: readonly { id: string; name: string }[];
   /** Calendar today, so year-collapse defaults are available on the first paint. */
   todayKey: string;
@@ -230,7 +221,6 @@ export function FinancesView({
   const [pendingDelete, setPendingDelete] = useState<RegisterTransactionRow[]>([]);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const categoryPickerTitleId = useId();
-  const [upcoming, setUpcoming] = useState(initialUpcoming);
   const today = useToday();
   const {
     open: importOpen,
@@ -447,25 +437,13 @@ export function FinancesView({
     move,
   } = multi;
 
-  useEffect(() => {
-    if (!today) return;
-    startTransition(async () => {
-      const preview = await upcomingBillsAction(today, UPCOMING_HORIZON_DAYS);
-      if (preview.ok) setUpcoming(preview.data);
-    });
-  }, [today]);
-
   const refresh = useCallback(() => {
     startTransition(async () => {
       await reload();
       const accountRows = await listAccountsAction();
       if (accountRows.ok) setAccounts(accountRows.data);
-      if (today) {
-        const preview = await upcomingBillsAction(today, UPCOMING_HORIZON_DAYS);
-        if (preview.ok) setUpcoming(preview.data);
-      }
     });
-  }, [reload, today]);
+  }, [reload]);
 
   const closeImport = useCallback(() => {
     closeFileImport();
@@ -771,26 +749,6 @@ export function FinancesView({
         </Link>
       ) : null}
       <AccountBalances accounts={accounts} />
-
-      {upcoming.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-rule bg-surface-raised px-3 py-1.5">
-          <span className="text-[0.75rem] font-medium uppercase tracking-wider text-ink-muted">
-            Upcoming (next {UPCOMING_HORIZON_DAYS} days)
-          </span>
-          {upcoming.map((row) => (
-            <span
-              key={`${row.name}:${row.dateKey}`}
-              className="flex items-baseline gap-1.5 text-[0.8125rem]"
-            >
-              <span className="text-ink">{row.name}</span>
-              <DateText dateKey={row.dateKey} className="text-ink-muted" />
-              <span className="tabular text-ink-muted">
-                {formatUsd(row.amountCents)}
-              </span>
-            </span>
-          ))}
-        </div>
-      ) : null}
 
       <DataGrid<FinanceColumnCtx, RegisterTransactionRow>
         rows={isClient ? gridRows : []}

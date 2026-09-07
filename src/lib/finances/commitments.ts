@@ -514,52 +514,6 @@ function billOccurrences(
   return dates;
 }
 
-export type UpcomingBillRow = {
-  name: string;
-  dateKey: string;
-  amountCents: number;
-};
-
-/**
- * How many days out the Upcoming strip looks — shared by the Register and Dashboard pages
- * and by `FinancesView.tsx`'s client-side refresh of the same strip.
- *
- * Lives in this DB-free module rather than `dashboardQueries.ts`: a `"use client"` file that
- * imports even a plain constant from a module with a `db` import pulls the `postgres` driver
- * into the client bundle, which fails to build (it needs Node's `net`/`tls`).
- */
-export const UPCOMING_HORIZON_DAYS = 14;
-
-/**
- * Bill occurrences due within `horizonDays` of today — the Register's Upcoming strip.
- *
- * Sourced from the bill's own cadence (`agent-os/specs/2026-08-23-2313-one-budget/` D2), so
- * a missed or early charge self-corrects the next time this runs rather than needing an
- * explicit skip. Unscheduled bills (propane) never appear here — a projected date would read
- * as knowledge the user never gave.
- */
-export function upcomingBillOccurrences(
-  bills: readonly StoredBillRow[],
-  chargesByName: ReadonlyMap<string, readonly CommitmentCharge[]>,
-  todayKey: string,
-  horizonDays: number,
-): UpcomingBillRow[] {
-  const horizonKey = shiftDateKey(todayKey, horizonDays);
-  const rows: UpcomingBillRow[] = [];
-  for (const bill of bills) {
-    if (bill.expectedCents === null || bill.expectedCents <= 0) continue;
-    for (const dateKey of billOccurrences(
-      bill,
-      chargesByName.get(bill.id) ?? chargesByName.get(bill.name) ?? [],
-      todayKey,
-      horizonKey,
-    )) {
-      rows.push({ name: bill.name, dateKey, amountCents: bill.expectedCents });
-    }
-  }
-  return rows.sort((left, right) => left.dateKey.localeCompare(right.dateKey));
-}
-
 /**
  * Every active bill projected across the next twelve calendar months.
  *

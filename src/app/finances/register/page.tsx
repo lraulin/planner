@@ -1,8 +1,7 @@
 import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { listAccounts, listTransactions } from "@/lib/finances/queries";
-import { loadRecurringBills, loadUpcomingBills } from "@/lib/finances/dashboardQueries";
-import { UPCOMING_HORIZON_DAYS } from "@/lib/finances/commitments";
+import { loadRecurringBills } from "@/lib/finances/dashboardQueries";
 import { claimedPayeesOf } from "@/lib/finances/registerBillDraft";
 import { collapsedYearGroupIds } from "@/lib/finances/grouping";
 import { THIS_MONTH_DATE_FILTER } from "@/lib/finances/registerFields";
@@ -27,23 +26,15 @@ export const dynamic = "force-dynamic";
 export default async function FinancesRegisterPage() {
   const userId = await getCurrentUserId();
   const todayKey = localDateKey(new Date());
-  const [
-    transactions,
-    accounts,
-    bills,
-    envelopeCatalog,
-    storedBudget,
-    payees,
-    upcoming,
-  ] = await Promise.all([
-    listTransactions(userId),
-    listAccounts(userId),
-    loadRecurringBills(userId),
-    listBudgetEnvelopeOptions(userId),
-    readSetting(userId, BUDGET_SCOPE),
-    listPayees(userId),
-    loadUpcomingBills(userId, todayKey, UPCOMING_HORIZON_DAYS),
-  ]);
+  const [transactions, accounts, bills, envelopeCatalog, storedBudget, payees] =
+    await Promise.all([
+      listTransactions(userId),
+      listAccounts(userId),
+      loadRecurringBills(userId),
+      listBudgetEnvelopeOptions(userId),
+      readSetting(userId, BUDGET_SCOPE),
+      listPayees(userId),
+    ]);
   const budgetStartMonth = parseBudget(storedBudget).startMonth;
   const defaultCollapsedGroups = collapsedYearGroupIds(
     transactions.map((row) => row.transactionDate),
@@ -74,7 +65,6 @@ export default async function FinancesRegisterPage() {
           initialAccounts={accounts}
           initialClaimed={claimedPayeesOf(bills)}
           catalog={envelopeCatalog}
-          initialUpcoming={upcoming}
           payees={payees.map(({ id, name }) => ({ id, name }))}
           todayKey={todayKey}
           defaultCollapsedGroups={defaultCollapsedGroups}

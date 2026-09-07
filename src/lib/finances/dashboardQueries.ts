@@ -10,7 +10,6 @@ import {
 } from "@/db/schema";
 import { listConnections, type BankConnectionRow } from "@/lib/banksync/queries";
 import {
-  effectiveFlow,
   effectiveMerchant,
   paydaysFrom,
   recurringMerchants,
@@ -25,10 +24,8 @@ import type { Payday } from "./classify/income";
 import {
   payeeClaimIndex,
   projectForwardMonths,
-  upcomingBillOccurrences,
   type CommitmentCharge,
   type StoredBillRow,
-  type UpcomingBillRow,
 } from "./commitments";
 
 /** Envelope id → the bill it is. The route from a filed row to a bill charge. */
@@ -46,7 +43,7 @@ import {
 import { regularIncomePlan } from "./budget/incomePlan";
 import { activeBillTotals } from "./commitmentRows";
 import { numericStringToCents } from "./money";
-import { listAccounts, listTransactions } from "./queries";
+import { listAccounts } from "./queries";
 import type { FinanceAccountRow } from "./types";
 import { loadWorkingPendingSelection } from "./workingPendingQuery";
 import { localDateKey } from "@/lib/schedule/geometry";
@@ -251,34 +248,6 @@ export async function loadRecurringBills(userId: string): Promise<StoredBillRow[
       .filter((payee) => payee.commitmentId === row.id)
       .map((payee) => payee.id),
   }));
-}
-
-/**
- * Bill occurrences due within `horizonDays` — the Register's Upcoming strip.
- *
- * Charge history is read from the register itself rather than `loadDashboard`'s heavier
- * insights pass, which loads three years for the trend charts this strip does not need.
- */
-export async function loadUpcomingBills(
-  userId: string,
-  todayKey: string,
-  horizonDays: number,
-): Promise<UpcomingBillRow[]> {
-  const [bills, transactions] = await Promise.all([
-    loadRecurringBills(userId),
-    listTransactions(userId),
-  ]);
-  const envelopes = billEnvelopeIndex(bills);
-  const chargesByName = new Map<string, CommitmentCharge[]>();
-  for (const row of transactions) {
-    if (effectiveFlow(row) !== "spend") continue;
-    const ref = row.budgetCategoryId ? envelopes.get(row.budgetCategoryId) : undefined;
-    if (!ref) continue;
-    const list = chargesByName.get(ref.id) ?? [];
-    list.push({ dateKey: row.transactionDate, costCents: spendCentsOf(row) });
-    chargesByName.set(ref.id, list);
-  }
-  return upcomingBillOccurrences(bills, chargesByName, todayKey, horizonDays);
 }
 
 export type BillForecast = {

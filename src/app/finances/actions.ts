@@ -132,8 +132,6 @@ import { loadWorkingPendingSelection } from "@/lib/finances/workingPendingQuery"
 import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { parseBudget } from "@/lib/settings/finances";
-import { loadUpcomingBills } from "@/lib/finances/dashboardQueries";
-import type { UpcomingBillRow } from "@/lib/finances/commitments";
 import type {
   FinanceAccountRow,
   TransactionFilter,
@@ -371,13 +369,6 @@ export async function pasteBankSnapshotAction(
   text: string,
 ): Promise<DataActionResult<BankSnapshotApplyResult>> {
   return runWithData((userId) => applyBankBrowserSnapshot(userId, text));
-}
-
-export async function upcomingBillsAction(
-  todayKey: string,
-  horizonDays: number,
-): Promise<QueryResult<UpcomingBillRow[]>> {
-  return runQuery((userId) => loadUpcomingBills(userId, todayKey, horizonDays));
 }
 
 export async function listFinanceActivityAction(): Promise<

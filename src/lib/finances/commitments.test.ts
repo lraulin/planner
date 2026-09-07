@@ -4,7 +4,6 @@ import {
   nextChargeWriteError,
   periodIndex,
   projectForwardMonths,
-  upcomingBillOccurrences,
   billsNeedingReview,
   billsNeedingAmountReview,
   suggestCommitmentName,
@@ -214,48 +213,6 @@ describe("billsNeedingAmountReview", () => {
         ]),
       ),
     ).toEqual([]);
-  });
-});
-
-describe("upcomingBillOccurrences", () => {
-  it("includes an active scheduled bill due within the horizon", () => {
-    const rent = bill({
-      name: "Rent",
-      cadenceMonths: 1,
-      expectedCents: 210_000,
-      anchorDate: "2026-08-01",
-    });
-    const rows = upcomingBillOccurrences([rent], new Map(), "2026-08-16", 30);
-    expect(rows).toEqual([
-      { name: "Rent", dateKey: "2026-09-01", amountCents: 210_000 },
-    ]);
-  });
-
-  it("excludes a bill due after the horizon", () => {
-    const rent = bill({
-      name: "Rent",
-      cadenceMonths: 1,
-      expectedCents: 210_000,
-      anchorDate: "2026-08-01",
-    });
-    expect(upcomingBillOccurrences([rent], new Map(), "2026-08-16", 7)).toEqual([]);
-  });
-
-  it("excludes an unscheduled bill — a projected date would read as knowledge", () => {
-    const propane = bill({
-      name: "Taylor Gas",
-      cadenceMonths: 12,
-      expectedCents: 50_000,
-      scheduled: false,
-    });
-    expect(upcomingBillOccurrences([propane], new Map(), "2026-08-16", 365)).toEqual(
-      [],
-    );
-  });
-
-  it("excludes a bill with no declared amount", () => {
-    const geico = bill({ expectedCents: null, anchorDate: "2026-08-10" });
-    expect(upcomingBillOccurrences([geico], new Map(), "2026-08-16", 30)).toEqual([]);
   });
 });
 
