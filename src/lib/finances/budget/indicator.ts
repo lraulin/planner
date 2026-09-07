@@ -16,12 +16,13 @@
  */
 
 import { formatUsd } from "@/lib/finances/money";
-import { monthName, type MonthKey } from "./envelope";
+import { monthLabel, monthName, type MonthKey } from "./envelope";
 import { neededAssigned } from "./assign/plan";
 import type { AssignEnvelope } from "./assign/types";
 import { monthsLeft } from "./targets/cadence";
 import { isPeriodFamily, periodCapCents } from "./targets/demand";
 import { resolveTarget, type BillSnapshot } from "./targets/derive";
+import { summarize, type Target } from "./targets/types";
 
 export type IndicatorState =
   | "overspent"
@@ -50,6 +51,21 @@ export type EnvelopeIndicator = {
   pill: IndicatorPill;
   icon: IndicatorIcon | null;
   bar: EnvelopeBar | null;
+};
+
+/**
+ * Overall progress toward the resolved target — the inspector's Needed / Funded / To Go.
+ * This month's installment is `moreNeededCents`, not these figures.
+ *
+ * Spec: `agent-os/specs/2026-09-07-1355-target-assign-button/` D3.
+ */
+export type TargetProgress = {
+  neededCents: number;
+  fundedCents: number;
+  toGoCents: number;
+  neededLabel: string;
+  /** `summarize` of the resolved target — stored or derived. */
+  summary: string;
 };
 
 /**
@@ -338,6 +354,55 @@ export function envelopeIndicator(
     pill: "gray",
     icon: null,
     bar: null,
+  };
+}
+
+function neededLabelOf(target: Target): string {
+  const { cadence } = target;
+  if (cadence.unit === "by") return `Needed by ${monthLabel(cadence.month)}`;
+  if (cadence.unit === "year") {
+    const month = `2000-${String(cadence.month).padStart(2, "0")}-01`;
+    return `Needed by ${monthName(month)}`;
+  }
+  return "Needed";
+}
+
+/**
+ * Needed / Funded / To Go for the inspector Target section. `null` when there is no
+ * resolved target (and therefore no bar horizon). `add` funds from this month's Assigned
+ * because leftovers do not count toward a contribution; every other behaviour uses the
+ * same fill the grid bar already reads.
+ */
+export function targetProgress(
+  envelope: AssignEnvelope,
+  month: MonthKey,
+  bills: ReadonlyMap<string, BillSnapshot>,
+): TargetProgress | null {
+  const { target } = resolveTarget(envelope, bills);
+  if (!target) return null;
+  const horizon = horizonOf(envelope, month, bills);
+  if (horizon.kind === "none") return null;
+
+  const neededCents =
+    horizon.kind === "period"
+      ? horizon.capCents
+      : horizon.kind === "sinking"
+        ? horizon.targetCents
+        : horizon.amountCents;
+  const available = envelope.balanceCents;
+  const funded = fundedCents(envelope);
+  const contributed = contributedCents(envelope);
+  const fundedCentsToward =
+    target.behavior === "add"
+      ? envelope.assignedCents
+      : fillsWith(horizon, { funded, available, contributed });
+
+  return {
+    neededCents,
+    fundedCents: fundedCentsToward,
+    toGoCents: Math.max(0, neededCents - fundedCentsToward),
+    neededLabel: neededLabelOf(target),
+    summary: summarize(target),
   };
 }
 

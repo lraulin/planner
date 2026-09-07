@@ -1135,6 +1135,11 @@ period)` so money already spent stops being held twice and only going over bites
   notes live in a right pane on desktop and a full-screen sheet below `md`. Envelopes
   remain the obligation registry; unscheduled bills keep estimate language, not a fake
   date. The funding-indicators spec had left this pane out of scope.
+  ✅ **Assign under Target shipped 2026-09-07.**
+  `agent-os/specs/2026-09-07-1355-target-assign-button/`. The inspector Target section
+  now holds the one-row Underfunded callout ("Assign $X this month to stay on track")
+  and Needed / Funded / To Go from the same horizon as the grid bar. Ready to Assign is
+  the source; snooze is unchanged.
   ✅ **Cancelled bill handling shipped 2026-09-03.**
   `agent-os/specs/2026-09-03-0951-cancelled-bill-handling/`. A cancelled bill with $0
   Assigned, Activity, and Available leaves the Bills grid on its own; leftover or a
@@ -1246,7 +1251,7 @@ period)` so money already spent stops being held twice and only going over bites
   whole gap" line written for `balance` + `none`, where it is right, because a raided emergency
   fund has to nag. Floors are untouched; only goals changed.
   It reads **"$450.00 more needed eventually"** in green — YNAB's sentence for this shape, and
-  this app's own until `target-refill-basis` retired it *for floors*, where the soothing sentence
+  this app's own until `target-refill-basis` retired it _for floors_, where the soothing sentence
   was a lie. For a goal it is the truth. Progress is still visible and the goal still stops
   reading "Goal met" if money leaves it, but it never enters Underfunded, Apply Targets or the
   header. **That is what made the header honest:** "Still needed" fell to $2,224.74 — what the
@@ -1257,7 +1262,7 @@ period)` so money already spent stops being held twice and only going over bites
   decision not to build on it yet. `balance` + `none` is the last shape that still reads money
   spent on an envelope's own purpose as a shortfall: a $5,000 car-repair fund with a $2,000 repair
   charged to it asks the whole $2,000 back **this month** and adds it to "still needed" — the
-  figure the specs above just made honest. Unlike a goal, a floor genuinely *should* be rebuilt,
+  figure the specs above just made honest. Unlike a goal, a floor genuinely _should_ be rebuilt,
   so the `save` answer of never asking again is wrong too; the fault is that it asks for the whole
   hole at once, with no way to say how fast.
   What is missing is **set aside $X a month until the balance reaches $Y, then stop** — a rate and

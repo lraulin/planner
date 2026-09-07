@@ -5,7 +5,11 @@ import { useId, useState } from "react";
 import { BillFields } from "./BillFields";
 import type { EnvelopeIndicator } from "@/lib/finances/budget/indicator";
 import { isQuietCancelledBill } from "@/lib/finances/budget/hierarchy";
-import { billInspectorView, inspectorBreakdown } from "@/lib/finances/budget/inspector";
+import {
+  billInspectorView,
+  inspectorBreakdown,
+  targetPaneView,
+} from "@/lib/finances/budget/inspector";
 import {
   isBillRow,
   type BudgetBillRow,
@@ -39,6 +43,56 @@ const IDLE: EnvelopeIndicator = {
   icon: null,
   bar: null,
 };
+
+const RING: Record<EnvelopeIndicator["pill"], string> = {
+  green: "text-[var(--chart-income)]",
+  yellow: "text-[var(--goal-unmet)]",
+  red: "text-[var(--chart-spend)]",
+  gray: "text-ink-faint",
+};
+
+function TargetProgressRing({
+  fill01,
+  pill,
+}: {
+  fill01: number;
+  pill: EnvelopeIndicator["pill"];
+}) {
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - fill01);
+  const percent = Math.round(fill01 * 100);
+  return (
+    <div className="relative h-12 w-12 shrink-0">
+      <svg viewBox="0 0 40 40" className="h-12 w-12 -rotate-90" aria-hidden>
+        <circle
+          cx="20"
+          cy="20"
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          className="text-rule"
+        />
+        <circle
+          cx="20"
+          cy="20"
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className={RING[pill]}
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[0.625rem] font-medium tabular text-ink">
+        {percent}%
+      </span>
+    </div>
+  );
+}
 
 export function BudgetInspector({
   row,
@@ -105,6 +159,7 @@ export function BudgetInspector({
   const targetSummary = row.target !== null ? summarize(row.target) : null;
   const hasTarget = targetSummary !== null;
   const snoozeReason = snoozeUnavailableReason(row, month, currentMonth);
+  const pane = targetPaneView(row, carryInCents, month, scan);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-4 py-3">
@@ -147,19 +202,55 @@ export function BudgetInspector({
 
       <section className="rounded border border-rule bg-surface px-3 py-2">
         <h3 className="mb-2 text-[0.75rem] font-medium text-ink-muted">Target</h3>
-        {billView?.estimateCopy ? (
-          <p className="text-[0.8125rem] text-ink">{billView.estimateCopy}</p>
-        ) : scan.copy ? (
-          <p className="text-[0.8125rem] text-ink">{scan.copy}</p>
-        ) : (
-          <p className="text-[0.8125rem] text-ink-muted">
-            {bill
-              ? "This bill is funded for the current month."
-              : hasTarget
-                ? targetSummary
-                : "No target. Assign what you have; leftover stays here."}
-          </p>
-        )}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            {billView?.estimateCopy ? (
+              <p className="text-[0.8125rem] text-ink">{billView.estimateCopy}</p>
+            ) : pane.progress ? (
+              <p className="text-[0.8125rem] text-ink">{pane.progress.summary}</p>
+            ) : scan.copy ? (
+              <p className="text-[0.8125rem] text-ink">{scan.copy}</p>
+            ) : (
+              <p className="text-[0.8125rem] text-ink-muted">
+                {bill
+                  ? "This bill is funded for the current month."
+                  : "No target. Assign what you have; leftover stays here."}
+              </p>
+            )}
+          </div>
+          {pane.fill01 !== null ? (
+            <TargetProgressRing fill01={pane.fill01} pill={scan.pill} />
+          ) : null}
+        </div>
+        {pane.showAssignCallout ? (
+          <div className="mt-3 rounded border border-[var(--goal-unmet)] bg-[var(--goal-unmet)]/10 px-3 py-2">
+            <p className="text-[0.8125rem] text-ink">
+              Assign{" "}
+              <span className="font-medium tabular">
+                {formatUsd(pane.assignThisMonthCents)}
+              </span>{" "}
+              this month to stay on track
+            </p>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onAssignUnderfunded(row)}
+              className="mt-2 min-h-tap w-full rounded bg-[var(--goal-unmet)] px-3 py-2 text-[0.8125rem] font-medium text-surface hover:opacity-90 disabled:opacity-50 md:min-h-0 md:py-1.5"
+            >
+              Assign
+            </button>
+          </div>
+        ) : null}
+        {pane.progress ? (
+          <dl className="mt-3 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-[0.8125rem]">
+            <dt className="text-ink-muted">{pane.progress.neededLabel}</dt>
+            <dd className="tabular text-ink">{formatUsd(pane.progress.neededCents)}</dd>
+            <dt className="text-ink-muted">Funded</dt>
+            <dd className="tabular text-ink">{formatUsd(pane.progress.fundedCents)}</dd>
+            <dt className="text-ink-muted">To Go</dt>
+            <dd className="tabular text-ink">{formatUsd(pane.progress.toGoCents)}</dd>
+          </dl>
+        ) : null}
         {!row.isIncome ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
@@ -211,17 +302,6 @@ export function BudgetInspector({
           onFileWaiting={onFileWaiting}
         />
       )}
-
-      {scan.moreNeededCents > 0 && !row.isIncome ? (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => onAssignUnderfunded(row)}
-          className="min-h-tap rounded border border-rule bg-surface px-3 py-2 text-left text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
-        >
-          Assign {formatUsd(scan.moreNeededCents)} to stay on track
-        </button>
-      ) : null}
 
       <label className={labelClass}>
         Notes

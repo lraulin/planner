@@ -1,8 +1,10 @@
 /**
- * View-model for the Budget inspector pane: Actual leftover identity, and bill-facet
- * copy that cannot invent a charge date for an unscheduled bill.
+ * View-model for the Budget inspector pane: Actual leftover identity, bill-facet
+ * copy that cannot invent a charge date for an unscheduled bill, and the Target
+ * section's Assign callout / Needed-Funded-To Go.
  *
- * Spec: `agent-os/specs/2026-08-25-1633-budget-inspector/` D7.
+ * Spec: `agent-os/specs/2026-08-25-1633-budget-inspector/` D7,
+ * `agent-os/specs/2026-09-07-1355-target-assign-button/` D2–D4.
  */
 
 import type { EnvelopeStatus } from "@/db/schema";
@@ -14,7 +16,17 @@ import {
   type Cadence,
 } from "@/lib/finances/recurringBills";
 import { declaresSchedule } from "@/lib/finances/billSchedule";
+import { billSnapshotFromRow } from "./assign/fromBudget";
+import type { AssignEnvelope } from "./assign/types";
+import type { MonthKey } from "./envelope";
+import {
+  targetProgress,
+  type EnvelopeIndicator,
+  type TargetProgress,
+} from "./indicator";
 import type { BillFacet } from "./queries";
+import type { BudgetRow } from "./rows";
+import type { BillSnapshot } from "./targets/derive";
 
 export type InspectorBreakdown = {
   carryInCents: number;
@@ -22,6 +34,60 @@ export type InspectorBreakdown = {
   activityCents: number;
   availableCents: number;
 };
+
+export type TargetPaneView = {
+  showAssignCallout: boolean;
+  assignThisMonthCents: number;
+  progress: TargetProgress | null;
+  /** `indicator.bar.fill01` — do not recompute (D4). */
+  fill01: number | null;
+};
+
+/** The AssignEnvelope the Target pane reads, using the inspector's already-folded carry-in. */
+export function inspectorAssignEnvelope(
+  row: BudgetRow,
+  carryInCents: number,
+): AssignEnvelope {
+  return {
+    id: row.id,
+    name: row.name,
+    kind: row.kind,
+    hidden: row.hidden,
+    status: row.bill?.status ?? "active",
+    target: row.target,
+    assignedCents: row.assignedCents,
+    activityCents: row.activityCents,
+    balanceCents: row.balanceCents,
+    carryInCents,
+    snoozed: row.snoozed,
+    contributedBeforeCents: row.contributedBeforeCents,
+    nextDueKey: row.nextDueKey,
+  };
+}
+
+export function inspectorBills(row: BudgetRow): ReadonlyMap<string, BillSnapshot> {
+  const snapshot = billSnapshotFromRow(row);
+  return snapshot ? new Map([[snapshot.id, snapshot]]) : new Map();
+}
+
+/**
+ * Target section chrome: this month's Underfunded ask, overall progress, and the
+ * bar fraction the grid already drew. Does not invent a second demand.
+ */
+export function targetPaneView(
+  row: BudgetRow,
+  carryInCents: number,
+  month: MonthKey,
+  indicator: EnvelopeIndicator,
+): TargetPaneView {
+  const envelope = inspectorAssignEnvelope(row, carryInCents);
+  return {
+    showAssignCallout: !row.isIncome && indicator.moreNeededCents > 0,
+    assignThisMonthCents: indicator.moreNeededCents,
+    progress: targetProgress(envelope, month, inspectorBills(row)),
+    fill01: indicator.bar?.fill01 ?? null,
+  };
+}
 
 /**
  * The three terms that already sum to Available. The inspector displays them; it does

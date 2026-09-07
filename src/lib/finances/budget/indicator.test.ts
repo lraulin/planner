@@ -4,7 +4,7 @@ import { assignScanInputs } from "./assign/fromBudget";
 import { neededAssigned } from "./assign/plan";
 import type { AssignEnvelope } from "./assign/types";
 import { buildBudget, findMonth } from "./envelope";
-import { envelopeIndicator, indicatorsFromAssign } from "./indicator";
+import { envelopeIndicator, indicatorsFromAssign, targetProgress } from "./indicator";
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
 import type { BillSnapshot } from "./targets/derive";
 import type { Target } from "./targets/types";
@@ -814,5 +814,96 @@ describe("a goal you finish reads contribution, and the bar agrees with the ask"
     const indicator = indicate(row);
     expect(indicator.state).toBe("fully-spent");
     expect(indicator.copy).toBe("Fully Spent");
+  });
+});
+
+describe("targetProgress", () => {
+  it("funds a period add from this month's Assigned, not carry-in", () => {
+    const row = envelope({
+      target: addMonthly(50_000),
+      assignedCents: 10_000,
+      carryInCents: 20_000,
+      balanceCents: 30_000,
+    });
+    expect(targetProgress(row, MONTH, new Map())).toEqual({
+      neededCents: 50_000,
+      fundedCents: 10_000,
+      toGoCents: 40_000,
+      neededLabel: "Needed",
+      summary: "Add $500.00 every month",
+    });
+  });
+
+  it("lets period upTo count carry-in as funded", () => {
+    const row = envelope({
+      target: refill(2_668),
+      carryInCents: 2_001,
+      assignedCents: 0,
+      balanceCents: 2_001,
+    });
+    expect(targetProgress(row, MONTH, new Map())).toEqual({
+      neededCents: 2_668,
+      fundedCents: 2_001,
+      toGoCents: 667,
+      neededLabel: "Needed",
+      summary: "Have $26.68 available each month",
+    });
+  });
+
+  it("names a by-deadline Needed label and the full pile", () => {
+    const row = envelope({
+      target: byDate(700_04, "2026-12"),
+      assignedCents: 1_631,
+      balanceCents: 1_631,
+    });
+    const progress = targetProgress(row, MONTH, new Map());
+    expect(progress?.neededCents).toBe(700_04);
+    expect(progress?.fundedCents).toBe(1_631);
+    expect(progress?.toGoCents).toBe(700_04 - 1_631);
+    expect(progress?.neededLabel).toBe("Needed by December 2026");
+    expect(progress?.summary).toBe("Have $700.04 available by December 2026");
+  });
+
+  it("still shows To Go on a deadline-free save that never asks this month", () => {
+    const row = envelope({
+      kind: "savings",
+      target: { behavior: "save", cadence: { unit: "none" }, amountCents: 45_000 },
+      assignedCents: 5_000,
+      contributedBeforeCents: 0,
+      carryInCents: 0,
+      balanceCents: 5_000,
+    });
+    expect(indicate(row).moreNeededCents).toBe(0);
+    expect(targetProgress(row, MONTH, new Map())).toEqual({
+      neededCents: 45_000,
+      fundedCents: 5_000,
+      toGoCents: 40_000,
+      neededLabel: "Needed",
+      summary: "Save $450.00 in total (no deadline)",
+    });
+  });
+
+  it("uses a derived monthly bill's charge as Needed", () => {
+    const row = billRow();
+    const bills = new Map([["rent", snapshot("rent", 210_000, "2026-08-01")]]);
+    expect(targetProgress(row, MONTH, bills)).toEqual({
+      neededCents: 210_000,
+      fundedCents: 0,
+      toGoCents: 210_000,
+      neededLabel: "Needed",
+      summary: "Have $2,100.00 available for each charge",
+    });
+  });
+
+  it("omits lines when there is no target", () => {
+    const row = envelope({
+      target: null,
+      assignedCents: 0,
+      activityCents: -5_000,
+      carryInCents: 0,
+      balanceCents: -5_000,
+    });
+    expect(targetProgress(row, MONTH, new Map())).toBeNull();
+    expect(indicate(row).moreNeededCents).toBe(5_000);
   });
 });
