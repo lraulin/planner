@@ -11,7 +11,8 @@
  * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1–D3,
  * `agent-os/specs/2026-08-29-2129-overassigned-available/` D1–D4, and
  * `agent-os/specs/2026-09-06-1301-pile-spent-is-not-a-raid/` D3, and
- * `agent-os/specs/2026-09-07-0804-one-time-savings-goal/` D3, D4.
+ * `agent-os/specs/2026-09-07-0804-one-time-savings-goal/` D3, D4, and
+ * `agent-os/specs/2026-09-07-1140-deadline-free-goal-never-asks/` D3.
  */
 
 import { formatUsd } from "@/lib/finances/money";
@@ -231,6 +232,32 @@ export function envelopeIndicator(
       pill: "gray",
       icon: "check",
       bar: { fill01: 1, spent01: 1, striped: true },
+    };
+  }
+
+  // A deadline-free goal asks $0 by construction, so `assigned − needed` would call every
+  // dollar put toward it "extra" and every full month "Funded". It has no installment for extra
+  // to be measured against, so progress wins ahead of both — the existing `on-track` rung with
+  // its own copy, not a new one (`deadline-free-goal-never-asks` D3). A `save` + `by` keeps the
+  // ordinary order: it has an installment, so assigning above it genuinely is extra.
+  if (
+    asked &&
+    horizon.kind === "floor" &&
+    horizon.fill === "contributed" &&
+    barBasis < periodTarget
+  ) {
+    return {
+      state: "on-track",
+      moreNeededCents: 0,
+      // Deliberately parallel to the underfunded "$X more needed this month", differing in the
+      // one word that carries the whole meaning. YNAB's sentence for this shape, and this
+      // codebase's until `target-refill-basis` D3 retired it — that retirement was about
+      // **floors**: "a $0 ask plus a soothing sentence is the one thing a floor must not say".
+      // For a goal with no deadline the soothing sentence is the literal truth.
+      copy: `${formatUsd(Math.max(0, periodTarget - barBasis))} more needed eventually`,
+      pill: "green",
+      icon: "pie",
+      bar: askBar,
     };
   }
 

@@ -265,23 +265,43 @@ describe("a goal you finish measures what has gone in", () => {
     expect(targetDemand(october, "2026-10-01", NO_BILLS).amount).toBe(0);
   });
 
-  it("assigning money back out of a finished goal asks for it back", () => {
-    // The other half of D2, and the reason Lee set the goal in the first place. $2,000 moved
-    // out to cover an overspend leaves $98,000 contributed, so the goal re-opens by exactly
-    // that much — and it surfaces the same month, not through next month's carry-in.
+  it("asks nothing at all when there is no deadline to be short against", () => {
+    // The reported bug: Handgun, $450 with a no-deadline goal and nothing saved, said "$450.00
+    // more needed this month". A monthly ask needs a denominator, and a goal with no cycle and
+    // no horizon has none (`deadline-free-goal-never-asks` D1).
+    const handgun = (contributedBeforeCents: number) =>
+      envelope(
+        { behavior: "save", cadence: NO_DEADLINE, amountCents: 45_000 },
+        {
+          name: "Handgun",
+          contributedBeforeCents,
+          carryInCents: contributedBeforeCents,
+        },
+      );
+    expect(targetDemand(handgun(0), "2026-09-01", NO_BILLS).amount).toBe(0);
+    expect(targetDemand(handgun(5_000), "2026-09-01", NO_BILLS).amount).toBe(0);
+  });
+
+  it("does not ask a withdrawal back when the goal has no deadline", () => {
+    // Supersedes `one-time-savings-goal` D2's other half. $2,000 moved out leaves $98,000
+    // contributed and the goal no longer reads met — that is the reminder. It is not an ask,
+    // because there is still no month to be short in (`deadline-free-goal-never-asks` D2).
     const raided = envelope(house(NO_DEADLINE), {
       name: "House",
-      carryInCents: 10_000_000,
+      carryInCents: 9_800_000,
       contributedBeforeCents: 9_800_000,
     });
-    expect(targetDemand(raided, "2026-10-01", NO_BILLS).amount).toBe(200_000);
+    expect(targetDemand(raided, "2026-10-01", NO_BILLS).amount).toBe(0);
+  });
 
-    const restored = envelope(house(NO_DEADLINE), {
-      name: "House",
-      carryInCents: 9_800_000,
-      contributedBeforeCents: 10_000_000,
-    });
-    expect(targetDemand(restored, "2026-11-01", NO_BILLS).amount).toBe(0);
+  it("keeps asking a raided `balance` floor, which is the shape that must nag", () => {
+    // The guard on D1's blast radius, stated in the goal's own suite: `target-refill-basis` D3
+    // is untouched, and only `save` changed.
+    const floor = envelope(
+      { behavior: "balance", cadence: NO_DEADLINE, amountCents: 45_000 },
+      { name: "Car repairs", carryInCents: 0 },
+    );
+    expect(targetDemand(floor, "2026-09-01", NO_BILLS).amount).toBe(45_000);
   });
 
   it("a goal with a deadline spreads what is left over the months it has", () => {

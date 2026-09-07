@@ -29,10 +29,11 @@
  * - `save` is a **goal you finish**: it asks the amount less **contribution since the target
  *   started** — everything ever put in, including whatever was already there. Spending it is
  *   completion rather than consumption, so a met goal stays met; assigning money back *out*
- *   reduces the contribution and re-opens the ask. No month-local basis can say that: carry-in
- *   would leave $95,000 against a $100,000 cap and ask for $5,000 every month forever, because
- *   carry-in measures a cycle and a one-time goal has no next cycle
- *   (`one-time-savings-goal` D2).
+ *   reduces the contribution and re-opens the ask **when it has a deadline to be short against**
+ *   — with no deadline it never asks at all (`deadline-free-goal-never-asks` D1). No month-local
+ *   basis can say any of this: carry-in would leave $95,000 against a $100,000 cap and ask for
+ *   $5,000 every month forever, because carry-in measures a cycle and a one-time goal has no
+ *   next cycle (`one-time-savings-goal` D2).
  *
  * All three bases exclude **this month's Assigned**, because the answer is *needed assigned for
  * this month* and every reader subtracts what is already assigned from it.
@@ -171,9 +172,18 @@ function pileDemand(
         ? assertCents(envelope.contributedBeforeCents, "contribution")
         : assertCents(envelope.carryInCents, "carry-in");
   const left = monthsLeft(target.cadence, month, bill ?? undefined);
-  // No deadline is not no ask. A floor you have raided has to nag now, or the one shape whose
-  // whole job is to stay full is the one shape that never asks (`target-refill-basis` D3).
-  if (left === null) return Math.max(0, amount - before);
+  if (left === null) {
+    // A monthly ask needs a denominator. `week`/`month`/`year` supply a cycle and `by` supplies
+    // a horizon to divide by; a **goal** with neither has no month to be short in, so it asks
+    // nothing at all — put in what you can, and it is done when it is full
+    // (`deadline-free-goal-never-asks` D1). A withdrawal does not re-open it either: the goal
+    // simply stops reading met, which is the reminder (D2).
+    if (target.behavior === "save") return 0;
+    // A **floor**, though, still nags. No deadline is not no ask for the one shape whose whole
+    // job is to stay full, or a raided emergency fund is the thing that never asks
+    // (`target-refill-basis` D3, deliberately kept).
+    return Math.max(0, amount - before);
+  }
   return Math.max(0, Math.round((amount - before) / (left + 1)));
 }
 

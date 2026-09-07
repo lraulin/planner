@@ -106,6 +106,20 @@ function isDeadlineFreeFloor(envelope: AssignEnvelope): boolean {
   return envelope.target?.cadence.unit === "none";
 }
 
+/**
+ * A one-time goal with no deadline, which cannot be short of anything
+ * (`deadline-free-goal-never-asks` D1, D2). Its demand is already $0; this covers the other
+ * way an ask can appear, which is `gapOf` reading a **negative** allocation as a shortfall.
+ * Moving money out of such a goal is allowed to leave it un-met — that is the reminder — but
+ * it must not turn into "$2,000.00 more needed this month".
+ *
+ * A derived bill target can never be `save`, so consulting the stored target is enough.
+ */
+function isDeadlineFreeGoal(envelope: AssignEnvelope): boolean {
+  const target = envelope.target;
+  return target?.behavior === "save" && target.cadence.unit === "none";
+}
+
 export function neededAssigned(
   envelope: AssignEnvelope,
   month: MonthKey,
@@ -123,7 +137,17 @@ export function neededAssigned(
   const demand = hasUnderfundedAsk(envelope)
     ? targetDemand(envelope, month, bills)
     : { amount: 0, errors: [] as string[] };
-  const needed = Math.max(demand.amount, assignedToZeroBalance(envelope));
+  const overspendFloor = assignedToZeroBalance(envelope);
+  // `gapOf` asks for `needed − assigned`, so a target asking $0 still reports a shortfall in the
+  // month money is assigned *out* of the envelope. For a floor that is exactly right — put back
+  // what you raided. A deadline-free goal has nothing to be short of, so it is satisfied by
+  // whatever was assigned, negative included; the goal simply stops reading met, which is the
+  // reminder (`deadline-free-goal-never-asks` D2). Overspending still wins, and still wins over
+  // a withdrawal too: empty the envelope *and* pull money out and both are asked back.
+  if (isDeadlineFreeGoal(envelope) && overspendFloor === 0) {
+    return { needed: envelope.assignedCents, errors: demand.errors };
+  }
+  const needed = Math.max(demand.amount, overspendFloor);
   return { needed, errors: demand.errors };
 }
 

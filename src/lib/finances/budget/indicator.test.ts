@@ -708,7 +708,39 @@ describe("a goal you finish reads contribution, and the bar agrees with the ask"
     expect(indicator.bar?.fill01).toBe(1);
   });
 
-  it("re-opens the ask the month money is assigned back out", () => {
+  it("shows progress instead of Overassigned while a deadline-free goal fills up", () => {
+    // The reported bug's other face. With the ask at $0, `assigned − needed` calls every dollar
+    // put toward the goal "extra": $50 toward the handgun read "Overassigned — $50.00 extra",
+    // and a fuller one read "Funded" (`deadline-free-goal-never-asks` D3).
+    const handgun = (assignedCents: number, contributedBeforeCents: number) =>
+      envelope({
+        name: "Handgun",
+        kind: "savings",
+        target: { behavior: "save", cadence: NO_DEADLINE, amountCents: 45_000 },
+        assignedCents,
+        contributedBeforeCents,
+        carryInCents: contributedBeforeCents,
+        balanceCents: contributedBeforeCents + assignedCents,
+      });
+
+    const empty = indicate(handgun(0, 0));
+    expect(empty.moreNeededCents).toBe(0);
+    expect(empty.state).toBe("on-track");
+    expect(empty.copy).toBe("$450.00 more needed eventually");
+
+    const started = indicate(handgun(5_000, 0));
+    expect(started.state).toBe("on-track");
+    expect(started.copy).toBe("$400.00 more needed eventually");
+    expect(started.bar?.fill01).toBeCloseTo(5_000 / 45_000, 3);
+
+    const full = indicate(handgun(0, 45_000));
+    expect(full.state).toBe("funded");
+    expect(full.copy).toBe("Goal met — $450.00 saved");
+  });
+
+  it("drops off Goal met without asking, when money is assigned back out", () => {
+    // The reminder is the goal no longer reading met, not an ask
+    // (`deadline-free-goal-never-asks` D2, superseding `one-time-savings-goal` D2's other half).
     const row = envelope({
       name: "House",
       kind: "savings",
@@ -719,9 +751,10 @@ describe("a goal you finish reads contribution, and the bar agrees with the ask"
       contributedBeforeCents: 10_000_000,
     });
     const indicator = indicate(row);
-    expect(indicator.state).toBe("underfunded");
-    expect(indicator.moreNeededCents).toBe(200_000);
-    expect(indicator.copy).toBe("$2,000.00 more needed this month");
+    expect(indicator.moreNeededCents).toBe(0);
+    expect(indicator.state).toBe("on-track");
+    expect(indicator.copy).toBe("$2,000.00 more needed eventually");
+    expect(indicator.bar?.fill01).toBeCloseTo(0.98, 3);
   });
 
   it("reads On Track against contribution once the installment is assigned", () => {
@@ -745,6 +778,25 @@ describe("a goal you finish reads contribution, and the bar agrees with the ask"
     const indicator = indicate(assigned);
     expect(indicator.state).toBe("on-track");
     expect(indicator.bar?.fill01).toBeCloseTo(0.125, 3);
+  });
+
+  it("still asks overspending back, and a withdrawal on top of it", () => {
+    // The one ask that survives D1: `assignedToZeroBalance` floors every target, so money
+    // already gone is asked for whatever the target says. Spend $500 out of an empty Handgun
+    // fund and pull $100 out on the same month, and both are owed.
+    const overspent = envelope({
+      name: "Handgun",
+      kind: "savings",
+      target: { behavior: "save", cadence: NO_DEADLINE, amountCents: 45_000 },
+      carryInCents: 0,
+      activityCents: -50_000,
+      assignedCents: -10_000,
+      balanceCents: -60_000,
+      contributedBeforeCents: 0,
+    });
+    // Overspent wins the ladder at negative Available, but the ask underneath is both amounts.
+    expect(indicate(overspent).state).toBe("overspent");
+    expect(indicate(overspent).moreNeededCents).toBe(60_000);
   });
 
   it("falls through to Fully Spent once the goal has been spent to zero", () => {
