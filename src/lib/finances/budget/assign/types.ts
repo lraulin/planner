@@ -52,6 +52,8 @@ export type AssignEnvelope = {
    * per-month data, not a clock reading — `neededAssigned` is the one place it is consulted.
    */
   snoozed: boolean;
+  /** The `save` basis: everything put in since the target started. See `demand.ts`. */
+  contributedBeforeCents: number;
   nextDueKey: string | null;
 };
 

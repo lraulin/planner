@@ -444,6 +444,12 @@ export async function loadBudget(
       id: category.id,
       groupId: category.groupId,
       isIncome: category.kind === "income",
+      // A target's `since` is the day it started asking, and the contribution window is a
+      // month comparison rather than a day filter (`target-since-month-granularity`). The fold
+      // does not know what it is for; only `save` targets read the number it produces.
+      ...(category.target?.since
+        ? { contributionsFrom: monthKeyOf(category.target.since) }
+        : {}),
     })),
     allocations: allocations.map((row) => ({
       month: row.month,

@@ -28,6 +28,8 @@ export type EnvelopeApplyInput = {
   /** Carry-in into this month: previous balance if carryover, else max(0, previous). */
   carryInCents: number;
   activityCents: number;
+  /** The `save` basis: everything put in since the target started. See `demand.ts`. */
+  contributedBeforeCents: number;
 };
 
 export type ApplyOptions = {

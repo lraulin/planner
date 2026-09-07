@@ -468,6 +468,7 @@ export function BudgetView({
       assignedCents: row.assignedCents,
       carryInCents: templateCarryIn(previous ? categoryMonth(previous, row.id) : null),
       activityCents: row.activityCents,
+      contributedBeforeCents: row.contributedBeforeCents,
     };
   }
 

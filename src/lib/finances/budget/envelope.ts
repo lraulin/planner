@@ -160,6 +160,15 @@ export type BudgetCategoryInput = {
   groupId: string | null;
   /** Income envelopes are never assigned and never hold a balance — they feed Ready to Assign. */
   isIncome: boolean;
+  /**
+   * First month `contributedBeforeCents` counts from. Defaults to `startMonth`.
+   *
+   * The fold stays **target-agnostic**: it answers "how much has gone into this envelope since
+   * month M" and knows nothing about goals. The caller decides what M means — today it is a
+   * `save` target's `since` month (`one-time-savings-goal` D2), month-granular per
+   * `target-since-month-granularity`.
+   */
+  contributionsFrom?: MonthKey;
 };
 
 export type AllocationInput = {
@@ -239,6 +248,25 @@ export type CategoryMonth = {
    * layer can read it, and enters no term of the balance recurrence.
    */
   snoozed: boolean;
+  /**
+   * Everything put into this envelope from `contributionsFrom` up to but **excluding** this
+   * month's Assigned: `carryIn(from) + Σ assigned(from … m−1)`. Zero in months before `from`.
+   *
+   * Excluding this month is what makes it a **basis** rather than a running total, and it is
+   * the same rule `availableBefore` and the `upTo` carry-in already follow: the ask is *needed
+   * assigned for this month*, and the reader subtracts what is assigned. A basis that counted
+   * this month's Assigned would have it subtracted twice.
+   *
+   * Assigned is **signed**, so moving money back out of the envelope reduces it while spending
+   * never does — which is the whole difference between a floor and a goal you finish. Counting
+   * the starting carry-in is what stops an envelope that was already full when its target
+   * began from being asked for the whole amount a second time.
+   *
+   * `carryIn` clamps a negative previous balance to 0 when `carryover: false`, so an envelope
+   * that overspent into the red before its start month contributes 0 rather than a negative.
+   * A savings envelope carries over, so that clamp is not reachable for the shape this is for.
+   */
+  contributedBeforeCents: number;
 };
 
 export type BudgetTerm = {
@@ -293,6 +321,7 @@ const ZERO_CATEGORY_MONTH = {
   balanceCents: 0,
   carryover: false,
   snoozed: false,
+  contributedBeforeCents: 0,
 } as const;
 
 function key(month: MonthKey, categoryId: string): string {
@@ -349,6 +378,8 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
 
   const previousBalance = new Map<string, number>();
   const previousCarryover = new Map<string, boolean>();
+  /** Running `carryIn(from) + Σ assigned`, per category, started at its `contributionsFrom`. */
+  const contributed = new Map<string, number>();
   let previousReadyToAssign = 0;
   let previousBuffered = 0;
 
@@ -381,6 +412,19 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
       const activityCents = activity.get(key(month, category.id)) ?? 0;
       const balanceCents = assignedCents + activityCents + carryIn;
 
+      // The counting window opens at `contributionsFrom`, seeded with that month's carry-in;
+      // every later month adds the previous month's Assigned. Activity is deliberately absent:
+      // spending a goal is what it is for, and only assigning money back out reduces what has
+      // gone in.
+      const from = category.contributionsFrom ?? input.startMonth;
+      const contributedBeforeCents =
+        month < from
+          ? 0
+          : month === from
+            ? carryIn
+            : (contributed.get(category.id) ?? 0);
+      contributed.set(category.id, contributedBeforeCents + assignedCents);
+
       categories[category.id] = {
         categoryId: category.id,
         assignedCents,
@@ -388,6 +432,7 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
         balanceCents,
         carryover: allocation?.carryover ?? false,
         snoozed: allocation?.snoozed ?? false,
+        contributedBeforeCents,
       };
 
       totalAssignedCents += assignedCents;

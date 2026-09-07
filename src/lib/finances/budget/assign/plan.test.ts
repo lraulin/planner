@@ -46,6 +46,7 @@ function envelope(overrides: Partial<AssignEnvelope> = {}): AssignEnvelope {
     balanceCents: 0,
     carryInCents: 0,
     snoozed: false,
+    contributedBeforeCents: 0,
     nextDueKey: null,
     ...overrides,
   };

@@ -92,6 +92,7 @@ function row(
     activityCents: 0,
     balanceCents: 0,
     carryover: true,
+    contributedBeforeCents: 0,
     target: null,
     goalCents: null,
     kind: "spending",

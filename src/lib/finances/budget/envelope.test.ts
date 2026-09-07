@@ -638,6 +638,80 @@ describe("buildBudget — current-month pool reconciliation", () => {
   });
 });
 
+describe("buildBudget — contribution since a month", () => {
+  // The fold is deliberately target-agnostic: it answers "how much had gone into this envelope
+  // by month M", and knows nothing about goals (`one-time-savings-goal` D2).
+  const HOUSE = { id: "house", groupId: "savings", isIncome: false };
+
+  function contributions(
+    contributionsFrom: string | undefined,
+    allocations: BudgetInput["allocations"],
+    activity: BudgetInput["activity"] = [],
+  ) {
+    const months = buildBudget({
+      categories: [{ ...HOUSE, ...(contributionsFrom ? { contributionsFrom } : {}) }],
+      allocations,
+      activity,
+      buffered: [],
+      startMonth: "2026-06-01",
+      endMonth: "2026-10-01",
+      openingCents: 0,
+    });
+    return (month: string) => at(months, month, "house").contributedBeforeCents;
+  }
+
+  const assign = (month: string, amountCents: number) => ({
+    month,
+    categoryId: "house",
+    amountCents,
+    carryover: true,
+    snoozed: false,
+  });
+
+  it("counts nothing in the months before the window opens", () => {
+    const of = contributions("2026-08-01", [assign("2026-06-01", 100_000)]);
+    expect(of("2026-06-01")).toBe(0);
+    expect(of("2026-07-01")).toBe(0);
+  });
+
+  it("seeds the opening month with its carry-in, not with zero", () => {
+    // What makes the hand switch in D5 safe: an envelope already full when the target starts
+    // reads met rather than being asked for the whole amount a second time.
+    const of = contributions("2026-08-01", [
+      assign("2026-06-01", 9_000_000),
+      assign("2026-08-01", 1_000_000),
+    ]);
+    expect(of("2026-08-01")).toBe(9_000_000);
+    // Excludes this month's own Assigned, so the reader can subtract it without double-counting.
+    expect(of("2026-09-01")).toBe(10_000_000);
+  });
+
+  it("lets a negative allocation reduce the total — the only thing that can", () => {
+    const of = contributions("2026-08-01", [
+      assign("2026-08-01", 10_000_000),
+      assign("2026-09-01", -200_000),
+    ]);
+    expect(of("2026-09-01")).toBe(10_000_000);
+    expect(of("2026-10-01")).toBe(9_800_000);
+  });
+
+  it("never lets activity reduce it, however much of the envelope is spent", () => {
+    const of = contributions(
+      "2026-08-01",
+      [assign("2026-08-01", 10_000_000)],
+      [{ month: "2026-09-01", categoryId: "house", amountCents: -10_000_000 }],
+    );
+    expect(of("2026-09-01")).toBe(10_000_000);
+    expect(of("2026-10-01")).toBe(10_000_000);
+  });
+
+  it("counts from the start month when no window is given", () => {
+    const of = contributions(undefined, [assign("2026-06-01", 500_000)]);
+    expect(of("2026-06-01")).toBe(0);
+    expect(of("2026-07-01")).toBe(500_000);
+  });
+});
+
 describe("buildBudget — sparse and defensive", () => {
   it("treats a missing allocation as zero and not as null", () => {
     // Trap 4. Nothing pre-creates rows, so most month/envelope pairs are absent, and reading
@@ -650,6 +724,7 @@ describe("buildBudget — sparse and defensive", () => {
       balanceCents: 0,
       carryover: false,
       snoozed: false,
+      contributedBeforeCents: 0,
     });
   });
 

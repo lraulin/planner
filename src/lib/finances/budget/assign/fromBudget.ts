@@ -47,6 +47,7 @@ export function assignEnvelopeFromRow(
     balanceCents: row.balanceCents,
     carryInCents: templateCarryIn(prior),
     snoozed: row.snoozed,
+    contributedBeforeCents: row.contributedBeforeCents,
     nextDueKey: row.nextDueKey,
   };
 }

@@ -1598,6 +1598,7 @@ export async function applyBudgetTemplates(
       assignedCents: cell.assignedCents,
       carryInCents: templateCarryIn(prior),
       activityCents: cell.activityCents,
+      contributedBeforeCents: cell.contributedBeforeCents,
     };
   });
 

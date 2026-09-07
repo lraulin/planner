@@ -30,6 +30,11 @@ export type BudgetRow = {
   carryover: boolean;
   /** This month's target ask is silenced. See `finance_budget_allocations.snoozed`. */
   snoozed: boolean;
+  /**
+   * Everything assigned into this envelope since its target started asking, including the
+   * balance it started from. The `save` basis; see `CategoryMonth.contributedBeforeCents`.
+   */
+  contributedBeforeCents: number;
   target: BudgetCategoryRow["target"];
   incomeRole: "regular" | "other";
   expectedMonthlyIncomeCents: number | null;
@@ -119,6 +124,7 @@ export function budgetRows(
         balanceCents: cell.balanceCents,
         carryover: cell.carryover,
         snoozed: cell.snoozed,
+        contributedBeforeCents: cell.contributedBeforeCents,
         kind: category.kind,
         bill: category.bill,
         nextDueKey: anchors.get(category.id)?.nextDueKey ?? null,

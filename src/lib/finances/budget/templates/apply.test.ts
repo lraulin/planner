@@ -20,6 +20,7 @@ function envelope(overrides: Partial<EnvelopeApplyInput> = {}): EnvelopeApplyInp
     assignedCents: 0,
     carryInCents: 0,
     activityCents: 0,
+    contributedBeforeCents: 0,
     ...overrides,
   };
 }

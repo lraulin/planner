@@ -55,6 +55,7 @@ function envelope(name: string, activityCents: number): BudgetRow {
     activityCents,
     balanceCents: 0,
     carryover: false,
+    contributedBeforeCents: 0,
     target: null,
     goalCents: null,
     kind: "income",
