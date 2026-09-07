@@ -44,6 +44,18 @@ const LEGAL: Array<[string, Target]> = [
     "Have $X available (no deadline)",
     { behavior: "balance", cadence: { unit: "none" }, amountCents: 10_000_000 },
   ],
+  [
+    "Save $X in total by March 2027",
+    {
+      behavior: "save",
+      cadence: { unit: "by", month: "2027-03" },
+      amountCents: 10_000_000,
+    },
+  ],
+  [
+    "Save $X in total (no deadline)",
+    { behavior: "save", cadence: { unit: "none" }, amountCents: 10_000_000 },
+  ],
 ];
 
 describe("parseTarget", () => {
@@ -214,6 +226,29 @@ describe("isLegalPairing", () => {
     expect(isLegalPairing("upTo", "week")).toBe(true);
     expect(isLegalPairing("balance", "week")).toBe(false);
   });
+
+  it("gives a one-time goal a deadline or none, and no repeating cadence", () => {
+    // No repeating cadence can express "once", and the evaluator has no arm for one
+    // (`one-time-savings-goal` D1).
+    expect(isLegalPairing("save", "by")).toBe(true);
+    expect(isLegalPairing("save", "none")).toBe(true);
+    for (const unit of ["week", "month", "year", "schedule"] as const) {
+      expect(isLegalPairing("save", unit)).toBe(false);
+    }
+  });
+
+  it("keeps a stored `save` blob with a repeating cadence out of the evaluator", () => {
+    for (const cadence of [
+      { unit: "week", weekday: 0 },
+      { unit: "month", day: 15 },
+      { unit: "year", month: 10 },
+      { unit: "schedule" },
+    ]) {
+      expect(
+        parseTarget({ behavior: "save", cadence, amountCents: 10_000_000 }, true),
+      ).toBeNull();
+    }
+  });
 });
 
 describe("parseTargetOrThrow", () => {
@@ -292,6 +327,8 @@ describe("summarize", () => {
     expect(summarize(LEGAL[4][1])).toBe("Have $400.00 available each year by October");
     expect(summarize(LEGAL[5][1])).toBe("Have $1,000.00 available by October 2026");
     expect(summarize(LEGAL[6][1])).toBe("Have $100,000.00 available (no deadline)");
+    expect(summarize(LEGAL[7][1])).toBe("Save $100,000.00 in total by March 2027");
+    expect(summarize(LEGAL[8][1])).toBe("Save $100,000.00 in total (no deadline)");
     expect(
       summarize({
         behavior: "upTo",

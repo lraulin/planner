@@ -25,6 +25,7 @@ function envelope(parts: Partial<DemandEnvelope> = {}): DemandEnvelope {
     target: null,
     carryInCents: 0,
     activityCents: 0,
+    contributedBeforeCents: 0,
     ...parts,
   };
 }

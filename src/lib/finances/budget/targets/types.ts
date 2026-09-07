@@ -9,19 +9,21 @@
  * explicit axes. An envelope that genuinely wants two asks is two envelopes.
  *
  * We take YNAB's mechanics and not its vocabulary: there is no "refill vs set aside" toggle,
- * only the seven sentences of D2.
+ * only the plain sentences of D2 — and, since `one-time-savings-goal`, the one YNAB has no
+ * shape for at all: a goal that is finished by being spent.
  *
  * Money is **integer cents** throughout, asserted — the one divergence from Actual that
  * survives this rewrite.
  *
- * Spec: `agent-os/specs/2026-08-28-1000-ynab-target-engine/` D1, D2.
+ * Spec: `agent-os/specs/2026-08-28-1000-ynab-target-engine/` D1, D2, extended by
+ * `agent-os/specs/2026-09-07-0804-one-time-savings-goal/` D1.
  */
 
 import { weekdayLongLabel } from "@/lib/dateFormat";
 import { formatUsd } from "@/lib/finances/money";
 import { monthLabel, monthName, type MonthKey } from "../envelope";
 
-export const TARGET_BEHAVIORS = ["add", "upTo", "balance"] as const;
+export const TARGET_BEHAVIORS = ["add", "upTo", "balance", "save"] as const;
 export type TargetBehavior = (typeof TARGET_BEHAVIORS)[number];
 
 export const CADENCE_UNITS = [
@@ -80,11 +82,18 @@ const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
  * that; a flat twelfth is honest but identical to writing `add` + `month`. `balance` + a
  * repeating cadence *is* `upTo` — the only difference between them is what happens after the
  * anchor passes.
+ *
+ * `save` takes the same two cadences as `balance` and no others: a one-time goal either has a
+ * deadline or it does not, and no repeating cadence can express "once". It is a fourth answer
+ * to "what is this money for", not a modifier on the third — a floor has to come back after it
+ * is spent, and a finished goal is finished by being spent
+ * (`one-time-savings-goal` D1).
  */
 const LEGAL: Record<TargetBehavior, readonly CadenceUnit[]> = {
   add: ["month", "week"],
   upTo: ["month", "week", "year", "schedule"],
   balance: ["by", "none"],
+  save: ["by", "none"],
 };
 
 export function isLegalPairing(behavior: TargetBehavior, unit: CadenceUnit): boolean {
@@ -180,6 +189,10 @@ export function parseNullableTargetOrThrow(raw: unknown): Target | null {
 /**
  * The one-line sentence the UI shows. D2's table, in the app's own words — deliberately not
  * YNAB's "refill" / "set aside", which is the vocabulary that made the choice read as a puzzle.
+ *
+ * **"in total" is load-bearing** in the `save` sentences. It is the only word that separates
+ * them from the `balance` sentence directly above in the drawer, and it names the measure:
+ * everything ever put in, not what is sitting there (`one-time-savings-goal` D1).
  */
 export function summarize(target: Target): string {
   const amount = formatUsd(target.amountCents);
@@ -198,9 +211,13 @@ export function summarize(target: Target): string {
     case "year":
       return `Have ${amount} available each year by ${monthName(`2000-${String(cadence.month).padStart(2, "0")}-01`)}`;
     case "by":
-      return `Have ${amount} available by ${monthLabel(cadence.month)}`;
+      return behavior === "save"
+        ? `Save ${amount} in total by ${monthLabel(cadence.month)}`
+        : `Have ${amount} available by ${monthLabel(cadence.month)}`;
     case "none":
-      return `Have ${amount} available (no deadline)`;
+      return behavior === "save"
+        ? `Save ${amount} in total (no deadline)`
+        : `Have ${amount} available (no deadline)`;
     case "schedule":
       return `Have ${amount} available for each charge`;
   }

@@ -9,7 +9,8 @@
  * The engine returns *needed assigned*, so `gap = max(0, needed − assigned)` is unchanged from
  * `budget-assign-options` D3.
  *
- * **The load-bearing claim: two families, two spreads; the behaviour picks the basis.**
+ * **The load-bearing claim: three bases, one spread — the behaviour picks the basis and the
+ * cadence picks the spread.**
  *
  * The **cadence** decides the spread. A **period refill** (`week`, `month`, a bill that charges
  * inside the month) asks its whole cap now; a **pile** (`year`, `by`, `none`, a quarterly or
@@ -25,15 +26,27 @@
  *   yearly bill in the month it is charged.
  * - `balance` is a **floor**: what is sitting in the envelope is the whole point, so it asks the
  *   amount less **Available**, and raiding one asks for it back.
+ * - `save` is a **goal you finish**: it asks the amount less **contribution since the target
+ *   started** — everything ever put in, including whatever was already there. Spending it is
+ *   completion rather than consumption, so a met goal stays met; assigning money back *out*
+ *   reduces the contribution and re-opens the ask. No month-local basis can say that: carry-in
+ *   would leave $95,000 against a $100,000 cap and ask for $5,000 every month forever, because
+ *   carry-in measures a cycle and a one-time goal has no next cycle
+ *   (`one-time-savings-goal` D2).
+ *
+ * All three bases exclude **this month's Assigned**, because the answer is *needed assigned for
+ * this month* and every reader subtracts what is already assigned from it.
  *
  * `assignedToZeroBalance` (`assign/plan.ts`) still floors every ask, which is what keeps
  * overspend visible without putting Activity back into an `upTo` basis. The cost of the `upTo`
  * basis is that a raid in an accumulation month is asked for through the *next* month's
- * carry-in rather than the same day (`pile-spent-is-not-a-raid` D2).
+ * carry-in rather than the same day (`pile-spent-is-not-a-raid` D2) — a cost the `save` basis
+ * does not pay, since a withdrawal is an allocation and lands the same month.
  *
  * Spec: `agent-os/specs/2026-08-28-1000-ynab-target-engine/` D3, D4, as superseded by
  * `agent-os/specs/2026-08-28-2039-target-refill-basis/` D1–D3 and
- * `agent-os/specs/2026-09-06-1301-pile-spent-is-not-a-raid/` D1.
+ * `agent-os/specs/2026-09-06-1301-pile-spent-is-not-a-raid/` D1, and extended by
+ * `agent-os/specs/2026-09-07-0804-one-time-savings-goal/` D2.
  */
 
 import type { MonthKey } from "../envelope";
@@ -51,6 +64,19 @@ export type DemandEnvelope = TargetHolder & {
   name: string;
   carryInCents: number;
   activityCents: number;
+  /**
+   * Everything put into this envelope since its target started asking, **excluding** this
+   * month's Assigned — the **contribution** basis, read by `save` targets alone. Supplied by
+   * `buildBudget`, which is target-agnostic and only answers "how much had gone in by month M".
+   */
+  contributedBeforeCents: number;
+};
+
+/** The three bases a pile may measure against, all supplied by the caller. */
+type PileBases = {
+  carryInCents: number;
+  activityCents: number;
+  contributedBeforeCents: number;
 };
 
 export type TargetDemand = {
@@ -130,17 +156,20 @@ function periodDemand(
 function pileDemand(
   target: Target,
   month: MonthKey,
-  envelope: { carryInCents: number; activityCents: number },
+  envelope: PileBases,
   bill: ScheduleBill | null,
 ): number {
   const amount = assertCents(target.amountCents, "target amount");
   // A `balance` pile is a floor, so it measures Available and a raid asks for it back. An
   // `upTo` pile is saving toward a spend, so it measures carry-in — paying the bill the pile
-  // was for must not demand the whole year back in the charge month.
+  // was for must not demand the whole year back in the charge month. A `save` goal is finished
+  // by being spent, so it measures contribution: only taking the money back out re-opens it.
   const before =
     target.behavior === "balance"
       ? availableBefore(envelope)
-      : assertCents(envelope.carryInCents, "carry-in");
+      : target.behavior === "save"
+        ? assertCents(envelope.contributedBeforeCents, "contribution")
+        : assertCents(envelope.carryInCents, "carry-in");
   const left = monthsLeft(target.cadence, month, bill ?? undefined);
   // No deadline is not no ask. A floor you have raided has to nag now, or the one shape whose
   // whole job is to stay full is the one shape that never asks (`target-refill-basis` D3).
@@ -148,11 +177,11 @@ function pileDemand(
   return Math.max(0, Math.round((amount - before) / (left + 1)));
 }
 
-/** What one resolved target asks for, given the envelope's carry-in and activity. */
+/** What one resolved target asks for, given the envelope's carry-in, activity and contribution. */
 export function demandForTarget(
   target: Target,
   month: MonthKey,
-  envelope: { carryInCents: number; activityCents: number },
+  envelope: PileBases,
   bill: ScheduleBill | null = null,
 ): number {
   return isPeriodFamily(target, bill)

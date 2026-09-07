@@ -17,6 +17,7 @@ function envelope(
     target,
     carryInCents: 0,
     activityCents: 0,
+    contributedBeforeCents: 0,
     ...parts,
   };
 }
@@ -230,6 +231,93 @@ describe("a raided floor still asks this month", () => {
     expect(targetDemand(spentAfterDeadline, "2026-08-01", NO_BILLS).amount).toBe(
       503_000,
     );
+  });
+});
+
+describe("a goal you finish measures what has gone in", () => {
+  // Lee's House down payment: $100,000 saved for the earnest money and closing, and spending it
+  // is the goal completing rather than a raid to make good (`one-time-savings-goal` D2).
+  const house = (cadence: Target["cadence"]): Target => ({
+    behavior: "save",
+    cadence,
+    amountCents: 10_000_000,
+  });
+  const NO_DEADLINE = { unit: "none" } as const;
+
+  it("a goal spent on its own purpose is finished, not raided", () => {
+    // The reported case. As a `balance` floor this asked $5,030 back; as a goal it asks $0,
+    // because the $5,000 wire is what the $100,000 was saved for.
+    const wired = envelope(house(NO_DEADLINE), {
+      name: "House",
+      carryInCents: 10_000_000,
+      activityCents: -500_000,
+      contributedBeforeCents: 10_000_000,
+    });
+    expect(targetDemand(wired, "2026-09-01", NO_BILLS).amount).toBe(0);
+
+    // And the month after, carrying in the $95,000 that is actually there. This is the case a
+    // carry-in basis gets wrong forever: it would ask $5,000 every month from here.
+    const october = envelope(house(NO_DEADLINE), {
+      name: "House",
+      carryInCents: 9_500_000,
+      contributedBeforeCents: 10_000_000,
+    });
+    expect(targetDemand(october, "2026-10-01", NO_BILLS).amount).toBe(0);
+  });
+
+  it("assigning money back out of a finished goal asks for it back", () => {
+    // The other half of D2, and the reason Lee set the goal in the first place. $2,000 moved
+    // out to cover an overspend leaves $98,000 contributed, so the goal re-opens by exactly
+    // that much — and it surfaces the same month, not through next month's carry-in.
+    const raided = envelope(house(NO_DEADLINE), {
+      name: "House",
+      carryInCents: 10_000_000,
+      contributedBeforeCents: 9_800_000,
+    });
+    expect(targetDemand(raided, "2026-10-01", NO_BILLS).amount).toBe(200_000);
+
+    const restored = envelope(house(NO_DEADLINE), {
+      name: "House",
+      carryInCents: 9_800_000,
+      contributedBeforeCents: 10_000_000,
+    });
+    expect(targetDemand(restored, "2026-11-01", NO_BILLS).amount).toBe(0);
+  });
+
+  it("a goal with a deadline spreads what is left over the months it has", () => {
+    // September 2026 through March 2027 is seven months inclusive.
+    const byMarch = envelope(house({ unit: "by", month: "2027-03" }), {
+      name: "House",
+    });
+    expect(targetDemand(byMarch, "2026-09-01", NO_BILLS).amount).toBe(1_428_571);
+
+    const halfSaved = envelope(house({ unit: "by", month: "2027-03" }), {
+      name: "House",
+      contributedBeforeCents: 5_000_000,
+    });
+    expect(targetDemand(halfSaved, "2026-09-01", NO_BILLS).amount).toBe(714_286);
+  });
+
+  it("a goal past its deadline asks the whole gap", () => {
+    // No new rule: `balance` + `by` already does this, and a deadline that has passed leaves
+    // zero months to spread over.
+    const overdue = envelope(house({ unit: "by", month: "2026-06" }), {
+      name: "House",
+      contributedBeforeCents: 9_500_000,
+    });
+    expect(targetDemand(overdue, "2026-09-01", NO_BILLS).amount).toBe(500_000);
+  });
+
+  it("counts contribution and never activity, so a met goal stays met while it drains", () => {
+    // Every dollar spent, none put back: the envelope is empty and still asks nothing. Fully
+    // Spent is what the grid says here (`one-time-savings-goal` D4), not a $100,000 ask.
+    const closed = envelope(house(NO_DEADLINE), {
+      name: "House",
+      carryInCents: 10_000_000,
+      activityCents: -10_000_000,
+      contributedBeforeCents: 10_000_000,
+    });
+    expect(targetDemand(closed, "2027-03-01", NO_BILLS).amount).toBe(0);
   });
 });
 
