@@ -1,11 +1,5 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import {
-  splitTransactionAction,
-  unsplitTransactionAction,
-  updateSplitChildrenAction,
-} from "@/app/finances/actions";
 import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind } from "@/db/schema";
 import {
@@ -13,6 +7,7 @@ import {
   formatUsd,
   parseAmountCents,
 } from "@/lib/finances/money";
+import { emptySplitDraft, type SplitDraftChild } from "@/lib/finances/splitDraft";
 import {
   assignRemainderTo,
   defaultStrategy,
@@ -20,7 +15,6 @@ import {
   splitRemainderCents,
 } from "@/lib/finances/splitRemainder";
 import type { RegisterTransactionRow } from "@/lib/finances/registerQuery";
-import type { TransactionListRow } from "@/lib/finances/types";
 import { CategorySelect } from "./CategorySelect";
 
 /**
@@ -31,76 +25,32 @@ import { CategorySelect } from "./CategorySelect";
  * because Distribute closes the gap in one click — and closes it *proportionally*, since the
  * gap is nearly always sales tax on the lines you just typed off a receipt.
  *
+ * **The draft is the drawer's, not this component's.** This is a section of an explicit-save
+ * form, so it has no save button of its own: the footer's Save and Save & Close write it,
+ * Cancel discards it, and the parts count towards "Unsaved changes" like every other field.
+ * Owning the draft here is what let Save & Close close over a filled-in split and lose it.
+ *
  * Desktop only (D12). Splitting is a deliberate, fiddly operation done while reading a
  * receipt; the phone shows the parts and no editor.
  */
-type ChildDraft = {
-  /** Stable across re-renders so an amount field does not lose focus; not the row id. */
-  key: string;
-  id?: string;
-  amountCents: number;
-  amountText: string;
-  budgetCategoryId: string | null;
-  notes: string;
-};
-
-function draftFrom(row: {
-  id: string;
-  amountCents: number;
-  budgetCategoryId: string | null;
-  notes: string;
-}): ChildDraft {
-  return {
-    key: row.id,
-    id: row.id,
-    amountCents: row.amountCents,
-    amountText: centsToNumericString(row.amountCents),
-    budgetCategoryId: row.budgetCategoryId,
-    notes: row.notes,
-  };
-}
-
-function emptyDraft(): ChildDraft {
-  return {
-    key: crypto.randomUUID(),
-    amountCents: 0,
-    amountText: "",
-    budgetCategoryId: null,
-    notes: "",
-  };
-}
-
 export function SplitEditor({
   row,
-  existing,
+  drafts,
+  alreadySplit,
   catalog,
   onCreateEnvelope,
-  onSplitChanged,
+  onChange,
 }: {
   row: RegisterTransactionRow;
-  /** The saved children, loaded by the Register — the parent is the source of truth. */
-  existing: readonly TransactionListRow[];
+  /** Null while the editor is closed — a row with no split and no drafted parts. */
+  drafts: readonly SplitDraftChild[] | null;
+  /** Whether the saved row is split, which is what "remove every part" means against. */
+  alreadySplit: boolean;
   catalog: EnvelopeCatalog;
   onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
-  onSplitChanged: () => void;
+  /** `null` closes the editor; `edited` is false for changes that are not the user's edits. */
+  onChange: (next: readonly SplitDraftChild[] | null, edited?: boolean) => void;
 }) {
-  const [children, setChildren] = useState<ChildDraft[] | null>(null);
-  const [seenExisting, setSeenExisting] = useState(existing);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, startTransition] = useTransition();
-  const split = row.splitChildCount > 0;
-
-  // Reset the draft when the saved children arrive or change underneath, in render rather
-  // than an effect: a fetch-on-mount effect is the `set-state-in-effect` lint, and the
-  // parent already holds these rows.
-  if (existing !== seenExisting) {
-    setSeenExisting(existing);
-    setChildren(existing.length === 0 ? null : existing.map(draftFrom));
-  }
-  if (split && children === null && existing.length > 0) {
-    setChildren(existing.map(draftFrom));
-  }
-
   // Splitting a transfer leg is refused by the mutation (D10); saying so before the click is
   // better than an error after it.
   if (row.transferGroupId) {
@@ -112,35 +62,42 @@ export function SplitEditor({
     );
   }
 
-  if (!split && children === null) {
+  if (drafts === null) {
     return (
       <button
         type="button"
         className="min-h-tap self-start rounded border border-rule px-3 text-[0.8125rem] text-ink md:min-h-0 md:py-1"
-        onClick={() => setChildren([emptyDraft(), emptyDraft()])}
+        // Disclosing the empty editor is not yet an edit: it must not dirty the form.
+        onClick={() =>
+          onChange(
+            [
+              emptySplitDraft(crypto.randomUUID()),
+              emptySplitDraft(crypto.randomUUID()),
+            ],
+            false,
+          )
+        }
       >
         Split this transaction
       </button>
     );
   }
 
-  const drafts = children ?? [];
   const amounts = drafts.map((child) => child.amountCents);
   const remainder = splitRemainderCents(row.amountCents, amounts);
+  const removingSplit = alreadySplit && drafts.length === 0;
 
-  function update(key: string, patch: Partial<ChildDraft>) {
-    setError(null);
-    setChildren((current) =>
-      (current ?? []).map((child) =>
+  function update(key: string, patch: Partial<SplitDraftChild>) {
+    onChange(
+      (drafts ?? []).map((child) =>
         child.key === key ? { ...child, ...patch } : child,
       ),
     );
   }
 
   function applyAmounts(next: readonly number[]) {
-    setError(null);
-    setChildren((current) =>
-      (current ?? []).map((child, i) => ({
+    onChange(
+      (drafts ?? []).map((child, i) => ({
         ...child,
         amountCents: next[i],
         amountText: centsToNumericString(next[i]),
@@ -148,37 +105,11 @@ export function SplitEditor({
     );
   }
 
-  function save() {
-    setError(null);
-    const payload = drafts.map((child) => ({
-      id: child.id,
-      amountCents: child.amountCents,
-      budgetCategoryId: child.budgetCategoryId,
-      notes: child.notes,
-    }));
-    startTransition(async () => {
-      const result = split
-        ? await updateSplitChildrenAction(row.id, payload)
-        : await splitTransactionAction(row.id, payload);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      onSplitChanged();
-    });
-  }
-
-  function unsplit() {
-    setError(null);
-    startTransition(async () => {
-      const result = await unsplitTransactionAction(row.id);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setChildren(null);
-      onSplitChanged();
-    });
+  function remove(key: string) {
+    const kept = (drafts ?? []).filter((entry) => entry.key !== key);
+    // Removing the last part of a row that is not split abandons the split entirely, rather
+    // than leaving an empty editor whose Save has nothing to write.
+    onChange(kept.length === 0 && !alreadySplit ? null : kept);
   }
 
   return (
@@ -242,11 +173,7 @@ export function SplitEditor({
               type="button"
               aria-label={`Remove part ${index + 1}`}
               className="rounded border border-rule px-2 py-1 text-[0.75rem] text-ink-muted hover:text-priority-a"
-              onClick={() =>
-                setChildren((current) =>
-                  (current ?? []).filter((entry) => entry.key !== child.key),
-                )
-              }
+              onClick={() => remove(child.key)}
             >
               Remove
             </button>
@@ -258,16 +185,30 @@ export function SplitEditor({
         <button
           type="button"
           className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink"
-          onClick={() => setChildren([...drafts, emptyDraft()])}
+          onClick={() => onChange([...drafts, emptySplitDraft(crypto.randomUUID())])}
         >
           Add a part
         </button>
+        {alreadySplit && drafts.length > 0 ? (
+          <button
+            type="button"
+            className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink-muted hover:text-priority-a"
+            title="Drop every part and put the whole amount back on one row. Saved with the drawer."
+            onClick={() => onChange([])}
+          >
+            Unsplit
+          </button>
+        ) : null}
         <span
-          className={`tabular text-[0.8125rem] ${remainder === 0 ? "text-ink-muted" : "text-priority-a"}`}
+          className={`tabular text-[0.8125rem] ${
+            removingSplit || remainder !== 0 ? "text-priority-a" : "text-ink-muted"
+          }`}
         >
-          {remainder === 0
-            ? `Balanced at ${formatUsd(row.amountCents)}`
-            : `${formatUsd(remainder)} left to allocate`}
+          {removingSplit
+            ? "Saving will remove the split."
+            : remainder === 0
+              ? `Balanced at ${formatUsd(row.amountCents)}`
+              : `${formatUsd(remainder)} left to allocate`}
         </span>
         {remainder === 0 || drafts.length === 0 ? null : (
           <button
@@ -285,41 +226,9 @@ export function SplitEditor({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={saving || remainder !== 0 || drafts.length === 0}
-          className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
-          onClick={save}
-        >
-          {split ? "Save the split" : "Split it"}
-        </button>
-        {split ? (
-          <button
-            type="button"
-            disabled={saving}
-            className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink-muted hover:text-priority-a disabled:opacity-50 md:min-h-0 md:py-1"
-            onClick={unsplit}
-          >
-            Unsplit
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={saving}
-            className="min-h-tap rounded px-3 text-[0.8125rem] text-ink-muted md:min-h-0 md:py-1"
-            onClick={() => setChildren(null)}
-          >
-            Cancel
-          </button>
-        )}
-      </div>
-
-      {error ? (
-        <p role="alert" className="text-[0.8125rem] text-priority-a">
-          {error}
-        </p>
-      ) : null}
+      <p className="text-[0.75rem] text-ink-faint">
+        The parts are saved with the drawer — use Save or Save &amp; Close below.
+      </p>
     </div>
   );
 }
