@@ -119,11 +119,12 @@ the third.
 ### D2 — The basis: contribution since the target started
 
 ```
-contributedSince(m) = carryIn(sinceMonth) + Σ assigned(k)   for k = sinceMonth … m
+contributedBefore(m) = carryIn(sinceMonth) + Σ assigned(k)   for k = sinceMonth … m−1
 ```
 
 Everything ever put into the envelope since the target began counting, including whatever was
-already in it then. Assigned is signed, so:
+already in it then, and **excluding this month's own Assigned** — see Changes #1. Assigned is
+signed, so:
 
 **Spending never reduces it; assigning money back out does** — a negative allocation, or a move
 to another envelope. That single rule is both halves of what Lee asked for:
@@ -139,7 +140,7 @@ to another envelope. That single rule is both halves of what Lee asked for:
 The demand keeps `pileDemand`'s spread and changes only the basis:
 
 ```
-gap    = max(0, amountCents − contributedSince)
+gap    = max(0, amountCents − contributedBefore)
 left   = monthsLeft(cadence, month)      // null for `none`; floors at 0 after a `by` deadline
 needed = left === null || left === 0 ? gap : max(0, round(gap / (left + 1)))
 ```
@@ -148,7 +149,7 @@ A met goal asks $0 for good. A `save` + `by` past an unmet deadline asks the who
 every month, exactly as `balance` + `by` already does — no new rule, and no special case for a
 deadline that has passed.
 
-Counting `carryIn(sinceMonth)` and not assignments alone is what makes D5 safe: an envelope that
+Counting `carryIn(sinceMonth)` and not later assignments alone is what makes D5 safe: an envelope that
 was already full when the target started reads met, rather than asking for the whole amount a
 second time. It is also the honest reading of the sentence — "how much has ever gone into this
 envelope since this target started counting" includes the balance it started from.
@@ -168,7 +169,7 @@ second opinion D3 exists to prevent. `balance` and `upTo` bars are untouched.
 ### D4 — "Done" is computed, never stored
 
 No column, no `completed_at`, no archive table, and no new rung in the state ladder that
-`overassigned-available` D4 settled. When `contributedSince >= amountCents` the existing `funded`
+`overassigned-available` D4 settled. When `contributedBefore + assigned >= amountCents` the existing `funded`
 state carries its own copy:
 
 ```
@@ -224,9 +225,11 @@ no need to restart `since`.
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The basis **excludes this month's Assigned** — `contributedBefore(m)`, summing `k = since … m−1` — and the field is named `contributedBeforeCents`, not `contributedSinceCents`. D2 and the Task 2/3 field names are corrected above. | D2 as shaped summed through `m` inclusive, which double-counts. `neededAssigned` returns _needed assigned for this month_ and every reader takes `gap = needed − assigned`, so a basis that already contained this month's Assigned has it subtracted twice. Two acceptance criteria fail on the shaped formula: moving $2,000 out asks **$4,000** rather than $2,000, and the half-saved `save` + `by` reads **Overassigned** rather than On Track once its installment is assigned. Excluding this month makes both come out exactly as written, and it is the rule `availableBefore` and the `upTo` carry-in basis already follow — all three bases now exclude it, which is why the name says `Before`. |
+| 2   | The indicator's bar and On Track read `contributedBefore + assignedCents`, through a `contributedCents` helper.                                                                                                                       | The bar basis has always included this month's Assigned where the ask basis excludes it — exactly the relationship `fundedCents` (`carryIn + assigned`) has to the `upTo` carry-in basis. Without it the bar would empty the moment money was assigned toward the goal.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 3   | `horizonOf`'s three-way fill choice is read through `fillOf` / `fillsWith` helpers instead of an inline conditional, and the "Goal met" copy is gated on `barBasis >= periodTarget` as well as the fill.                              | Three bases do not fit the two-way `funded ? : available` ternary legibly. The explicit met check is redundant today (every path into `funded` with a `contributed` fill is met) but is the kind of thing a later rung in the ladder could silently break.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 > **While this spec is active:** a material change to requirements, design or scope — including
 > feedback on what was actually built — updates the sections above and appends a row here. Skip
@@ -243,7 +246,7 @@ Create this folder with `plan.md`, `shape.md`, `standards.md` and `references.md
 - `targets/types.ts` — D1. Add `"save"` to `TARGET_BEHAVIORS`, `save: ["by", "none"]` to `LEGAL`,
   and the `summarize()` arms. `types.test.ts` covers the matrix going from eight legal pairs to
   ten, and each new rejection.
-- `targets/demand.ts` — D2. `DemandEnvelope` gains `contributedSinceCents`; `pileDemand` picks it
+- `targets/demand.ts` — D2. `DemandEnvelope` gains `contributedBeforeCents`; `pileDemand` picks it
   for `save`, alongside `availableBefore` for `balance` and `carryInCents` for `upTo`. Rewrite the
   module header: the load-bearing claim becomes **three bases, one spread — the behaviour picks
   the basis and the cadence picks the spread**.
@@ -261,7 +264,7 @@ Tests named for the claim they defend, in `targets/demand.test.ts`:
 
 ## Task 3: The fold that supplies it
 
-- `envelope.ts` — `CategoryMonth` gains `contributedSinceCents`, and `BudgetInput`'s category
+- `envelope.ts` — `CategoryMonth` gains `contributedBeforeCents`, and `BudgetInput`'s category
   shape gains an optional `contributionsFrom?: MonthKey`. Keep `buildBudget` **target-agnostic**:
   it answers "how much has gone into this envelope since month M", and knows nothing about goals.
   Absent `contributionsFrom` means from `startMonth`.
@@ -287,7 +290,7 @@ untouched — they are the blast-radius guard.
 ## Task 5: The drawer
 
 `TargetDrawer.tsx` — `behaviorsFor` picks the new option up from `isLegalPairing` for free; add
-the `sentence()` arms. The live preview needs `contributedSinceCents`: use the row's number when a
+the `sentence()` arms. The live preview needs `contributedBeforeCents`: use the row's number when a
 stored target exists (its `since` is preserved on save), and `carryIn + assigned` when there is
 none — which is exactly what a target starting today has contributed, so the preview and the saved
 result agree. This is the same rule `TargetDrawer.tsx:176-182` already applies to `since`, for the
