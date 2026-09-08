@@ -135,6 +135,13 @@ new size" (`user-manual.md`) describes what happens.
   shows the current state.
 - This is why `groupBy` is `string[] | null`: null follows the tab's default, `[]` is the
   user having turned grouping off. Same distinction as `order`, and for the same reason.
+- **A module supplies its buckets, never the walk.** `buildGroupRows` owns everything that
+  must not differ between grids: the sort into bucket order, the header ids (which encode the
+  whole dimension/key path above them, so a collapsed `2026 → March` cannot collapse another
+  year's March), the counts including nested rows, and empty buckets last. A module supplies
+  only `partOf` — which bucket a row is in on a dimension — and how two buckets order. Notes,
+  the Register, Statements and Amazon each carried their own copy of that walk before Accounts
+  would have made a fifth; a bug in the header ids would have had to be found four times.
 - **Notes has two mutually exclusive hierarchies.** Its real parent/child tree is Nested
   mode; column-value grouping is a display hierarchy over Flat mode. Choosing any group
   switches to Flat, and choosing Nested clears grouping. Calendar dimensions run newest
@@ -723,6 +730,7 @@ knowing about:
 | `lib/grid/distinct.ts`          | Distinct values, shared by funnel and builder                           |
 | `lib/settings/grid.ts`          | The persisted shape, its defaults and its migrations                    |
 | `lib/grid/grouping.ts`          | Shared group dimensions and progressive-level state                     |
+| `lib/grid/groupRows.ts`         | The one walk that turns flat rows into nested group headers             |
 | `lib/grid/groupTotals.ts`       | Which track a group header's label spans, and which columns get a total |
 | `lib/tree/slice.ts`             | Outline row slices and tree-tab group headers/counts                    |
 | `lib/notes/grouping.ts`         | Notes column buckets, ordering, and nested group headers                |

@@ -5,6 +5,7 @@ import {
   type CalendarNoteGroupBy,
   type NoteGroupBy,
 } from "@/lib/grid/grouping";
+import { buildGroupRows, type GroupPart } from "@/lib/grid/groupRows";
 import {
   DEFAULT_DATE_FORMAT,
   formatDateKey,
@@ -114,16 +115,7 @@ export function asNoteGroupBy(values: readonly string[]): NoteGroupBy[] {
   return knownGroupBy(values, NOTE_GROUP_BY_VALUES);
 }
 
-type NoteGroupPart = {
-  /** Exact bucket identity. Empty means the field has no value. */
-  key: string;
-  /** Text shown in the group header. */
-  label: string;
-  /** Calendar dimensions sort descending; categorical dimensions sort ascending. */
-  sort: string | number;
-};
-
-function textPart(value: string | null | undefined): NoteGroupPart | null {
+function textPart(value: string | null | undefined): GroupPart | null {
   const label = value?.trim() ?? "";
   return label === "" ? null : { key: label, label, sort: label };
 }
@@ -133,7 +125,7 @@ export function noteGroupPart(
   note: GroupableNote,
   dimension: NoteGroupBy,
   dateFormat: DateFormatId = DEFAULT_DATE_FORMAT,
-): NoteGroupPart | null {
+): GroupPart | null {
   switch (dimension) {
     case "subject":
       return textPart(note.subject);
@@ -173,14 +165,10 @@ function isCalendarDimension(dimension: NoteGroupBy): boolean {
 }
 
 function compareParts(
-  left: NoteGroupPart | null,
-  right: NoteGroupPart | null,
+  left: GroupPart,
+  right: GroupPart,
   dimension: NoteGroupBy,
 ): number {
-  if (left === null && right === null) return 0;
-  if (left === null) return 1;
-  if (right === null) return -1;
-
   if (typeof left.sort === "number" && typeof right.sort === "number") {
     return isCalendarDimension(dimension)
       ? right.sort - left.sort
@@ -203,71 +191,13 @@ export function groupNotes<T extends GroupableNote>(
   dimensions: readonly NoteGroupBy[],
   dateFormat: DateFormatId = DEFAULT_DATE_FORMAT,
 ): GridRow<T>[] {
-  const groupBy = asNoteGroupBy(dimensions);
-  if (groupBy.length === 0) return rows.map(toGridRow);
-
-  const indexed = rows.map((row, index) => ({ row, index }));
-  indexed.sort((left, right) => {
-    for (const dimension of groupBy) {
-      const compared = compareParts(
-        noteGroupPart(left.row.note, dimension, dateFormat),
-        noteGroupPart(right.row.note, dimension, dateFormat),
-        dimension,
-      );
-      if (compared !== 0) return compared;
-    }
-    return left.index - right.index;
+  return buildGroupRows(rows, {
+    dimensions: asNoteGroupBy(dimensions),
+    partOf: (row, dimension) => noteGroupPart(row.note, dimension, dateFormat),
+    emptyLabel: (dimension) => EMPTY_LABELS[dimension],
+    comparePart: compareParts,
+    toGridRow,
   });
-
-  const out: GridRow<T>[] = [];
-  type Frame = {
-    dimension: NoteGroupBy;
-    key: string;
-    rowIndex: number;
-    count: number;
-  };
-  const stack: Frame[] = [];
-
-  function closeTo(depth: number) {
-    while (stack.length > depth) {
-      const frame = stack.pop()!;
-      const header = out[frame.rowIndex];
-      if (header.kind === "group") header.count = frame.count;
-    }
-  }
-
-  for (const { row } of indexed) {
-    for (let level = 0; level < groupBy.length; level++) {
-      const dimension = groupBy[level];
-      const part = noteGroupPart(row.note, dimension, dateFormat);
-      const key = part?.key ?? "";
-      const frame = stack[level];
-
-      if (frame?.dimension === dimension && frame.key === key) continue;
-      closeTo(level);
-
-      const path = [
-        ...stack.map((entry) => `${entry.dimension}:${encodeURIComponent(entry.key)}`),
-        `${dimension}:${encodeURIComponent(key)}`,
-      ];
-      const rowIndex = out.length;
-      out.push({
-        kind: "group",
-        id: `group:${path.join("|")}`,
-        label: part?.label ?? EMPTY_LABELS[dimension],
-        count: 0,
-        depth: level,
-        collapsed: false,
-      });
-      stack.push({ dimension, key, rowIndex, count: 0 });
-    }
-
-    out.push(toGridRow(row));
-    for (const frame of stack) frame.count += 1;
-  }
-
-  closeTo(0);
-  return out;
 }
 
 function toGridRow<T extends GroupableNote>(row: NoteRowView<T>): GridRow<T> {

@@ -3,6 +3,7 @@ import {
   type CalendarNoteGroupBy,
   type GridGroupBy,
 } from "@/lib/grid/grouping";
+import { buildGroupRows, type GroupPart } from "@/lib/grid/groupRows";
 import type { GridRow } from "@/lib/tree/slice";
 import type { AmazonItemListRow } from "./types";
 
@@ -33,8 +34,6 @@ const MONTH_LABELS = [
 export function asAmazonGroupBy(values: readonly string[]): AmazonGroupBy[] {
   return knownGroupBy(values, AMAZON_GROUP_BY_VALUES);
 }
-
-type GroupPart = { key: string; label: string; sort: string | number };
 
 function datePart(
   dateKey: string,
@@ -99,70 +98,24 @@ function toGridRow(row: AmazonItemListRow): GridRow<AmazonItemListRow> {
   return { kind: "node", id: row.id, node: row, depth: 0 };
 }
 
+/**
+ * Nest Amazon item rows under year / month / order / channel headers.
+ *
+ * `partOf` never returns null — an item with no parseable date still belongs to a bucket,
+ * labelled as the empty one — so the shared builder's empty-last ordering never applies
+ * here and the ranks below place those buckets themselves.
+ */
 export function groupAmazonItems(
   rows: readonly AmazonItemListRow[],
   dimensions: readonly string[],
 ): GridRow<AmazonItemListRow>[] {
-  const groupBy = asAmazonGroupBy(dimensions);
-  if (groupBy.length === 0) return rows.map(toGridRow);
-
-  const indexed = rows.map((row, index) => ({ row, index }));
-  indexed.sort((left, right) => {
-    for (const dimension of groupBy) {
-      const compared = compareParts(
-        partOf(left.row, dimension),
-        partOf(right.row, dimension),
-        dimension,
-      );
-      if (compared !== 0) return compared;
-    }
-    return left.index - right.index;
+  return buildGroupRows(rows, {
+    dimensions: asAmazonGroupBy(dimensions),
+    partOf,
+    emptyLabel: (dimension) => EMPTY[dimension],
+    comparePart: compareParts,
+    toGridRow,
   });
-
-  const out: GridRow<AmazonItemListRow>[] = [];
-  type Frame = {
-    dimension: AmazonGroupBy;
-    key: string;
-    rowIndex: number;
-    count: number;
-  };
-  const stack: Frame[] = [];
-
-  function closeTo(depth: number) {
-    while (stack.length > depth) {
-      const frame = stack.pop()!;
-      const header = out[frame.rowIndex];
-      if (header.kind === "group") header.count = frame.count;
-    }
-  }
-
-  for (const { row } of indexed) {
-    for (let level = 0; level < groupBy.length; level++) {
-      const dimension = groupBy[level];
-      const part = partOf(row, dimension);
-      const frame = stack[level];
-      if (frame?.dimension === dimension && frame.key === part.key) continue;
-      closeTo(level);
-      const path = [
-        ...stack.map((entry) => `${entry.dimension}:${encodeURIComponent(entry.key)}`),
-        `${dimension}:${encodeURIComponent(part.key)}`,
-      ];
-      const rowIndex = out.length;
-      out.push({
-        kind: "group",
-        id: `group:${path.join("|")}`,
-        label: part.label,
-        count: 0,
-        depth: level,
-        collapsed: false,
-      });
-      stack.push({ dimension, key: part.key, rowIndex, count: 0 });
-    }
-    for (const frame of stack) frame.count += 1;
-    out.push(toGridRow(row));
-  }
-  closeTo(0);
-  return out;
 }
 
 /** Paid cents of every item under each group header, nested groups included. */

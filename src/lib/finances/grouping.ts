@@ -4,6 +4,7 @@ import {
   type CalendarNoteGroupBy,
   type GridGroupBy,
 } from "@/lib/grid/grouping";
+import { buildGroupRows, type GroupPart } from "@/lib/grid/groupRows";
 import type { GridRow } from "@/lib/tree/slice";
 import { effectiveCategory, effectiveFlow } from "./analytics";
 import { flowLabel } from "./flowLabels";
@@ -68,8 +69,6 @@ export function transactionDatePart(
   };
 }
 
-type GroupPart = { key: string; label: string; sort: string | number };
-
 const EMPTY_LABELS: Record<FinanceGroupBy, string> = {
   year: "(No Year)",
   month: "(No Month)",
@@ -102,13 +101,10 @@ function partOf(row: TransactionListRow, dimension: FinanceGroupBy): GroupPart |
 }
 
 function compareParts(
-  left: GroupPart | null,
-  right: GroupPart | null,
+  left: GroupPart,
+  right: GroupPart,
   dimension: FinanceGroupBy,
 ): number {
-  if (left === null && right === null) return 0;
-  if (left === null) return 1;
-  if (right === null) return -1;
   if (typeof left.sort === "number" && typeof right.sort === "number") {
     // Newest year / month first, so a missing December sits as a gap between January
     // and November rather than buried at the bottom of a flat date sort.
@@ -153,68 +149,11 @@ export function groupTransactions(
   rows: readonly TransactionListRow[],
   dimensions: readonly string[],
 ): GridRow<TransactionListRow>[] {
-  const groupBy = asFinanceGroupBy(dimensions);
-  if (groupBy.length === 0) return rows.map(toGridRow);
-
-  const indexed = rows.map((row, index) => ({ row, index }));
-  indexed.sort((left, right) => {
-    for (const dimension of groupBy) {
-      const compared = compareParts(
-        partOf(left.row, dimension),
-        partOf(right.row, dimension),
-        dimension,
-      );
-      if (compared !== 0) return compared;
-    }
-    return left.index - right.index;
+  return buildGroupRows(rows, {
+    dimensions: asFinanceGroupBy(dimensions),
+    partOf,
+    emptyLabel: (dimension) => EMPTY_LABELS[dimension],
+    comparePart: compareParts,
+    toGridRow,
   });
-
-  const out: GridRow<TransactionListRow>[] = [];
-  type Frame = {
-    dimension: FinanceGroupBy;
-    key: string;
-    rowIndex: number;
-    count: number;
-  };
-  const stack: Frame[] = [];
-
-  function closeTo(depth: number) {
-    while (stack.length > depth) {
-      const frame = stack.pop()!;
-      const header = out[frame.rowIndex];
-      if (header.kind === "group") header.count = frame.count;
-    }
-  }
-
-  for (const { row } of indexed) {
-    for (let level = 0; level < groupBy.length; level++) {
-      const dimension = groupBy[level];
-      const part = partOf(row, dimension);
-      const key = part?.key ?? "";
-      const frame = stack[level];
-      if (frame?.dimension === dimension && frame.key === key) continue;
-      closeTo(level);
-
-      const path = [
-        ...stack.map((entry) => `${entry.dimension}:${encodeURIComponent(entry.key)}`),
-        `${dimension}:${encodeURIComponent(key)}`,
-      ];
-      const rowIndex = out.length;
-      out.push({
-        kind: "group",
-        id: `group:${path.join("|")}`,
-        label: part?.label ?? EMPTY_LABELS[dimension],
-        count: 0,
-        depth: level,
-        collapsed: false,
-      });
-      stack.push({ dimension, key, rowIndex, count: 0 });
-    }
-
-    out.push(toGridRow(row));
-    for (const frame of stack) frame.count += 1;
-  }
-
-  closeTo(0);
-  return out;
 }
