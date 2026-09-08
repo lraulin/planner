@@ -4,7 +4,12 @@ import type { ExternalRef, PriorityLetter } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import { isSettled } from "@/lib/tree/completionCascade";
-import { createNode, createNodeOnce } from "@/lib/tree/mutations";
+import {
+  applyStateTransition,
+  createNode,
+  createNodeOnce,
+  reopenSettledAncestors,
+} from "@/lib/tree/mutations";
 import type { CapturedItem } from "./parse";
 
 /**
@@ -47,10 +52,16 @@ export async function ensureInbox(userId: string): Promise<string> {
 
   if (existing) {
     if (isSettled(existing.state)) {
-      await db
-        .update(nodes)
-        .set({ state: "in_progress", completedAt: null, updatedAt: new Date() })
-        .where(and(eq(nodes.id, existing.id), eq(nodes.userId, userId)));
+      // Through the transition rather than a raw `set`, and with the upward half of the
+      // cascade after it. The inbox is an ordinary project, so it can be dragged under a
+      // goal and settled along with it; reopening only the inbox would leave that goal
+      // finished above live unprocessed work. Upward only, like every other caller that
+      // drives one node's state itself — settling open descendants is the direction that
+      // needs a confirmation, and capture has none.
+      await db.transaction(async (tx) => {
+        await applyStateTransition(tx, userId, existing.id, "in_progress");
+        await reopenSettledAncestors(tx, userId, existing.id, "in_progress");
+      });
     }
     return existing.id;
   }

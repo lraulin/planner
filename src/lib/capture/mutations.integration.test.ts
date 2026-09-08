@@ -5,7 +5,13 @@ import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { loadNodeDetail } from "@/lib/detail/queries";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
-import { createNode, deleteNode, renameNode, setState } from "@/lib/tree/mutations";
+import {
+  createNode,
+  deleteNode,
+  moveNode,
+  renameNode,
+  setState,
+} from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { captureItems, ensureInbox, INBOX_NAME } from "./mutations";
 import { parseCapture, type CapturedItem } from "./parse";
@@ -114,6 +120,31 @@ describeDb("ensureInbox", () => {
 
     await ensureInbox(userId);
     expect((await nodeById(userId, inboxId)).state).toBe("in_progress");
+  });
+
+  // The inbox is an ordinary project, so it can be dragged under a goal — and a goal can be
+  // completed, which settles the inbox with it. Reopening only the inbox then leaves a
+  // finished goal sitting above live unprocessed work, which is the contradiction
+  // `reopenSettledAncestors` exists to prevent.
+  it("reopens the ancestors it was settled with, not just itself", async () => {
+    const areaId = await createNode({ userId, parentId: null, type: "result_area" });
+    const goalId = await createNode({ userId, parentId: areaId, type: "goal" });
+    const inboxId = await ensureInbox(userId);
+    await moveNode({
+      userId,
+      nodeId: inboxId,
+      parentId: goalId,
+      position: { at: "last" },
+    });
+
+    await setState(userId, goalId, "completed");
+    expect((await nodeById(userId, inboxId)).state).toBe("completed");
+
+    await ensureInbox(userId);
+
+    expect((await nodeById(userId, inboxId)).state).toBe("in_progress");
+    expect((await nodeById(userId, goalId)).state).not.toBe("completed");
+    expect((await nodeById(userId, goalId)).completedAt).toBeNull();
   });
 
   // Deleting the inbox is the reset gesture: it takes the unprocessed items with it and
