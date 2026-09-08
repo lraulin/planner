@@ -337,6 +337,21 @@ describe("selectionMoveRoots", () => {
     ]);
   });
 
+  // A drag runs this on every row of the selection, so a `parent_id` ring here freezes the
+  // grid rather than answering wrongly. `walkUp` asks every upward walk in the UI path to
+  // carry the same insurance.
+  it("terminates on a parent cycle instead of walking it forever", () => {
+    const cyclic: Record<string, string | null> = { x: "y", y: "x", z: null };
+    const walk = (id: string) => cyclic[id] ?? null;
+    // A ring member comes back as its own root: nothing selected above it was found before
+    // the walk closed. That is the safe answer — the drag proceeds and `moveNode` refuses
+    // the destination on its own — where looping forever freezes the grid.
+    expect(selectionMoveRoots(new Set(["x"]), ["x", "y", "z"], walk)).toEqual(["x"]);
+    // The other member of the same ring still drops out when its ancestor is selected too.
+    expect(selectionMoveRoots(new Set(["x", "y"]), ["x", "y", "z"], walk)).toEqual([]);
+    expect(selectionMoveRoots(new Set(["z"]), ["x", "y", "z"], walk)).toEqual(["z"]);
+  });
+
   it("drops a child when its ancestor is also selected", () => {
     expect(
       selectionMoveRoots(new Set(["a", "b", "c", "d"]), order, parentIdOf),

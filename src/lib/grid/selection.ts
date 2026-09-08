@@ -257,9 +257,13 @@ export function selectionMoveRoots(
 ): string[] {
   return orderedIds.filter((id) => {
     if (!selectedIds.has(id)) return false;
+    // Cycle insurance, as `walkUp` asks every upward walk in the UI path to carry: a
+    // corrupt import can ring `parent_id`, and this runs on every drag.
+    const seen = new Set<string>([id]);
     let parent = parentIdOf(id);
-    while (parent !== null) {
+    while (parent !== null && !seen.has(parent)) {
       if (selectedIds.has(parent)) return false;
+      seen.add(parent);
       parent = parentIdOf(parent);
     }
     return true;

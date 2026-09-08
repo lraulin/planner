@@ -266,3 +266,26 @@ describe("withRootCategoryFromPlacement", () => {
     expect(withRootCategoryFromPlacement(drop, "g", byId)).toEqual(drop);
   });
 });
+
+describe("resolveDrop on a corrupt tree", () => {
+  // `canNest` can refuse every member of a `parent_id` ring, and the walk's stated
+  // termination argument — "the top level hosts every type" — only holds for a chain that
+  // reaches the top. A ring never does.
+  it("gives up rather than walking a parent cycle forever", () => {
+    const node = (id: string, parentId: string): DropNode => ({
+      id,
+      parentId,
+      type: "task",
+      depth: 1,
+      hasChildren: true,
+      collapsed: false,
+    });
+    const cyclic = new Map<string, DropNode>([
+      ["a", node("a", "b")],
+      ["b", node("b", "a")],
+      ["area", { ...node("area", "b"), type: "result_area" }],
+    ]);
+    // A Result Area can sit under nothing but the top level, which this ring never reaches.
+    expect(resolveDrop("area", "a", "after", cyclic)).toBeNull();
+  });
+});

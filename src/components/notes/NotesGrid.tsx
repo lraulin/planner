@@ -8,6 +8,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { isSelfOrDescendantIn } from "@/lib/tree/ancestry";
 import type { NoteFlag } from "@/db/schema";
 import { INSERT_AFTER, INSERT_CHILD } from "@/lib/commands/chords";
 import type { NoteNode, NotePosition, NoteSummary } from "@/lib/notes/types";
@@ -688,15 +689,6 @@ export function NotesGrid({
   const rowDrag: RowDrag | undefined = useMemo(() => {
     if (!canReorder) return undefined;
 
-    const isInSubtree = (ancestorId: string, candidateId: string | null): boolean => {
-      let current = candidateId;
-      while (current !== null) {
-        if (current === ancestorId) return true;
-        current = byId.get(current)?.parentId ?? null;
-      }
-      return false;
-    };
-
     const rootsOf = (dragIds: readonly string[]) =>
       selectionMoveRoots(
         new Set(dragIds),
@@ -710,7 +702,7 @@ export function NotesGrid({
         if (roots.length === 0) return null;
         if (dragIds.includes(targetId)) return null;
         for (const root of roots) {
-          if (isInSubtree(root, targetId)) return null;
+          if (isSelfOrDescendantIn(byId, root, targetId)) return null;
         }
 
         const target = byId.get(targetId);

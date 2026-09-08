@@ -89,8 +89,13 @@ export function resolveDrop(
   // levels can host it. The walk always terminates: the top level hosts every type.
   const at = zone === "before" ? "before" : "after";
   let anchor: DropNode | null = target;
+  // "The top level hosts every type" terminates the walk only if the chain reaches the top.
+  // A `parent_id` ring never does, and `canNest` can refuse every member of it forever —
+  // a synchronous loop, so it takes the tab rather than just the answer.
+  const seenAnchors = new Set<string>();
 
-  while (anchor) {
+  while (anchor && !seenAnchors.has(anchor.id)) {
+    seenAnchors.add(anchor.id);
     const parent: DropNode | null = anchor.parentId
       ? (byId.get(anchor.parentId) ?? null)
       : null;
