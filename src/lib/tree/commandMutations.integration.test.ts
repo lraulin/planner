@@ -285,6 +285,62 @@ describeDb("shared command mutations", () => {
     expect(row.type).toBe("project");
   });
 
+  /**
+   * `planNodeConversion` puts state, deferred date and completion time in
+   * `retainedFields` for every conversion that does not involve a Result Area, and the
+   * dialog lists nothing under "These details will be cleared" — so nothing tells the user
+   * a conversion resets the lifecycle. Goal ↔ Dream is the plainest case: it flips one
+   * boolean on the detail row and is described as discarding nothing at all.
+   */
+  it("keeps state, completion and shelf across a conversion between stateful types", async () => {
+    const goal = await createNode({
+      userId,
+      parentId: null,
+      type: "goal",
+      name: "Finished goal",
+    });
+    await setState(userId, goal, "completed");
+    const before = (
+      await db
+        .select()
+        .from(nodes)
+        .where(and(eq(nodes.userId, userId), eq(nodes.id, goal)))
+    )[0];
+    expect(before.state).toBe("completed");
+    expect(before.completedAt).not.toBeNull();
+
+    await convertNode(userId, goal, "dream");
+
+    const [after] = await db
+      .select()
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), eq(nodes.id, goal)));
+    expect(after.state).toBe("completed");
+    expect(after.completedAt).not.toBeNull();
+  });
+
+  it("keeps a shelved task shelved when it becomes a project", async () => {
+    const area = await createNode({ userId, parentId: null, type: "result_area" });
+    const project = await createNode({ userId, parentId: area, type: "project" });
+    const task = await createNode({
+      userId,
+      parentId: project,
+      type: "task",
+      name: "Shelved",
+    });
+    await setState(userId, task, "postponed");
+
+    await convertNode(userId, task, "project");
+
+    const [after] = await db
+      .select()
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), eq(nodes.id, task)));
+    // Projects can be shelved — `deferred_date` lives on `nodes` precisely so they can
+    // (`specs/2026-08-01-2145-deferred-date-model`), so becoming one must not un-shelve it.
+    expect(after.state).toBe("postponed");
+  });
+
   it("keeps a Goal's detail row when only the Dream flag changes", async () => {
     const goal = await createNode({
       userId,

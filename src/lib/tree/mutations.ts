@@ -587,13 +587,25 @@ export async function convertNode(
         .where(and(eq(nodeItems.userId, userId), eq(nodeItems.nodeId, nodeId)));
     }
 
+    // Lifecycle only moves when a Result Area is on one side of the conversion, which is
+    // exactly what `planNodeConversion` tells the user: it lists state, deferred date and
+    // completion time under `discardedFields` when the target is a Result Area, under
+    // `retainedFields` otherwise, and the dialog warns only in the first case. Resetting
+    // unconditionally un-completed a finished Goal on its way to a Dream — a conversion
+    // described as discarding nothing — and un-shelved a postponed task that became a
+    // project, which `deferred_date` moved onto `nodes` specifically to allow.
+    const lifecycle =
+      targetType === "result_area"
+        ? { state: null, completedAt: null, deferredDate: null }
+        : source.type === "result_area"
+          ? { state: initialStateForType(targetType), completedAt: null }
+          : {};
+
     await tx
       .update(nodes)
       .set({
         type: targetType,
-        state: initialStateForType(targetType),
-        completedAt: null,
-        deferredDate: null,
+        ...lifecycle,
         parentId: placement.parentId,
         sortKey,
         updatedAt: new Date(),
