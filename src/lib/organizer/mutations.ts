@@ -18,7 +18,10 @@ import { createAppointment } from "@/lib/schedule/mutations";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { assertCanNest } from "@/lib/tree/hierarchy";
-import { applyStateTransition } from "@/lib/tree/mutations";
+import {
+  applyStateTransition,
+  assignPriorityAmongSiblings,
+} from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import type { NodeType } from "@/db/schema";
 import { organizerOutcomeError, type OrganizerOutcome } from "./types";
@@ -171,14 +174,18 @@ async function organizeAsTask(
         type: "project",
         state: "not_started",
         name: outcome.newProject.name.trim(),
-        priorityLetter: outcome.newProject.priorityLetter,
-        priorityRank: outcome.newProject.priorityLetter
-          ? outcome.newProject.priorityRank
-          : null,
         sortKey: await endNodeSortKey(tx, userId, parentId),
       })
       .returning({ id: nodes.id });
     await tx.insert(projectDetails).values({ nodeId: project.id });
+    await assignPriorityAmongSiblings(
+      tx,
+      userId,
+      project.id,
+      parentId,
+      outcome.newProject.priorityLetter,
+      outcome.newProject.priorityRank,
+    );
     parentId = project.id;
   }
 
@@ -188,8 +195,6 @@ async function organizeAsTask(
       parentId,
       sortKey: await endNodeSortKey(tx, userId, parentId),
       name: outcome.name,
-      priorityLetter: outcome.priorityLetter,
-      priorityRank: outcome.priorityLetter ? outcome.priorityRank : null,
       deadline: calendarDay(outcome.deadline),
       notes: outcome.notes,
       state: "not_started",
@@ -198,6 +203,16 @@ async function organizeAsTask(
       updatedAt: new Date(),
     })
     .where(and(eq(nodes.id, item.id), eq(nodes.userId, userId)));
+  // After the move, so the pool this ranks against is the destination's children and
+  // includes the row itself.
+  await assignPriorityAmongSiblings(
+    tx,
+    userId,
+    item.id,
+    parentId,
+    outcome.priorityLetter,
+    outcome.priorityRank,
+  );
   await tx
     .update(taskDetails)
     .set({
@@ -245,8 +260,6 @@ async function organizeAsProject(
       parentId: outcome.parentProjectId,
       sortKey: await endNodeSortKey(tx, userId, outcome.parentProjectId),
       name: outcome.name,
-      priorityLetter: outcome.priorityLetter,
-      priorityRank: outcome.priorityLetter ? outcome.priorityRank : null,
       deadline: calendarDay(outcome.deadline),
       notes: outcome.notes,
       state: "not_started",
@@ -255,6 +268,14 @@ async function organizeAsProject(
       updatedAt: new Date(),
     })
     .where(and(eq(nodes.id, item.id), eq(nodes.userId, userId)));
+  await assignPriorityAmongSiblings(
+    tx,
+    userId,
+    item.id,
+    outcome.parentProjectId,
+    outcome.priorityLetter,
+    outcome.priorityRank,
+  );
   await tx.insert(projectDetails).values({
     nodeId: item.id,
     contexts: outcome.contexts,

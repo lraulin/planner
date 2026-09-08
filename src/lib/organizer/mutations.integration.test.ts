@@ -12,7 +12,7 @@ import { and, count, eq } from "drizzle-orm";
 import { captureItems } from "@/lib/capture/mutations";
 import { parseCapture } from "@/lib/capture/parse";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { createNode } from "@/lib/tree/mutations";
+import { assignPriorityAmongSiblings, createNode } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { organizerQueue } from "./queue";
@@ -102,16 +102,20 @@ describeDb("organizeInboxItem", () => {
     const outline = await loadOutline(userId);
     const item = outline.find((node) => node.id === itemId)!;
     const project = outline.find((node) => node.id === item.parentId)!;
+    // The requested ranks were A3 and B2, and both densify to 1: each is the only row
+    // carrying its letter in its own sibling group, and
+    // `specs/2026-08-19-0912-always-ranked-priorities` makes ranks dense 1..n, so an A3
+    // with no A1 or A2 above it is not a state the outline can hold.
     expect(project).toMatchObject({
       type: "project",
       name: "New outcome",
       priorityLetter: "A",
-      priorityRank: 3,
+      priorityRank: 1,
     });
     expect(item).toMatchObject({
       name: "Filed task",
       priorityLetter: "B",
-      priorityRank: 2,
+      priorityRank: 1,
       effortMinutes: 45,
       contexts: ["@Home"],
       notes: "Filed deliberately",
@@ -383,5 +387,98 @@ describeDb("organizeInboxItem", () => {
     expect((await loadOutline(userId)).some((node) => node.id === ownerItem)).toBe(
       true,
     );
+  });
+});
+
+/**
+ * `specs/2026-08-19-0912-always-ranked-priorities`: within one parent and one letter,
+ * ranks are dense 1..n and unique. The organizer used to write the letter and rank
+ * verbatim, which is the one thing `assignPriorityAmongSiblings` exists to stop.
+ */
+describeDb("organizer priorities keep the sibling group ranked", () => {
+  let userId: string;
+  let projectId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+    const areaId = await createNode({ userId, parentId: null, type: "result_area" });
+    projectId = await createNode({ userId, parentId: areaId, type: "project" });
+  });
+
+  async function childrenOf(parentId: string) {
+    return (await loadOutline(userId))
+      .filter((node) => node.parentId === parentId)
+      .map((node) => [node.name, node.priorityLetter, node.priorityRank] as const);
+  }
+
+  it("does not let two filed tasks share one letter and rank", async () => {
+    const captured = await captureItems({
+      userId,
+      items: parseCapture("One\nTwo"),
+    });
+
+    for (const [index, nodeId] of captured.nodeIds.entries()) {
+      await organizeInboxItem(
+        userId,
+        nodeId,
+        taskOutcome({
+          name: `Filed ${index}`,
+          destinationProjectId: projectId,
+          priorityLetter: "A",
+          priorityRank: 1,
+        }),
+      );
+    }
+
+    const ranks = (await childrenOf(projectId))
+      .filter(([, letter]) => letter === "A")
+      .map(([, , rank]) => rank)
+      .sort();
+    expect(ranks).toEqual([1, 2]);
+  });
+
+  it("ranks a filed project among the destination's children", async () => {
+    const first = await createNode({
+      userId,
+      parentId: projectId,
+      type: "task",
+    });
+    await assignPriorityAmongSiblings(db, userId, first, projectId, "A", 1);
+
+    const captured = await captureItems({ userId, items: parseCapture("Second") });
+    await organizeInboxItem(
+      userId,
+      captured.nodeIds[0],
+      taskOutcome({
+        name: "Also A1",
+        destinationProjectId: projectId,
+        priorityLetter: "A",
+        priorityRank: 1,
+      }),
+    );
+
+    const aRanks = (await childrenOf(projectId))
+      .filter(([, letter]) => letter === "A")
+      .map(([, , rank]) => rank)
+      .sort();
+    expect(aRanks).toEqual([1, 2]);
+  });
+
+  it("never leaves a bare letter with no rank", async () => {
+    const captured = await captureItems({ userId, items: parseCapture("Bare") });
+    await organizeInboxItem(
+      userId,
+      captured.nodeIds[0],
+      taskOutcome({
+        name: "Bare",
+        destinationProjectId: projectId,
+        priorityLetter: "C",
+        priorityRank: null,
+      }),
+    );
+
+    const [[, letter, rank]] = await childrenOf(projectId);
+    expect(letter).toBe("C");
+    expect(rank).not.toBeNull();
   });
 });
