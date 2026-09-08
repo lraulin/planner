@@ -8,10 +8,18 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { createNode } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { createNodeItem, saveNodeDetail } from "@/lib/detail/mutations";
-import { loadNodeDetail } from "@/lib/detail/queries";
+import { listResultAreas, loadNodeDetail } from "@/lib/detail/queries";
 import { loadWishList } from "@/lib/detail/wishQueries";
 import { createNote } from "@/lib/notes/mutations";
-import { loadDiarySummaries, loadNotes, loadNotesForNode } from "@/lib/notes/queries";
+import {
+  loadDiarySummaries,
+  loadNote,
+  loadNoteSummaries,
+  loadNoteSummary,
+  loadNotes,
+  loadNotesForNode,
+  noteOwnedBy,
+} from "@/lib/notes/queries";
 import { createMetric, createMetricEntry } from "@/lib/metrics/mutations";
 import {
   getMetricDetail,
@@ -24,6 +32,7 @@ import {
   getAppointment,
   getTimeChart,
   listAppointmentsInRange,
+  listTimeChartSummaries,
   listTimeCharts,
   loadSchedule,
 } from "@/lib/schedule/queries";
@@ -40,11 +49,13 @@ import { getResourceDetail, listResources } from "@/lib/resources/queries";
 import { importAmazonSlim } from "@/lib/amazon/import";
 import { persistAmazonSnapshot } from "@/lib/amazon/reconcile";
 import {
+  countAmazonItems,
   getAmazonCharge,
   getAmazonItem,
   getAmazonSubscription,
   listAmazonCharges,
   listAmazonItems,
+  listAmazonItemsByIds,
   listAmazonSubscriptions,
 } from "@/lib/amazon/queries";
 import { SNAPSHOT_SOURCE, SNAPSHOT_VERSION } from "@/lib/amazon/snapshot";
@@ -66,8 +77,13 @@ import {
   listPaymentResolutions,
   listStatements,
   listTransactions,
+  listTransactionsByIds,
   transactionTotalCents,
 } from "@/lib/finances/queries";
+import {
+  listFinanceAuditEvents,
+  loadFinanceAuditEvent,
+} from "@/lib/finances/audit/queries";
 import { linkAccount, saveConnection } from "@/lib/banksync/mutations";
 import {
   existingRowsInWindow,
@@ -106,7 +122,7 @@ import {
   plannedNodeIds,
 } from "@/lib/day/queries";
 import { writeUserSetting } from "@/lib/settings/mutations";
-import { loadUserSettings } from "@/lib/settings/queries";
+import { loadUserSettings, readSetting } from "@/lib/settings/queries";
 import { createJob } from "@/lib/jobs/mutations";
 import { getJobDetail, listJobDates, listJobs } from "@/lib/jobs/queries";
 import { createResidence } from "@/lib/residences/mutations";
@@ -541,6 +557,15 @@ describeDb("a second user reads none of the first user's rows", () => {
     // Reachable by id from a shared link, so it must refuse by user and not only by parent.
     expect(await loadNotesForNode(intruder, owner.taskId)).toEqual([]);
     expect(await loadDiarySummaries(intruder)).toEqual([]);
+    expect(await loadNoteSummaries(intruder)).toEqual([]);
+    // The three single-note reads are the ones a guessed `?note=` reaches. `noteOwnedBy`
+    // is the ownership gate itself, so it is the one that must never answer from the id
+    // alone.
+    expect(await loadNote(intruder, owner.noteId)).toBeNull();
+    expect(await loadNoteSummary(intruder, owner.noteId)).toBeNull();
+    expect(await noteOwnedBy(intruder, owner.noteId)).toBe(false);
+    expect(await noteOwnedBy(owner.userId, owner.noteId)).toBe(true);
+    expect(await loadNote(owner.userId, owner.noteId)).not.toBeNull();
   });
 
   it("the wish list, which reads node_items directly", async () => {
@@ -562,6 +587,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listAppointmentsInRange(intruder, RANGE_FROM, RANGE_TO)).toEqual([]);
     expect(await listTimeCharts(intruder)).toEqual([]);
     expect(await getTimeChart(intruder, owner.timeChartId)).toBeNull();
+    expect(await listTimeChartSummaries(intruder)).toEqual([]);
 
     // The one query that assembles a whole page rather than a table: appointments, charts
     // and the project tree all reach it through separate calls.
@@ -606,6 +632,20 @@ describeDb("a second user reads none of the first user's rows", () => {
     ).toContain(owner.amazonSubscriptionId);
   });
 
+  it("amazon reads that take an id the intruder can guess", async () => {
+    expect(await listAmazonItemsByIds(intruder, [owner.amazonItemId])).toEqual([]);
+    // A count is a read too: it says how much the owner has bought without handing over
+    // a row for the row-level checks above to catch.
+    expect(await countAmazonItems(intruder)).toBe(0);
+    // Both come back for the owner, so neither passes on an empty table.
+    expect(
+      (await listAmazonItemsByIds(owner.userId, [owner.amazonItemId])).map(
+        (row) => row.id,
+      ),
+    ).toContain(owner.amazonItemId);
+    expect(await countAmazonItems(owner.userId)).toBeGreaterThan(0);
+  });
+
   it("finance accounts and transactions", async () => {
     expect(await listAccounts(intruder)).toEqual([]);
     expect(await listTransactions(intruder)).toEqual([]);
@@ -626,6 +666,25 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(
       await transactionTotalCents(intruder, { accountId: owner.financeAccountId }),
     ).toBe(0);
+  });
+
+  it("finance reads that take a transaction id, and the audit trail", async () => {
+    expect(await listTransactionsByIds(intruder, [owner.financeTransactionId])).toEqual(
+      [],
+    );
+    expect(
+      (await listTransactionsByIds(owner.userId, [owner.financeTransactionId])).map(
+        (row) => row.id,
+      ),
+    ).toContain(owner.financeTransactionId);
+
+    // Audit events quote the before/after of every field they changed, so a dropped userId
+    // here hands over the amounts even where the transaction read refuses.
+    const events = await listFinanceAuditEvents(owner.userId);
+    expect(events.length).toBeGreaterThan(0);
+    expect(await listFinanceAuditEvents(intruder)).toEqual([]);
+    expect(await loadFinanceAuditEvent(intruder, events[0].id)).toBeNull();
+    expect(await loadFinanceAuditEvent(owner.userId, events[0].id)).not.toBeNull();
   });
 
   it("bank sync connections, links and their sync windows", async () => {
@@ -716,6 +775,18 @@ describeDb("a second user reads none of the first user's rows", () => {
 
   it("stored view settings", async () => {
     expect(await loadUserSettings(intruder)).toEqual({});
+    // The single-scope read is the one every server component calls; the whole-map read
+    // being scoped says nothing about it.
+    expect(await readSetting(intruder, "shell")).toBeUndefined();
+    expect(await readSetting(owner.userId, "shell")).toEqual({
+      v: 2,
+      sidebarCollapsed: true,
+    });
+  });
+
+  it("the result-area picker every detail form loads", async () => {
+    expect(await listResultAreas(intruder)).toEqual([]);
+    expect((await listResultAreas(owner.userId)).length).toBeGreaterThan(0);
   });
 
   /**
