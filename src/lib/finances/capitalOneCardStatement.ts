@@ -1,4 +1,5 @@
 import { parseAmountCents } from "./money";
+import { dateKeyFromParts } from "@/lib/schedule/geometry";
 import { looksLikeChaseCreditStatement } from "./chaseStatement";
 import { looksLikeCapitalOne360Statement } from "./statement";
 import {
@@ -88,25 +89,10 @@ export function capitalOneCardAccountKeyFromFileName(fileName: string): string |
   return named ? named[1] : null;
 }
 
-function isRealDate(year: number, month: number, day: number): boolean {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const d = new Date(Date.UTC(year, month - 1, day));
-  return (
-    d.getUTCFullYear() === year &&
-    d.getUTCMonth() === month - 1 &&
-    d.getUTCDate() === day
-  );
-}
-
-function toDateKey(year: number, month: number, day: number): string | null {
-  if (!isRealDate(year, month, day)) return null;
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
 function parseNamedDate(raw: string): string | null {
   const match = NAMED_DATE.exec(raw);
   if (!match) return null;
-  return toDateKey(Number(match[3]), MONTHS[match[1]], Number(match[2]));
+  return dateKeyFromParts(Number(match[3]), MONTHS[match[1]], Number(match[2]));
 }
 
 type Period = { start: string; end: string; startYear: number; endYear: number };
@@ -114,8 +100,8 @@ type Period = { start: string; end: string; startYear: number; endYear: number }
 function parsePeriod(text: string): Period | null {
   const match = PERIOD.exec(text);
   if (!match) return null;
-  const start = toDateKey(Number(match[3]), MONTHS[match[1]], Number(match[2]));
-  const end = toDateKey(Number(match[6]), MONTHS[match[4]], Number(match[5]));
+  const start = dateKeyFromParts(Number(match[3]), MONTHS[match[1]], Number(match[2]));
+  const end = dateKeyFromParts(Number(match[6]), MONTHS[match[4]], Number(match[5]));
   if (!start || !end) return null;
   return {
     start,
@@ -127,15 +113,15 @@ function parsePeriod(text: string): Period | null {
 
 function resolveLedgerDate(month: number, day: number, period: Period): string | null {
   if (period.startYear === period.endYear) {
-    return toDateKey(period.startYear, month, day);
+    return dateKeyFromParts(period.startYear, month, day);
   }
   const startMonth = Number(period.start.slice(5, 7));
   const endMonth = Number(period.end.slice(5, 7));
-  if (month === startMonth) return toDateKey(period.startYear, month, day);
-  if (month === endMonth) return toDateKey(period.endYear, month, day);
-  if (month > startMonth) return toDateKey(period.startYear, month, day);
-  if (month < endMonth) return toDateKey(period.endYear, month, day);
-  return toDateKey(period.startYear, month, day);
+  if (month === startMonth) return dateKeyFromParts(period.startYear, month, day);
+  if (month === endMonth) return dateKeyFromParts(period.endYear, month, day);
+  if (month > startMonth) return dateKeyFromParts(period.startYear, month, day);
+  if (month < endMonth) return dateKeyFromParts(period.endYear, month, day);
+  return dateKeyFromParts(period.startYear, month, day);
 }
 
 /**

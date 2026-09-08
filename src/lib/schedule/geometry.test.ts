@@ -3,9 +3,11 @@ import {
   asCalendarDay,
   atMinutes,
   contrastText,
+  dateKeyFromParts,
   daysBetweenKeys,
   floatingDateTime,
   fromDateKey,
+  isRealCalendarDate,
   localDateKey,
   minutesOfDay,
   normalizeTimeRange,
@@ -168,5 +170,43 @@ describe("contrastText", () => {
     expect(contrastText("#90ee90")).toBe("#1b1d23");
     expect(contrastText("#c8e0f0")).toBe("#1b1d23");
     expect(contrastText("#fff")).toBe("#1b1d23");
+  });
+});
+
+describe("isRealCalendarDate / dateKeyFromParts", () => {
+  it("accepts a day that exists and rejects one that does not", () => {
+    expect(isRealCalendarDate(2026, 2, 28)).toBe(true);
+    expect(isRealCalendarDate(2026, 2, 29)).toBe(false);
+    expect(isRealCalendarDate(2024, 2, 29)).toBe(true);
+    expect(isRealCalendarDate(2026, 4, 31)).toBe(false);
+    expect(isRealCalendarDate(2026, 13, 1)).toBe(false);
+    expect(isRealCalendarDate(2026, 0, 1)).toBe(false);
+  });
+
+  // `Date.UTC(26, …)` means 1926, which is how a two-digit year silently imports as the
+  // wrong century. The round-trip is what catches it.
+  it("rejects a two-digit year rather than reading it as 19xx", () => {
+    expect(isRealCalendarDate(26, 1, 15)).toBe(false);
+  });
+
+  it("rejects non-integers, including NaN from a failed parse", () => {
+    expect(isRealCalendarDate(Number("x"), 1, 1)).toBe(false);
+    expect(isRealCalendarDate(2026, 1, 1.5)).toBe(false);
+  });
+
+  it("pads every part of the key", () => {
+    expect(dateKeyFromParts(2026, 1, 5)).toBe("2026-01-05");
+    expect(dateKeyFromParts(2026, 12, 31)).toBe("2026-12-31");
+  });
+
+  it("returns null for a day that does not exist", () => {
+    expect(dateKeyFromParts(2026, 2, 30)).toBe(null);
+  });
+
+  // The parts never become an instant, so no importer can shift the day it was handed.
+  it("agrees with the stored-date round trip in a zone behind UTC", () => {
+    const key = dateKeyFromParts(2026, 8, 1);
+    expect(key).toBe("2026-08-01");
+    expect(toDateKey(fromDateKey(key!))).toBe("2026-08-01");
   });
 });

@@ -1,4 +1,5 @@
 import { parseAmountCents } from "./money";
+import { dateKeyFromParts, isRealCalendarDate } from "@/lib/schedule/geometry";
 import type { FinanceFeed } from "./types";
 
 export const PLANNER_BANK_SNAPSHOT_HEADER = "# planner-bank-snapshot v1";
@@ -126,7 +127,7 @@ export function parseBankDate(raw: string): string | null {
   const trimmed = raw.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     const [year, month, day] = trimmed.split("-").map(Number);
-    return isRealDate(year, month, day) ? trimmed : null;
+    return isRealCalendarDate(year, month, day) ? trimmed : null;
   }
 
   const weekday = /^[A-Za-z]{3}, ([A-Za-z]{3}) (\d{1,2}), (\d{4})$/.exec(trimmed);
@@ -140,9 +141,7 @@ export function parseBankDate(raw: string): string | null {
   const month = Number(slash[1]);
   const day = Number(slash[2]);
   const year = Number(slash[3]);
-  return isRealDate(year, month, day)
-    ? `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
-    : null;
+  return dateKeyFromParts(year, month, day);
 }
 
 function fromMonthDayYear(
@@ -154,18 +153,7 @@ function fromMonthDayYear(
   if (!month) return null;
   const year = Number(yearRaw);
   const day = Number(dayRaw);
-  if (!isRealDate(year, Number(month), day)) return null;
-  return `${year}-${month}-${String(day).padStart(2, "0")}`;
-}
-
-function isRealDate(year: number, month: number, day: number): boolean {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const probe = new Date(Date.UTC(year, month - 1, day, 12));
-  return (
-    probe.getUTCFullYear() === year &&
-    probe.getUTCMonth() === month - 1 &&
-    probe.getUTCDate() === day
-  );
+  return dateKeyFromParts(year, Number(month), day);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

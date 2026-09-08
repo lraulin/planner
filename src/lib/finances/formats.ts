@@ -1,4 +1,5 @@
 import type { FinanceAccountKind } from "@/db/schema";
+import { dateKeyFromParts } from "@/lib/schedule/geometry";
 import { parseCsvRows } from "@/lib/csv/text";
 import { parseAmountCents } from "./money";
 import type {
@@ -81,20 +82,6 @@ function expandTwoDigitYear(yy: number): number {
   return yy <= 68 ? 2000 + yy : 1900 + yy;
 }
 
-function isRealDate(year: number, month: number, day: number): boolean {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const d = new Date(Date.UTC(year, month - 1, day));
-  return (
-    d.getUTCFullYear() === year &&
-    d.getUTCMonth() === month - 1 &&
-    d.getUTCDate() === day
-  );
-}
-
-function toDateKey(year: number, month: number, day: number): string {
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
 /**
  * Parse the three date shapes these exports use into a `YYYY-MM-DD` calendar day:
  * `MM/DD/YYYY` (Chase), `MM/DD/YY` (Capital One bank), `YYYY-MM-DD` (Capital One card).
@@ -112,7 +99,7 @@ export function parseCsvDate(raw: string): string | null {
     const year = Number(y);
     const month = Number(m);
     const day = Number(d);
-    return isRealDate(year, month, day) ? toDateKey(year, month, day) : null;
+    return dateKeyFromParts(year, month, day);
   }
 
   const slashed = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(text);
@@ -121,7 +108,7 @@ export function parseCsvDate(raw: string): string | null {
     const year = y.length === 2 ? expandTwoDigitYear(Number(y)) : Number(y);
     const month = Number(m);
     const day = Number(d);
-    return isRealDate(year, month, day) ? toDateKey(year, month, day) : null;
+    return dateKeyFromParts(year, month, day);
   }
 
   return null;

@@ -1,4 +1,5 @@
 import type { FinanceAccountKind } from "@/db/schema";
+import { dateKeyFromParts } from "@/lib/schedule/geometry";
 import { parseAmountCents } from "./money";
 import type {
   ParsedAccount,
@@ -72,21 +73,6 @@ export function looksLikeCapitalOne360Statement(text: string): boolean {
   );
 }
 
-function isRealDate(year: number, month: number, day: number): boolean {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const d = new Date(Date.UTC(year, month - 1, day));
-  return (
-    d.getUTCFullYear() === year &&
-    d.getUTCMonth() === month - 1 &&
-    d.getUTCDate() === day
-  );
-}
-
-function toDateKey(year: number, month: number, day: number): string | null {
-  if (!isRealDate(year, month, day)) return null;
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
 function yearForMonth(month: number, period: Period): number {
   if (month === period.startMonth) return period.startYear;
   if (month === period.endMonth) return period.endYear;
@@ -102,7 +88,7 @@ function resolveDate(
   const month = MONTHS[monthName];
   const day = Number(dayText);
   if (!month) return null;
-  return toDateKey(yearForMonth(month, period), month, day);
+  return dateKeyFromParts(yearForMonth(month, period), month, day);
 }
 
 function parsePeriod(text: string): Period | null {
@@ -290,8 +276,12 @@ function finishAccount(
         message: `${fileName} ${working.meta.name}: opening plus activity does not equal the statement closing balance.`,
       });
     }
-    const periodStart = toDateKey(period.startYear, period.startMonth, period.startDay);
-    const periodEnd = toDateKey(period.endYear, period.endMonth, period.endDay);
+    const periodStart = dateKeyFromParts(
+      period.startYear,
+      period.startMonth,
+      period.startDay,
+    );
+    const periodEnd = dateKeyFromParts(period.endYear, period.endMonth, period.endDay);
     if (periodStart && periodEnd) {
       statements.push({
         externalKey: working.meta.externalKey,

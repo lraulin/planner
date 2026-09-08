@@ -1,4 +1,5 @@
 import { parseCsvDate } from "./formats";
+import { dateKeyFromParts } from "@/lib/schedule/geometry";
 import { parseAmountCents } from "./money";
 import {
   SUPPORTED_STATEMENT_PDFS,
@@ -79,21 +80,6 @@ export function chaseAccountKeyFromFileName(fileName: string): string | null {
   return chase ? chase[1] : null;
 }
 
-function isRealDate(year: number, month: number, day: number): boolean {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const d = new Date(Date.UTC(year, month - 1, day));
-  return (
-    d.getUTCFullYear() === year &&
-    d.getUTCMonth() === month - 1 &&
-    d.getUTCDate() === day
-  );
-}
-
-function toDateKey(year: number, month: number, day: number): string | null {
-  if (!isRealDate(year, month, day)) return null;
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
 type Period = { start: string; end: string; startYear: number; endYear: number };
 
 function parsePeriod(text: string): Period | null {
@@ -126,12 +112,12 @@ function resolveLedgerDate(mmDd: string, period: Period): string | null {
   if (period.startYear !== period.endYear) {
     const startMonth = Number(period.start.slice(5, 7));
     const endMonth = Number(period.end.slice(5, 7));
-    if (month === startMonth) return toDateKey(period.startYear, month, day);
-    if (month === endMonth) return toDateKey(period.endYear, month, day);
-    if (month > startMonth) return toDateKey(period.startYear, month, day);
-    if (month < endMonth) return toDateKey(period.endYear, month, day);
+    if (month === startMonth) return dateKeyFromParts(period.startYear, month, day);
+    if (month === endMonth) return dateKeyFromParts(period.endYear, month, day);
+    if (month > startMonth) return dateKeyFromParts(period.startYear, month, day);
+    if (month < endMonth) return dateKeyFromParts(period.endYear, month, day);
   }
-  return toDateKey(year, month, day);
+  return dateKeyFromParts(year, month, day);
 }
 
 /** Strip the location / phone / Amazon-bill suffix the CSV never has. */

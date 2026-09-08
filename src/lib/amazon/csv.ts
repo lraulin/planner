@@ -1,4 +1,5 @@
 import { parseCsvRows } from "@/lib/csv/text";
+import { dateKeyFromParts, isRealCalendarDate } from "@/lib/schedule/geometry";
 import { parseAmountCents } from "@/lib/finances/money";
 import { toDateKey } from "@/lib/schedule/geometry";
 
@@ -65,7 +66,11 @@ export function amazonCalendarDay(raw: string | undefined): string {
   const value = amazonBlank(raw);
   if (!value) return "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return isRealDate(value.slice(0, 4), value.slice(5, 7), value.slice(8, 10))
+    return isRealCalendarDate(
+      Number(value.slice(0, 4)),
+      Number(value.slice(5, 7)),
+      Number(value.slice(8, 10)),
+    )
       ? value
       : "";
   }
@@ -80,9 +85,7 @@ export function amazonCalendarDay(raw: string | undefined): string {
 
   const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
   if (slash) {
-    const month = slash[1].padStart(2, "0");
-    const day = slash[2].padStart(2, "0");
-    return isRealDate(slash[3], month, day) ? `${slash[3]}-${month}-${day}` : "";
+    return dateKeyFromParts(Number(slash[3]), Number(slash[1]), Number(slash[2])) ?? "";
   }
 
   if (/^\d{4}-\d{2}-\d{2}T/.test(value) || /Z$/i.test(value)) {
@@ -94,24 +97,7 @@ export function amazonCalendarDay(raw: string | undefined): string {
 function fromMonthDayYear(monthRaw: string, dayRaw: string, yearRaw: string): string {
   const month = MONTHS[monthRaw.toLowerCase()];
   if (!month) return "";
-  const day = String(Number(dayRaw)).padStart(2, "0");
-  return isRealDate(yearRaw, month, day) ? `${yearRaw}-${month}-${day}` : "";
-}
-
-function isRealDate(yearRaw: string, monthRaw: string, dayRaw: string): boolean {
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  const day = Number(dayRaw);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-    return false;
-  }
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const probe = new Date(Date.UTC(year, month - 1, day, 12));
-  return (
-    probe.getUTCFullYear() === year &&
-    probe.getUTCMonth() === month - 1 &&
-    probe.getUTCDate() === day
-  );
+  return dateKeyFromParts(Number(yearRaw), Number(month), Number(dayRaw)) ?? "";
 }
 
 /** Last four from `Visa - 9910` or `Gift Certificate/Card and Visa - 4903`. */

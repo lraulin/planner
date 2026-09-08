@@ -38,6 +38,45 @@ export function toDateKey(date: Date): string {
 }
 
 /**
+ * Whether `year`/`month`/`day` name a day that exists — Feb 30 and Apr 31 do not.
+ *
+ * Every file importer parses a date the bank chose to print, so each one has to reject
+ * what its own regex will happily capture. The round-trip through `Date.UTC` is what
+ * catches the overflow: JavaScript rolls Feb 30 forward to Mar 2 rather than failing, so
+ * the only way to know the input was real is to read the components back. Two-digit years
+ * are rejected by the same check — `Date.UTC(26, …)` means 1926.
+ *
+ * `month` is 1–12. Non-integers (including `NaN` from a failed `Number(...)`) are false.
+ */
+export function isRealCalendarDate(year: number, month: number, day: number): boolean {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const probe = new Date(Date.UTC(year, month - 1, day, 12));
+  return (
+    probe.getUTCFullYear() === year &&
+    probe.getUTCMonth() === month - 1 &&
+    probe.getUTCDate() === day
+  );
+}
+
+/**
+ * A `YYYY-MM-DD` key from calendar components, or null when they do not name a real day.
+ *
+ * String-to-string by way of numbers: the parts never become an instant, so no importer
+ * can turn an August 1 into a July 31 on its way to a key.
+ */
+export function dateKeyFromParts(
+  year: number,
+  month: number,
+  day: number,
+): string | null {
+  if (!isRealCalendarDate(year, month, day)) return null;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/**
  * Encode a `YYYY-MM-DD` calendar day for storage / wire.
  *
  * Uses **UTC noon** of that day (not local midnight, not UTC midnight). Local midnight is
