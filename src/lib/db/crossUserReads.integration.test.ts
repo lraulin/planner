@@ -18,6 +18,7 @@ import {
   loadNoteSummary,
   loadNotes,
   loadNotesForContact,
+  loadNotesListPayload,
   loadNotesForNode,
   noteOwnedBy,
 } from "@/lib/notes/queries";
@@ -64,6 +65,7 @@ import {
   listAmazonChargeOrders,
   listAmazonItemsByIds,
   listAmazonOrderSummaries,
+  loadAmazonBlock,
   listAmazonSubscriptions,
 } from "@/lib/amazon/queries";
 import { SNAPSHOT_SOURCE, SNAPSHOT_VERSION } from "@/lib/amazon/snapshot";
@@ -71,6 +73,7 @@ import { SLIM_SOURCE, SLIM_VERSION } from "@/lib/amazon/types";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import {
   loadCarryingCost,
+  loadDashboard,
   loadInsightsRows,
   loadRecurringBills,
   unclassifiedCount,
@@ -84,6 +87,7 @@ import {
   listAccounts,
   listPaymentResolutions,
   listSplitChildren,
+  loadRegisterBlock,
   listStatements,
   listTransactions,
   listTransactionsByIds,
@@ -97,6 +101,7 @@ import { linkAccount, saveConnection } from "@/lib/banksync/mutations";
 import {
   existingRowsInWindow,
   knownExternalIds,
+  newestTransactionDate,
   linkableAccounts,
   listConnections,
   listLinks,
@@ -820,6 +825,54 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await getResidenceDetail(intruder, owner.residenceId)).toBeNull();
     expect(await listLifeEvents(intruder)).toEqual([]);
     expect(await getLifeEvent(intruder, owner.lifeEventId)).toBeNull();
+  });
+
+  /**
+   * `standards/development/security.md`: "When you add a query module, register it in
+   * `crossUserReads.integration.test.ts`." These are the page-shaped loaders — the ones a
+   * route calls directly — rather than the table reads the blocks above cover.
+   */
+  it("the block and page loaders a route calls directly", async () => {
+    // Both take a list of ids straight from the client, which is the shape that has to
+    // refuse by user rather than trusting the id it was handed.
+    expect(
+      (await loadRegisterBlock(intruder, [owner.financeTransactionId])).rows,
+    ).toEqual([]);
+    expect((await loadAmazonBlock(intruder, [owner.amazonItemId])).rows).toEqual([]);
+    expect(
+      (await loadRegisterBlock(owner.userId, [owner.financeTransactionId])).rows.length,
+    ).toBe(1);
+    expect(
+      (await loadAmazonBlock(owner.userId, [owner.amazonItemId])).rows.length,
+    ).toBe(1);
+
+    expect(await listJobDates(intruder)).toEqual([]);
+    expect(await listResidenceDates(intruder)).toEqual([]);
+    expect((await listJobDates(owner.userId)).length).toBe(1);
+    expect((await listResidenceDates(owner.userId)).length).toBe(1);
+
+    // The sync window reads an account id the intruder can guess; answering from it would
+    // say when the owner last transacted.
+    expect(await newestTransactionDate(intruder, [owner.financeAccountId])).toBeNull();
+    expect(
+      await newestTransactionDate(owner.userId, [owner.financeAccountId]),
+    ).not.toBeNull();
+
+    // Two composite loaders assemble several tables into one payload, so the assertion is
+    // that the owner's ids appear nowhere in what the intruder gets — and do appear in
+    // what the owner gets, which is what stops this passing on an empty database.
+    const mentions = (payload: unknown, id: string) =>
+      (JSON.stringify(payload) ?? "").includes(id);
+    expect(mentions(await loadDashboard(intruder), owner.financeAccountId)).toBe(false);
+    expect(mentions(await loadDashboard(owner.userId), owner.financeAccountId)).toBe(
+      true,
+    );
+    expect(mentions(await loadNotesListPayload(intruder, null), owner.noteId)).toBe(
+      false,
+    );
+    expect(mentions(await loadNotesListPayload(owner.userId, null), owner.noteId)).toBe(
+      true,
+    );
   });
 
   it("stored view settings", async () => {
