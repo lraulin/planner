@@ -21,8 +21,19 @@ export type CalendarNoteGroupBy = "date" | "year" | "month" | "day";
 export type NoteGroupBy =
   "subject" | "contexts" | "flag" | CalendarNoteGroupBy | "linked";
 
+/** Dimensions the Accounts grid adds, each one of its own columns. */
+export type AccountGroupBy =
+  "kind" | "institution" | "source" | "budget" | "accountStatus";
+
 export type GridGroupBy =
-  TreeGroupBy | NoteGroupBy | "account" | "flow" | "order" | "channel" | "budgetGroup";
+  | TreeGroupBy
+  | NoteGroupBy
+  | AccountGroupBy
+  | "account"
+  | "flow"
+  | "order"
+  | "channel"
+  | "budgetGroup";
 
 export const TREE_GROUP_BY_VALUES: readonly TreeGroupBy[] = [
   "category",
@@ -53,6 +64,11 @@ const GRID_GROUP_BY_VALUES: readonly GridGroupBy[] = [
   "order",
   "channel",
   "budgetGroup",
+  "kind",
+  "institution",
+  "source",
+  "budget",
+  "accountStatus",
 ];
 
 export const GROUP_BY_LABELS: Record<GridGroupBy, string> = {
@@ -76,6 +92,11 @@ export const GROUP_BY_LABELS: Record<GridGroupBy, string> = {
   month: "Month",
   day: "Day",
   linked: "Linked to",
+  kind: "Kind",
+  institution: "Institution",
+  source: "Source",
+  budget: "Budget",
+  accountStatus: "Status",
 };
 
 /** How many dimensions may be stacked before the headers overwhelm the rows. */

@@ -9,6 +9,11 @@ import {
 } from "@/lib/finances/accountOperations";
 import type { DashboardData } from "@/lib/finances/dashboardQueries";
 import { accountPoolBreakdown } from "@/lib/finances/accountPool";
+import {
+  ACCOUNT_GROUP_BY_VALUES,
+  accountTotals,
+  groupAccounts,
+} from "@/lib/finances/accountGrouping";
 import { formatUsd } from "@/lib/finances/money";
 import { customFilter } from "@/lib/grid/customFilter";
 import { RefreshBanksButton, BankSnapshotPaste } from "./AccountOperations";
@@ -79,6 +84,7 @@ export function AccountsView({
   const position = accountPoolBreakdown(rows, operations.pending);
   const [seenServerRows, setSeenServerRows] = useState(initialAccounts);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
+  const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FinanceAccountRow | null>(null);
   const {
@@ -108,7 +114,7 @@ export function AccountsView({
   const gridState = views.grid;
   const formatDate = useDateFormatter();
 
-  const gridRows: GridRow<OperationalAccount>[] = useMemo(
+  const accounts = useMemo(
     () =>
       operationalAccountRows(
         rows,
@@ -118,8 +124,12 @@ export function AccountsView({
         operations.connections,
         todayKey,
         formatDate,
-      ).map((node) => ({ kind: "node" as const, id: node.id, node, depth: 0 })),
+      ),
     [rows, operations, links, todayKey, formatDate],
+  );
+  const gridRows: GridRow<OperationalAccount>[] = useMemo(
+    () => groupAccounts(accounts, gridState.groupBy),
+    [accounts, gridState.groupBy],
   );
   const distinctValues = useMemo(
     () =>
@@ -305,6 +315,8 @@ export function AccountsView({
         counts={counts}
         error={error}
         views={views}
+        groupDimensions={ACCOUNT_GROUP_BY_VALUES}
+        groupIds={groupIds}
         commandCapabilities={commandCapabilities}
       />
 
@@ -344,6 +356,18 @@ export function AccountsView({
         columnControls={gridState.columnControls}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
+        onGroupIdsChange={setGroupIds}
+        // Accounts holds every row, so a group's money is a real sum of it, and the
+        // question a grouped account list is read to answer is "how much is in the
+        // savings ones".
+        groupTotals={(nodes) => {
+          const totals = accountTotals(nodes);
+          return {
+            balance: formatUsd(totals.workingCents),
+            posted: formatUsd(totals.postedCents),
+            pending: formatUsd(totals.pendingCents),
+          };
+        }}
         density={gridState.density}
         empty={
           <div className="mx-auto w-full max-w-2xl p-6">

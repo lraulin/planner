@@ -716,24 +716,25 @@ Per `development/testing.md`: the logic lives in `src/lib/grid/**` and `src/lib/
 with a test beside it, and there are **no React component tests**. The pure modules worth
 knowing about:
 
-| Module                          | What it owns                                                            |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| `lib/grid/sortRows.ts`          | Hierarchy-preserving multi-key sort                                     |
-| `lib/grid/columnMenu.ts`        | Which column-menu items are available, and header drag slots            |
-| `lib/grid/ancestors.ts`         | Ancestor closure that keeps a filtered tree connected                   |
-| `lib/tree/flattenLevels.ts`     | Dissolving a level and promoting its children                           |
-| `lib/tree/completionCascade.ts` | Which other nodes a state change moves, and which way                   |
-| `lib/grid/customFilter.ts`      | Operator vocabulary and per-column expressions                          |
-| `lib/grid/crossFilter.ts`       | Cross-column And/Or advanced filter                                     |
-| `lib/grid/search.ts`            | Quick search matching                                                   |
-| `lib/grid/chips.ts`             | What the chip bar says                                                  |
-| `lib/grid/distinct.ts`          | Distinct values, shared by funnel and builder                           |
-| `lib/settings/grid.ts`          | The persisted shape, its defaults and its migrations                    |
-| `lib/grid/grouping.ts`          | Shared group dimensions and progressive-level state                     |
-| `lib/grid/groupRows.ts`         | The one walk that turns flat rows into nested group headers             |
-| `lib/grid/groupTotals.ts`       | Which track a group header's label spans, and which columns get a total |
-| `lib/tree/slice.ts`             | Outline row slices and tree-tab group headers/counts                    |
-| `lib/notes/grouping.ts`         | Notes column buckets, ordering, and nested group headers                |
+| Module                            | What it owns                                                            |
+| --------------------------------- | ----------------------------------------------------------------------- |
+| `lib/grid/sortRows.ts`            | Hierarchy-preserving multi-key sort                                     |
+| `lib/grid/columnMenu.ts`          | Which column-menu items are available, and header drag slots            |
+| `lib/grid/ancestors.ts`           | Ancestor closure that keeps a filtered tree connected                   |
+| `lib/tree/flattenLevels.ts`       | Dissolving a level and promoting its children                           |
+| `lib/tree/completionCascade.ts`   | Which other nodes a state change moves, and which way                   |
+| `lib/grid/customFilter.ts`        | Operator vocabulary and per-column expressions                          |
+| `lib/grid/crossFilter.ts`         | Cross-column And/Or advanced filter                                     |
+| `lib/grid/search.ts`              | Quick search matching                                                   |
+| `lib/grid/chips.ts`               | What the chip bar says                                                  |
+| `lib/grid/distinct.ts`            | Distinct values, shared by funnel and builder                           |
+| `lib/settings/grid.ts`            | The persisted shape, its defaults and its migrations                    |
+| `lib/grid/grouping.ts`            | Shared group dimensions and progressive-level state                     |
+| `lib/grid/groupRows.ts`           | The one walk that turns flat rows into nested group headers             |
+| `lib/grid/groupTotals.ts`         | Which track a group header's label spans, and which columns get a total |
+| `lib/tree/slice.ts`               | Outline row slices and tree-tab group headers/counts                    |
+| `lib/notes/grouping.ts`           | Notes column buckets, ordering, and nested group headers                |
+| `lib/finances/accountGrouping.ts` | Account buckets and the money a group header totals                     |
 
 A test earns its place if it would fail on a plausible mistake. The mistakes this area
 actually makes are: a filter that silently matches nothing, a sort that lifts a child above
