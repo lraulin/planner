@@ -61,7 +61,9 @@ import {
   getAmazonSubscription,
   listAmazonCharges,
   listAmazonItems,
+  listAmazonChargeOrders,
   listAmazonItemsByIds,
+  listAmazonOrderSummaries,
   listAmazonSubscriptions,
 } from "@/lib/amazon/queries";
 import { SNAPSHOT_SOURCE, SNAPSHOT_VERSION } from "@/lib/amazon/snapshot";
@@ -670,6 +672,10 @@ describeDb("a second user reads none of the first user's rows", () => {
     // A count is a read too: it says how much the owner has bought without handing over
     // a row for the row-level checks above to catch.
     expect(await countAmazonItems(intruder)).toBe(0);
+    // Both take an id the intruder can guess and neither joins the charge or order row,
+    // so each has to refuse on its own `user_id`.
+    expect(await listAmazonChargeOrders(intruder, owner.amazonChargeId)).toEqual([]);
+    expect(await listAmazonOrderSummaries(intruder)).toEqual([]);
     // Both come back for the owner, so neither passes on an empty table.
     expect(
       (await listAmazonItemsByIds(owner.userId, [owner.amazonItemId])).map(
@@ -677,6 +683,10 @@ describeDb("a second user reads none of the first user's rows", () => {
       ),
     ).toContain(owner.amazonItemId);
     expect(await countAmazonItems(owner.userId)).toBeGreaterThan(0);
+    expect(
+      (await listAmazonChargeOrders(owner.userId, owner.amazonChargeId)).length,
+    ).toBe(1);
+    expect((await listAmazonOrderSummaries(owner.userId)).length).toBe(1);
   });
 
   it("finance accounts and transactions", async () => {
