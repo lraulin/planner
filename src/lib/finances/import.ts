@@ -8,7 +8,7 @@ import {
   financeStatements,
   financeTransactions,
 } from "@/db/schema";
-import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, toDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import {
   looksLikeCapitalOneCardStatement,
   parseCapitalOneCardStatement,
@@ -363,12 +363,6 @@ function importMonths(
  * file's range hides exactly those — which duplicates every transaction on the boundary.
  */
 /** A `YYYY-MM-DD` day shifted by whole days. Noon UTC so no timezone can move the date. */
-function shiftDateKey(key: string, days: number): string {
-  const date = new Date(`${key}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 async function existingOnAccount(
   tx: Executor,
   userId: string,

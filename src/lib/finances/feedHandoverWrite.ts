@@ -8,6 +8,7 @@
  */
 
 import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { shiftDateKey } from "@/lib/schedule/geometry";
 import { financeTransactions } from "@/db/schema";
 import type { FinanceAuditChange } from "./audit/types";
 import type { FinanceExecutor } from "./dbExecutor";
@@ -36,12 +37,6 @@ const EMPTY: FeedHandoverResult = {
   warnings: [],
   changes: [],
 };
-
-function shiftDateKey(key: string, days: number): string {
-  const date = new Date(`${key}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
 
 /**
  * Retire every `scrape:*` row on this account that the feed watermark now covers.
