@@ -55,7 +55,6 @@ import {
   type BankSnapshotApplyResult,
 } from "@/lib/finances/bankSnapshotApply";
 import {
-  deleteTransaction,
   deleteTransactions,
   reclassifyTransactions,
   setSubscriptionStatus,
@@ -93,7 +92,6 @@ import {
   setTargetSnooze,
   setTransactionBudgetCategory,
   setTransactionBudgetCategories,
-  setTaxonomyCategoryEnvelope,
   updateBudgetCategory,
   type BudgetCategoryEdit,
   type BudgetOperation,
@@ -111,7 +109,6 @@ import {
   getTransaction,
   listAccounts,
   listSplitChildren,
-  listTransactions,
   loadRegisterBlock,
   loadRegisterExportRows,
   loadRegisterPrepared,
@@ -132,11 +129,7 @@ import { loadWorkingPendingSelection } from "@/lib/finances/workingPendingQuery"
 import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { parseBudget } from "@/lib/settings/finances";
-import type {
-  FinanceAccountRow,
-  TransactionFilter,
-  TransactionListRow,
-} from "@/lib/finances/types";
+import type { FinanceAccountRow, TransactionListRow } from "@/lib/finances/types";
 import {
   applyAmazonSnapshotText,
   approveAmazonChargeMatch,
@@ -179,12 +172,6 @@ export async function updateTransactionAction(
   });
 }
 
-export async function deleteTransactionAction(
-  transactionId: string,
-): Promise<ActionResult> {
-  return run((userId) => deleteTransaction(userId, transactionId));
-}
-
 export async function deleteTransactionsAction(
   transactionIds: readonly string[],
 ): Promise<ActionResult> {
@@ -200,12 +187,6 @@ export async function updateAccountAction(
 
 export async function deleteAccountAction(accountId: string): Promise<ActionResult> {
   return run((userId) => deleteAccount(userId, accountId));
-}
-
-export async function listTransactionsAction(
-  filter?: TransactionFilter,
-): Promise<QueryResult<TransactionListRow[]>> {
-  return runQuery((userId) => listTransactions(userId, filter));
 }
 
 async function registerContext(userId: string, rawQuery?: unknown) {
@@ -398,12 +379,6 @@ export async function seedBudgetAction(
   });
 }
 
-export async function autoMapBudgetAction(
-  since: string,
-): Promise<DataActionResult<{ placed: number; remaining: number }>> {
-  return runWithData((userId) => autoMapBudgetCategories(userId, since));
-}
-
 export async function budgetOperationAction(
   operation: BudgetOperation,
 ): Promise<ActionResult> {
@@ -479,15 +454,6 @@ export async function updateBudgetCategoryAction(
   edit: BudgetCategoryEdit,
 ): Promise<ActionResult> {
   return run((userId) => updateBudgetCategory(userId, categoryId, edit));
-}
-
-export async function setTaxonomyCategoryEnvelopeAction(
-  sourceCategory: string,
-  categoryId: string | null,
-): Promise<ActionResult> {
-  return run((userId) =>
-    setTaxonomyCategoryEnvelope(userId, sourceCategory, categoryId),
-  );
 }
 
 export async function deleteBudgetCategoryAction(

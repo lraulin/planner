@@ -923,13 +923,6 @@ export async function updateBudgetCategory(
     );
 }
 
-/** Retired with the taxonomy auto-map. Kept as a named no-op so old callers compile. */
-export async function setTaxonomyCategoryEnvelope(
-  _userId: string,
-  _sourceCategory: string,
-  _categoryId: string | null,
-): Promise<void> {}
-
 export async function renameCategoryGroup(
   userId: string,
   groupId: string,
