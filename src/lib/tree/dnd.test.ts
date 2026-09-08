@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  isSelfOrDescendant,
   resolveCategoryGroupDrop,
   resolveDrop,
   withRootCategoryFromPlacement,
@@ -153,32 +152,6 @@ describe("resolveDrop", () => {
   it("returns null for unknown ids", () => {
     expect(resolveDrop("nope", "t1", "after", tree())).toBeNull();
     expect(resolveDrop("t1", "nope", "after", tree())).toBeNull();
-  });
-});
-
-describe("isSelfOrDescendant", () => {
-  it("counts the node itself", () => {
-    expect(isSelfOrDescendant(tree(), "proj", "proj")).toBe(true);
-  });
-
-  it("walks the whole ancestor chain", () => {
-    expect(isSelfOrDescendant(tree(), "area", "t1")).toBe(true);
-    expect(isSelfOrDescendant(tree(), "goal", "t1")).toBe(true);
-    expect(isSelfOrDescendant(tree(), "area2", "t1")).toBe(false);
-  });
-
-  it("handles the root", () => {
-    expect(isSelfOrDescendant(tree(), "area", null)).toBe(false);
-  });
-
-  it("terminates on a parent cycle rather than hanging", () => {
-    // Clipboard paste and drag both call this; a corrupt cycle must not spin the tab.
-    const cyclic = new Map([
-      ["a", { parentId: "b" }],
-      ["b", { parentId: "a" }],
-    ]);
-    expect(isSelfOrDescendant(cyclic, "x", "a")).toBe(false);
-    expect(isSelfOrDescendant(cyclic, "a", "b")).toBe(true);
   });
 });
 

@@ -1,4 +1,5 @@
 import type { NodeType } from "@/db/schema";
+import { isSelfOrDescendantIn } from "./ancestry";
 import { canNest } from "./hierarchy";
 import { categoryLabelFromGroupId, categoryOf, categoryValueFromLabel } from "./slice";
 import type { OutlineNode, Position } from "./types";
@@ -44,28 +45,6 @@ export type ResolvedDrop = {
 };
 
 /**
- * True when `nodeId` is `ancestorId` itself or sits somewhere beneath it.
- *
- * Takes only what it walks — a parent link — rather than a whole `DropNode`, so the row
- * clipboard's paste guard can reuse the app's one cycle check instead of writing a second.
- */
-export function isSelfOrDescendant(
-  byId: ReadonlyMap<string, { parentId: string | null }>,
-  ancestorId: string,
-  nodeId: string | null,
-): boolean {
-  const seen = new Set<string>();
-  let current = nodeId;
-  while (current !== null) {
-    if (current === ancestorId) return true;
-    if (seen.has(current)) return false;
-    seen.add(current);
-    current = byId.get(current)?.parentId ?? null;
-  }
-  return false;
-}
-
-/**
  * Resolves a hover into a concrete move, or null when no legal move exists there.
  *
  * Zones are forgiving rather than strict: a drop the hierarchy forbids as a child falls
@@ -85,7 +64,7 @@ export function resolveDrop(
 
   // A node cannot land on itself or inside its own subtree — it would take the drop site
   // with it.
-  if (isSelfOrDescendant(byId, dragId, targetId)) return null;
+  if (isSelfOrDescendantIn(byId, dragId, targetId)) return null;
 
   // Dropping onto the body of a row makes the dragged node its last child.
   if (zone === "inside" && canNest(drag.type, target.type)) {

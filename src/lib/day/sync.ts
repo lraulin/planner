@@ -59,8 +59,12 @@ export async function effectiveShelfOf(
 ): Promise<Shelf | null> {
   let shelf: Shelf | null = null;
   let currentId: string | null = nodeId;
+  // A `parent_id` cycle is reachable (see `lib/tree/ancestry.ts`), and this walk runs
+  // inside the transaction that is writing the day line. Stop at a node already seen.
+  const seen = new Set<string>();
 
-  while (currentId) {
+  while (currentId && !seen.has(currentId)) {
+    seen.add(currentId);
     const [row] = await tx
       .select({
         id: nodes.id,

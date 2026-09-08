@@ -16,6 +16,7 @@ import {
 } from "@/lib/day/sync";
 import { createAppointment } from "@/lib/schedule/mutations";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
+import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { assertCanNest } from "@/lib/tree/hierarchy";
 import { applyStateTransition } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
@@ -80,18 +81,14 @@ async function isSelfOrDescendant(
   itemId: string,
   candidateId: string,
 ): Promise<boolean> {
-  let currentId: string | null = candidateId;
-  while (currentId) {
-    if (currentId === itemId) return true;
+  return isSelfOrDescendantVia(itemId, candidateId, async (id) => {
     const [current] = await tx
       .select({ parentId: nodes.parentId })
       .from(nodes)
-      .where(and(eq(nodes.id, currentId), eq(nodes.userId, userId)))
+      .where(and(eq(nodes.id, id), eq(nodes.userId, userId)))
       .limit(1);
-    if (!current) return false;
-    currentId = current.parentId;
-  }
-  return false;
+    return current?.parentId;
+  });
 }
 
 /**

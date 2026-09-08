@@ -49,6 +49,7 @@ import { promoteUrlsFromTaskName } from "@/lib/url/taskNameLinks";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
 import type { Position } from "./types";
+import { isSelfOrDescendantVia } from "./ancestry";
 import { assertSupportsLifecycleState, initialStateForType } from "./lifecycle";
 
 /**
@@ -151,18 +152,14 @@ async function isSelfOrDescendant(
   nodeId: string,
   candidateId: string | null,
 ): Promise<boolean> {
-  let current = candidateId;
-  while (current !== null) {
-    if (current === nodeId) return true;
+  return isSelfOrDescendantVia(nodeId, candidateId, async (id) => {
     const [row] = await tx
       .select({ parentId: nodes.parentId })
       .from(nodes)
-      .where(and(eq(nodes.id, current), eq(nodes.userId, userId)))
+      .where(and(eq(nodes.id, id), eq(nodes.userId, userId)))
       .limit(1);
-    if (!row) return false;
-    current = row.parentId;
-  }
-  return false;
+    return row?.parentId;
+  });
 }
 
 export type CreateNodeParams = {

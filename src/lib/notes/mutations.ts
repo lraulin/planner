@@ -1,4 +1,5 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
+import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { db } from "@/db";
 import { notes, type NewNote, type NoteFlag } from "@/db/schema";
 import type { ExternalRef } from "@/db/schema";
@@ -101,18 +102,14 @@ async function isSelfOrDescendant(
   noteId: string,
   candidateId: string | null,
 ): Promise<boolean> {
-  let current = candidateId;
-  while (current !== null) {
-    if (current === noteId) return true;
+  return isSelfOrDescendantVia(noteId, candidateId, async (id) => {
     const [row] = await tx
       .select({ parentId: notes.parentId })
       .from(notes)
-      .where(and(eq(notes.id, current), eq(notes.userId, userId)))
+      .where(and(eq(notes.id, id), eq(notes.userId, userId)))
       .limit(1);
-    if (!row) return false;
-    current = row.parentId;
-  }
-  return false;
+    return row?.parentId;
+  });
 }
 
 export type NoteInput = {

@@ -1,4 +1,5 @@
 import type { NodeType } from "@/db/schema";
+import { isSelfOrDescendantIn } from "./ancestry";
 import { canNest, TYPE_LABELS } from "./hierarchy";
 import type { OutlineNode } from "./types";
 
@@ -31,20 +32,6 @@ export function moveExclusionIds(
   return out;
 }
 
-function isSelfOrDescendant(
-  byId: Map<string, OutlineNode>,
-  ancestorId: string,
-  nodeId: string,
-): boolean {
-  if (ancestorId === nodeId) return true;
-  let current = byId.get(nodeId);
-  while (current?.parentId) {
-    if (current.parentId === ancestorId) return true;
-    current = byId.get(current.parentId);
-  }
-  return false;
-}
-
 /**
  * Which selected roots can move under `parentId` (null = top level).
  *
@@ -75,7 +62,7 @@ export function planBulkMove(
   for (const id of rootIds) {
     const node = byId.get(id);
     if (!node) continue;
-    if (parentId !== null && isSelfOrDescendant(byId, id, parentId)) {
+    if (parentId !== null && isSelfOrDescendantIn(byId, id, parentId)) {
       skipped.push({
         id,
         name: node.name,

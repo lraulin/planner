@@ -1,4 +1,4 @@
-import { isSelfOrDescendant } from "@/lib/tree/dnd";
+import { isSelfOrDescendantIn } from "@/lib/tree/ancestry";
 import { canNest } from "@/lib/tree/hierarchy";
 import type { NodeType } from "@/db/schema";
 
@@ -59,7 +59,7 @@ export function pasteRefusal(
 
     // The cycle check `moveNode` performs server-side, done here so the menu can say so before
     // the click rather than after it.
-    if (isSelfOrDescendant(byId, id, parentId)) {
+    if (isSelfOrDescendantIn(byId, id, parentId)) {
       return "Cannot paste a row inside itself";
     }
 
