@@ -49,7 +49,7 @@ import { promoteUrlsFromTaskName } from "@/lib/url/taskNameLinks";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
 import type { Position } from "./types";
-import { isSelfOrDescendantVia } from "./ancestry";
+import { isSelfOrDescendantVia, subtreeIdsVia } from "./ancestry";
 import { assertSupportsLifecycleState, initialStateForType } from "./lifecycle";
 
 /**
@@ -650,20 +650,12 @@ async function subtreeIds(
   userId: string,
   rootId: string,
 ): Promise<string[]> {
-  const ids = [rootId];
-  let frontier = [rootId];
-
-  while (frontier.length > 0) {
-    const children = await tx
+  return subtreeIdsVia(rootId, (frontier) =>
+    tx
       .select({ id: nodes.id })
       .from(nodes)
-      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, frontier)));
-
-    frontier = children.map((c) => c.id);
-    ids.push(...frontier);
-  }
-
-  return ids;
+      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, [...frontier]))),
+  );
 }
 
 /**
@@ -1655,25 +1647,21 @@ async function applyCategoryToResultAreaSubtree(
   // space that would fork an otherwise identical group label.
   const normalized =
     category === null || category.trim() === "" ? null : category.trim();
-  const raIds: string[] = [];
-  const queue = [rootId];
-
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    const [row] = await tx
-      .select({ type: nodes.type })
-      .from(nodes)
-      .where(and(eq(nodes.id, id), eq(nodes.userId, userId)))
-      .limit(1);
-    if (!row) continue;
-    if (row.type === "result_area") raIds.push(id);
-
-    const children = await tx
+  // The subtree first, then one query for the areas in it — rather than a type lookup per
+  // node, which was a query per row of a branch that can be the whole outline.
+  const subtree = await subtreeIds(tx, userId, rootId);
+  const raIds = (
+    await tx
       .select({ id: nodes.id })
       .from(nodes)
-      .where(and(eq(nodes.userId, userId), eq(nodes.parentId, id)));
-    for (const child of children) queue.push(child.id);
-  }
+      .where(
+        and(
+          eq(nodes.userId, userId),
+          eq(nodes.type, "result_area"),
+          inArray(nodes.id, subtree),
+        ),
+      )
+  ).map((row) => row.id);
 
   for (const id of raIds) {
     await tx

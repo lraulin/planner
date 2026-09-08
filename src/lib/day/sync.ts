@@ -42,6 +42,7 @@ import { dailyItems, nodes } from "@/db/schema";
 import { localDateKey, fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { isSettled } from "@/lib/tree/completionCascade";
 import { laterShelf, ownShelf, shelfHolds, type Shelf } from "@/lib/tree/shelving";
+import { subtreeIdsVia } from "@/lib/tree/ancestry";
 import { between } from "@/lib/tree/sortKey";
 
 type Db = typeof db;
@@ -231,18 +232,15 @@ export async function clearConflictingDescendantPlans(
 
   // Breadth-first descendants, excluding the shelved node itself.
   const toClear: string[] = [];
-  let frontier = [nodeId];
-
-  while (frontier.length > 0) {
+  await subtreeIdsVia(nodeId, async (frontier) => {
     const children = await tx
       .select({
         id: nodes.id,
         targetStartDate: nodes.targetStartDate,
       })
       .from(nodes)
-      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, frontier)));
+      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, [...frontier])));
 
-    frontier = children.map((c) => c.id);
     for (const child of children) {
       if (!child.targetStartDate) continue;
       const startKey = toDateKey(child.targetStartDate);
@@ -251,7 +249,8 @@ export async function clearConflictingDescendantPlans(
         toClear.push(child.id);
       }
     }
-  }
+    return children;
+  });
 
   if (toClear.length === 0) return;
 
@@ -300,17 +299,12 @@ export async function syncDayLinesInSubtree(
   userId: string,
   rootId: string,
 ): Promise<void> {
-  const ids = [rootId];
-  let frontier = [rootId];
-
-  while (frontier.length > 0) {
-    const children = await tx
+  const ids = await subtreeIdsVia(rootId, (frontier) =>
+    tx
       .select({ id: nodes.id })
       .from(nodes)
-      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, frontier)));
-    frontier = children.map((c) => c.id);
-    ids.push(...frontier);
-  }
+      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, [...frontier]))),
+  );
 
   for (const id of ids) {
     await syncDayLineToTargetStart(tx, userId, id);

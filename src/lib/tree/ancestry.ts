@@ -58,3 +58,35 @@ export async function isSelfOrDescendantVia(
   }
   return false;
 }
+
+/**
+ * Every id in the subtree rooted at `rootId`, breadth-first, including the root.
+ *
+ * The downward twin of the walks above, and it needs the visited set for the same reason —
+ * `taskRatio.ts` spells the consequence out: unguarded this is not a crash but a hang. The
+ * database walks are worse than the synchronous one it describes, because each turn of the
+ * loop issues another query inside the caller's open transaction.
+ *
+ * `childrenOf` is handed one frontier and returns the rows parented to anything in it. Rows
+ * already visited are dropped before the next round, so a `parent_id` ring terminates once
+ * it closes rather than cycling forever.
+ */
+export async function subtreeIdsVia(
+  rootId: string,
+  childrenOf: (frontier: readonly string[]) => Promise<readonly { id: string }[]>,
+): Promise<string[]> {
+  const seen = new Set<string>([rootId]);
+  let frontier: string[] = [rootId];
+
+  while (frontier.length > 0) {
+    const children = await childrenOf(frontier);
+    frontier = [];
+    for (const child of children) {
+      if (seen.has(child.id)) continue;
+      seen.add(child.id);
+      frontier.push(child.id);
+    }
+  }
+
+  return [...seen];
+}

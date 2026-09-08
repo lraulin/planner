@@ -8,7 +8,7 @@ import {
   taskDetails,
 } from "@/db/schema";
 import type { NodeItemKind } from "@/db/schema";
-import { and, asc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { assertContactOwned } from "@/lib/contacts/ownership";
 import {
   clearConflictingDescendantPlans,
@@ -20,6 +20,7 @@ import {
   moveNode,
   reopenSettledAncestors,
 } from "@/lib/tree/mutations";
+import { subtreeIdsVia } from "@/lib/tree/ancestry";
 import { owningResultAreaIdFromChain } from "@/lib/tree/owningResultArea";
 import { loadNodeChain } from "@/lib/tree/path";
 import { parentIdForResultAreaChange } from "./resultAreaParent";
@@ -864,23 +865,24 @@ async function applyResultAreaCategory(
 
   // Cascade so nested areas do not keep a stale category that would split Projects
   // grouping or the outline's By category view.
-  const raIds: string[] = [];
-  const queue = [nodeId];
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    const [row] = await tx
-      .select({ type: nodes.type })
-      .from(nodes)
-      .where(and(eq(nodes.id, id), eq(nodes.userId, userId)))
-      .limit(1);
-    if (!row) continue;
-    if (row.type === "result_area") raIds.push(id);
-    const children = await tx
+  const subtree = await subtreeIdsVia(nodeId, (frontier) =>
+    tx
       .select({ id: nodes.id })
       .from(nodes)
-      .where(and(eq(nodes.userId, userId), eq(nodes.parentId, id)));
-    for (const child of children) queue.push(child.id);
-  }
+      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, [...frontier]))),
+  );
+  const raIds = (
+    await tx
+      .select({ id: nodes.id })
+      .from(nodes)
+      .where(
+        and(
+          eq(nodes.userId, userId),
+          eq(nodes.type, "result_area"),
+          inArray(nodes.id, subtree),
+        ),
+      )
+  ).map((row) => row.id);
 
   for (const id of raIds) {
     await tx

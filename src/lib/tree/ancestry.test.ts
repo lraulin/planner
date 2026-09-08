@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSelfOrDescendantIn, isSelfOrDescendantVia } from "./ancestry";
+import { isSelfOrDescendantIn, isSelfOrDescendantVia, subtreeIdsVia } from "./ancestry";
 
 const tree = () =>
   new Map([
@@ -90,5 +90,52 @@ describe("isSelfOrDescendantVia", () => {
       return Promise.resolve(cyclic.get(id)?.parentId);
     });
     expect(calls).toBe(3);
+  });
+});
+
+describe("subtreeIdsVia", () => {
+  const children =
+    (byParent: Record<string, string[]>) => (frontier: readonly string[]) =>
+      Promise.resolve(
+        frontier.flatMap((id) => (byParent[id] ?? []).map((c) => ({ id: c }))),
+      );
+
+  it("returns the root and every descendant", async () => {
+    const ids = await subtreeIdsVia(
+      "area",
+      children({ area: ["goal"], goal: ["proj"], proj: ["t1", "t2"] }),
+    );
+    expect([...ids].sort()).toEqual(["area", "goal", "proj", "t1", "t2"]);
+  });
+
+  it("returns just the root when it has no children", async () => {
+    expect(await subtreeIdsVia("solo", children({}))).toEqual(["solo"]);
+  });
+
+  // Unguarded this never terminates — the frontier keeps handing the ring back. The
+  // database callers do it inside an open transaction, a query per turn.
+  it("terminates on a parent cycle", async () => {
+    const ids = await subtreeIdsVia("a", children({ a: ["b"], b: ["c"], c: ["a"] }));
+    expect([...ids].sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("asks for each node's children at most once on a cycle", async () => {
+    const asked: string[] = [];
+    const byParent: Record<string, string[]> = { a: ["b"], b: ["c"], c: ["a", "b"] };
+    await subtreeIdsVia("a", (frontier) => {
+      asked.push(...frontier);
+      return Promise.resolve(
+        frontier.flatMap((id) => (byParent[id] ?? []).map((c) => ({ id: c }))),
+      );
+    });
+    expect(asked.sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("does not revisit a node reachable by two paths", async () => {
+    const ids = await subtreeIdsVia(
+      "root",
+      children({ root: ["l", "r"], l: ["shared"], r: ["shared"], shared: [] }),
+    );
+    expect([...ids].sort()).toEqual(["l", "r", "root", "shared"]);
   });
 });
