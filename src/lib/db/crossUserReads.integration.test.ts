@@ -17,6 +17,7 @@ import {
   loadNoteSummaries,
   loadNoteSummary,
   loadNotes,
+  loadNotesForContact,
   loadNotesForNode,
   noteOwnedBy,
 } from "@/lib/notes/queries";
@@ -27,11 +28,16 @@ import {
   listMetrics,
   listMetricsForOwner,
 } from "@/lib/metrics/queries";
-import { createAppointment, createTimeChart } from "@/lib/schedule/mutations";
+import {
+  createAppointment,
+  createTimeChart,
+  createTimeChartArea,
+} from "@/lib/schedule/mutations";
 import {
   getAppointment,
   getTimeChart,
   listAppointmentsInRange,
+  listTimeChartAreas,
   listTimeChartSummaries,
   listTimeCharts,
   loadSchedule,
@@ -68,13 +74,14 @@ import {
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
 import { createCategoryGroup } from "@/lib/finances/budget/mutations";
-import { upsertBillEnvelope } from "@/lib/finances/mutations";
+import { splitTransaction, upsertBillEnvelope } from "@/lib/finances/mutations";
 import { getPayee, listAliasRows, listPayees } from "@/lib/finances/payees/queries";
 import {
   getPaymentResolution,
   getTransaction,
   listAccounts,
   listPaymentResolutions,
+  listSplitChildren,
   listStatements,
   listTransactions,
   listTransactionsByIds,
@@ -247,12 +254,24 @@ async function seedOwner(): Promise<Owned> {
   });
   if (!appointment) throw new Error("createAppointment returned null");
   const timeChart = await createTimeChart(userId, "Owner chart");
+  // The chart's areas are their own table with their own `user_id`; without one the
+  // `listTimeChartAreas` isolation check would pass against an empty table.
+  await createTimeChartArea(userId, timeChart.id, {
+    name: "Owner block",
+    daysOfWeek: [1, 3],
+    startMinute: 9 * 60,
+    durationMinutes: 60,
+  });
 
   const contactId = await createContact(userId, {
     givenName: "Owner",
     familyName: "Person",
   });
   await createDiscussionItem(userId, contactId, { name: "Owner topic" });
+  await createNote({
+    userId,
+    values: { title: "Owner contact note", contactId },
+  });
 
   const resourceId = await createResource(userId, { shortName: "Owner resource" });
 
@@ -298,6 +317,12 @@ async function seedOwner(): Promise<Owned> {
       "expected the finance seed to create an account, row, and statement",
     );
   }
+  // Split children are ordinary rows with a `parent_id`, read by their own query.
+  await splitTransaction(userId, financeTransaction.id, [
+    { amountCents: financeTransaction.amountCents - 100, budgetCategoryId: null },
+    { amountCents: 100, budgetCategoryId: null },
+  ]);
+
   await createCategoryGroup(userId, { name: "Household", kind: "spending" });
   await upsertBillEnvelope(userId, {
     name: "Owner Insurance",
@@ -564,6 +589,8 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await loadNote(intruder, owner.noteId)).toBeNull();
     expect(await loadNoteSummary(intruder, owner.noteId)).toBeNull();
     expect(await noteOwnedBy(intruder, owner.noteId)).toBe(false);
+    expect(await loadNotesForContact(intruder, owner.contactId)).toEqual([]);
+    expect((await loadNotesForContact(owner.userId, owner.contactId)).length).toBe(1);
     expect(await noteOwnedBy(owner.userId, owner.noteId)).toBe(true);
     expect(await loadNote(owner.userId, owner.noteId)).not.toBeNull();
   });
@@ -588,6 +615,12 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listTimeCharts(intruder)).toEqual([]);
     expect(await getTimeChart(intruder, owner.timeChartId)).toBeNull();
     expect(await listTimeChartSummaries(intruder)).toEqual([]);
+    // The areas read takes a chart id the intruder can guess and never joins the chart
+    // row, so it has to refuse on its own `user_id`.
+    expect(await listTimeChartAreas(intruder, owner.timeChartId)).toEqual([]);
+    expect(
+      (await listTimeChartAreas(owner.userId, owner.timeChartId)).length,
+    ).toBeGreaterThan(0);
 
     // The one query that assembles a whole page rather than a table: appointments, charts
     // and the project tree all reach it through separate calls.
@@ -677,6 +710,12 @@ describeDb("a second user reads none of the first user's rows", () => {
         (row) => row.id,
       ),
     ).toContain(owner.financeTransactionId);
+    // A split child carries the amount its parent no longer shows, and the query reaches
+    // it by the parent id alone.
+    expect(await listSplitChildren(intruder, owner.financeTransactionId)).toEqual([]);
+    expect(
+      (await listSplitChildren(owner.userId, owner.financeTransactionId)).length,
+    ).toBe(2);
 
     // Audit events quote the before/after of every field they changed, so a dropped userId
     // here hands over the amounts even where the transaction read refuses.
