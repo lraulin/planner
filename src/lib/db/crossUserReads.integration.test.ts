@@ -53,11 +53,13 @@ import {
 } from "@/lib/contacts/queries";
 import { createResource } from "@/lib/resources/mutations";
 import { getResourceDetail, listResources } from "@/lib/resources/queries";
+import { approveAmazonChargeMatch } from "@/lib/amazon/apply";
 import { importAmazonSlim } from "@/lib/amazon/import";
 import { persistAmazonSnapshot } from "@/lib/amazon/reconcile";
 import {
   countAmazonItems,
   getAmazonCharge,
+  getAmazonChargeMatch,
   getAmazonItem,
   getAmazonSubscription,
   listAmazonCharges,
@@ -65,6 +67,7 @@ import {
   listAmazonChargeOrders,
   listAmazonItemsByIds,
   listAmazonOrderSummaries,
+  listAmazonReceiptAllocations,
   loadAmazonBlock,
   listAmazonSubscriptions,
 } from "@/lib/amazon/queries";
@@ -450,6 +453,29 @@ async function seedOwner(): Promise<Owned> {
   if (!amazonSubscription || !amazonCharge) {
     throw new Error("expected the amazon snapshot seed to create evidence");
   }
+  // A charge matched to a register row is what puts a row in `amazon_charge_matches` and
+  // `amazon_receipt_allocations`; without one, both of their reads would answer the owner
+  // with nothing and the isolation checks would pass against an empty table. The ledger row
+  // has to be an Amazon merchant of exactly the charge's amount, which is what
+  // `canManuallyMatch` approves.
+  await importFinanceCsvFiles({
+    userId,
+    files: [
+      {
+        name: "Chase9910_Amazon.csv",
+        text:
+          "Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n" +
+          "08/01/2026,08/02/2026,AMZN Mktp US*OWNER1,Shopping,Sale,-6.30,\n",
+      },
+    ],
+  });
+  const amazonLedgerRow = (await listTransactions(userId)).find((row) =>
+    row.description.includes("AMZN Mktp"),
+  );
+  if (!amazonLedgerRow) {
+    throw new Error("expected the Amazon ledger seed to import a row");
+  }
+  await approveAmazonChargeMatch(userId, amazonCharge.id, amazonLedgerRow.id);
 
   const plan = await ensureWeeklyPlan(userId, { weekStart: WEEK_START });
   await upsertPlanEntry(userId, plan.id, goalId, { focus: true });
@@ -692,6 +718,22 @@ describeDb("a second user reads none of the first user's rows", () => {
       (await listAmazonChargeOrders(owner.userId, owner.amazonChargeId)).length,
     ).toBe(1);
     expect((await listAmazonOrderSummaries(owner.userId)).length).toBe(1);
+  });
+
+  it("the receipt a matched charge leaves behind", async () => {
+    // Both take the charge id and neither joins the charge row, so each has to refuse on
+    // its own `user_id`. The match says which register row the owner's Amazon money went
+    // to; the allocation says what it bought, line by line.
+    expect(await getAmazonChargeMatch(intruder, owner.amazonChargeId)).toBeNull();
+    expect(await listAmazonReceiptAllocations(intruder, owner.amazonChargeId)).toEqual(
+      [],
+    );
+    expect(
+      await getAmazonChargeMatch(owner.userId, owner.amazonChargeId),
+    ).not.toBeNull();
+    expect(
+      (await listAmazonReceiptAllocations(owner.userId, owner.amazonChargeId)).length,
+    ).toBeGreaterThan(0);
   });
 
   it("finance accounts and transactions", async () => {
