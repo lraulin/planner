@@ -166,7 +166,7 @@ Rules:
   (`development/testing.md`) — an off-by-one in a slop threshold is invisible until it is
   infuriating.
 - **Wire the gesture once, at the capabilities layer**, the way `rowMenuFor` is
-  (`src/components/grid/rowSwipe.ts`). Six hosts hand-wiring their own swipes drift apart the
+  (`src/lib/grid/rowSwipe.ts`). Six hosts hand-wiring their own swipes drift apart the
   way eight hand-written context menus did, and a wrong swipe is worse than a wrong menu row:
   there is no label to read before you commit.
 

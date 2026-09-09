@@ -190,7 +190,7 @@ do not, and the Register cannot. What separates them is worth stating before the
   spending (bills + regular)" deliberately excludes Savings, so writing it in the grid's own
   column language would invite a reader to add the Savings table to it.
 - **Do not print the same three numbers a fourth time.** Budget already runs row → group header
-  → `SectionHeader` per kind → one combined spending footer, plus `BudgetSummary`. None of its
+  → `BudgetSection` header per kind → one combined spending footer, plus `BudgetSummary`. None of its
   three grids gets a `footerTotals`. Each surface has to answer a different question or it is
   noise the reader has to disambiguate.
 - **No per-column aggregation function.** `ColumnDef` has no `aggFn` and is not getting one.
