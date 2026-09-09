@@ -125,6 +125,7 @@ import {
   transactionTotalCents,
 } from "@/lib/finances/queries";
 import {
+  listBudgetMovementAudit,
   listFinanceAuditEvents,
   loadFinanceAuditEvent,
 } from "@/lib/finances/audit/queries";
@@ -255,6 +256,7 @@ type Owned = {
 };
 
 const DAY = "2026-03-11";
+const SEED_AUDIT_MONTH = "2026-08-01";
 const OWNER_CALENDAR_ID = "owner-primary@group.calendar.google.com";
 const WEEK_START = new Date(2026, 2, 8);
 const RANGE_FROM = new Date(2026, 2, 1);
@@ -849,6 +851,12 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listFinanceAuditEvents(intruder)).toEqual([]);
     expect(await loadFinanceAuditEvent(intruder, events[0].id)).toBeNull();
     expect(await loadFinanceAuditEvent(owner.userId, events[0].id)).not.toBeNull();
+    // The Budget page's movement log filters the same events by month, with its own `where`
+    // rather than a call into the list above.
+    expect(await listBudgetMovementAudit(intruder, SEED_AUDIT_MONTH)).toEqual([]);
+    expect(
+      (await listBudgetMovementAudit(owner.userId, SEED_AUDIT_MONTH)).length,
+    ).toBeGreaterThan(0);
   });
 
   it("the catalogs a picker fills itself from", async () => {
