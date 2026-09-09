@@ -88,6 +88,18 @@ import {
 } from "@/lib/finances/budget/queries";
 import { createSupplyItem } from "@/lib/finances/supplies/mutations";
 import { listSupplyItems } from "@/lib/finances/supplies/queries";
+import { refreshCalendarLinks, setCalendarSyncEnabled } from "@/lib/google/mutations";
+import {
+  enabledCalendarLinks,
+  listCalendarLinks,
+  pushTargetCalendarId,
+  syncIsStale,
+} from "@/lib/google/queries";
+import { applyGoogleContactSync } from "@/lib/google/contacts/mutations";
+import {
+  getGoogleContactSync,
+  googleContactSyncIsStale,
+} from "@/lib/google/contacts/queries";
 import { addMasterContext } from "@/lib/contexts/mutations";
 import { listMasterContexts } from "@/lib/contexts/queries";
 import { splitTransaction, upsertBillEnvelope } from "@/lib/finances/mutations";
@@ -242,6 +254,7 @@ type Owned = {
 };
 
 const DAY = "2026-03-11";
+const OWNER_CALENDAR_ID = "owner-primary@group.calendar.google.com";
 const WEEK_START = new Date(2026, 2, 8);
 const RANGE_FROM = new Date(2026, 2, 1);
 const RANGE_TO = new Date(2026, 2, 31);
@@ -379,6 +392,24 @@ async function seedOwner(): Promise<Owned> {
     name: "Owner paper towels",
     envelopeId: billEnvelope.id,
     rate: { rateBasis: "days_per_unit", daysPerUnitTenths: 70 },
+  });
+  // Both Google surfaces keep their own per-user table, written here without any network:
+  // `refreshCalendarLinks` and `applyGoogleContactSync` are ordinary writes that happen to
+  // be fed by an API elsewhere. The mirror pass touches only `external_source = 'google'`
+  // contacts, of which the owner has none, so the seeded contact is left alone.
+  await refreshCalendarLinks(userId, [
+    {
+      id: OWNER_CALENDAR_ID,
+      summary: "Owner calendar",
+      primary: true,
+      backgroundColor: "#123456",
+    },
+  ]);
+  await setCalendarSyncEnabled(userId, OWNER_CALENDAR_ID, true);
+  await applyGoogleContactSync(userId, {
+    mode: "full",
+    remote: [],
+    nextSyncToken: "owner-people-sync-token",
   });
   await importFinanceCsvFiles({
     userId,
@@ -839,6 +870,28 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listMasterContexts(owner.userId)).length).toBeGreaterThan(0);
     expect((await listSupplyItems(owner.userId)).length).toBeGreaterThan(0);
     expect(await openingPositionFor(owner.userId, "2026-09-01")).not.toBe(0);
+  });
+
+  it("the Google link state, which names the owner's calendars", async () => {
+    // A calendar link row carries the calendar's id and title, and the contact sync row
+    // carries a People API sync token — a credential-shaped string, not just a fact.
+    expect(await listCalendarLinks(intruder)).toEqual([]);
+    expect(await enabledCalendarLinks(intruder)).toEqual([]);
+    expect(await pushTargetCalendarId(intruder)).toBeNull();
+    expect(await getGoogleContactSync(intruder)).toBeNull();
+    // Both staleness helpers answer `false` for a user with no state at all, so they say
+    // nothing on their own — asserted next to the reads they wrap rather than alone.
+    expect(await syncIsStale(intruder, 0)).toBe(false);
+    expect(await googleContactSyncIsStale(intruder, 0)).toBe(false);
+
+    expect(
+      (await listCalendarLinks(owner.userId)).map((row) => row.calendarId),
+    ).toEqual([OWNER_CALENDAR_ID]);
+    expect((await enabledCalendarLinks(owner.userId)).length).toBe(1);
+    expect(await pushTargetCalendarId(owner.userId)).toBe(OWNER_CALENDAR_ID);
+    expect(await syncIsStale(owner.userId, 0)).toBe(true);
+    expect(await getGoogleContactSync(owner.userId)).not.toBeNull();
+    expect(await googleContactSyncIsStale(owner.userId, 0)).toBe(true);
   });
 
   it("payee routing reads that take an envelope or payee id", async () => {
