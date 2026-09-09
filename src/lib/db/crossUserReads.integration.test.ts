@@ -83,7 +83,15 @@ import {
 } from "@/lib/finances/dashboardQueries";
 import { createCategoryGroup } from "@/lib/finances/budget/mutations";
 import { splitTransaction, upsertBillEnvelope } from "@/lib/finances/mutations";
-import { getPayee, listAliasRows, listPayees } from "@/lib/finances/payees/queries";
+import { claimPayeeForCommitment } from "@/lib/finances/payees/mutations";
+import {
+  aliasesOf,
+  getPayee,
+  listAliasRows,
+  listPayees,
+  payeeEvidenceForCategory,
+  payeesForCommitment,
+} from "@/lib/finances/payees/queries";
 import {
   getPaymentResolution,
   getTransaction,
@@ -208,6 +216,7 @@ type Owned = {
   financeTransactionId: string;
   financePayeeId: string;
   financeStatementId: string;
+  billEnvelopeId: string;
   paymentResolutionId: string;
   amazonItemId: string;
   amazonSubscriptionId: string;
@@ -345,6 +354,16 @@ async function seedOwner(): Promise<Owned> {
     throw new Error("expected the finance seed to mint a payee");
   }
   const financePayeeId = financePayee.id;
+  const [billEnvelope] = await loadRecurringBills(userId);
+  if (!billEnvelope) {
+    throw new Error("expected the bill envelope seed to create one");
+  }
+  // A payee claim is what fills `claimed_budget_category_id`, and three reads take the
+  // envelope or category id and answer from that column alone. Without a claim the owner
+  // side of those assertions is empty and they stop testing anything. The gate refuses to
+  // *file* this $10.59 charge against a $1,412.60 six-monthly bill, which is what keeps the
+  // rest of the seed's numbers where the other assertions expect them.
+  await claimPayeeForCommitment(userId, financePayeeId, { id: billEnvelope.id });
   await importFinanceCsvFiles({
     userId,
     files: [
@@ -537,6 +556,7 @@ async function seedOwner(): Promise<Owned> {
     financeTransactionId: financeTransaction.id,
     financePayeeId,
     financeStatementId: financeStatement.id,
+    billEnvelopeId: billEnvelope.id,
     paymentResolutionId: paymentResolution.id,
     amazonItemId: amazonItem.id,
     amazonSubscriptionId: amazonSubscription.id,
@@ -781,6 +801,29 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listFinanceAuditEvents(intruder)).toEqual([]);
     expect(await loadFinanceAuditEvent(intruder, events[0].id)).toBeNull();
     expect(await loadFinanceAuditEvent(owner.userId, events[0].id)).not.toBeNull();
+  });
+
+  it("payee routing reads that take an envelope or payee id", async () => {
+    // All three answer from a column on `finance_payees` and join nothing that would
+    // inherit a refusal — the envelope id, the category id and the payee id are all things
+    // an intruder can guess or read out of a URL.
+    expect(await payeesForCommitment(intruder, { id: owner.billEnvelopeId })).toEqual(
+      [],
+    );
+    expect(await payeeEvidenceForCategory(intruder, owner.billEnvelopeId)).toEqual([]);
+    expect(await aliasesOf(intruder, [owner.financePayeeId])).toEqual([]);
+
+    expect(
+      (await payeesForCommitment(owner.userId, { id: owner.billEnvelopeId })).map(
+        (row) => row.id,
+      ),
+    ).toContain(owner.financePayeeId);
+    expect(
+      (await payeeEvidenceForCategory(owner.userId, owner.billEnvelopeId)).length,
+    ).toBeGreaterThan(0);
+    expect(
+      (await aliasesOf(owner.userId, [owner.financePayeeId])).length,
+    ).toBeGreaterThan(0);
   });
 
   it("bank sync connections, links and their sync windows", async () => {
