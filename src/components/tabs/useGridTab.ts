@@ -14,6 +14,7 @@ import {
 } from "@/app/plan/outline/actions";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useStateChange } from "@/components/grid/useStateChange";
 import { useToday } from "@/components/grid/useToday";
 import { useSuspendCommandKeys } from "@/components/shell/CommandProvider";
@@ -48,17 +49,14 @@ export function useGridTab(initialNodes: OutlineNode[]) {
    * that insert (Achieve cancel-blank-row). F2 rename never sets this.
    */
   const [virginInsertId, setVirginInsertId] = useState<string | null>(null);
-  const [navigableIds, setNavigableIds] = useState<readonly string[]>([]);
   const today = useToday();
 
-  // Memoised because the fallback branch builds a new array, and everything downstream keys
-  // off its identity: `copySelectionAsText` was being rebuilt on every single render, which
-  // stayed invisible until a consumer registered it as a command and the churn had somewhere
-  // to become a re-render loop.
-  const order = useMemo(
-    () => (navigableIds.length > 0 ? navigableIds : nodes.map((n) => n.id)),
-    [navigableIds, nodes],
-  );
+  // The shared hook, not a second copy of it: `components/data-grid.md` says "do not inline
+  // that fallback", and the re-render loop it warns about is the one this file found first —
+  // `copySelectionAsText` rebuilt on every render, invisible until a consumer registered it
+  // as a command and the churn had somewhere to go.
+  const fallbackIds = useMemo(() => nodes.map((n) => n.id), [nodes]);
+  const { order, onIdsChange: setNavigableIds } = useNavigableIds(fallbackIds);
   const multi = useMultiSelect(order, detailId);
   const {
     selectedId,
