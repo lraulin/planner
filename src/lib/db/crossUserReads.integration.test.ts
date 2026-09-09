@@ -87,7 +87,10 @@ import {
   openingPositionFor,
 } from "@/lib/finances/budget/queries";
 import { createSupplyItem } from "@/lib/finances/supplies/mutations";
-import { listSupplyItems } from "@/lib/finances/supplies/queries";
+import {
+  listAmazonRepeatPurchases,
+  listSupplyItems,
+} from "@/lib/finances/supplies/queries";
 import { refreshCalendarLinks, setCalendarSyncEnabled } from "@/lib/google/mutations";
 import {
   enabledCalendarLinks,
@@ -869,6 +872,10 @@ describeDb("a second user reads none of the first user's rows", () => {
     });
     expect(await listMasterContexts(intruder)).toEqual([]);
     expect(await listSupplyItems(intruder)).toEqual([]);
+    // Repeat purchases are a shopping history: ASIN, product name, how many times and how
+    // recently. The owner's single seeded item qualifies through the Subscribe & Save arm of
+    // the `having`, not the three-order one.
+    expect(await listAmazonRepeatPurchases(intruder)).toEqual([]);
     // The opening position is a number rather than a row, which is why it needs saying: it
     // reports what the owner's on-budget accounts held before a month began.
     expect(await openingPositionFor(intruder, "2026-09-01")).toBe(0);
@@ -878,6 +885,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(catalog.envelopes.map((row) => row.id)).toContain(owner.billEnvelopeId);
     expect((await listMasterContexts(owner.userId)).length).toBeGreaterThan(0);
     expect((await listSupplyItems(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listAmazonRepeatPurchases(owner.userId)).length).toBeGreaterThan(0);
     expect(await openingPositionFor(owner.userId, "2026-09-01")).not.toBe(0);
   });
 
