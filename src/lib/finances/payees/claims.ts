@@ -9,7 +9,6 @@
 import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financePayees, financeTransactions } from "@/db/schema";
-import type { MonthKey } from "../budget/envelope";
 import { categoryForNewTransaction } from "./autoCategory";
 import type { AutoCategoryMode } from "./autoCategory";
 import { refusedBillClaims } from "./billClaimGate";
@@ -32,7 +31,6 @@ import { monthKeyOf } from "../budget/envelope";
 export async function applyPayeeClaims(
   userId: string,
   options: {
-    since?: MonthKey;
     createdSince?: Date;
     payeeIds?: readonly string[];
     uncategorizedOnly?: boolean;
@@ -64,9 +62,6 @@ export async function applyPayeeClaims(
         sql`${financeTransactions.budgetCategoryId} is distinct from ${financePayees.claimedBudgetCategoryId}`,
         ...(options.uncategorizedOnly
           ? [isNull(financeTransactions.budgetCategoryId)]
-          : []),
-        ...(options.since
-          ? [gte(financeTransactions.transactionDate, options.since)]
           : []),
         ...(options.createdSince
           ? [gte(financeTransactions.createdAt, options.createdSince)]
