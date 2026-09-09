@@ -49,6 +49,7 @@ import { snoozeUnavailableReason } from "@/lib/finances/budget/snooze";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useGridState } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import {
   categoryMonth,
   findMonth,
@@ -326,18 +327,25 @@ export function BudgetView({
     () => savingsGridRows.map((row) => row.id),
     [savingsGridRows],
   );
+  // Each grid narrows its own rows by collapsing groups, so the list the arrows walk and the
+  // selection is pruned against has to come back *from* the grid — `useNavigableIds`. The
+  // row ids built above are only the first-render fallback. Selecting against the input list
+  // let a collapsed group keep its envelopes selected, and Assign scopes to the selection.
+  const billNav = useNavigableIds(billRowIds);
+  const envelopeNav = useNavigableIds(envelopeRowIds);
+  const savingsNav = useNavigableIds(savingsRowIds);
   const billSelect = useMultiSelect(
-    billRowIds,
+    billNav.order,
     returnContext?.table === "bills" ? returnContext.id : null,
     { allowEmpty: true },
   );
   const envelopeSelect = useMultiSelect(
-    envelopeRowIds,
+    envelopeNav.order,
     returnContext?.table === "envelopes" ? returnContext.id : null,
     { allowEmpty: true },
   );
   const savingsSelect = useMultiSelect(
-    savingsRowIds,
+    savingsNav.order,
     returnContext?.table === "savings" ? returnContext.id : null,
     { allowEmpty: true },
   );
@@ -1715,6 +1723,7 @@ export function BudgetView({
             >
               <DataGrid<BudgetColumnCtx, BudgetRow>
                 rows={envelopeGridRows}
+                onNavigableIdsChange={envelopeNav.onIdsChange}
                 columns={envelopeGrid.columns}
                 allColumns={envelopeColumns}
                 columnCtx={ctx}
@@ -1776,6 +1785,7 @@ export function BudgetView({
             >
               <DataGrid<BudgetColumnCtx, BudgetBillRow>
                 rows={billGridRows}
+                onNavigableIdsChange={billNav.onIdsChange}
                 columns={billGrid.columns}
                 allColumns={billColumns}
                 columnCtx={ctx}
@@ -1836,6 +1846,7 @@ export function BudgetView({
           >
             <DataGrid<BudgetColumnCtx, BudgetRow>
               rows={savingsGridRows}
+              onNavigableIdsChange={savingsNav.onIdsChange}
               columns={savingsGrid.columns}
               allColumns={envelopeColumns}
               columnCtx={ctx}
