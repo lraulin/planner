@@ -23,6 +23,7 @@
  */
 
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
+import { median, medianRounded } from "@/lib/statistics";
 import { normalizeMerchant } from "./merchant";
 
 /** Typical gap between biweekly paydays. Holiday posting drifts a few days either side. */
@@ -77,18 +78,6 @@ export type IncomeSummary = {
  */
 export function normalizedMonthlyIncome(medianPaycheckCents: number): number {
   return Math.round((medianPaycheckCents * PAYCHECKS_PER_YEAR) / 12);
-}
-
-function median(values: readonly number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((left, right) => left - right);
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 1) return sorted[mid];
-  return (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function medianCents(values: readonly number[]): number {
-  return Math.round(median(values));
 }
 
 function isBiweekly(gaps: readonly number[]): boolean {
@@ -180,7 +169,9 @@ export function detectIncome(
       left.employer.localeCompare(right.employer),
   );
 
-  const medianPaycheckCents = medianCents(paydays.map((payday) => payday.amountCents));
+  const medianPaycheckCents = medianRounded(
+    paydays.map((payday) => payday.amountCents),
+  );
 
   return {
     flows,

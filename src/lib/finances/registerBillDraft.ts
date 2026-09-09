@@ -10,6 +10,7 @@
  */
 
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
+import { medianRounded } from "@/lib/statistics";
 import { amountMatches } from "./amountMatch";
 import { effectiveFlow, effectiveMerchant, spendCentsOf } from "./analytics";
 import { normalizeMerchant } from "./classify/merchant";
@@ -131,7 +132,7 @@ export function trackAsBillDraft(
     };
   const amounts = charges.map(spendCentsOf).filter((cents) => cents > 0);
   const expectedCents =
-    amounts.length > 0 ? median(amounts) : Math.max(0, spendCentsOf(selected));
+    amounts.length > 0 ? medianRounded(amounts) : Math.max(0, spendCentsOf(selected));
   const lastChargeOn = dates[dates.length - 1] ?? selected.transactionDate;
   return {
     payeeId: selected.payeeId,
@@ -154,14 +155,5 @@ function medianGapDays(dates: readonly string[]): number | null {
   for (let index = 1; index < dates.length; index++) {
     gaps.push(daysBetweenKeys(dates[index - 1], dates[index]));
   }
-  return median(gaps);
-}
-
-function median(values: readonly number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[middle]
-    : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
+  return medianRounded(gaps);
 }

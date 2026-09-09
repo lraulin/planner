@@ -23,6 +23,7 @@
 
 import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
+import { medianRounded } from "@/lib/statistics";
 import { UNCATEGORIZED } from "./classify/categories";
 import { periodIndex, RATE_LOOKBACK_PERIODS, type Period } from "./commitments";
 import {
@@ -310,15 +311,6 @@ export function paydaysFrom(rows: readonly AnalyticsRow[]): Payday[] {
   return detectIncome(income).paydays;
 }
 
-function median(values: readonly number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[middle]
-    : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
-}
-
 export type IncomeBreakdown = {
   /** `median(paycheck) × 26 ÷ 12`. */
   paycheckMonthlyCents: number;
@@ -346,7 +338,9 @@ export function monthlyIncome(
   const inWindow = paydays.filter(
     (payday) => payday.dateKey >= range.startKey && payday.dateKey <= range.endKey,
   );
-  const medianPaycheckCents = median(inWindow.map((payday) => payday.amountCents));
+  const medianPaycheckCents = medianRounded(
+    inWindow.map((payday) => payday.amountCents),
+  );
   const paycheckMonthlyCents = normalizedMonthlyIncome(medianPaycheckCents);
 
   const onAPayday = new Set(inWindow.flatMap((payday) => payday.transactionIds));
@@ -1149,12 +1143,12 @@ export function recurringMerchants(
     if (ordered.length < MIN_RECURRING_CHARGES) continue;
 
     const amounts = ordered.map(spendCentsOf);
-    const typicalCents = median(amounts);
+    const typicalCents = medianRounded(amounts);
     if (typicalCents <= 0) continue;
     const deviationCents = standardDeviation(amounts);
     if (deviationCents > typicalCents * RECURRING_VARIANCE_RATIO) continue;
 
-    const cadenceDays = median(gapsBetween(ordered));
+    const cadenceDays = medianRounded(gapsBetween(ordered));
     if (cadenceDays < MIN_CADENCE_DAYS || cadenceDays > MAX_CADENCE_DAYS) continue;
 
     found.push({
@@ -1189,7 +1183,7 @@ export function recurringMerchants(
     // The declared amount first, because it survives a window that contains no charge — which
     // is the normal case for a yearly bill and exactly when the commitment still exists.
     const typicalCents =
-      bill.expectedCents ?? (amounts.length > 0 ? median(amounts) : 0);
+      bill.expectedCents ?? (amounts.length > 0 ? medianRounded(amounts) : 0);
     if (typicalCents <= 0) continue;
 
     found.push({
@@ -1353,7 +1347,7 @@ export function spendCandidates(
       lowCents: Math.min(...amounts),
       highCents: Math.max(...amounts),
       chargeCount: past.length,
-      observedGapDays: median(gapsBetween(past)),
+      observedGapDays: medianRounded(gapsBetween(past)),
       annualCents: Math.round(
         candidate.typicalCents * (candidate.period === "week" ? 365.2425 / 7 : 12),
       ),
@@ -1411,7 +1405,7 @@ function coverageOf(
   const coverage = covered / spanned;
   if (coverage < MIN_SPEND_COVERAGE) return null;
 
-  const typicalCents = median(values);
+  const typicalCents = medianRounded(values);
   if (typicalCents <= 0) return null;
 
   return { period, coverage, typicalCents };
@@ -1461,7 +1455,7 @@ export function cadenceCandidates(
     if (ordered.length < MIN_CANDIDATE_CHARGES) continue;
 
     const amounts = ordered.map(spendCentsOf);
-    const typicalCents = median(amounts);
+    const typicalCents = medianRounded(amounts);
     if (typicalCents <= 0) continue;
     // Spread from the median rather than a standard deviation, which is near-meaningless on
     // the two-charge case this exists to serve.
@@ -1529,7 +1523,7 @@ export function upcomingBills(
 
       const expectedCents =
         bill.expectedCents ??
-        (charges.length > 0 ? median(charges.map(spendCentsOf)) : 0);
+        (charges.length > 0 ? medianRounded(charges.map(spendCentsOf)) : 0);
       if (expectedCents <= 0) return [];
 
       const dueOn = nextDueFrom(lastChargeOn, cadenceOf(bill), todayKey);
