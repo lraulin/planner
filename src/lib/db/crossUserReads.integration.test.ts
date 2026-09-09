@@ -82,6 +82,14 @@ import {
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
 import { createCategoryGroup } from "@/lib/finances/budget/mutations";
+import {
+  listBudgetEnvelopeOptions,
+  openingPositionFor,
+} from "@/lib/finances/budget/queries";
+import { createSupplyItem } from "@/lib/finances/supplies/mutations";
+import { listSupplyItems } from "@/lib/finances/supplies/queries";
+import { addMasterContext } from "@/lib/contexts/mutations";
+import { listMasterContexts } from "@/lib/contexts/queries";
 import { splitTransaction, upsertBillEnvelope } from "@/lib/finances/mutations";
 import { claimPayeeForCommitment } from "@/lib/finances/payees/mutations";
 import {
@@ -364,6 +372,14 @@ async function seedOwner(): Promise<Owned> {
   // *file* this $10.59 charge against a $1,412.60 six-monthly bill, which is what keeps the
   // rest of the seed's numbers where the other assertions expect them.
   await claimPayeeForCommitment(userId, financePayeeId, { id: billEnvelope.id });
+  // Two list reads answer from their own table with no join to inherit a refusal from, and
+  // neither had a row to answer with.
+  await addMasterContext(userId, "@Owner Errands");
+  await createSupplyItem(userId, {
+    name: "Owner paper towels",
+    envelopeId: billEnvelope.id,
+    rate: { rateBasis: "days_per_unit", daysPerUnitTenths: 70 },
+  });
   await importFinanceCsvFiles({
     userId,
     files: [
@@ -801,6 +817,28 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listFinanceAuditEvents(intruder)).toEqual([]);
     expect(await loadFinanceAuditEvent(intruder, events[0].id)).toBeNull();
     expect(await loadFinanceAuditEvent(owner.userId, events[0].id)).not.toBeNull();
+  });
+
+  it("the catalogs a picker fills itself from", async () => {
+    // Each is a plain list off its own table. Nothing here takes an id, so the only thing
+    // between the intruder and the whole catalog is the `where` — and a catalog is exactly
+    // what names every envelope, context and supply the owner has.
+    expect(await listBudgetEnvelopeOptions(intruder)).toEqual({
+      groups: [],
+      envelopes: [],
+    });
+    expect(await listMasterContexts(intruder)).toEqual([]);
+    expect(await listSupplyItems(intruder)).toEqual([]);
+    // The opening position is a number rather than a row, which is why it needs saying: it
+    // reports what the owner's on-budget accounts held before a month began.
+    expect(await openingPositionFor(intruder, "2026-09-01")).toBe(0);
+
+    const catalog = await listBudgetEnvelopeOptions(owner.userId);
+    expect(catalog.groups.length).toBeGreaterThan(0);
+    expect(catalog.envelopes.map((row) => row.id)).toContain(owner.billEnvelopeId);
+    expect((await listMasterContexts(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listSupplyItems(owner.userId)).length).toBeGreaterThan(0);
+    expect(await openingPositionFor(owner.userId, "2026-09-01")).not.toBe(0);
   });
 
   it("payee routing reads that take an envelope or payee id", async () => {
