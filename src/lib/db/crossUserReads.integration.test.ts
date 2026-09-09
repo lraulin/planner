@@ -148,6 +148,7 @@ import {
   getWeeklyPlanById,
   listPlanEntries,
   listWeeklyPlans,
+  loadPreviousRewrites,
   loadResultAreaReviews,
 } from "@/lib/planning/queries";
 import { loadFindCorpus } from "@/lib/find/queries";
@@ -262,6 +263,8 @@ const DAY = "2026-03-11";
 const SEED_AUDIT_MONTH = "2026-08-01";
 const OWNER_CALENDAR_ID = "owner-primary@group.calendar.google.com";
 const WEEK_START = new Date(2026, 2, 8);
+/** After `WEEK_START`, so the seeded plan counts as a previous week. */
+const AFTER_WEEK_START = new Date(2026, 2, 15);
 const RANGE_FROM = new Date(2026, 2, 1);
 const RANGE_TO = new Date(2026, 2, 31);
 
@@ -550,7 +553,12 @@ async function seedOwner(): Promise<Owned> {
   await approveAmazonChargeMatch(userId, amazonCharge.id, amazonLedgerRow.id);
 
   const plan = await ensureWeeklyPlan(userId, { weekStart: WEEK_START });
-  await upsertPlanEntry(userId, plan.id, goalId, { focus: true });
+  // The rewrite is what `loadPreviousRewrites` carries forward into the next week's review,
+  // so without one that read answers empty for the owner too.
+  await upsertPlanEntry(userId, plan.id, goalId, {
+    focus: true,
+    rewrite: "Owner rewrite from last week",
+  });
 
   const exerciseId = await createExercise(userId, "Owner lift");
   const sessionId = await createSession(userId, {
@@ -978,6 +986,10 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await getWeeklyPlan(intruder, owner.weekStart)).toBeNull();
     expect(await getWeeklyPlanById(intruder, owner.planId)).toBeNull();
     expect(await listPlanEntries(intruder, owner.planId)).toEqual([]);
+    // Last week's rewrite, carried into this week's review. Its own `where` on
+    // `weekly_plans`, and the date bound says nothing about who owns the plan.
+    expect(await loadPreviousRewrites(intruder, AFTER_WEEK_START)).toEqual(new Map());
+    expect((await loadPreviousRewrites(owner.userId, AFTER_WEEK_START)).size).toBe(1);
     // The weekly review's Result Area panel: description, mission and guiding principles,
     // reached from `nodes` rather than from the plan, so it needs its own refusal.
     expect(await loadResultAreaReviews(intruder)).toEqual(new Map());
