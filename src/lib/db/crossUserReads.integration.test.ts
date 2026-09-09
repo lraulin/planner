@@ -144,6 +144,7 @@ import {
   getWeeklyPlanById,
   listPlanEntries,
   listWeeklyPlans,
+  loadResultAreaReviews,
 } from "@/lib/planning/queries";
 import { loadFindCorpus } from "@/lib/find/queries";
 import { FIND_FIELD_CLASSES, FIND_SOURCE_IDS } from "@/lib/find/types";
@@ -961,6 +962,10 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await getWeeklyPlan(intruder, owner.weekStart)).toBeNull();
     expect(await getWeeklyPlanById(intruder, owner.planId)).toBeNull();
     expect(await listPlanEntries(intruder, owner.planId)).toEqual([]);
+    // The weekly review's Result Area panel: description, mission and guiding principles,
+    // reached from `nodes` rather than from the plan, so it needs its own refusal.
+    expect(await loadResultAreaReviews(intruder)).toEqual(new Map());
+    expect((await loadResultAreaReviews(owner.userId)).size).toBeGreaterThan(0);
   });
 
   it("the fitness log", async () => {
