@@ -23,13 +23,11 @@ export type StoredFlowRow = {
   /** Signed cents, positive is money in — the same convention as `finance_transactions`. */
   amountCents: number;
   derivedFlow: FinanceFlowKind | null;
-  derivedCategory?: string | null;
 };
 
 export type PlannedFlowRow = {
   id: string;
   derivedFlow: FinanceFlowKind;
-  derivedCategory?: string | null;
 };
 
 /** One (was, now) pair, with how many rows moved and how much signed money went with them. */
@@ -51,16 +49,15 @@ function keyOf(from: string | null, to: string | null): string {
 }
 
 /**
- * Group every row whose value under `read` moved, into (was, now) pairs.
+ * Group the rows whose planned flow differs from the stored one.
  *
- * Generic over the field because flow and category need exactly the same report and would
- * otherwise be two copies that could drift in their edge cases — which row counts as new,
- * whether null is a value, how ties order.
+ * A row present in the plan but absent from `stored` is not a change — it has never been
+ * classified, so there is no previous meaning for it to have moved away from. Counting those
+ * would bury a real regression under the backlog of a fresh import.
  */
-function summarize<T extends { id: string }>(
-  stored: readonly (T & { amountCents: number })[],
-  planned: readonly { id: string }[],
-  read: (row: object) => string | null,
+export function summarizeFlowChanges(
+  stored: readonly StoredFlowRow[],
+  planned: readonly PlannedFlowRow[],
 ): FlowDiff {
   const byId = new Map(stored.map((row) => [row.id, row]));
   const groups = new Map<string, FlowTransition>();
@@ -69,8 +66,8 @@ function summarize<T extends { id: string }>(
   for (const plan of planned) {
     const before = byId.get(plan.id);
     if (!before) continue;
-    const was = read(before);
-    const now = read(plan);
+    const was = before.derivedFlow;
+    const now = plan.derivedFlow;
     if (was === now) continue;
 
     changed += 1;
@@ -96,46 +93,9 @@ function summarize<T extends { id: string }>(
   return { scanned: byId.size, changed, transitions };
 }
 
-/**
- * Group the rows whose planned flow differs from the stored one.
- *
- * A row present in the plan but absent from `stored` is not a change — it has never been
- * classified, so there is no previous meaning for it to have moved away from. Counting those
- * would bury a real regression under the backlog of a fresh import.
- */
-export function summarizeFlowChanges(
-  stored: readonly StoredFlowRow[],
-  planned: readonly PlannedFlowRow[],
-): FlowDiff {
-  return summarize(
-    stored,
-    planned,
-    (row) => (row as PlannedFlowRow).derivedFlow ?? null,
-  );
-}
-
-/**
- * The same report for `derived_category`.
- *
- * Both fields have to be audited together, because a rule change can move one without the
- * other: a rule that only names a category leaves flow alone, and a flow-only rule pushes its
- * row out of the categorised set entirely through `carriesCategory`. Reporting just one would
- * let the other half of a regression through.
- */
-export function summarizeCategoryChanges(
-  stored: readonly StoredFlowRow[],
-  planned: readonly PlannedFlowRow[],
-): FlowDiff {
-  return summarize(
-    stored,
-    planned,
-    (row) => (row as PlannedFlowRow).derivedCategory ?? null,
-  );
-}
-
 /** One line per transition, for a CLI. */
-export function formatFlowDiff(diff: FlowDiff, label = "flow"): string {
-  const head = `${diff.changed} of ${diff.scanned} classified rows change ${label}`;
+export function formatFlowDiff(diff: FlowDiff): string {
+  const head = `${diff.changed} of ${diff.scanned} classified rows change flow`;
   if (diff.transitions.length === 0) return `${head}.`;
 
   const lines = diff.transitions.map((transition) => {
