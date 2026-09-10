@@ -177,19 +177,3 @@ export function isConvertiblePayeeCategoryRule(rule: {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
-export function convertiblePayeeId(conditions: unknown): string | null {
-  if (!Array.isArray(conditions) || conditions.length !== 1) return null;
-  const condition = conditions[0];
-  if (!isRecord(condition)) return null;
-  if (condition.field !== "payee" || condition.op !== "is") return null;
-  return typeof condition.value === "string" ? condition.value : null;
-}
-
-export function convertibleCategoryId(actions: unknown): string | null {
-  if (!Array.isArray(actions) || actions.length !== 1) return null;
-  const action = actions[0];
-  if (!isRecord(action)) return null;
-  if (action.op !== "set" || action.field !== "category") return null;
-  return typeof action.value === "string" ? action.value : null;
-}

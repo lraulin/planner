@@ -287,10 +287,6 @@ export async function handleMcpHttpPayload(
   return { status: 200, body: response };
 }
 
-export function parseMcpJson(text: string): unknown {
-  return JSON.parse(text) as unknown;
-}
-
 export function mcpParseError(): JsonRpcResponse {
   return errorResponse(null, { code: PARSE_ERROR, message: "Parse error" });
 }

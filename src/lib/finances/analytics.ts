@@ -863,17 +863,7 @@ export function spendByCategoryPerBucket(
   return { keys, points };
 }
 
-const ASSET_KINDS: ReadonlySet<FinanceAccountKind> = new Set([
-  "checking",
-  "savings",
-  "cash",
-  "investment",
-]);
 const DEBT_KINDS: ReadonlySet<FinanceAccountKind> = new Set(["credit_card", "loan"]);
-
-export function isAssetKind(kind: FinanceAccountKind): boolean {
-  return ASSET_KINDS.has(kind);
-}
 
 export function isDebtKind(kind: FinanceAccountKind): boolean {
   return DEBT_KINDS.has(kind);

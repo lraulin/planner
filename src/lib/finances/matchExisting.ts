@@ -14,21 +14,6 @@ function foldDescription(description: string): string {
   return description.replace(/\s+/g, " ").trim().toUpperCase();
 }
 
-export function matchKey(transaction: {
-  transactionDate: string;
-  amountCents: number;
-  description: string;
-}): string {
-  // Case and interior spaces are not identity — the Capital One CSV writes
-  // "WL *Steam Purchase" and "WL *STEAM PURCHASE", and "AGENT FEE   890…".
-  // Date + cents still have to agree; Disney Plus and Kindle can share both.
-  return JSON.stringify([
-    transaction.transactionDate,
-    transaction.amountCents,
-    foldDescription(transaction.description),
-  ]);
-}
-
 /**
  * Same merchant after folding, or one is the other plus a leftover location / domain
  * the statement normalizer failed to peel (`CURSOR, AI POWERED IDE` vs

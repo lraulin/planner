@@ -51,10 +51,6 @@ export function findSource(id: FindSourceId): FindSource {
   return source;
 }
 
-export function sourceLabel(id: FindSourceId): string {
-  return findSource(id).label;
-}
-
 /** Everything, as Achieve had every Search In box ticked. */
 export const DEFAULT_SOURCES: readonly FindSourceId[] = FIND_SOURCE_IDS;
 

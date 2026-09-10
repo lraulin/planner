@@ -21,7 +21,7 @@ import {
   type RemoteEvent,
 } from "./mirror";
 import { markCalendarsSynced, refreshCalendarLinks } from "./mutations";
-import { enabledCalendarLinks, isGoogleLinked, syncIsStale } from "./queries";
+import { enabledCalendarLinks, syncIsStale } from "./queries";
 
 /** How long a mirrored window stays fresh before loading `/schedule` refetches it. */
 export const SYNC_MAX_AGE_MS = 5 * 60_000;
@@ -208,9 +208,4 @@ export async function refreshCalendarsFromGoogle(
   const entries = await listCalendars(userId);
   await refreshCalendarLinks(userId, entries);
   return entries;
-}
-
-/** Whether the connect flow has been completed, for the settings panel. */
-export async function googleConnectionState(userId: string): Promise<boolean> {
-  return isGoogleLinked(userId);
 }

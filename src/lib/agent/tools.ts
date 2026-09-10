@@ -831,10 +831,6 @@ if (TOOL_REGISTRY.size !== definitions.length) {
   throw new Error("Agent tool registry contains a duplicate name.");
 }
 
-export function isAgentTool(name: string): name is AgentToolName {
-  return TOOL_REGISTRY.has(name as AgentToolName);
-}
-
 export function publicToolDefinition(tool: AgentToolDefinition) {
   return {
     name: tool.name,

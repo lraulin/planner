@@ -424,19 +424,3 @@ export function prepareRegister(
     },
   };
 }
-
-export function registerBlockAt(
-  ledger: readonly TransactionListRow[],
-  query: RegisterQuery,
-  ctx: RegisterQueryContext,
-  offset: number,
-): RegisterRowBlock<RegisterTransactionRow> {
-  const preparedLedger = annotateCategoryAssignability(ledger, ctx.offBudgetAccountIds);
-  const prepared = prepareRegister(preparedLedger, query, ctx);
-  const start = parseBlockOffset(offset);
-  return {
-    queryKey: prepared.index.queryKey,
-    offset: start,
-    rows: sliceRegisterBlock(preparedLedger, prepared.index.nodeIds, start),
-  };
-}
