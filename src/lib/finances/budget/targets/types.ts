@@ -39,7 +39,16 @@ export type CadenceUnit = (typeof CADENCE_UNITS)[number];
 export type Cadence =
   /** 0 = Sunday … 6 = Saturday, the `weekdayOfDateKey` convention (`standards/development/dates.md`). */
   | { unit: "week"; weekday: number }
-  /** 1–31, clamped to the month's end. */
+  /**
+   * 1–31, and **nothing reads it**.
+   *
+   * A monthly target asks for its whole amount in the month it is counted in —
+   * `wholeOccurrences` returns 1 for `month` without consulting this — so the day decides
+   * nothing about the ask, the cap, or the spread. `TargetDrawer` offers no control for it
+   * and seeds 31; the parser below still requires it, so it round-trips rather than
+   * disappearing on the next save. It is not clamped anywhere, because nothing reaches a
+   * calendar with it.
+   */
   | { unit: "month"; day: number }
   /** 1–12, the month it is needed by. */
   | { unit: "year"; month: number }
