@@ -1,12 +1,7 @@
 "use server";
 
 import * as fitness from "@/lib/fitness/mutations";
-import {
-  latestSessionByTitle,
-  listExercises,
-  listRepeatableTitles,
-  loadLatestForExercise,
-} from "@/lib/fitness/queries";
+import { loadLatestForExercise } from "@/lib/fitness/queries";
 import type { ExercisePrefs, SessionInput } from "@/lib/fitness/types";
 import {
   runWithData,
@@ -54,10 +49,6 @@ export async function deleteSessionAction(sessionId: string) {
   return run((userId) => fitness.deleteSession(userId, sessionId));
 }
 
-export async function listExercisesAction() {
-  return run((userId) => listExercises(userId));
-}
-
 export async function loadLatestForExerciseAction(
   exerciseId: string,
   excludeSessionId?: string | null,
@@ -66,12 +57,4 @@ export async function loadLatestForExerciseAction(
   return run((userId) =>
     loadLatestForExercise(userId, exerciseId, { excludeSessionId, sessionTitle }),
   );
-}
-
-export async function listRepeatableTitlesAction() {
-  return run((userId) => listRepeatableTitles(userId));
-}
-
-export async function latestSessionByTitleAction(title: string) {
-  return run((userId) => latestSessionByTitle(userId, title));
 }

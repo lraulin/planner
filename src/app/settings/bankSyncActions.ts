@@ -9,7 +9,6 @@ import {
   renameConnection,
   replaceAccessUrl,
   saveConnection,
-  unlinkAccount,
 } from "@/lib/banksync/mutations";
 import {
   linkableAccounts,
@@ -155,12 +154,6 @@ export async function linkAccountAction(input: {
 }): Promise<ActionResult> {
   return run(async (userId) => {
     await linkAccount(userId, input);
-  });
-}
-
-export async function unlinkAccountAction(linkId: string): Promise<ActionResult> {
-  return run(async (userId) => {
-    await unlinkAccount(userId, linkId);
   });
 }
 

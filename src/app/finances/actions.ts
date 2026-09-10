@@ -7,10 +7,8 @@ import {
   mergePayees,
   replaceCommitmentPayees,
   removeAlias,
-  isolatePayeeForBill,
   setPayeeNotACommitment,
   setPayeeAutoCategory,
-  setPayeeNotes,
   updatePayeeDetails,
 } from "@/lib/finances/payees/mutations";
 import { addPayeeAlias } from "@/lib/finances/payees/aliases";
@@ -311,14 +309,6 @@ export async function trackTransactionAsBillAction(
   return runWithData((userId) => trackTransactionAsBill(userId, transactionId, edit));
 }
 
-export async function isolatePayeeForBillAction(
-  transactionId: string,
-): Promise<ActionResult> {
-  return run((userId) => isolatePayeeForBill(userId, transactionId), {
-    revalidate: [],
-  });
-}
-
 export async function setCommitmentPayeesAction(input: {
   id: string;
   payeeIds: readonly string[];
@@ -533,13 +523,6 @@ export async function removePayeeAliasAction(
   alias: string,
 ): Promise<ActionResult> {
   return run((userId) => removeAlias(userId, payeeId, alias));
-}
-
-export async function setPayeeNotesAction(
-  payeeId: string,
-  notes: string,
-): Promise<ActionResult> {
-  return run((userId) => setPayeeNotes(userId, payeeId, notes));
 }
 
 export async function updatePayeeDetailsAction(
