@@ -55,6 +55,10 @@ import { createResource } from "@/lib/resources/mutations";
 import { getResourceDetail, listResources } from "@/lib/resources/queries";
 import { approveAmazonChargeMatch } from "@/lib/amazon/apply";
 import { importAmazonSlim } from "@/lib/amazon/import";
+import {
+  updateAmazonChargeReview,
+  updateAmazonSubscriptionReview,
+} from "@/lib/amazon/mutations";
 import { persistAmazonSnapshot } from "@/lib/amazon/reconcile";
 import {
   countAmazonItems,
@@ -69,6 +73,7 @@ import {
   listAmazonOrderSummaries,
   listAmazonReceiptAllocations,
   loadAmazonBlock,
+  listAmazonReviewItems,
   listAmazonSubscriptions,
 } from "@/lib/amazon/queries";
 import { SNAPSHOT_SOURCE, SNAPSHOT_VERSION } from "@/lib/amazon/snapshot";
@@ -551,6 +556,19 @@ async function seedOwner(): Promise<Owned> {
     throw new Error("expected the Amazon ledger seed to import a row");
   }
   await approveAmazonChargeMatch(userId, amazonCharge.id, amazonLedgerRow.id);
+  // `listAmazonReviewItems` reads charges and subscriptions in two separate scoped queries,
+  // so a seed with neither flagged would let either guard be dropped without going red.
+  // Approving the match above clears the charge's flag (`apply.ts:469`), and nothing flags a
+  // subscription on capture, so both are set here — a matched charge carrying a review flag
+  // is a state the app produces on its own (`reconcile.ts:426`).
+  await updateAmazonChargeReview(userId, amazonCharge.id, {
+    needsReview: true,
+    reviewReason: "Owner charge under review",
+  });
+  await updateAmazonSubscriptionReview(userId, amazonSubscription.id, {
+    needsReview: true,
+    reviewReason: "Owner subscription under review",
+  });
 
   const plan = await ensureWeeklyPlan(userId, { weekStart: WEEK_START });
   // The rewrite is what `loadPreviousRewrites` carries forward into the next week's review,
@@ -777,6 +795,14 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(
       (await listAmazonSubscriptions(owner.userId)).map((row) => row.id),
     ).toContain(owner.amazonSubscriptionId);
+  });
+
+  it("the amazon review list, whose two halves each carry their own guard", async () => {
+    // Two scoped queries, one per table, unioned into one list — so each has to refuse on
+    // its own `user_id` and the seed flags one row of each kind.
+    expect(await listAmazonReviewItems(intruder)).toEqual([]);
+    const mine = await listAmazonReviewItems(owner.userId);
+    expect(mine.map((row) => row.kind).sort()).toEqual(["charge", "subscription"]);
   });
 
   it("amazon reads that take an id the intruder can guess", async () => {
