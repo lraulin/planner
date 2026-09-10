@@ -21,7 +21,7 @@ import {
   type RemoteEvent,
 } from "./mirror";
 import { markCalendarsSynced, refreshCalendarLinks } from "./mutations";
-import { enabledCalendarLinks, syncIsStale } from "./queries";
+import { enabledCalendarLinks } from "./queries";
 
 /** How long a mirrored window stays fresh before loading `/schedule` refetches it. */
 export const SYNC_MAX_AGE_MS = 5 * 60_000;
@@ -178,23 +178,6 @@ export async function syncWindow(
     };
   }
   return status;
-}
-
-/**
- * Sync only if the window has gone stale. This is what `loadSchedule` calls on every page
- * view, so the throttle is the difference between "fresh enough" and a Google round trip
- * on every navigation.
- */
-export async function syncWindowIfStale(
-  userId: string,
-  window: MirrorWindow,
-): Promise<SyncStatus> {
-  // "Off" and "fresh" are different answers and the UI treats them differently: off hides
-  // the Refresh button entirely, fresh leaves it available. Checking staleness first would
-  // report an unconfigured install as merely fresh, and offer a button that can only fail.
-  if ((await enabledCalendarLinks(userId)).length === 0) return { state: "off" };
-  if (!(await syncIsStale(userId, SYNC_MAX_AGE_MS))) return { state: "skipped" };
-  return syncWindow(userId, window);
 }
 
 /**

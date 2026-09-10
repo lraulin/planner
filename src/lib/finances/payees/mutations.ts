@@ -523,18 +523,6 @@ export async function clearPayeeRouting(
     .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
 }
 
-export async function setPayeeNotes(
-  userId: string,
-  payeeId: string,
-  notes: string,
-): Promise<void> {
-  await requirePayee(userId, payeeId);
-  await db
-    .update(financePayees)
-    .set({ notes, updatedAt: new Date() })
-    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
-}
-
 /**
  * Claim this merchant for a payee.
  *
@@ -720,22 +708,6 @@ export async function setPayeeNotACommitment(
     .update(financePayees)
     .set({ notACommitment, updatedAt: new Date() })
     .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
-}
-
-/** Every payee an envelope claims, released in one statement. */
-export async function releaseCommitmentClaims(
-  userId: string,
-  claim: { id: string },
-): Promise<void> {
-  await db
-    .update(financePayees)
-    .set({ claimedBudgetCategoryId: null, updatedAt: new Date() })
-    .where(
-      and(
-        eq(financePayees.userId, userId),
-        eq(financePayees.claimedBudgetCategoryId, claim.id),
-      ),
-    );
 }
 
 /** Replace an envelope's complete payee set atomically, refusing identities held elsewhere. */
