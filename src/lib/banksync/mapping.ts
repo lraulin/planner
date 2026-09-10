@@ -145,6 +145,14 @@ export function toParsedTransaction(
   const pending = isPending(transaction);
   const postedKey = epochToDateKey(transaction.posted);
   const transactedKey = epochToDateKey(transaction.transacted_at);
+  // Prefer when it happened over when it cleared, and fall back only because some servers
+  // report one timestamp. **The fallback changes what the register's date means, per bank.**
+  // Measured on real data: every Chase row carries a `transacted_at` one to three days before
+  // its `posted`, so Chase is transaction-dated. Capital One's card reports the two as the
+  // same day, and its feed rows land Mon 19 / Sat 3 / Sun 0 against 1,217 CSV rows for the
+  // same card whose heaviest days are Sunday and Saturday — a weekend's purchases arriving on
+  // Monday. So `transaction_date` on that card means the purchase before 2026-08-10 and the
+  // posting after it, and a Sunday purchase can fall in the next budget month.
   const transactionDate = transactedKey ?? postedKey;
   // Nothing usable to date it by. A row with neither timestamp cannot be placed in the
   // register at all, so it is dropped the same way an unparseable amount is.
