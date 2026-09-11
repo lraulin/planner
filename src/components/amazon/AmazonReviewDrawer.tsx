@@ -2,7 +2,12 @@
 
 import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
+import {
+  Drawer,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerLeaveGuard,
+} from "@/components/detail/Drawer";
 import { formatUsd } from "@/lib/finances/money";
 import { DateText } from "@/components/date/DateText";
 import {
@@ -291,6 +296,7 @@ export function AmazonReviewDrawer({
           </p>
         )}
       </div>
+      <DrawerLeaveGuard dirty={dirty} />
       <DrawerFooter
         onSave={() => save(false)}
         onSaveAndClose={() => save(true)}

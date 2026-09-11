@@ -5,7 +5,12 @@ import {
   getResidenceDetailAction,
   updateResidenceAction,
 } from "@/app/library/residences/actions";
-import { Drawer, DrawerHeader, DrawerFooter } from "@/components/detail/Drawer";
+import {
+  Drawer,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerLeaveGuard,
+} from "@/components/detail/Drawer";
 import { FormTabs } from "@/components/detail/FormTabs";
 import {
   ComboboxField,
@@ -303,6 +308,7 @@ function ResidenceForm({
   return (
     <>
       <FormTabs tabs={tabs} active={tab} onSelect={(id) => setTab(id as TabId)} />
+      <DrawerLeaveGuard dirty={dirty} />
       <DrawerFooter
         onSave={() => save(false)}
         onSaveAndClose={() => save(true)}

@@ -8,7 +8,12 @@ import {
   getResourceDetailAction,
   updateResourceAction,
 } from "@/app/library/resources/actions";
-import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
+import {
+  Drawer,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerLeaveGuard,
+} from "@/components/detail/Drawer";
 import {
   EffortField,
   FieldGrid,
@@ -260,6 +265,8 @@ function ResourceForm({
           </Section>
         </div>
       </div>
+
+      <DrawerLeaveGuard dirty={dirty} />
 
       <DrawerFooter
         onSave={() => save(false)}

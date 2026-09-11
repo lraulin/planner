@@ -107,7 +107,10 @@ Rules for this model:
 - **Save & Close** persists then leaves — the finishing action, not a substitute for
   stay-open Save. Failed writes still stay open with the error.
 - **Cancel** / header × / Escape / backdrop leave the surface. If dirty, prompt to discard
-  — every leave path must share the same dirty-aware handler.
+  — every leave path must share the same dirty-aware handler. The `Drawer` owns that handler:
+  render `<DrawerLeaveGuard dirty={dirty} />` anywhere inside it and all four paths ask
+  first. Hand-rolling a `requestClose` for some paths is how six drawers ended up discarding
+  edits on the others.
 - Never close a drawer over a failed save — the user's input disappears with it.
 - On **create**, promote the draft to the new id in local state so the next Save is an
   update, then stay open. `onSaved` (if the parent needs one) means **refresh background

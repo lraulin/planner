@@ -1,9 +1,50 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { formatBindings, matchBindings } from "@/lib/commands/bindings";
 import { COMMIT_FORM, SAVE } from "@/lib/commands/chords";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { comboboxOwnsEscape, useModalFocus } from "./focus";
+
+/**
+ * The drawer's one leave path, for forms that opt in with `useDrawerLeaveGuard`.
+ *
+ * `drawer-pattern.md`: "every leave path must share the same dirty-aware handler." A drawer has
+ * four — Escape, the backdrop, the header ×, the footer Cancel — and three of them used to be
+ * wired by each form on its own. Six forms (Contact, Job, Residence, Resource, Amazon review,
+ * Metric) wired none, or only some, and discarded unsaved edits silently on the rest. With the
+ * guard on the drawer itself, a form renders `<DrawerLeaveGuard dirty={dirty} />` once and all four paths ask.
+ *
+ * Forms that already route every path through their own confirm (Account, Payee, Transaction,
+ * Target, the node drawer, Appointment) do not register, so the guard stays clean for them and
+ * passes their handler straight through.
+ */
+type LeaveGuard = {
+  setDirty: (dirty: boolean) => void;
+  leave: (close: () => void) => void;
+};
+
+const LeaveGuardContext = createContext<LeaveGuard | null>(null);
+
+/**
+ * Put this drawer's leave paths behind a discard confirmation while `dirty`. Render it anywhere
+ * inside the `Drawer` — a component rather than a hook, because several forms hold their dirty
+ * state in the component that renders the `Drawer`, above the context a hook would read.
+ */
+export function DrawerLeaveGuard({ dirty }: { dirty: boolean }): null {
+  const guard = useContext(LeaveGuardContext);
+  useEffect(() => {
+    guard?.setDirty(dirty);
+    return () => guard?.setDirty(false);
+  }, [guard, dirty]);
+  return null;
+}
+
+/** `close`, or the discard confirmation first if a registered form is dirty. */
+function useLeave(close: () => void): () => void {
+  const guard = useContext(LeaveGuardContext);
+  return () => (guard ? guard.leave(close) : close());
+}
 
 const SAVE_CHORD = formatBindings(SAVE) ?? "⌘S";
 const COMMIT_CHORD = formatBindings(COMMIT_FORM) ?? "⌘⏎";
@@ -38,6 +79,26 @@ export function Drawer({
   children: React.ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const dirtyRef = useRef(false);
+  // The close a discard confirmation is holding, while it is open.
+  const [pending, setPending] = useState<{ close: () => void } | null>(null);
+  const pendingRef = useRef(pending);
+  useEffect(() => {
+    pendingRef.current = pending;
+  });
+
+  const guard = useMemo<LeaveGuard>(
+    () => ({
+      setDirty: (dirty) => {
+        dirtyRef.current = dirty;
+      },
+      leave: (close) => {
+        if (dirtyRef.current) setPending({ close });
+        else close();
+      },
+    }),
+    [],
+  );
 
   useModalFocus(panelRef, open);
 
@@ -48,24 +109,26 @@ export function Drawer({
       if (event.key === "Escape") {
         // An expanded combobox closes its own list first — see `comboboxOwnsEscape`.
         if (comboboxOwnsEscape()) return;
+        // The discard confirmation is on top and answers its own Escape.
+        if (pendingRef.current) return;
         event.preventDefault();
         // Stop the outline's own Escape handling from also firing behind the drawer.
         event.stopPropagation();
-        onClose();
+        guard.leave(onClose);
       }
     }
 
     // Capture phase: the drawer is on top, so it decides what Escape means while it is open.
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [open, onClose]);
+  }, [open, onClose, guard]);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end md:absolute">
       <div
-        onClick={onClose}
+        onClick={() => guard.leave(onClose)}
         aria-hidden
         className="absolute inset-0 bg-[color-mix(in_srgb,var(--ink)_18%,transparent)]"
       />
@@ -80,8 +143,25 @@ export function Drawer({
         // viewport, so `h-full` puts the footer under Safari's toolbar.
         className="relative flex h-dvh w-full flex-col border-l border-rule-strong bg-surface shadow-2xl outline-none sm:w-[90%] md:h-full md:max-w-[45rem]"
       >
-        {children}
+        <LeaveGuardContext.Provider value={guard}>
+          {children}
+        </LeaveGuardContext.Provider>
       </div>
+
+      <ConfirmDialog
+        open={pending !== null}
+        title="Discard changes?"
+        message="You have unsaved changes. Close without saving?"
+        confirmLabel="Discard"
+        destructive
+        onConfirm={() => {
+          const close = pending?.close;
+          setPending(null);
+          dirtyRef.current = false;
+          close?.();
+        }}
+        onCancel={() => setPending(null)}
+      />
     </div>
   );
 }
@@ -104,6 +184,7 @@ export function DrawerHeader({
   /** Optional controls before the × (e.g. Delete). */
   actions?: React.ReactNode;
 }) {
+  const leave = useLeave(onClose);
   return (
     // The sheet covers the whole screen below `md`, so this header is what sits under the
     // notch — nothing above it is carrying that inset.
@@ -124,7 +205,7 @@ export function DrawerHeader({
 
       <button
         type="button"
-        onClick={onClose}
+        onClick={leave}
         title="Close"
         aria-label="Close"
         className="-mr-1 flex h-tap w-tap flex-none items-center justify-center rounded text-[1.25rem] leading-none text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink md:h-7 md:w-7 md:text-[1.125rem]"
@@ -176,6 +257,7 @@ export function DrawerFooter({
   error: string | null;
 }) {
   const status = dirty ? "Unsaved changes" : justSaved && !saving ? "Saved" : null;
+  const leave = useLeave(onClose);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -226,7 +308,7 @@ export function DrawerFooter({
         <div className="flex min-h-tap items-center gap-2 md:min-h-0">
           <button
             type="button"
-            onClick={onClose}
+            onClick={leave}
             className="min-h-tap rounded px-3 py-1.5 text-[0.8125rem] text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink md:min-h-0"
           >
             Cancel

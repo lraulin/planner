@@ -2,7 +2,12 @@
 
 import { useEffect, useId, useState, useTransition } from "react";
 import { getJobDetailAction, updateJobAction } from "@/app/library/jobs/actions";
-import { Drawer, DrawerHeader, DrawerFooter } from "@/components/detail/Drawer";
+import {
+  Drawer,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerLeaveGuard,
+} from "@/components/detail/Drawer";
 import { FormTabs } from "@/components/detail/FormTabs";
 import {
   CheckboxField,
@@ -337,6 +342,7 @@ function JobForm({
   return (
     <>
       <FormTabs tabs={tabs} active={tab} onSelect={(id) => setTab(id as TabId)} />
+      <DrawerLeaveGuard dirty={dirty} />
       <DrawerFooter
         onSave={() => save(false)}
         onSaveAndClose={() => save(true)}

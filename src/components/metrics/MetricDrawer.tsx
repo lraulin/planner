@@ -22,7 +22,12 @@ import {
   updateMetricAction,
   updateMetricEntryAction,
 } from "@/app/metrics/actions";
-import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
+import {
+  Drawer,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerLeaveGuard,
+} from "@/components/detail/Drawer";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import { useGridState } from "@/components/grid/useGridState";
 import {
@@ -373,11 +378,6 @@ function MetricForm({
     return true;
   };
 
-  const requestClose = () => {
-    if (dirty && !window.confirm("Discard unsaved changes?")) return;
-    onClose();
-  };
-
   const addEntry = () => {
     startTransition(async () => {
       const result = await createMetricEntryAction(detail.id, {
@@ -493,7 +493,7 @@ function MetricForm({
         titleId={titleId}
         eyebrow="Metric"
         title={draft.title || "Untitled"}
-        onClose={requestClose}
+        onClose={onClose}
         actions={
           <button
             type="button"
@@ -918,10 +918,12 @@ function MetricForm({
         )}
       </div>
 
+      <DrawerLeaveGuard dirty={dirty} />
+
       <DrawerFooter
         onSave={() => void save(false)}
         onSaveAndClose={() => void save(true)}
-        onClose={requestClose}
+        onClose={onClose}
         saving={saving}
         dirty={dirty}
         justSaved={justSaved}

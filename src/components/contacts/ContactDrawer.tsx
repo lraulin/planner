@@ -14,7 +14,12 @@ import {
   updateContactAction,
   updateContactItemAction,
 } from "@/app/library/contacts/actions";
-import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
+import {
+  Drawer,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerLeaveGuard,
+} from "@/components/detail/Drawer";
 import { FormTabs } from "@/components/detail/FormTabs";
 import {
   ContextsField,
@@ -399,6 +404,8 @@ export function ContactDrawer({
       <div className="sr-only">{formalNameOf(detail)}</div>
 
       <FormTabs tabs={tabs} active={tab} onSelect={(id) => setTab(id as TabId)} />
+
+      <DrawerLeaveGuard dirty={dirty} />
 
       <DrawerFooter
         onSave={() => save(false)}
