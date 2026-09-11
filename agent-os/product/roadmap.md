@@ -176,8 +176,9 @@ Features that complete or surround the original product, plus making it multi-de
   capped at 1000 with a visible notice. `?q=` is addressable; sources and options persist in
   `user_settings`. Achieve's reference pack does not document this dialog at all (one release-log
   line), so the Search In semantics are a stated reconstruction, and its Date Fields box is
-  dropped. Deferred: deep links for Appointments / Metrics / Timeline / Commitments (Find lands
-  on the page and says so), a SQL prefilter for transactions, saved searches.
+  dropped. The deep links it first deferred (Appointments / Metrics / Timeline / Commitments)
+  shipped the same day in `specs/2026-08-18-1254-detail-deep-links`, so every result kind now
+  opens its record. Still deferred: a SQL prefilter for transactions, saved searches.
 - **✅ Metrics tab + import/export.** `specs/2026-08-02-0912-metrics-tab`. First-class
   `metrics` / `metric_entries` (optional goal owner, history survives goal delete). Metrics
   tab lists all metrics with Group by Owner and an SVG performance graph; Metric form
