@@ -499,17 +499,23 @@ function billOccurrences(
     return dates;
   }
 
+  const cadence = cadenceOf(bill);
   const lastCharge =
     bill.anchorDate !== null && (lastPosted === null || bill.anchorDate > lastPosted)
-      ? shiftDateKeyMonths(bill.anchorDate, -bill.cadenceMonths)
+      ? shiftByCadence(bill.anchorDate, cadence, -1)
       : lastPosted;
   if (lastCharge === null) return [];
   const dates: string[] = [];
-  let due = nextDueFrom(lastCharge, cadenceOf(bill), todayKey);
-  // 24 months of cadences is the same bound `nextDueFrom` uses.
-  for (let step = 0; step < 24 && due < horizonKey; step++) {
+  // Every date counted in whole cadences from one origin, never stepped from the date before:
+  // stepping clamps a 31st to Feb 28 and keeps it there, and stepping by `cadenceMonths`
+  // turned a day cadence into a monthly one after its first charge. The bound is
+  // `nextDueFrom`'s two years of catch-up plus the twelve-month horizon.
+  const bound =
+    Math.ceil((cadence.unit === "day" ? 730 : 24) / Math.max(1, cadence.n)) + 48;
+  for (let count = 1; count <= bound && dates.length < 24; count++) {
+    const due = shiftByCadence(lastCharge, cadence, count);
+    if (due >= horizonKey) break;
     if (due >= todayKey) dates.push(due);
-    due = shiftDateKeyMonths(due, bill.cadenceMonths);
   }
   return dates;
 }

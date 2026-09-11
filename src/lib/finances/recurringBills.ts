@@ -241,19 +241,25 @@ export function shiftByCadence(key: string, cadence: Cadence, count = 1): string
  * A bill last charged three cycles ago is not two years overdue, it is due next month, and a
  * single `+ cadence` would say the former. The walk is bounded because a stale anchor with a
  * short cadence would otherwise iterate for as long as the history is deep.
+ *
+ * Each candidate is counted in whole cadences **from the charge**, never stepped from the one
+ * before it: stepping clamps a 31st to Feb 28 and then walks on from the 28th for good, the
+ * degradation `billSchedule.ts`'s `occurrenceAt` exists to avoid for declared bills.
  */
 export function nextDueFrom(
   lastChargeOn: string,
   cadence: Cadence,
   todayKey: string,
 ): string {
-  let due = shiftByCadence(lastChargeOn, cadence);
   // Two years of cadences is far past any real gap; beyond that the anchor is wrong, and
   // walking further would only produce a confident answer built on a bad one.
   const span = cadence.unit === "day" ? 730 : 24;
   const limit = Math.ceil(span / Math.max(1, cadence.n)) + 1;
-  for (let step = 0; step < limit && due < todayKey; step++) {
-    due = shiftByCadence(due, cadence);
+  let count = 1;
+  let due = shiftByCadence(lastChargeOn, cadence, count);
+  while (count <= limit && due < todayKey) {
+    count += 1;
+    due = shiftByCadence(lastChargeOn, cadence, count);
   }
   return due;
 }

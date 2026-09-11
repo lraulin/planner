@@ -63,6 +63,17 @@ describe("nextDueFrom", () => {
       "2026-08-14",
     );
   });
+
+  it("does not let a short month drag a 31st down to the 28th for good", () => {
+    // Stepping from each clamped result walks Jan 31 → Feb 28 → Mar 28. Counting cadences
+    // from the charge itself gives Mar 31, which is when the bill is actually due.
+    expect(nextDueFrom("2026-01-31", { unit: "month", n: 1 }, "2026-03-15")).toBe(
+      "2026-03-31",
+    );
+    expect(nextDueFrom("2026-08-31", { unit: "month", n: 1 }, "2026-10-01")).toBe(
+      "2026-10-31",
+    );
+  });
 });
 
 describe("spanDays", () => {

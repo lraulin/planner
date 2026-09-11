@@ -258,6 +258,46 @@ describe("projectForwardMonths", () => {
     expect(months.every((month) => !month.aboveMedian)).toBe(true);
   });
 
+  it("keeps a month-end bill on the month's end after a short month", () => {
+    // SMECO, anchored Aug 31. Each step used to start from the last one's clamped date, so
+    // Sep 30 became Oct 30 and Feb 28 became Mar 28 for the rest of the year.
+    const smeco = bill({
+      name: "SMECO",
+      cadenceMonths: 1,
+      expectedCents: 17_794,
+      anchorDate: "2026-08-31",
+    });
+    const dates = projectForwardMonths([smeco], new Map(), "2026-09-10").flatMap(
+      (month) => month.items.map((item) => item.dateKey),
+    );
+
+    expect(dates.slice(0, 7)).toEqual([
+      "2026-09-30",
+      "2026-10-31",
+      "2026-11-30",
+      "2026-12-31",
+      "2027-01-31",
+      "2027-02-28",
+      "2027-03-31",
+    ]);
+  });
+
+  it("projects a day-cadence bill in days, not months", () => {
+    // Every 28 days: after the first charge the walk used to step by `cadenceMonths` (1).
+    const vetsource = bill({
+      name: "Vetsource",
+      cadenceMonths: 1,
+      cadenceDays: 28,
+      expectedCents: 4_500,
+      anchorDate: "2026-09-14",
+    });
+    const dates = projectForwardMonths([vetsource], new Map(), "2026-09-10").flatMap(
+      (month) => month.items.map((item) => item.dateKey),
+    );
+
+    expect(dates.slice(0, 3)).toEqual(["2026-09-14", "2026-10-12", "2026-11-09"]);
+  });
+
   it("leaves cancelled bills out of the projection", () => {
     const disney = bill({
       name: "Disney+",
