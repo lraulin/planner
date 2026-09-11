@@ -46,6 +46,11 @@ describe("mergeIntervals", () => {
     expect(mergeIntervals([{ start: at(9), end: at(9) }])).toHaveLength(0);
   });
 
+  it("keeps the outer end when a later interval sits inside an earlier one", () => {
+    const merged = mergeIntervals([span(9, 12), span(10, 11)]);
+    expect(merged).toEqual([span(9, 12)]);
+  });
+
   it("does not mutate the intervals it was given", () => {
     const input = [span(9, 10), span(10, 11)];
     mergeIntervals(input);
@@ -91,6 +96,16 @@ describe("findFreeSlot", () => {
     expect(findFreeSlot(busy, at(9), 60, { searchEnd })).toBeNull();
   });
 
+  it("takes a slot that ends exactly as the window closes", () => {
+    expect(findFreeSlot([], at(22), 60, { searchEnd })).toEqual(at(22));
+  });
+
+  it("does not snap back onto a blocker that ends partway through a minute", () => {
+    // A synced event ending 10:00:30 still holds 10:00; the next quarter hour is 10:15.
+    const busy = [{ start: at(9), end: new Date(2026, 6, 28, 10, 0, 30) }];
+    expect(findFreeSlot(busy, at(9), 60, { searchEnd })).toEqual(at(10, 15));
+  });
+
   it("refuses a block that would not fit before the window closes", () => {
     expect(findFreeSlot([], at(22, 30), 60, { searchEnd })).toBeNull();
   });
@@ -111,6 +126,10 @@ describe("splitIntoBlocks", () => {
 
   it("folds a stub tail into the previous block instead of scheduling five minutes", () => {
     expect(splitIntoBlocks(185, 90)).toEqual([90, 95]);
+  });
+
+  it("keeps a tail of exactly the minimum as its own block", () => {
+    expect(splitIntoBlocks(105, 90)).toEqual([90, 15]);
   });
 
   it("has nothing to split when nothing is committed", () => {

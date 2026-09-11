@@ -26,6 +26,12 @@ describe("summarizeBudget", () => {
     expect(s.committedCount).toBe(1);
   });
 
+  it("is not over-committed at exactly the budget", () => {
+    const s = summarizeBudget([row(40 * 60)], 40 * 60);
+    expect(s.overCommitted).toBe(false);
+    expect(s.remainingMinutes).toBe(0);
+  });
+
   it("reports over-commitment with a negative remainder", () => {
     const s = summarizeBudget([row(30 * 60), row(20 * 60)], 40 * 60);
     expect(s.overCommitted).toBe(true);
