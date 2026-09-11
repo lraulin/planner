@@ -44,6 +44,7 @@ import { ForecastDetails } from "../budget/ForwardPanel";
 import { ReviewDrawer } from "../budget/ReviewDrawer";
 import { CommitmentPayeeDialog } from "../budget/CommitmentPayeeDialog";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { billColumns, type BillColumnCtx } from "./billColumns";
 import { INSERT_AFTER, OPEN_RECORD } from "@/lib/commands/chords";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
@@ -89,6 +90,7 @@ export function BillsView({
   lastCharges: ReadonlyMap<string, string>;
 }) {
   const router = useRouter();
+  const formatDate = useDateFormatter();
   const titleId = useId();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -395,8 +397,8 @@ export function BillsView({
                     className="underline"
                     onClick={() => setDetail(item.billId)}
                   >
-                    {item.name} · expected {item.expectedOn}
-                    {item.dueOn === null ? "" : `, due ${item.dueOn}`}
+                    {item.name} · expected {formatDate(item.expectedOn)}
+                    {item.dueOn === null ? "" : `, due ${formatDate(item.dueOn)}`}
                   </button>
                   {item.dueOn === null ? (
                     <button
