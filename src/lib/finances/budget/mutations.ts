@@ -21,7 +21,7 @@ import {
   partitionCategoryTargets,
 } from "../categoryEligibility";
 import { numericStringToCents } from "../money";
-import { applyPayeeAutoCategories, applyPayeeClaims } from "../payees/claims";
+import { applyPayeeClaims } from "../payees/claims";
 import { learnFromCategoryEdit } from "../payees/learn";
 import {
   budgetSiblings,
@@ -253,28 +253,7 @@ export async function seedBudget(
   return { startMonth, openingCents, categoryCount };
 }
 
-/**
- * Fill currently uncategorised eligible rows from payee claims then defaults.
- *
- * Taxonomy auto-map is retired. The `since` argument is kept so existing callers compile;
- * uncategorised-only application is the safety, not the date bound.
- */
-export async function autoMapBudgetCategories(
-  userId: string,
-  _since?: MonthKey,
-): Promise<{ placed: number; remaining: number }> {
-  const placed = await applyPayeeAutoCategories(userId);
-  return { placed, remaining: 0 };
-}
-
 export { applyPayeeClaims };
-
-/** Same fill, used after seeding a budget. */
-export async function autoMapConfiguredBudgetCategories(
-  userId: string,
-): Promise<{ placed: number; remaining: number }> {
-  return autoMapBudgetCategories(userId);
-}
 
 // ─────────────────────────── Moving money ───────────────────────────
 

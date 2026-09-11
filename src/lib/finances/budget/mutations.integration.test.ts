@@ -17,7 +17,6 @@ import {
   applyBudgetTemplates,
   assignBudget,
   applyPayeeClaims,
-  autoMapBudgetCategories,
   createBudgetCategory,
   createCategoryGroup,
   deleteBudgetCategory,
@@ -538,9 +537,9 @@ describeDb("budget mutations", () => {
 
     const ids = await envelopes(userId);
     await setTransactionBudgetCategory(userId, txId, ids.get("Savings")!);
-    const mapped = await autoMapBudgetCategories(userId, MONTH);
+    const placed = await applyPayeeAutoCategories(userId);
 
-    expect(mapped.placed).toBe(0);
+    expect(placed).toBe(0);
     const [row] = await db
       .select({ budgetCategoryId: financeTransactions.budgetCategoryId })
       .from(financeTransactions)
@@ -1609,7 +1608,7 @@ describeDb("budget mutations — cross-user isolation", () => {
       startMonth: MONTH,
       todayKey: TODAY,
     });
-    await autoMapBudgetCategories(ownerId, MONTH);
+    await applyPayeeAutoCategories(ownerId);
 
     const ids = await envelopes(ownerId);
     // The presets seed no groups, so the owner gets one here for the intruder to fail at.

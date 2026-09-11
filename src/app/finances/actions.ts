@@ -12,6 +12,7 @@ import {
   updatePayeeDetails,
 } from "@/lib/finances/payees/mutations";
 import { addPayeeAlias } from "@/lib/finances/payees/aliases";
+import { applyPayeeAutoCategories } from "@/lib/finances/payees/claims";
 import {
   listPayees,
   payeeEvidenceForCategory,
@@ -73,8 +74,6 @@ import {
 import {
   applyBudgetTemplates,
   assignBudget,
-  autoMapBudgetCategories,
-  autoMapConfiguredBudgetCategories,
   createBudgetCategory,
   createCategoryGroup,
   fileWaitingChargesForPayee,
@@ -316,7 +315,7 @@ export async function setCommitmentPayeesAction(input: {
   return run(async (userId) => {
     await replaceCommitmentPayees(userId, { id: input.id }, input.payeeIds);
     await reclassifyTransactions(userId);
-    await autoMapConfiguredBudgetCategories(userId);
+    await applyPayeeAutoCategories(userId);
   });
 }
 
@@ -364,7 +363,7 @@ export async function seedBudgetAction(
     const result = await seedBudget(userId, { preset, todayKey });
     // Setup is only finished when the grid has numbers in it, so the two run together
     // rather than leaving the user on an empty budget wondering what to do next.
-    await autoMapBudgetCategories(userId, result.startMonth);
+    await applyPayeeAutoCategories(userId);
     return result;
   });
 }
