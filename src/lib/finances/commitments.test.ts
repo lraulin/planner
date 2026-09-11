@@ -298,6 +298,63 @@ describe("projectForwardMonths", () => {
     expect(dates.slice(0, 3)).toEqual(["2026-09-14", "2026-10-12", "2026-11-09"]);
   });
 
+  const datesOf = (
+    row: StoredBillRow,
+    charges: { dateKey: string; costCents: number }[],
+    todayKey: string,
+  ) =>
+    projectForwardMonths([row], new Map([[row.id, charges]]), todayKey).flatMap(
+      (month) => month.items.map((item) => item.dateKey),
+    );
+
+  it("walks from the latest charge on file, not the first", () => {
+    const monthly = bill({ cadenceMonths: 1, expectedCents: 1_000 });
+    const charges = [
+      { dateKey: "2026-06-03", costCents: -1_000 },
+      { dateKey: "2026-08-15", costCents: -1_000 },
+    ];
+    expect(datesOf(monthly, charges, "2026-08-16")[0]).toBe("2026-09-15");
+  });
+
+  it("lets a charge newer than the anchor move the series", () => {
+    // Anchored May 10, but it last charged Aug 20: the bank's date is the newer fact.
+    const monthly = bill({
+      cadenceMonths: 1,
+      expectedCents: 1_000,
+      anchorDate: "2026-05-10",
+    });
+    const charges = [{ dateKey: "2026-08-20", costCents: -1_000 }];
+    expect(datesOf(monthly, charges, "2026-08-21")[0]).toBe("2026-09-20");
+  });
+
+  it("counts a charge due today as ahead, not behind", () => {
+    const monthly = bill({
+      cadenceMonths: 1,
+      expectedCents: 1_000,
+      anchorDate: "2026-09-10",
+    });
+    expect(datesOf(monthly, [], "2026-09-10")[0]).toBe("2026-09-10");
+  });
+
+  it("still projects a whole year from a charge eighteen months old", () => {
+    const monthly = bill({ cadenceMonths: 1, expectedCents: 1_000 });
+    const charges = [{ dateKey: "2025-03-15", costCents: -1_000 }];
+    const dates = datesOf(monthly, charges, "2026-09-16");
+    expect(dates[0]).toBe("2026-10-15");
+    expect(dates).toHaveLength(11);
+  });
+
+  it("phases a declared bill by its anchor, not by an older charge", () => {
+    const quarterly = bill({
+      cadenceMonths: 3,
+      expectedCents: 1_000,
+      dueDay: 1,
+      anchorDate: "2026-10-01",
+    });
+    const charges = [{ dateKey: "2026-08-01", costCents: -1_000 }];
+    expect(datesOf(quarterly, charges, "2026-09-10")[0]).toBe("2026-10-01");
+  });
+
   it("leaves cancelled bills out of the projection", () => {
     const disney = bill({
       name: "Disney+",
