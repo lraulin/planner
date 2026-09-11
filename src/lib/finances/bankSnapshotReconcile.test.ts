@@ -193,6 +193,85 @@ describe("planBankSnapshotReconciliation", () => {
     expect(plan.warnings[0]).toContain("Could not attach");
   });
 
+  it("retires the pending hold for a posted row it already has", () => {
+    const posted = incoming("CVS PHARMACY", -2284, "2026-08-28");
+    const plan = planBankSnapshotReconciliation(
+      [
+        existing("stored", "CVS PHARMACY", -2284, {
+          pending: false,
+          externalId: posted.externalId,
+        }),
+        existing("hold", "CVS PHARMACY", -2284),
+      ],
+      [posted],
+      [],
+      null,
+    );
+    expect(plan.postedDuplicates.map((row) => row.existingId)).toEqual(["stored"]);
+    expect(plan.pendingDeletes).toEqual(["hold"]);
+  });
+
+  it("converts the nearest of two matching holds, not the first by id", () => {
+    const plan = planBankSnapshotReconciliation(
+      [
+        existing("a-far", "CVS PHARMACY", -2284, { transactionDate: "2026-08-26" }),
+        existing("z-near", "CVS PHARMACY", -2284, { transactionDate: "2026-08-28" }),
+      ],
+      [incoming("CVS PHARMACY", -2284, "2026-08-28")],
+      [],
+      null,
+    );
+    expect(plan.postedTransitions.map((row) => row.existingId)).toEqual(["z-near"]);
+  });
+
+  it("converts the browser hold and retires the SimpleFIN twin when both match exactly", () => {
+    const plan = planBankSnapshotReconciliation(
+      [
+        existing("simplefin-cvs", "CVS PHARMACY", -2284, {
+          externalSource: "api:simplefin",
+        }),
+        existing("browser-cvs", "CVS PHARMACY", -2284),
+      ],
+      [incoming("CVS PHARMACY", -2284, "2026-08-28")],
+      [],
+      null,
+    );
+    expect(plan.postedTransitions.map((row) => row.existingId)).toEqual([
+      "browser-cvs",
+    ]);
+    expect(plan.pendingDeletes).toEqual(["simplefin-cvs"]);
+  });
+
+  it("keeps a split hold's edits when its posted twin is the only candidate", () => {
+    const plan = planBankSnapshotReconciliation(
+      [existing("restaurant", "DINER", -5000, { isParent: true })],
+      [incoming("DINER", -5000)],
+      [],
+      null,
+    );
+    expect(plan.postedTransitions.map((row) => row.existingId)).toEqual(["restaurant"]);
+    expect(plan.postedReplacements).toEqual([]);
+    expect(plan.warnings).toEqual([]);
+  });
+
+  it("does not merge a browser and a SimpleFIN hold that disagree on the amount", () => {
+    // Two holds, two different amounts: two occurrences, so the changed posted amount
+    // cannot be pinned to either.
+    const plan = planBankSnapshotReconciliation(
+      [
+        existing("browser-gas", "SHEETZ 123", -10000),
+        existing("simplefin-gas", "SHEETZ 123", -9000, {
+          externalSource: "api:simplefin",
+        }),
+      ],
+      [incoming("SHEETZ 123", -6789, "2026-08-28")],
+      [],
+      null,
+    );
+    expect(plan.postedTransitions).toEqual([]);
+    expect(plan.postedInserts).toHaveLength(1);
+  });
+
   it("replaces only browser pending and leaves SimpleFIN stored for expiry fallback", () => {
     const plan = planBankSnapshotReconciliation(
       [
