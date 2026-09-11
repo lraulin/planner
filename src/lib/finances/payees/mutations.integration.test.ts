@@ -16,6 +16,7 @@ import {
   createPayee,
   ensurePayeeForTransaction,
   isolatePayeeForBill,
+  isolateSimilarAmountForBill,
   deletePayee,
   mergePayees,
   removeAlias,
@@ -488,6 +489,7 @@ describeDb("payee mutations — cross-user isolation", () => {
   let intruderId: string;
   let ownedPayeeId: string;
   let ownedAlias: string;
+  let ownedTransactionId: string;
 
   beforeEach(async () => {
     ownerId = await makeUser();
@@ -499,7 +501,7 @@ describeDb("payee mutations — cross-user isolation", () => {
       aliases: ["WM SUPERCENTER"],
     });
     ownedAlias = "WM SUPERCENTER";
-    await addTransaction(ownerId, accountId, {
+    ownedTransactionId = await addTransaction(ownerId, accountId, {
       description: "WM SUPERCENTER #1",
       amount: "-40.00",
       payeeId: ownedPayeeId,
@@ -539,6 +541,14 @@ describeDb("payee mutations — cross-user isolation", () => {
     ).rejects.toThrow();
     await expect(
       setPayeeNotACommitment(intruderId, ownedPayeeId, true),
+    ).rejects.toThrow();
+    await expect(
+      isolateSimilarAmountForBill(
+        intruderId,
+        ownedTransactionId,
+        ownedPayeeId,
+        "Stolen",
+      ),
     ).rejects.toThrow();
 
     const intruderPayee = await createPayee(intruderId, { name: "Mine" });
