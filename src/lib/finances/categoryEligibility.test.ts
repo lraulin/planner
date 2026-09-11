@@ -52,6 +52,32 @@ describe("categoryEligibleIds", () => {
   });
 });
 
+describe("categoryEligibleIds — the budget's window", () => {
+  const spend = (id: string, transactionDate: string) => ({
+    id,
+    accountId: "checking",
+    transactionDate,
+    transferGroupId: null,
+    effectiveFlow: "spend",
+  });
+
+  it("leaves history before the budget's first month out of the backlog", () => {
+    expect([
+      ...categoryEligibleIds(
+        [spend("before", "2026-07-31"), spend("first", "2026-08-01")],
+        new Set(),
+        "2026-08-01",
+      ),
+    ]).toEqual(["first"]);
+  });
+
+  it("has no backlog before a budget exists", () => {
+    expect(
+      categoryEligibleIds([spend("any", "2026-08-01")], new Set(), null).size,
+    ).toBe(0);
+  });
+});
+
 describe("categoryAssignableIds", () => {
   it("uses the same transfer boundary as the backlog without excluding history", () => {
     const historicalSpend = {
@@ -86,6 +112,13 @@ describe("categoryAssignableIds", () => {
         categoryAssignable: true,
       }),
     ).toBeNull();
+    expect(
+      categoryAssignmentRefusal({
+        accountOffBudget: false,
+        categoryAssignable: true,
+        isSplitParent: true,
+      }),
+    ).toMatch(/from its children/);
   });
 });
 
