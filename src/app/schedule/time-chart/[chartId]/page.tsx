@@ -2,13 +2,14 @@ import { notFound } from "next/navigation";
 import { getCurrentUserId } from "@/lib/auth";
 import { getTimeChart, listTimeChartAreas } from "@/lib/schedule/queries";
 import { loadOutline } from "@/lib/tree/queries";
+import { internalPath } from "@/lib/navigation/internalPath";
 import { AppShell } from "@/components/shell/AppShell";
 import { TimeChartEditorView } from "@/components/schedule/TimeChartEditorView";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ chartId: string }>;
-type SearchParams = Promise<{ returnTo?: string }>;
+type SearchParams = Promise<{ returnTo?: string | string[] }>;
 
 export default async function TimeChartEditorPage({
   params,
@@ -35,7 +36,8 @@ export default async function TimeChartEditorPage({
         chart={chart}
         initialAreas={areas}
         nodes={nodes}
-        returnTo={returnTo}
+        // A link can carry any `returnTo`, and the editor's Back button follows it.
+        returnTo={internalPath(returnTo)}
       />
     </AppShell>
   );
