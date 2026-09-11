@@ -3,6 +3,7 @@ import {
   builtPageById,
   builtPagesForModule,
   defaultPageFor,
+  entryPageFor,
   hasPageBar,
   isFocusedFlow,
   pageForPathname,
@@ -275,5 +276,30 @@ describe("pageHref", () => {
         expect(pageForPathname(moduleId, basePath, href)?.id, href).toBe(page.id);
       }
     }
+  });
+});
+
+describe("entryPageFor", () => {
+  const RANGE = ["calendar", "agenda"];
+
+  it("sends a bare visit where you left off", () => {
+    expect(entryPageFor("schedule", "time-charts")?.id).toBe("time-charts");
+    expect(entryPageFor("schedule", null)?.id).toBe("calendar");
+  });
+
+  it("keeps the remembered page when it can read the link", () => {
+    // Someone who lives in Agenda should not be moved to Calendar by `Schedule block…`.
+    expect(entryPageFor("schedule", "agenda", RANGE)?.id).toBe("agenda");
+  });
+
+  it("does not deliver a link to a remembered page that would ignore it", () => {
+    // Day's own "Schedule" link used to lead back to Day; `?block=` to Time Charts did nothing.
+    expect(entryPageFor("schedule", "day", RANGE)?.id).toBe("calendar");
+    expect(entryPageFor("schedule", "week-plan", RANGE)?.id).toBe("calendar");
+    expect(entryPageFor("schedule", "time-charts", RANGE)?.id).toBe("calendar");
+  });
+
+  it("falls to the first reader when the default is not one", () => {
+    expect(entryPageFor("notes", "grid", ["journal"])?.id).toBe("journal");
   });
 });

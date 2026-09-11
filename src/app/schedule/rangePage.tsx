@@ -16,6 +16,14 @@ export type ScheduleRangeSearchParams = {
   block?: string;
 };
 
+/** Every key above, for the entry route to recognise a link meant for these pages. */
+export const SCHEDULE_RANGE_PARAMS = [
+  "start",
+  "week",
+  "chart",
+  "block",
+] as const satisfies readonly (keyof ScheduleRangeSearchParams)[];
+
 /**
  * Which day the range is anchored on, as a calendar-day key.
  *

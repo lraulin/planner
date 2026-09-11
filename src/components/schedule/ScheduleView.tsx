@@ -169,6 +169,12 @@ export function ScheduleView({
 }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  /*
+   * Paging and chart picks stay on this page. The bare `/schedule` re-derives the page from the
+   * remembered one, which is written 600ms after arrival — page forward sooner than that after
+   * arriving by a deep link and it would redirect you to wherever you were before.
+   */
+  const pagePath = `/schedule/${page}`;
 
   const hydrated = hydratePayload(initial);
   const [charts, setCharts] = useState<TimeChart[]>(hydrated.charts);
@@ -288,8 +294,9 @@ export function ScheduleView({
   // Drop `?block=` once it has been consumed. Left in place, Back or a refresh would re-open a
   // drawer the user had deliberately closed.
   useEffect(() => {
-    if (blockNodeId) router.replace(`/schedule?start=${anchorKey}`, { scroll: false });
-  }, [blockNodeId, router, anchorKey]);
+    if (blockNodeId)
+      router.replace(`${pagePath}?start=${anchorKey}`, { scroll: false });
+  }, [blockNodeId, router, pagePath, anchorKey]);
 
   const [syncing, setSyncing] = useState(false);
   /**
@@ -334,11 +341,11 @@ export function ScheduleView({
   const openTimeChartEditor = useCallback(
     (chartId: string) => {
       const returnTo = encodeURIComponent(
-        `/schedule?start=${anchorKey}${chartId ? `&chart=${chartId}` : ""}`,
+        `${pagePath}?start=${anchorKey}${chartId ? `&chart=${chartId}` : ""}`,
       );
       router.push(`/schedule/time-chart/${chartId}?returnTo=${returnTo}`);
     },
-    [router, anchorKey],
+    [router, pagePath, anchorKey],
   );
 
   /** The day count and anchor mode the pagers step by. */
@@ -354,9 +361,9 @@ export function ScheduleView({
   const navigateTo = useCallback(
     (next: Date) => {
       const chart = selectedChartId ? `&chart=${selectedChartId}` : "";
-      router.push(`/schedule?start=${localDateKey(next)}${chart}`);
+      router.push(`${pagePath}?start=${localDateKey(next)}${chart}`);
     },
-    [router, selectedChartId],
+    [router, pagePath, selectedChartId],
   );
 
   /** Previous / next range. Rolling tiles by the day count; aligned pages by the week. */
@@ -395,9 +402,9 @@ export function ScheduleView({
     (id: string) => {
       setSelectedChartId(id);
       const chart = id ? `&chart=${id}` : "";
-      router.push(`/schedule?start=${anchorKey}${chart}`);
+      router.push(`${pagePath}?start=${anchorKey}${chart}`);
     },
-    [router, anchorKey],
+    [router, pagePath, anchorKey],
   );
 
   const refresh = useCallback(() => {

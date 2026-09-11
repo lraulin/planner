@@ -404,6 +404,31 @@ export function builtPageById(
   return builtPagesForModule(moduleId).find((page) => page.id === pageId) ?? null;
 }
 
+/**
+ * Which page the bare module path sends you to: the one you left, unless the link carries a
+ * query that page cannot read.
+ *
+ * `/schedule?block=<id>` and `/schedule?start=<day>` mean something only to Calendar and
+ * Agenda. Sent on to a remembered Day, Week Plan or Time Charts, the parameter arrived on a page
+ * that ignores it — `Schedule block…` silently did nothing, and Day's own "Schedule" link led
+ * back to Day. `readers` names the pages that can act on what the link carries; the remembered
+ * page wins only if it is one of them, then the default, then the first reader.
+ */
+export function entryPageFor(
+  moduleId: string,
+  rememberedId: string | null,
+  readers?: readonly string[],
+): PageEntry | null {
+  const reads = (page: PageEntry | null) =>
+    page && (!readers || readers.includes(page.id)) ? page : null;
+  return (
+    reads(builtPageById(moduleId, rememberedId)) ??
+    reads(defaultPageFor(moduleId)) ??
+    builtPagesForModule(moduleId).find((page) => readers?.includes(page.id)) ??
+    defaultPageFor(moduleId)
+  );
+}
+
 export function pageHref(basePath: string, page: PageEntry): string {
   return `${basePath}/${page.segment}`;
 }
