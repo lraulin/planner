@@ -4,6 +4,7 @@ import { useGridState } from "@/components/grid/useGridState";
 import type { regularIncomePlan } from "@/lib/finances/budget/incomePlan";
 import { DateText } from "@/components/date/DateText";
 import { formatUsd } from "@/lib/finances/money";
+import { monthLabel } from "@/lib/finances/budget/envelope";
 import type { projectForwardMonths } from "@/lib/finances/commitments";
 import type { SpendingVsIncome } from "@/lib/finances/commitmentRows";
 
@@ -169,7 +170,8 @@ function ForwardPanel({ months }: { months: ReturnType<typeof projectForwardMont
           >
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[0.8125rem] text-ink">
-                <DateText dateKey={bucket.startKey} className="inline" />
+                {/* A month, so it reads as one — "9/1/2026" read as a day that nothing is due on. */}
+                {monthLabel(bucket.startKey)}
                 {bucket.aboveMedian && (
                   <span className="ml-2 text-[0.7rem] text-[var(--chart-spend)]">
                     above median
