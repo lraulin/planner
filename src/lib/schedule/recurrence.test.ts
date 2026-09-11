@@ -46,6 +46,20 @@ describe("expandRecurrence", () => {
     expect(occ[0].subject).toBe("Test");
   });
 
+  it("treats the window as half-open, so an appointment touching an edge is outside it", () => {
+    const { startAt, endAt } = at9("2026-07-28");
+    const one = master({ startAt, endAt });
+    const hour = 60 * 60_000;
+    // Ends exactly as the window opens: it was the previous slot's.
+    expect(expandRecurrence(one, endAt, new Date(endAt.getTime() + hour))).toHaveLength(
+      0,
+    );
+    // Starts exactly as the window closes: it is the next slot's.
+    expect(
+      expandRecurrence(one, new Date(startAt.getTime() - hour), startAt),
+    ).toHaveLength(0);
+  });
+
   it("expands weekly on selected weekdays", () => {
     // Tuesday Jul 28 2026 9:00 for 1h, weekly Tue+Thu
     const start = fromDateKey("2026-07-28");
@@ -146,6 +160,19 @@ describe("expandRecurrence — daily", () => {
     expect(keysOf(occ)).toEqual(["2026-03-02", "2026-03-03", "2026-03-04"]);
   });
 
+  it("keeps an every-other-day series on its own days after fast-forwarding", () => {
+    // From Jan 1, every two days: Mar 2 is day 60, so it and Mar 4 are on the grid.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-01-01"),
+        recurrenceFrequency: "daily",
+        recurrenceInterval: 2,
+      }),
+      ...window("2026-03-02", "2026-03-06"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-03-02", "2026-03-04"]);
+  });
+
   it("does not resurrect a counted series in a later window", () => {
     // Three occurrences from Jan 1, viewed in March. The series is long over.
     const occ = expandRecurrence(
@@ -190,6 +217,48 @@ describe("expandRecurrence — weekly", () => {
       ...window("2026-03-01", "2026-04-12"),
     );
     expect(keysOf(occ)).toEqual(["2026-03-02", "2026-03-16", "2026-03-30"]);
+  });
+
+  it("stays on its own weeks when viewed from a later window", () => {
+    // Biweekly Monday from Mar 2: Mar 16 and Mar 30, never Mar 23.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-03-02"),
+        recurrenceFrequency: "weekly",
+        recurrenceInterval: 2,
+      }),
+      ...window("2026-03-22", "2026-04-05"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-03-30"]);
+  });
+
+  it("does not emit the ticked days that fall before the series starts", () => {
+    // Mon/Wed/Fri from Wednesday Mar 4: that week's Monday never happened.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-03-04"),
+        recurrenceFrequency: "weekly",
+        recurrenceByWeekday: [1, 3, 5],
+      }),
+      ...window("2026-03-01", "2026-03-08"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-03-04", "2026-03-06"]);
+  });
+
+  it("counts a counted series from its real first day when a later week is viewed", () => {
+    // Mon/Wed/Fri from Wed Mar 4, five times: Mar 4, 6, 9, 11, 13. The second week holds
+    // the last three; counting the first week's Monday would end the series a day early.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-03-04"),
+        recurrenceFrequency: "weekly",
+        recurrenceByWeekday: [1, 3, 5],
+        recurrenceEnd: "count",
+        recurrenceCount: 5,
+      }),
+      ...window("2026-03-08", "2026-03-15"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-03-09", "2026-03-11", "2026-03-13"]);
   });
 
   it("does not resurrect a counted series in a later window", () => {
