@@ -9,6 +9,7 @@ import type {
   FinanceMoneyCheckpoint,
 } from "@/lib/finances/audit/types";
 import { exactBankSnapshots } from "@/lib/finances/audit/export";
+import { monthLabel } from "@/lib/finances/budget/envelope";
 import { formatUsd } from "@/lib/finances/money";
 import { financeAuditActionLabel } from "./activityColumns";
 
@@ -102,7 +103,7 @@ function CheckpointRail({
         return (
           <div key={month} className="border-t border-rule pt-3">
             <h4 className="mb-1 text-[0.8125rem] font-medium text-ink">
-              Budget {month.slice(0, 7)}
+              Budget {monthLabel(month)}
             </h4>
             <div className="grid grid-cols-[minmax(8rem,1fr)_auto] gap-x-4 gap-y-1 text-[0.8125rem]">
               <span className="text-ink-muted">Ready to Assign</span>
@@ -132,7 +133,8 @@ function CheckpointRail({
             </div>
             <details className="mt-2 text-[0.8125rem]">
               <summary className="min-h-tap cursor-pointer text-ink-muted md:min-h-0">
-                {envelopeIds.length} envelope checkpoints
+                {envelopeIds.length} envelope{" "}
+                {envelopeIds.length === 1 ? "checkpoint" : "checkpoints"}
               </summary>
               <div className="mt-2 flex flex-col gap-2 pl-3">
                 {envelopeIds.map((envelopeId) => {

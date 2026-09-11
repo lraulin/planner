@@ -36,6 +36,7 @@ import type { BudgetData } from "@/lib/finances/budget/queries";
 import {
   monthKeyOf,
   monthEndKey,
+  monthLabel,
   monthParamOf,
   monthKeyFromParam,
 } from "@/lib/finances/budget/envelope";
@@ -667,7 +668,7 @@ export function InsightsView({
         />
         {opened ? (
           <div className="space-y-3 p-3 text-sm">
-            <p>{monthParamOf(month)}</p>
+            <p>{monthLabel(month)}</p>
             <dl className="grid grid-cols-[1fr_auto] gap-3 tabular">
               {(
                 [
