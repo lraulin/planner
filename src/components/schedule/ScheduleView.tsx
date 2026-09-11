@@ -61,6 +61,7 @@ import { CommandBar } from "@/components/grid/CommandBar";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { NoticeDialog } from "@/components/detail/NoticeDialog";
 
 import type { Command } from "@/lib/commands/registry";
 
@@ -156,11 +157,6 @@ const CHECK_STATES = [
   ["missed", "Mark missed"],
 ] as const satisfies readonly (readonly [AppointmentCheck, string])[];
 
-/** `alert` is a free variable that does not exist under RSC SSR — look it up via window. */
-function reportError(message: string) {
-  if (typeof window !== "undefined") window.alert(message);
-}
-
 export function ScheduleView({
   page,
   initial,
@@ -178,6 +174,9 @@ export function ScheduleView({
   const pagePath = `/schedule/${page}`;
   // An appointment a context-menu Delete is asking about.
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  // A failed write, said in the app's own dialog rather than the browser's `alert`, which
+  // blocks the page and every script on it until it is dismissed.
+  const [errorNotice, reportError] = useState<string | null>(null);
 
   const hydrated = hydratePayload(initial);
   const [charts, setCharts] = useState<TimeChart[]>(hydrated.charts);
@@ -1126,6 +1125,13 @@ export function ScheduleView({
           if (id) asyncHandler(handleDeleteAppointment, reportError)(id);
         }}
         onCancel={() => setPendingDeleteId(null)}
+      />
+
+      <NoticeDialog
+        open={errorNotice !== null}
+        title="That did not work"
+        message={errorNotice ?? ""}
+        onClose={() => reportError(null)}
       />
     </div>
   );
