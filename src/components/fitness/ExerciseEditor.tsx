@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { createExerciseAction, updateExerciseAction } from "@/app/fitness/actions";
-import { Drawer } from "@/components/detail/Drawer";
+import { Drawer, DrawerLeaveGuard, useDrawerLeave } from "@/components/detail/Drawer";
 import { BAR_PRESETS, barPresetId, parseBarWeight } from "@/lib/fitness/bars";
 import {
   allowsUnilateral,
@@ -91,7 +91,10 @@ function ExerciseForm({
   onClose: () => void;
   onSaved: (exercise: ExerciseSummary) => void;
 }) {
-  const [draft, setDraft] = useState<Draft>(() => toDraft(exercise, seedName));
+  const [initial] = useState<Draft>(() => toDraft(exercise, seedName));
+  const [draft, setDraft] = useState<Draft>(initial);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+  const leave = useDrawerLeave(onClose);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
 
@@ -178,6 +181,7 @@ function ExerciseForm({
 
   return (
     <div className="flex h-full flex-col">
+      <DrawerLeaveGuard dirty={dirty} />
       <header className="flex flex-none items-center justify-between gap-3 border-b border-rule px-4 py-3">
         <h2 id="exercise-editor-title" className="text-sm font-semibold text-ink">
           {exercise ? "Edit exercise" : "New exercise"}
@@ -185,7 +189,7 @@ function ExerciseForm({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={leave}
             className="rounded border border-rule px-3 py-1 text-[0.8125rem] text-ink-muted hover:text-ink"
           >
             Cancel

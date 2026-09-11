@@ -58,8 +58,11 @@ function dialogAbove(panel: HTMLElement | null): boolean {
   );
 }
 
-/** `close`, or the discard confirmation first if a registered form is dirty. */
-function useLeave(close: () => void): () => void {
+/**
+ * `close`, or the discard confirmation first if a registered form is dirty. The header × and
+ * the footer Cancel already go through it; a form with its own close button uses this.
+ */
+export function useDrawerLeave(close: () => void): () => void {
   const guard = useContext(LeaveGuardContext);
   return () => (guard ? guard.leave(close) : close());
 }
@@ -200,7 +203,7 @@ export function DrawerHeader({
   /** Optional controls before the × (e.g. Delete). */
   actions?: React.ReactNode;
 }) {
-  const leave = useLeave(onClose);
+  const leave = useDrawerLeave(onClose);
   return (
     // The sheet covers the whole screen below `md`, so this header is what sits under the
     // notch — nothing above it is carrying that inset.
@@ -273,7 +276,7 @@ export function DrawerFooter({
   error: string | null;
 }) {
   const status = dirty ? "Unsaved changes" : justSaved && !saving ? "Saved" : null;
-  const leave = useLeave(onClose);
+  const leave = useDrawerLeave(onClose);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
