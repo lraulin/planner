@@ -112,6 +112,24 @@ describe("reconcileAccounts", () => {
     });
   });
 
+  it("reports a planted row inside the period as a delta of exactly its amount", () => {
+    // Rows on both bookends belong to the period; the extra $1.00 is the whole delta.
+    const report = reconcileAccounts(
+      [snap({ id: "jan", openingBalanceCents: 0, closingBalanceCents: -2500 })],
+      [
+        tx({ id: "first", transactionDate: "2026-01-01", amountCents: -1000 }),
+        tx({ id: "last", transactionDate: "2026-01-31", amountCents: -1500 }),
+        tx({ id: "extra", transactionDate: "2026-01-15", amountCents: -100 }),
+      ],
+    );
+    expect(report.statements[0]).toMatchObject({
+      rowCount: 3,
+      registerDeltaCents: -100,
+    });
+    // A row on the closing day is the statement's, not "since the statement".
+    expect(report.accounts[0].postStatementCount).toBe(0);
+  });
+
   it("treats a 2024-then-2026 statement pair as one hole", () => {
     const report = reconcileAccounts(
       [
@@ -145,6 +163,50 @@ describe("reconcileAccounts", () => {
       },
     ]);
     expect(report.accounts[0].anchoredBalanceCents).toBe(-20114);
+  });
+
+  it("calls missing months a hole even when the balances happen to line up", () => {
+    const report = reconcileAccounts(
+      [
+        snap({
+          id: "jan",
+          periodStart: "2026-01-01",
+          periodEnd: "2026-01-31",
+          closingBalanceCents: -2000,
+        }),
+        snap({
+          id: "apr",
+          periodStart: "2026-04-01",
+          periodEnd: "2026-04-30",
+          openingBalanceCents: -2000,
+        }),
+      ],
+      [],
+    );
+    expect(report.holes).toEqual([
+      expect.objectContaining({
+        afterPeriodEnd: "2026-01-31",
+        beforePeriodStart: "2026-04-01",
+      }),
+    ]);
+  });
+
+  it("orders statements by period before looking for holes", () => {
+    const a = snap({
+      id: "a",
+      periodStart: "2026-01-22",
+      periodEnd: "2026-02-21",
+      openingBalanceCents: -1000,
+      closingBalanceCents: -2000,
+    });
+    const b = snap({
+      id: "b",
+      periodStart: "2026-02-22",
+      periodEnd: "2026-03-21",
+      openingBalanceCents: -2000,
+      closingBalanceCents: -1500,
+    });
+    expect(reconcileAccounts([b, a], []).holes).toEqual([]);
   });
 
   it("does not call adjacent matching periods a hole", () => {
@@ -272,6 +334,17 @@ describe("reconcileAccounts", () => {
       ],
     );
     expect(report.unpairedTransfers.map((row) => row.id)).toEqual(["lone"]);
+  });
+
+  it("reads a flow override ahead of the derived flow", () => {
+    const report = reconcileAccounts(
+      [],
+      [
+        tx({ id: "marked", derivedFlow: "spend", flowOverride: "internal_transfer" }),
+        tx({ id: "unmarked", derivedFlow: "internal_transfer", flowOverride: "spend" }),
+      ],
+    );
+    expect(report.unpairedTransfers.map((row) => row.id)).toEqual(["marked"]);
   });
 });
 
