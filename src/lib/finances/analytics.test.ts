@@ -8,6 +8,7 @@ import {
   coverageGap,
   effectiveCategory,
   effectiveFlow,
+  effectiveMerchant,
   monthBuckets,
   monthlyIncome,
   paydaysFrom,
@@ -617,6 +618,49 @@ describe("recurringMerchants", () => {
     // Otherwise a bill with no history would print a range invented out of nothing.
     const found = recurringMerchants([], [geicoBill]);
     expect(found[0]).toMatchObject({ lowCents: 141260, highCents: 141260 });
+  });
+
+  it("needs six charges before it calls a merchant recurring", () => {
+    expect(recurringMerchants(monthlyCharges("NETFLIX", Array(5).fill(1599)))).toEqual(
+      [],
+    );
+    expect(
+      recurringMerchants(monthlyCharges("NETFLIX", Array(6).fill(1599))),
+    ).toHaveLength(1);
+  });
+
+  it("finds a weekly charge and nothing slower than about a quarter", () => {
+    const every = (days: number) =>
+      Array.from({ length: 8 }, (_, index) =>
+        row({
+          description: "PODCAST CLUB",
+          transactionDate: shiftDateKey("2025-01-06", index * days),
+          amountCents: -500,
+        }),
+      );
+    expect(recurringMerchants(every(7))[0]?.observedGapDays).toBe(7);
+    expect(recurringMerchants(every(120))).toEqual([]);
+  });
+
+  it("refuses a series whose deviation is past a quarter of its typical charge", () => {
+    // Deviation $3.18 on a typical $10.00: regular in date, too loose in amount.
+    expect(
+      recurringMerchants(monthlyCharges("TOLLS", [1000, 1000, 1000, 1000, 1550, 450])),
+    ).toEqual([]);
+  });
+
+  it("leaves a refund out of the charges it counts", () => {
+    const refund = row({
+      description: "NETFLIX",
+      derivedFlow: "refund",
+      transactionDate: "2025-03-20",
+      amountCents: 1599,
+    });
+    const found = recurringMerchants([
+      ...monthlyCharges("NETFLIX", Array(6).fill(1599)),
+      refund,
+    ]);
+    expect(found[0]).toMatchObject({ chargeCount: 6, typicalCents: 1599 });
   });
 
   it("ignores a merchant with too few charges to have a cadence", () => {
@@ -1323,5 +1367,13 @@ describe("assetDebtSeries", () => {
     );
     expect(points[0]?.debtCents).toBe(0);
     expect(points[0]?.assetCents).toBe(50000);
+  });
+});
+
+describe("effectiveMerchant", () => {
+  it("trims the payee's name, so spacing does not split one merchant in two", () => {
+    expect(
+      effectiveMerchant({ description: "NETFLIX.COM", payeeName: "  Netflix " }),
+    ).toBe("Netflix");
   });
 });
