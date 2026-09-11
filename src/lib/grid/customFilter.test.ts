@@ -58,6 +58,18 @@ describe("matchesCondition — text", () => {
     expect(matchesCondition(null, { op: "neq", value: "Cn" }, "enum")).toBe(true);
   });
 
+  it("keeps empty cells under does-not-contain, as under not-equals", () => {
+    expect(matchesCondition(null, { op: "not_contains", value: "draft" }, "text")).toBe(
+      true,
+    );
+  });
+
+  it("orders text with numbers in it the way a person reads them", () => {
+    expect(matchesCondition("Unit 2", { op: "lt", value: "Unit 10" }, "text")).toBe(
+      true,
+    );
+  });
+
   it("handles contains / not_contains / starts / ends", () => {
     expect(
       matchesCondition("Archive project", { op: "contains", value: "ARCH" }, "text"),
@@ -105,6 +117,11 @@ describe("matchesCondition — date and priority compares", () => {
     );
   });
 
+  it("matches nothing while a date comparison has no operand yet", () => {
+    // Every ISO day sorts after "", so an unfinished "after …" would otherwise pass them all.
+    expect(matchesCondition("2026-08-01", { op: "gt", value: "" }, "date")).toBe(false);
+  });
+
   it("compares calendar days the same way as date", () => {
     expect(
       matchesCondition("2026-08-01", { op: "gte", value: "2026-08-01" }, "calendar"),
@@ -125,6 +142,8 @@ describe("matchesCondition — date and priority compares", () => {
     expect(matchesCondition("A10", { op: "lt", value: "B" }, "priority")).toBe(true);
     expect(matchesCondition("B", { op: "gte", value: "A" }, "priority")).toBe(true);
     expect(matchesCondition("A1", { op: "gt", value: "B" }, "priority")).toBe(false);
+    // A bare letter sorts after every ranked one of it — string order would put A first.
+    expect(matchesCondition("A", { op: "gt", value: "A9" }, "priority")).toBe(true);
     expect(matchesCondition(null, { op: "gte", value: "A" }, "priority")).toBe(false);
   });
 });
