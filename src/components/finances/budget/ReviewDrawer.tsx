@@ -5,7 +5,7 @@ import {
   setPayeeNotACommitmentAction,
   trackTransactionAsBillAction,
 } from "@/app/finances/actions";
-import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
+import { Drawer, DrawerHeader, DrawerLeaveGuard } from "@/components/detail/Drawer";
 import { CadenceSelect } from "@/components/finances/CadenceSelect";
 import { DateText } from "@/components/date/DateText";
 import type { RecurringMerchant } from "@/lib/finances/analytics";
@@ -175,12 +175,18 @@ function ReviewForm({
   const [name, setName] = useState(entry.merchant);
   const initialCadence = useMemo(() => proposedCadence(entry), [entry]);
   const [cadence, setCadence] = useState<Cadence>(initialCadence);
-  const [amount, setAmount] = useState((entry.typicalCents / 100).toFixed(2));
+  const initialAmount = (entry.typicalCents / 100).toFixed(2);
+  const [amount, setAmount] = useState(initialAmount);
   const [next, setNext] = useState(() =>
     nextDueFrom(entry.lastChargeOn, initialCadence, todayKey),
   );
   const [nextTouched, setNextTouched] = useState(false);
   const cents = parseAmountEntryCents(amount);
+  const dirty =
+    name !== entry.merchant ||
+    cadence !== initialCadence ||
+    amount !== initialAmount ||
+    nextTouched;
 
   function changeCadence(value: Cadence) {
     setCadence(value);
@@ -214,6 +220,7 @@ function ReviewForm({
         });
       }}
     >
+      <DrawerLeaveGuard dirty={dirty} />
       <label className="flex flex-col gap-1 text-[0.75rem] text-ink-muted">
         Call it
         <input
