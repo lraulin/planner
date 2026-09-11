@@ -1896,6 +1896,85 @@ describeDb("applyPayeeClaims", () => {
     expect(await applyPayeeClaims(userId)).toEqual({ moved: 0 });
   });
 
+  /** A charge from the claimed payee that arrives after the claim was made. */
+  async function laterCharge(
+    owner: string,
+    accountId: string,
+    payeeId: string,
+    amount: string,
+    extra: Partial<TxSeed> = {},
+  ): Promise<string> {
+    const [id] = await addTransactions(owner, [
+      { accountId, date: "2026-08-20", description: "RENT", amount, payeeId, ...extra },
+    ]);
+    return id;
+  }
+
+  it("refuses a later charge that does not look like the bill it is claimed by", async () => {
+    // The CVS case: a bill envelope's claim files only charges near the bill's own amount.
+    const { checkingId } = await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    await upsertBillEnvelope(userId, {
+      name: "Hulu",
+      cadence: { unit: "month", n: 1 },
+      expectedCents: 9_900,
+    });
+    const hulu = (await envelopes(userId)).get("Hulu")!;
+    const payeeId = await createPayee(userId, { name: "Hulu" });
+    await replaceCommitmentPayees(userId, { id: hulu }, [payeeId]);
+
+    const bill = await laterCharge(userId, checkingId, payeeId, "-99.00");
+    const other = await laterCharge(userId, checkingId, payeeId, "-45.00", {
+      date: "2026-07-01",
+    });
+    expect(await applyPayeeClaims(userId)).toEqual({ moved: 1 });
+    expect(await envelopeOf(bill)).toBe(hulu);
+    expect(await envelopeOf(other)).toBeNull();
+  });
+
+  it("leaves an internal transfer from the claimed payee alone", async () => {
+    const { payeeId, checkingId } = await seedClaim(userId);
+    const transfer = await laterCharge(userId, checkingId, payeeId, "-900.00", {
+      flow: "internal_transfer",
+    });
+    expect(await applyPayeeClaims(userId)).toEqual({ moved: 0 });
+    expect(await envelopeOf(transfer)).toBeNull();
+  });
+
+  it("files only the payees it is asked about", async () => {
+    const { payeeId, checkingId } = await seedClaim(userId);
+    const fresh = await laterCharge(userId, checkingId, payeeId, "-900.00");
+    const otherPayee = await createPayee(userId, { name: "Someone else" });
+    expect(await applyPayeeClaims(userId, { payeeIds: [otherPayee] })).toEqual({
+      moved: 0,
+    });
+    expect(await envelopeOf(fresh)).toBeNull();
+  });
+
+  it("files only rows created since the cutoff it is given", async () => {
+    const { payeeId, checkingId } = await seedClaim(userId);
+    const fresh = await laterCharge(userId, checkingId, payeeId, "-900.00");
+    const cutoff = new Date(Date.now() + 60_000);
+    expect(await applyPayeeClaims(userId, { createdSince: cutoff })).toEqual({
+      moved: 0,
+    });
+    expect(await envelopeOf(fresh)).toBeNull();
+  });
+
+  it("never rewrites a category already set when filling on import", async () => {
+    // applyPayeeAutoCategories promises exactly this; the claim pass it runs is what moves.
+    const { payeeId, checkingId, byName, rent } = await seedClaim(userId);
+    const elsewhere = [...byName.values()].find((id) => id !== rent)!;
+    const filed = await laterCharge(userId, checkingId, payeeId, "-900.00");
+    await db
+      .update(financeTransactions)
+      .set({ budgetCategoryId: elsewhere })
+      .where(eq(financeTransactions.id, filed));
+
+    await applyPayeeAutoCategories(userId);
+    expect(await envelopeOf(filed)).toBe(elsewhere);
+  });
+
   it("will not file a second user's charges, or read their claims", async () => {
     const { inWindow } = await seedClaim(userId);
     const { inWindow: intruderCharge } = await seedClaim(await makeUser());
