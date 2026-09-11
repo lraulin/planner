@@ -195,6 +195,15 @@ describe("chartPoints", () => {
     expect(pts.map((p) => p.value)).toEqual([10, 30, 35]);
   });
 
+  it("keeps an entry's own target over the objective's on a cumulative chart too", () => {
+    const pts = chartPoints(
+      [{ entryDate: "2025-01-01", value: 10, target: 40 }],
+      100,
+      "cumulative",
+    );
+    expect(pts[0].target).toBe(40);
+  });
+
   it("instance does not sum", () => {
     const pts = chartPoints(
       [
@@ -213,6 +222,10 @@ describe("yDomain", () => {
     const d = yDomain([10, 10]);
     expect(d.min).toBeLessThan(10);
     expect(d.max).toBeGreaterThan(10);
+  });
+
+  it("pads a series of zeros rather than collapsing to a zero-height range", () => {
+    expect(yDomain([0, 0])).toEqual({ min: -1, max: 1 });
   });
 
   it("includes an objective target", () => {
@@ -269,6 +282,15 @@ describe("niceTicks", () => {
     }
   });
 
+  it("rounds a step up to 5 rather than down to 2", () => {
+    // A rough step of 2.5 is closer to a 5 grid than a 2 grid.
+    expect(niceTicks(0, 10, 5)).toEqual([0, 5, 10]);
+  });
+
+  it("ends on a tick at or above the top value", () => {
+    expect(niceTicks(0, 9, 5)).toEqual([0, 5, 10]);
+  });
+
   it("handles a flat domain", () => {
     const ticks = niceTicks(50, 50, 5);
     expect(ticks.length).toBeGreaterThanOrEqual(2);
@@ -282,6 +304,11 @@ describe("dateXFraction / time axis", () => {
     expect(dateXFraction("2025-01-01", "2025-01-01", "2025-01-11")).toBeCloseTo(0, 8);
     expect(dateXFraction("2025-01-06", "2025-01-01", "2025-01-11")).toBeCloseTo(0.5, 8);
     expect(dateXFraction("2025-01-11", "2025-01-01", "2025-01-11")).toBeCloseTo(1, 8);
+  });
+
+  it("clamps a date outside the range onto its edges", () => {
+    expect(dateXFraction("2024-12-01", "2025-01-01", "2025-01-11")).toBe(0);
+    expect(dateXFraction("2025-02-01", "2025-01-01", "2025-01-11")).toBe(1);
   });
 
   it("centres a single-day range", () => {
@@ -357,6 +384,12 @@ describe("plotPoint", () => {
     const p = plotPoint(0.5, 50, 100, 100, pad, 0, 100);
     expect(p.x).toBe(50);
     expect(p.y).toBe(50);
+  });
+
+  it("draws a larger value higher on the screen", () => {
+    expect(plotPoint(0.5, 90, 100, 100, pad, 0, 100).y).toBeLessThan(
+      plotPoint(0.5, 10, 100, 100, pad, 0, 100).y,
+    );
   });
 
   it("maps xFraction 0 and 1 to the plot edges", () => {
@@ -436,6 +469,10 @@ describe("labelIndices", () => {
   it("replaces a crowded neighbour rather than overlapping it", () => {
     // 35 pay periods at every fourth used to end "Jul 21" and "Aug 5" on top of each other.
     expect(labelIndices(35, 10)).toEqual([0, 4, 8, 12, 16, 20, 24, 28, 34]);
+  });
+
+  it("labels the latest bucket when there is room for only one", () => {
+    expect(labelIndices(5, 1)).toEqual([4]);
   });
 
   it("has nothing to label for an empty series", () => {
