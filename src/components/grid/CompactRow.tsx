@@ -434,7 +434,9 @@ function textOf<TCtx, TRow>(
     : column.compactText
       ? column.compactText(row)
       : (column.filterValue?.(row) ?? null);
-  const text = isCalendarDayKind(column.filterKind) ? formatDate(raw) : raw;
+  // A date column's compact text can be a word ("Unscheduled") rather than a key, and the
+  // formatter returns "" for anything that is not a key — keep the word.
+  const text = isCalendarDayKind(column.filterKind) ? formatDate(raw) || raw : raw;
   return text && text.trim() !== "" ? text : null;
 }
 
@@ -450,7 +452,7 @@ function fullTextOf<TCtx, TRow>(
       ? column.compactText(row)
       : (column.filterValue?.(row) ?? null);
   if (!raw || raw.trim() === "") return null;
-  return isCalendarDayKind(column.filterKind) ? formatFullDateKey(raw) : raw;
+  return isCalendarDayKind(column.filterKind) ? formatFullDateKey(raw) || raw : raw;
 }
 
 /**

@@ -158,6 +158,13 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     filterKind: "date",
     filterValue: (row) => row.node.nextDueKey,
     sortValue: (row) => row.node.nextDueKey,
+    // The phone reads the same three answers the cell gives, not just the date half.
+    compactText: (row) =>
+      row.node.bill.status === "cancelled"
+        ? null
+        : !row.node.bill.scheduled
+          ? "Unscheduled"
+          : row.node.nextDueKey,
     render: (row, ctx) =>
       row.node.bill.status === "cancelled" ? (
         <span>—</span>
