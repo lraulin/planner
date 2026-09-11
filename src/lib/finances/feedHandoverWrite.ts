@@ -7,11 +7,12 @@
  * leaves the register holding the same money twice.
  */
 
-import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { financeTransactions } from "@/db/schema";
 import type { FinanceAuditChange } from "./audit/types";
 import type { FinanceExecutor } from "./dbExecutor";
+import { SCRAPE_FEEDS } from "./bankSnapshot";
 import { feedWatermarkForAccount } from "./feedWatermark";
 import {
   planFeedHandover,
@@ -73,10 +74,7 @@ export async function retireCoveredScrapeRows(
         eq(financeTransactions.userId, userId),
         eq(financeTransactions.accountId, accountId),
         bankRows,
-        inArray(financeTransactions.externalSource, [
-          "scrape:capitalone",
-          "scrape:chase",
-        ]),
+        inArray(financeTransactions.externalSource, [...SCRAPE_FEEDS]),
         // A pending browser hold whose day the feed has posted is covered too: the feed's
         // posted row is the settled truth for that charge.
         lte(
@@ -130,7 +128,7 @@ export async function retireCoveredScrapeRows(
         eq(financeTransactions.accountId, accountId),
         bankRows,
         sql`${financeTransactions.externalSource} is not null`,
-        sql`${financeTransactions.externalSource} not in ('scrape:capitalone', 'scrape:chase')`,
+        notInArray(financeTransactions.externalSource, [...SCRAPE_FEEDS]),
         // Either axis may fall in the window: the two feeds date one charge differently,
         // which is exactly why the browser copy has to be retired rather than matched.
         or(
