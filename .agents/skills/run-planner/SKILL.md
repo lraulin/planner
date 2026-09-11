@@ -240,12 +240,13 @@ npm run smoke     # loads all 23 static routes; needs the dev server (see below)
   still works, but there are no `role="gridcell"` children and no column header, so a
   selector written against the desktop layout finds nothing at `390x844`. Tap (`click`)
   opens the drawer there; `dblclick` is the desktop trigger.
-- **`window.confirm()` freezes everything.** Deleting an appointment
-  (`AppointmentDrawer`) or a Time Chart area (`TimeChartEditorView`) opens a native
-  dialog; while it is up, every CDP call times out (`CDP timeout:
-Input.dispatchMouseEvent`). The driver auto-answers via
-  `Page.javascriptDialogOpening` — use `dialogs dismiss` to take the cancel branch. Do
-  not remove that handler.
+- **Native dialogs freeze everything.** No `window.confirm` is left in `src/` — deletes and
+  discards ask through `ConfirmDialog` (`role="alertdialog"`; click its buttons with
+  `[role=alertdialog] >> text=Delete`). Two `window.prompt`s remain: naming a new Time Chart
+  from the calendar and planning wizard, and the exercise editor's custom bar weight. While
+  one is up, every CDP call times out (`CDP timeout: Input.dispatchMouseEvent`). The driver
+  auto-answers via `Page.javascriptDialogOpening` — use `dialogs dismiss` to take the cancel
+  branch. Do not remove that handler.
 - **Form fields have React-generated ids** (`_r_0_`, unstable across renders), and no
   `name` attributes. `label=Priority` is the way in; CSS selectors on drawer inputs will
   rot.
