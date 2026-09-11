@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectNewTransactions } from "./matchExisting";
+import { descriptionsMatch, selectNewTransactions } from "./matchExisting";
 import type { ParsedTransaction } from "./types";
 
 function row(
@@ -128,5 +128,25 @@ describe("selectNewTransactions", () => {
     const second = selectNewTransactions(existing, [twin, twin]);
     expect(second.keep).toHaveLength(1);
     expect(second.skipCount).toBe(1);
+  });
+});
+
+describe("descriptionsMatch — what a leftover must not be", () => {
+  it("does not read a processor star as a leftover, even when a domain follows it", () => {
+    // `PP` is PayPal's stamp; everything after the star is a different counterparty.
+    expect(descriptionsMatch("PP", "PP*APPLE.COM/BILL")).toBe(false);
+  });
+
+  it("needs a long stem before one trailing token counts as noise", () => {
+    // The case the rule's own comment names: a bare "UNITED" is not "UNITED 016…".
+    expect(descriptionsMatch("UNITED", "UNITED 0162345")).toBe(false);
+  });
+
+  it("allows one trailing token, not two", () => {
+    expect(descriptionsMatch("PANDA EXPRESS", "PANDA EXPRESS 3006 P")).toBe(false);
+  });
+
+  it("matches nothing to a blank description", () => {
+    expect(descriptionsMatch("", "SBARRO")).toBe(false);
   });
 });
