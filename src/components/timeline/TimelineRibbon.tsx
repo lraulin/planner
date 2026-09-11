@@ -22,7 +22,7 @@ import { AXIS_LOCK_PX, swipeAxis } from "@/lib/touch/swipe";
 import { chartCatVar } from "@/components/finances/insights/chartColors";
 import { useToday } from "@/components/grid/useToday";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
-import { useElementWidth } from "./useElementWidth";
+import { useElementSize } from "@/components/useElementSize";
 
 /**
  * The Timeline drawn as spans: how long each job and each address lasted, and what overlapped.
@@ -74,7 +74,8 @@ export function TimelineRibbon({
 }) {
   const todayKey = useToday();
   const formatDate = useDateFormatter();
-  const { ref: plotRef, width } = useElementWidth<HTMLDivElement>();
+  const { ref: plotRef, size } = useElementSize<HTMLDivElement>();
+  const width = size?.width ?? null;
   const [focused, setFocused] = useState<Focused>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
 

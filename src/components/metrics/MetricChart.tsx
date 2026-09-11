@@ -13,7 +13,9 @@ import {
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatMetricNumber } from "@/lib/metrics/parse";
 import type { MetricEntryView, MetricType } from "@/lib/metrics/types";
+import { useElementSize } from "@/components/useElementSize";
 
+/** The drawing's size until the pane has been measured; after that it is the pane's own. */
 const CHART_WIDTH = 640;
 const CHART_HEIGHT = 240;
 /** Room for axis labels (left Y values, bottom X dates). */
@@ -27,12 +29,17 @@ function clampPercent(percent: number): number {
 /** How many date labels fit along the bottom axis before they collide. */
 const X_TICKS = 14;
 const X_TICKS_COMPACT = 5;
+/** Horizontal room one date label needs, in px, so a narrow pane asks for fewer of them. */
+const X_TICK_SPACING = 48;
 
 /**
  * Actual vs objective performance graph — pure SVG, no chart library.
  * X is linear in calendar time (each day the same width); Y is linear in value.
  * Markers with hover tooltips; axes labeled at regular intervals (Achieve-style).
- * Fills its parent height so the Metrics split can resize the pane.
+ * Fills its parent height so the Metrics split can resize the pane, and draws in that pane's
+ * own pixels. A fixed viewBox stretched with `preserveAspectRatio="none"` scales x and y by
+ * different amounts — at 1500×156 every axis label rendered 3.6× wider than tall and every
+ * marker was an ellipse — so the coordinate system is the measured box instead.
  *
  * `compact` is the phone: fewer date labels (fourteen of them overlap into a grey smear at
  * 390px), fatter marker hit areas, and **tap** to read a point. A `<title>` tooltip and a
@@ -61,6 +68,9 @@ export function MetricChart({
   compact?: boolean;
 }) {
   const formatDate = useDateFormatter();
+  const { ref: plotRef, size } = useElementSize<HTMLDivElement>();
+  const width = size ? Math.max(1, Math.round(size.width)) : CHART_WIDTH;
+  const height = size ? Math.max(1, Math.round(size.height)) : CHART_HEIGHT;
   const [hover, setHover] = useState<{
     index: number;
     x: number;
@@ -81,22 +91,15 @@ export function MetricChart({
   const minDate = points[0]?.date ?? "";
   const maxDate = points[points.length - 1]?.date ?? minDate;
 
-  const actualLine = seriesPolyline(
-    points,
-    CHART_WIDTH,
-    CHART_HEIGHT,
-    CHART_PAD,
-    yMin,
-    yMax,
-  );
+  const actualLine = seriesPolyline(points, width, height, CHART_PAD, yMin, yMax);
 
   const plotted = points.map((p) => ({
     ...p,
     ...plotPoint(
       dateXFraction(p.date, minDate, maxDate),
       p.value,
-      CHART_WIDTH,
-      CHART_HEIGHT,
+      width,
+      height,
       CHART_PAD,
       yMin,
       yMax,
@@ -105,13 +108,22 @@ export function MetricChart({
 
   // Calendar-aligned labels (days/months/years by span) — not sample dates.
   const xTicks = minDate
-    ? niceTimeTicks(minDate, maxDate, compact ? X_TICKS_COMPACT : X_TICKS)
+    ? niceTimeTicks(
+        minDate,
+        maxDate,
+        Math.max(
+          2,
+          Math.min(
+            compact ? X_TICKS_COMPACT : X_TICKS,
+            Math.floor((width - CHART_PAD.left - CHART_PAD.right) / X_TICK_SPACING),
+          ),
+        ),
+      )
     : [];
 
   const objectiveY =
     showObjective && objectiveTarget !== null && Number.isFinite(objectiveTarget)
-      ? plotPoint(0, objectiveTarget, CHART_WIDTH, CHART_HEIGHT, CHART_PAD, yMin, yMax)
-          .y
+      ? plotPoint(0, objectiveTarget, width, height, CHART_PAD, yMin, yMax).y
       : null;
 
   if (points.length === 0) {
@@ -142,11 +154,13 @@ export function MetricChart({
           {caption}
         </p>
       )}
-      <div className="relative min-h-0 w-full flex-1 overflow-hidden">
+      <div
+        ref={plotRef}
+        className="relative min-h-[6rem] w-full flex-1 overflow-hidden"
+      >
         <svg
-          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-          preserveAspectRatio="none"
-          className="h-full w-full min-h-[6rem] text-ink"
+          viewBox={`0 0 ${width} ${height}`}
+          className="absolute inset-0 h-full w-full text-ink"
           role="img"
           aria-label={label || "Metric performance"}
           // Tapping the plot anywhere but a marker puts the tooltip away. Markers stop this
@@ -154,20 +168,12 @@ export function MetricChart({
           onPointerDown={() => setHover(null)}
         >
           {yTicks.map((tick) => {
-            const y = plotPoint(
-              0,
-              tick,
-              CHART_WIDTH,
-              CHART_HEIGHT,
-              CHART_PAD,
-              yMin,
-              yMax,
-            ).y;
+            const y = plotPoint(0, tick, width, height, CHART_PAD, yMin, yMax).y;
             return (
               <g key={`y-${tick}`}>
                 <line
                   x1={CHART_PAD.left}
-                  x2={CHART_WIDTH - CHART_PAD.right}
+                  x2={width - CHART_PAD.right}
                   y1={y}
                   y2={y}
                   stroke="var(--rule)"
@@ -190,8 +196,8 @@ export function MetricChart({
             const x = plotPoint(
               dateXFraction(tick.dateKey, minDate, maxDate),
               yMin,
-              CHART_WIDTH,
-              CHART_HEIGHT,
+              width,
+              height,
               CHART_PAD,
               yMin,
               yMax,
@@ -201,14 +207,14 @@ export function MetricChart({
                 <line
                   x1={x}
                   x2={x}
-                  y1={CHART_HEIGHT - CHART_PAD.bottom}
-                  y2={CHART_HEIGHT - CHART_PAD.bottom + (tick.major ? 5 : 3)}
+                  y1={height - CHART_PAD.bottom}
+                  y2={height - CHART_PAD.bottom + (tick.major ? 5 : 3)}
                   stroke="var(--rule)"
                   strokeWidth={tick.major ? 1.25 : 1}
                 />
                 <text
                   x={x}
-                  y={CHART_HEIGHT - 8}
+                  y={height - 8}
                   textAnchor="middle"
                   className={tick.major ? "fill-ink-muted" : "fill-ink-faint"}
                   style={{
@@ -236,7 +242,7 @@ export function MetricChart({
           {objectiveY !== null && (
             <line
               x1={CHART_PAD.left}
-              x2={CHART_WIDTH - CHART_PAD.right}
+              x2={width - CHART_PAD.right}
               y1={objectiveY}
               y2={objectiveY}
               stroke="#6aab6a"
@@ -277,8 +283,7 @@ export function MetricChart({
             >
               {/*
                 The hit area, not the dot. Wider on a phone: the visible marker is 3px and a
-                fingertip is not, and the viewBox is squashed horizontally to fit the pane, so
-                a circle here is an ellipse on screen.
+                fingertip is not.
               */}
               <circle cx={pt.x} cy={pt.y} r={compact ? 18 : 10} fill="transparent" />
               <circle
@@ -304,8 +309,8 @@ export function MetricChart({
             style={{
               // Clamped inside the plot: a tooltip centred on the first or last point hangs
               // off the edge, and there is no room to hang off at 390px.
-              left: `${clampPercent((hover.x / CHART_WIDTH) * 100)}%`,
-              top: `${(hover.y / CHART_HEIGHT) * 100}%`,
+              left: `${clampPercent((hover.x / width) * 100)}%`,
+              top: `${(hover.y / height) * 100}%`,
               marginTop: -8,
             }}
           >
