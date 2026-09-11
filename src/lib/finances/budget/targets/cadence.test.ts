@@ -127,6 +127,17 @@ describe("monthsLeft", () => {
       monthsLeft({ unit: "schedule" }, "2026-08-01", yearlyBill("2026-10-15")),
     ).toBe(2);
   });
+
+  it("has no months left, not negative ones, while a sinking bill is overdue", () => {
+    // The pile divides by `left + 1`; a July charge still unpaid in August would make that
+    // zero, and the ask Infinity.
+    expect(
+      monthsLeft({ unit: "schedule" }, "2026-08-01", {
+        ...yearlyBill("2027-07-15"),
+        expectedKey: "2026-07-15",
+      }),
+    ).toBe(0);
+  });
 });
 
 describe("occurrenceDatesInMonth", () => {
@@ -136,6 +147,17 @@ describe("occurrenceDatesInMonth", () => {
       "2026-08-13",
       "2026-08-20",
       "2026-08-27",
+    ]);
+  });
+
+  it("leaves a charge on the 1st of next month to next month", () => {
+    // `015b90c`: the exclusive end once read as still inside the month, and a weekly bill
+    // due on the 1st was asked for five times in the month before.
+    expect(occurrenceDatesInMonth(weeklyBill("2026-08-04"), "2026-08-01")).toEqual([
+      "2026-08-04",
+      "2026-08-11",
+      "2026-08-18",
+      "2026-08-25",
     ]);
   });
 
