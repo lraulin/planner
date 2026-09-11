@@ -868,7 +868,16 @@ export function FinancesView({
         catalog={envelopeCatalog}
         offBudgetAccountIds={offBudgetAccountIds}
         onClose={closeDrawer}
-        onChanged={patchRow}
+        onChanged={(id, patch) => {
+          const flowChanged =
+            patch.flowOverride !== undefined &&
+            patch.flowOverride !== rowById(id)?.flowOverride;
+          patchRow(id, patch);
+          // Whether a row is Not budgeted is decided server-side over its transfer pair and
+          // lives in the index, not the row — patching the row alone leaves the Category
+          // cell asking for an envelope the budget will never read.
+          if (flowChanged) void reload();
+        }}
         onCreateEnvelope={onCreateEnvelope}
         splitChildren={(openId && childrenByParent.get(openId)) || EMPTY_SPLIT_CHILDREN}
         onSplitChanged={() => {
