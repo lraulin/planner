@@ -3,7 +3,12 @@
 import { useId, useMemo, useState, useTransition } from "react";
 
 import { saveEnvelopeTargetAction } from "@/app/finances/actions";
-import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
+import {
+  Drawer,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerLeaveGuard,
+} from "@/components/detail/Drawer";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { weekdayLongLabel } from "@/lib/dateFormat";
 import type { AssignHistoryMonth } from "@/lib/finances/budget/assign/types";
@@ -286,11 +291,6 @@ export function TargetDrawer({
     });
   }
 
-  function requestClose() {
-    if (dirty && !window.confirm("Discard the changes to this target?")) return;
-    onClose();
-  }
-
   const periodCadence =
     parsed && (parsed.cadence.unit === "week" || parsed.cadence.unit === "month")
       ? parsed.cadence
@@ -303,12 +303,12 @@ export function TargetDrawer({
   const beforeStart = count === 0 && Boolean(since);
 
   return (
-    <Drawer open onClose={requestClose} labelledBy={titleId}>
+    <Drawer open onClose={onClose} labelledBy={titleId}>
       <DrawerHeader
         titleId={titleId}
         title={envelope.name}
         eyebrow="Envelope target"
-        onClose={requestClose}
+        onClose={onClose}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-4 py-3">
         {derived && !overriding ? (
@@ -493,10 +493,11 @@ export function TargetDrawer({
             : "No target."}
         </p>
       </div>
+      <DrawerLeaveGuard dirty={dirty} />
       <DrawerFooter
         onSave={() => persist(false)}
         onSaveAndClose={() => persist(true)}
-        onClose={requestClose}
+        onClose={onClose}
         saving={pending}
         dirty={dirty}
         justSaved={saved}
