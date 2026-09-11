@@ -1043,7 +1043,10 @@ describeDb("importing a statement after a live sync", () => {
     expect(result.skipped).toBeGreaterThanOrEqual(1);
   });
 
-  it("does not re-import a transaction a bank-page snapshot already posted", async () => {
+  it("replaces a bank-page snapshot's posted row with the file's copy", async () => {
+    // The file owns the days it covers, so its row is written and the page's copy retired.
+    // Skipping the file's row as the page row's duplicate, then retiring the page row, is
+    // how the SMECO charge left the register on 2026-09-10.
     const userId = await makeUser();
     await importFinanceCsvFiles({ userId, files: [chaseFile] });
     const [account] = await listAccounts(userId);
@@ -1055,17 +1058,18 @@ describeDb("importing a statement after a live sync", () => {
       postedDate: "2026-08-09",
       description: "AMAZON MKTPL*5H1YV8C82",
       amount: "-10.59",
+      notes: "sleep sack",
       externalSource: "scrape:chase",
       externalId: "browser-posted-1",
     });
 
-    const result = await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
     const amazon = (await listTransactions(userId)).filter((row) =>
       row.description.includes("5H1YV8C82"),
     );
     expect(amazon).toHaveLength(1);
-    expect(amazon[0].transactionDate).toBe("2026-08-09");
-    expect(result.skipped).toBeGreaterThanOrEqual(1);
+    expect(amazon[0].externalSource).toBe("csv:chase-credit");
+    expect(amazon[0].notes).toBe("sleep sack");
   });
 
   it("finds a synced row dated outside the file's own range", async () => {
@@ -1113,11 +1117,10 @@ describeDb("importing a statement after a live sync", () => {
   });
 
   /**
-   * The 2026-08-29 Capital One failure. The transaction page publishes `Pizza Hut` and
-   * dates the charge on the purchase day; the CSV download carries the bank descriptor and
-   * the posting day. Both halves have to hold: the descriptions only meet through the brand
-   * stem, and the row is four days off on `transaction_date`, so it is loaded and matched
-   * only via `posted_date`.
+   * The 2026-08-29 Capital One case. The transaction page publishes `Pizza Hut` and dates
+   * the charge on the purchase day; the CSV download carries the bank descriptor and the
+   * posting day. No description rule reconciles the two, so the file never matches the page
+   * row at all: it writes its own and the handover retires the page's by date.
    */
   const caponePizzaFile: ImportFile = {
     name: "2026-08-29_transaction_download.csv",
@@ -1141,7 +1144,7 @@ describeDb("importing a statement after a live sync", () => {
     });
   }
 
-  it("does not re-import a charge a bank page wrote under its display name", async () => {
+  it("keeps one copy of a charge a bank page wrote under its display name — the file's", async () => {
     const userId = await makeUser();
     await importFinanceCsvFiles({ userId, files: [caponePizzaFile] });
     const [account] = await listAccounts(userId);
@@ -1152,8 +1155,8 @@ describeDb("importing a statement after a live sync", () => {
 
     const rows = await listTransactions(userId);
     expect(rows).toHaveLength(1);
-    expect(rows[0].description).toBe("Pizza Hut");
-    expect(result.skipped).toBe(1);
+    expect(rows[0].description).toBe("PIZZA HUT 036874");
+    expect(result.skipped).toBe(0);
   });
 
   it("never matches a page row belonging to another user", async () => {

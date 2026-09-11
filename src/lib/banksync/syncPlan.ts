@@ -20,6 +20,14 @@
  * posted row matches the pending row it replaces and is dropped as a duplicate — leaving
  * the account with neither. That includes scrape-pending from Capital One, which have no
  * SimpleFIN id and would otherwise sit in the comparison set forever.
+ *
+ * The same "leaving neither" failure applies to **every browser row**, posted or not. The
+ * feed handover (`feedHandoverWrite.ts`) deletes browser rows once this sync's watermark
+ * covers them, trusting that the feed wrote its own copy. So a browser row may never be
+ * the reason a feed row is not written: a posted SimpleFIN row is always inserted, and
+ * only a SimpleFIN *hold* defers to the browser's fresh pending set. Matching a feed row
+ * to a browser row cost SMECO and Neon charges on 2026-09-10 — both skipped here as
+ * duplicates of posted browser rows, then retired with nothing to replace them.
  */
 
 import { selectUnmatched } from "@/lib/finances/liveFeedMatch";
@@ -60,6 +68,11 @@ export type ExistingRow = {
   /** Non-null only for rows this feed wrote. */
   externalId: string | null;
   pending: boolean;
+  /**
+   * Written by a bank-page capture (`scrape:*`). Never an identity for a feed row: the
+   * handover retires it once the feed covers its day, so matching against it drops money.
+   */
+  fromBrowser: boolean;
   /** Browser pending on an account whose 36-hour bank-page authority is still live. */
   authoritativeBrowserPending?: boolean;
 };
@@ -182,21 +195,29 @@ export function planSync(input: SyncPlanInput): SyncPlan {
   let skippedDuplicate = 0;
   for (const [accountId, candidates] of candidatesByAccount) {
     const accountExisting = existingByAccount.get(accountId) ?? [];
+    // The browser's fresh pending set outranks SimpleFIN's holds, and nothing more. A posted
+    // candidate is history: the handover retires the browser hold it settles, in the same
+    // commit that inserts it, so suppressing it here would lose the charge.
     const authoritativePending = accountExisting.filter(
       (row) => row.pending && row.authoritativeBrowserPending,
     );
     const pageAuthority = selectUnmatched(
       authoritativePending,
-      candidates.map((candidate) => candidate.transaction),
+      candidates
+        .filter((candidate) => candidate.pending)
+        .map((candidate) => candidate.transaction),
     );
-    const allowedTransactions = new Set(pageAuthority.keep);
-    const allowedCandidates = candidates.filter((candidate) =>
-      allowedTransactions.has(candidate.transaction),
+    const allowedHolds = new Set(pageAuthority.keep);
+    const allowedCandidates = candidates.filter(
+      (candidate) => !candidate.pending || allowedHolds.has(candidate.transaction),
     );
     skippedDuplicate += candidates.length - allowedCandidates.length;
 
     const existing = accountExisting.filter(
-      (row) => !row.pending && !(row.externalId && deleted.has(row.externalId)),
+      (row) =>
+        !row.pending &&
+        !row.fromBrowser &&
+        !(row.externalId && deleted.has(row.externalId)),
     );
     if (existing.length === 0) {
       inserts.push(...allowedCandidates);

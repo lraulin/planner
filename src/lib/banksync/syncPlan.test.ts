@@ -33,6 +33,7 @@ function existing(over: Partial<ExistingRow> = {}): ExistingRow {
     description: "STARBUCKS",
     externalId: null,
     pending: false,
+    fromBrowser: false,
     ...over,
   };
 }
@@ -194,32 +195,37 @@ describe("planSync — pending resolution", () => {
     expect(plan.deletes).toEqual([]);
   });
 
-  it("suppresses a SimpleFIN replacement while the browser pending set is authoritative", () => {
+  /** The browser's fresh pending Chipotle, which outranks SimpleFIN's holds for 36 hours. */
+  const browserHold = (authoritative: boolean) =>
+    new Map([
+      [
+        ACCT_CARD,
+        [
+          existing({
+            description: "Chipotle",
+            amountCents: -1691,
+            pending: true,
+            externalId: null,
+            fromBrowser: true,
+            authoritativeBrowserPending: authoritative,
+          }),
+        ],
+      ],
+    ]);
+  const simplefinHold = txn({
+    id: "hold-chipotle",
+    posted: 0,
+    pending: true,
+    transacted_at: D12,
+    amount: "-16.91",
+    description: "CHIPOTLE 0123",
+  });
+
+  it("suppresses a SimpleFIN hold while the browser pending set is authoritative", () => {
     const plan = planSync(
       input({
-        accounts: [
-          account(EXT_CARD, [
-            txn({
-              id: "posted-chipotle",
-              amount: "-16.91",
-              description: "CHIPOTLE 0123",
-            }),
-          ]),
-        ],
-        existingByAccount: new Map([
-          [
-            ACCT_CARD,
-            [
-              existing({
-                description: "CHIPOTLE 0123",
-                amountCents: -1691,
-                pending: true,
-                externalId: null,
-                authoritativeBrowserPending: true,
-              }),
-            ],
-          ],
-        ]),
+        accounts: [account(EXT_CARD, [simplefinHold])],
+        existingByAccount: browserHold(true),
       }),
     );
     expect(plan.inserts).toEqual([]);
@@ -227,7 +233,19 @@ describe("planSync — pending resolution", () => {
     expect(plan.skippedDuplicate).toBe(1);
   });
 
-  it("lets SimpleFIN resume once browser authority has expired", () => {
+  it("lets SimpleFIN's holds resume once browser authority has expired", () => {
+    const plan = planSync(
+      input({
+        accounts: [account(EXT_CARD, [simplefinHold])],
+        existingByAccount: browserHold(false),
+      }),
+    );
+    expect(plan.inserts.map((row) => row.externalId)).toEqual(["hold-chipotle"]);
+  });
+
+  it("inserts a posted SimpleFIN row even while the browser pending set is authoritative", () => {
+    // The posted row settles the browser's hold, and the handover retires that hold in the
+    // same commit. Deferring to it here would leave the account with neither.
     const plan = planSync(
       input({
         accounts: [
@@ -239,23 +257,11 @@ describe("planSync — pending resolution", () => {
             }),
           ]),
         ],
-        existingByAccount: new Map([
-          [
-            ACCT_CARD,
-            [
-              existing({
-                description: "Chipotle",
-                amountCents: -1691,
-                pending: true,
-                externalId: null,
-                authoritativeBrowserPending: false,
-              }),
-            ],
-          ],
-        ]),
+        existingByAccount: browserHold(true),
       }),
     );
     expect(plan.inserts.map((row) => row.externalId)).toEqual(["posted-chipotle"]);
+    expect(plan.skippedDuplicate).toBe(0);
   });
 
   it("inserts the posted replacement AND deletes the pending row it supersedes", () => {
@@ -299,10 +305,9 @@ describe("planSync — cross-source dedup", () => {
     expect(plan.skippedDuplicate).toBe(1);
   });
 
-  it("skips a row whose descriptor expands a bank page's display name", () => {
-    // The scrape wrote `Pizza Hut` off the Capital One transaction page; SimpleFIN reports
-    // the same charge as `PIZZA HUT 036874`. Under description matching alone the sync
-    // inserted a second copy beside it.
+  it("still matches a descriptor against a statement row's display name", () => {
+    // A CSV wrote `Pizza Hut`; SimpleFIN reports the same charge as `PIZZA HUT 036874`.
+    // Both are history feeds, so this is the matcher's job and it must recognise them.
     const plan = planSync(
       input({
         accounts: [
@@ -317,6 +322,37 @@ describe("planSync — cross-source dedup", () => {
     );
     expect(plan.inserts).toHaveLength(0);
     expect(plan.skippedDuplicate).toBe(1);
+  });
+
+  it("inserts a charge the bank page already posted — the handover retires the page's copy", () => {
+    // 2026-09-10: Capital One's page had posted `SMECO` −$263.15. Every sync skipped
+    // SimpleFIN's copy as its duplicate, then the sync whose watermark passed the day
+    // retired the page's row, and the charge left the register with nothing replacing it.
+    const plan = planSync(
+      input({
+        accounts: [
+          account(EXT_CARD, [
+            txn({ id: "smeco", description: "SMECO", amount: "-263.15" }),
+          ]),
+        ],
+        existingByAccount: new Map([
+          [
+            ACCT_CARD,
+            [
+              existing({
+                transactionDate: "2026-08-11",
+                postedDate: "2026-08-12",
+                description: "SMECO",
+                amountCents: -26315,
+                fromBrowser: true,
+              }),
+            ],
+          ],
+        ]),
+      }),
+    );
+    expect(plan.inserts.map((row) => row.externalId)).toEqual(["smeco"]);
+    expect(plan.skippedDuplicate).toBe(0);
   });
 
   it("still inserts a row the existing window does not cover", () => {

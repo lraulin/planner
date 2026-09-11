@@ -163,7 +163,8 @@ export async function knownExternalIds(
  * Loads **every** feed's rows, not just the sync's — the point is to recognise that a Chase
  * statement row and a synced row are the same event, and they carry different external ids
  * by construction. `externalId` and `pending` come along because the plan needs them to
- * tell "a row this feed wrote and is still pending" from "a row a statement wrote".
+ * tell "a row this feed wrote and is still pending" from "a row a statement wrote", and
+ * `fromBrowser` because a bank-page row is never one a feed row may be matched to.
  */
 export async function existingRowsInWindow(
   userId: string,
@@ -223,6 +224,7 @@ export async function existingRowsInWindow(
       externalId:
         row.externalSource === "api:simplefin" ? (row.externalId ?? null) : null,
       pending: row.pending,
+      fromBrowser: isScrapeFeed(row.externalSource ?? ""),
       authoritativeBrowserPending:
         row.pending &&
         isScrapeFeed(row.externalSource ?? "") &&

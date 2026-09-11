@@ -29,7 +29,8 @@ import {
   listLinks,
   loadConnectionsForSync,
 } from "./queries";
-import type { BankInsert } from "./syncPlan";
+import type { SimpleFinTransaction } from "./mapping";
+import { planSync, type BankInsert } from "./syncPlan";
 
 /**
  * Integration tests against the local Postgres (`npm run db:up`).
@@ -449,6 +450,7 @@ describeDb("queries for the sync window", () => {
         description: "CSV ROW",
         externalId: null,
         pending: true,
+        fromBrowser: false,
         authoritativeBrowserPending: false,
       },
     ]);
@@ -780,5 +782,129 @@ describeDb("cross-user isolation", () => {
       }),
     ).rejects.toThrow(/Account not found/i);
     expect(await listLinks(intruder)).toEqual([]);
+  });
+});
+
+describeDb("a sync catching up to the bank page's posted rows", () => {
+  /**
+   * The 2026-09-10 loss, end to end through the real planner rather than a hand-inserted
+   * feed row. Capital One's page had posted `SMECO` −$263.15. Each sync skipped SimpleFIN's
+   * copy as that row's duplicate; the sync whose watermark passed the day then retired the
+   * page's row, and the charge was gone from the register while the bank still held it.
+   */
+  const epoch = (key: string) => Date.parse(`${key}T12:00:00Z`) / 1000;
+  const smeco = {
+    id: "sfin-smeco",
+    posted: epoch("2026-09-02"),
+    amount: "-263.15",
+    description: "SMECO",
+  };
+  const later = {
+    id: "sfin-huel",
+    posted: epoch("2026-09-04"),
+    amount: "-95.40",
+    description: "HUEL",
+  };
+
+  async function seedPagePosted(userId: string, accountId: string): Promise<void> {
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId,
+      transactionDate: "2026-09-01",
+      postedDate: "2026-09-02",
+      description: "SMECO",
+      amount: "-263.15",
+      notes: "electric",
+      externalSource: "scrape:capitalone",
+      externalId: "capitalone|3448|posted|2026-09-01|2026-09-02|SMECO|-26315|0",
+    });
+  }
+
+  async function syncCard(
+    userId: string,
+    connectionId: string,
+    accountId: string,
+    transactions: SimpleFinTransaction[],
+  ) {
+    const plan = planSync({
+      accounts: [{ id: "sfin-card", name: "Capital One", balance: "0", transactions }],
+      accountIdByExternal: new Map([["sfin-card", accountId]]),
+      existingByAccount: await existingRowsInWindow(
+        userId,
+        [accountId],
+        "2026-08-25",
+        "2026-09-12",
+      ),
+      windowStart: "2026-08-27",
+    });
+    return applySync(userId, {
+      connectionId,
+      inserts: plan.inserts,
+      updates: plan.updates,
+      deletes: plan.deletes,
+      syncedThrough: "2026-09-10",
+      unmatchedAccountCount: 0,
+    });
+  }
+
+  async function rowsOn(userId: string, accountId: string) {
+    return db
+      .select({
+        amount: financeTransactions.amount,
+        externalSource: financeTransactions.externalSource,
+        notes: financeTransactions.notes,
+      })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.accountId, accountId),
+        ),
+      );
+  }
+
+  it("keeps the charge: SimpleFIN's copy is written and inherits the page row's notes", async () => {
+    const userId = await makeUser();
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const accountId = await makeAccount(userId, "3448");
+    await seedPagePosted(userId, accountId);
+
+    // First the feed delivers the charge; later it moves past the day. Either order of
+    // arrival must end with exactly one copy.
+    await syncCard(userId, connectionId, accountId, [smeco]);
+    const result = await syncCard(userId, connectionId, accountId, [smeco, later]);
+
+    const rows = await rowsOn(userId, accountId);
+    const smecoRows = rows.filter((row) => row.amount === "-263.15");
+    expect(smecoRows).toEqual([
+      { amount: "-263.15", externalSource: "api:simplefin", notes: "electric" },
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(result.inserted).toBe(1);
+  });
+
+  it("never touches another user's page row with the same charge", async () => {
+    const owner = await makeUser();
+    const other = await makeUser();
+    const connectionId = await saveConnection(owner, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const ownerAccount = await makeAccount(owner, "3448");
+    const otherAccount = await makeAccount(other, "3448");
+    await seedPagePosted(owner, ownerAccount);
+    await seedPagePosted(other, otherAccount);
+
+    await syncCard(owner, connectionId, ownerAccount, [smeco, later]);
+
+    // The owner's comparison set and handover are both user-scoped: the other user's page
+    // row is neither what the owner's sync matched against nor what it retired.
+    expect(await rowsOn(other, otherAccount)).toEqual([
+      { amount: "-263.15", externalSource: "scrape:capitalone", notes: "electric" },
+    ]);
+    expect(
+      await existingRowsInWindow(owner, [otherAccount], "2026-08-25", "2026-09-12"),
+    ).toEqual(new Map());
   });
 });

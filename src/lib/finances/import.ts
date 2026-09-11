@@ -411,16 +411,22 @@ async function existingOnAccount(
         ),
       ),
     );
-  return rows.map((row) => ({
-    transactionDate: row.transactionDate,
-    postedDate: row.postedDate,
-    amountCents: numericStringToCents(row.amount) ?? 0,
-    description: row.description,
-    // Only a live feed's rows get the looser comparison. Everything else keeps the exact
-    // matching that CSV-to-CSV dedup already relies on.
-    fromLiveFeed:
-      row.externalSource === "api:simplefin" || isScrapeFeed(row.externalSource ?? ""),
-  }));
+  return (
+    rows
+      // A bank-page row never absorbs a file line. This import retires every browser row
+      // its watermark covers (`retireCoveredScrapeRows`, below), so a line skipped as its
+      // duplicate would leave the account holding neither copy.
+      .filter((row) => !isScrapeFeed(row.externalSource ?? ""))
+      .map((row) => ({
+        transactionDate: row.transactionDate,
+        postedDate: row.postedDate,
+        amountCents: numericStringToCents(row.amount) ?? 0,
+        description: row.description,
+        // Only SimpleFIN's rows get the looser comparison. Everything else keeps the exact
+        // matching that CSV-to-CSV dedup already relies on.
+        fromLiveFeed: row.externalSource === "api:simplefin",
+      }))
+  );
 }
 
 async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
