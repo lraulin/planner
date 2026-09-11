@@ -229,6 +229,30 @@ describe("parseCapitalOne360Statement", () => {
     expect(parsed.accounts[0].transactions[0].transactionDate).toBe("2023-07-24");
   });
 
+  it("puts December in the earlier year when a period crosses New Year", () => {
+    // The period line prints only the end year. Nothing on file crosses a year yet, which is
+    // exactly why this is written down: a December row read as the end year lands eleven
+    // months in the future.
+    const parsed = ok(
+      "Statement_2024-01.pdf",
+      [
+        "Here's your bank statement.January 2024 STATEMENT PERIOD",
+        "Dec 16 - Jan 15, 2024",
+        "360 Checking - 111111112322",
+        "DATE DESCRIPTION CATEGORY AMOUNT BALANCE",
+        "Dec 16 Opening Balance $0.00",
+        "Dec 20 Deposit from TRANSFER Credit + $100.00 $100.00",
+        "Jan 5 Deposit from TRANSFER Credit + $50.00 $150.00",
+        "Jan 15 Closing Balance $150.00",
+        "If anything in your statement looks incorrect, please let us know immediately.",
+      ].join("\n"),
+    );
+    expect(parsed.accounts[0].transactions.map((row) => row.transactionDate)).toEqual([
+      "2023-12-20",
+      "2024-01-05",
+    ]);
+  });
+
   it("warns when a section does not reconcile instead of failing the file", () => {
     const parsed = ok(
       "Statement_2024-01.pdf",
