@@ -30,6 +30,12 @@ describe("nextDue", () => {
     expect(key(nextDue(at(2026, 3, 7), "weekly", 2)!)).toBe("2026-03-21");
   });
 
+  it("counts from the day it was ticked where you are, not the UTC day", () => {
+    // 21:00 in New York is already tomorrow in UTC; a daily routine ticked then is due
+    // tomorrow, not the day after.
+    expect(key(nextDue(at(2026, 8, 25, 21), "daily", 1)!)).toBe("2026-08-26");
+  });
+
   it("clamps into a short month instead of overflowing into the next one", () => {
     // Jan 31 + 1 month is the end of February, not March 3.
     expect(key(nextDue(at(2026, 1, 31), "monthly", 1)!)).toBe("2026-02-28");
