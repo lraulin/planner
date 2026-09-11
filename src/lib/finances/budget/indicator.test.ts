@@ -122,6 +122,21 @@ describe("envelopeIndicator", () => {
     expect(indicator.bar?.fill01).toBeLessThan(1);
   });
 
+  it("shades the bar's spent part against what was put in, not against the target", () => {
+    // $400 in (carry-in $300 + $100 assigned), $200 spent: half of the funding is gone. The
+    // $1,200 target is what the fill measures; the spend overlay measures the funding.
+    const row = envelope({
+      target: yearlyUpTo(120_000, 12),
+      carryInCents: 30_000,
+      assignedCents: 10_000,
+      activityCents: -20_000,
+      balanceCents: 20_000,
+    });
+    const indicator = indicate(row);
+    expect(indicator.state).toBe("underfunded");
+    expect(indicator.bar?.spent01).toBeCloseTo(0.5);
+  });
+
   it("does not treat leftover as funding a simple monthly Assigned ask", () => {
     const row = envelope({
       target: addMonthly(50_000),
@@ -848,6 +863,15 @@ describe("targetProgress", () => {
       neededLabel: "Needed",
       summary: "Have $26.68 available each month",
     });
+  });
+
+  it("never shows a negative To Go on an envelope holding more than it needs", () => {
+    const row = envelope({
+      target: refill(2_668),
+      carryInCents: 5_000,
+      balanceCents: 5_000,
+    });
+    expect(targetProgress(row, MONTH, new Map())?.toGoCents).toBe(0);
   });
 
   it("names a by-deadline Needed label and the full pile", () => {
