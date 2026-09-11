@@ -427,6 +427,84 @@ describe("SET options", () => {
   });
 });
 
+describe("SET options at their edges", () => {
+  const month = (key: string, food: number, activity = 0): AssignHistoryMonth => ({
+    month: key,
+    assigned: { food },
+    activity: { food: activity },
+  });
+
+  it("averages the months before the viewed one, never the viewed month itself", () => {
+    const history = [
+      month("2026-06-01", 30_000),
+      month("2026-07-01", 30_000),
+      month(MONTH, 90_000),
+    ];
+    const result = run("average-assigned", [envelope({ assignedCents: 0 })], {
+      history,
+    });
+    expect(result.lines[0]?.toAssignedCents).toBe(30_000);
+  });
+
+  it("floors an average of money assigned out at zero", () => {
+    const history = [
+      month("2026-06-01", -10_000),
+      month("2026-07-01", -10_000),
+      month(MONTH, 0),
+    ];
+    const result = run("average-assigned", [envelope({ assignedCents: 5_000 })], {
+      history,
+    });
+    expect(result.lines[0]?.toAssignedCents).toBe(0);
+  });
+
+  it("reads a month of refunds as nothing spent, not as a negative to assign", () => {
+    const history = [month("2026-07-01", 0, 5_000), month(MONTH, 0)];
+    const result = run("spent-last-month", [envelope({ assignedCents: 10_000 })], {
+      history,
+    });
+    expect(result.lines[0]?.toAssignedCents).toBe(0);
+  });
+
+  it("changes nothing when there is no last month to copy", () => {
+    const result = run("assigned-last-month", [envelope({ assignedCents: 10_000 })], {
+      history: [month(MONTH, 10_000)],
+    });
+    expect(result.lines).toEqual([]);
+  });
+
+  it("funds increases in Underfunded order, bills by due date first", () => {
+    const history: AssignHistoryMonth[] = [
+      { month: "2026-07-01", assigned: { food: 40_000, rent: 210_000 }, activity: {} },
+      { month: MONTH, assigned: {}, activity: {} },
+    ];
+    const result = run("assigned-last-month", [envelope(), bill()], {
+      readyToAssignCents: 100_000,
+      history,
+    });
+    const status = Object.fromEntries(
+      result.lines.map((line) => [line.categoryId, line.status]),
+    );
+    expect(status).toEqual({ rent: "partial", food: "skipped" });
+  });
+
+  it("spends only what reductions free while Ready to Assign is negative", () => {
+    const history: AssignHistoryMonth[] = [
+      { month: "2026-07-01", assigned: { food: 40_000, rent: 210_000 }, activity: {} },
+      { month: MONTH, assigned: {}, activity: {} },
+    ];
+    const result = run(
+      "assigned-last-month",
+      [envelope({ assignedCents: 80_000 }), bill()],
+      { readyToAssignCents: -50_000, history },
+    );
+    expect(
+      result.lines.find((line) => line.categoryId === "rent")?.toAssignedCents,
+    ).toBe(40_000);
+    expect(result.remainingRtaCents).toBe(-50_000);
+  });
+});
+
 describe("return-money options", () => {
   it("Reduce Overfunding returns only demand-envelope excess", () => {
     const over = envelope({ assignedCents: 80_000, target: addMonthly(50_000) });
