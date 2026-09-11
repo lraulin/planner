@@ -78,6 +78,25 @@ describe("derive — ancestry display values", () => {
   });
 });
 
+describe("derive — Project Priority under a sub-project", () => {
+  it("reads the nearest project, not the outermost", () => {
+    const nodes = derive([
+      row({ id: "outer", type: "project", priorityLetter: "A", priorityRank: 1 }),
+      row({
+        id: "inner",
+        type: "project",
+        parentId: "outer",
+        depth: 1,
+        priorityLetter: "C",
+        priorityRank: 3,
+      }),
+      row({ id: "task", type: "task", parentId: "inner", depth: 2 }),
+    ]);
+    expect(nodes[2]?.projectPriorityLetter).toBe("C");
+    expect(nodes[2]?.projectPriorityRank).toBe(3);
+  });
+});
+
 describe("derive — effort rollups", () => {
   it("reports a leaf's own effort", () => {
     const [node] = derive([row({ id: "a", type: "task", effortMinutes: 120 })]);
@@ -154,6 +173,43 @@ describe("derive — effort rollups", () => {
     expect(nodes[0].percentCompleteRollup).toBe(75);
   });
 
+  it("rounds the weighted percent to a whole number", () => {
+    const nodes = derive([
+      row({ id: "root", type: "project" }),
+      row({
+        id: "a",
+        type: "task",
+        parentId: "root",
+        depth: 1,
+        effortMinutes: 60,
+        percentComplete: 33,
+      }),
+      row({
+        id: "b",
+        type: "task",
+        parentId: "root",
+        depth: 1,
+        effortMinutes: 60,
+        percentComplete: 34,
+      }),
+    ]);
+    expect(nodes[0].percentCompleteRollup).toBe(34);
+  });
+
+  it("adds time logged on the parent itself to its children's", () => {
+    const nodes = derive([
+      row({ id: "root", type: "project", actualEffortMinutes: 30 }),
+      row({
+        id: "a",
+        type: "task",
+        parentId: "root",
+        depth: 1,
+        actualEffortMinutes: 60,
+      }),
+    ]);
+    expect(nodes[0].actualEffortRollupMinutes).toBe(90);
+  });
+
   it("reports percent rollup 0 on a leaf with no effort estimate", () => {
     // Weighted rollup needs a denominator. Display must use the stored value instead —
     // see displayPercentComplete / percentColumn, which used to sort and chip from the
@@ -191,6 +247,12 @@ describe("derive — structure", () => {
     ]);
     expect(nodes[0].hasChildren).toBe(true);
     expect(nodes[0].hasActiveChildren).toBe(false);
+
+    const cancelled = derive([
+      row({ id: "p", type: "project" }),
+      row({ id: "dropped", type: "task", parentId: "p", depth: 1, state: "cancelled" }),
+    ]);
+    expect(cancelled[0].hasActiveChildren).toBe(false);
   });
 
   it("hides descendants of a collapsed node", () => {
