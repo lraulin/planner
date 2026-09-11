@@ -41,6 +41,12 @@ describe("descriptionsOverlap", () => {
     expect(descriptionsOverlap("rent:raulin  rent", "RENT:RAULIN RENT")).toBe(true);
   });
 
+  it("folds interior spacing before looking for the feed's text inside a wrapper", () => {
+    expect(
+      descriptionsOverlap("VACP TREAS 310", "Deposit from VACP  TREAS 310 XXVA BENEF"),
+    ).toBe(true);
+  });
+
   it("recognises a bank page's display name in the descriptor", () => {
     // The six rows the 2026-08-29 Capital One snapshot duplicated. The page publishes a
     // cleaned brand name; SimpleFIN and the CSV download carry the full descriptor, and
@@ -57,6 +63,10 @@ describe("descriptionsOverlap", () => {
     // Without a length floor a bare processor stamp matches every row it appears in.
     expect(descriptionsOverlap("PAYPAL", "PAYPAL *PADDLE.NET")).toBe(false);
     expect(descriptionsOverlap("SQ *", "SQ *COFFEE SHOP")).toBe(false);
+  });
+
+  it("needs three characters before a stem counts as a brand", () => {
+    expect(descriptionsOverlap("AT", "AT&T BILL PAYMENT")).toBe(false);
   });
 
   it("anchors a brand stem at the start, so it cannot match mid-word", () => {
@@ -133,6 +143,49 @@ describe("selectUnmatched", () => {
       },
     ]);
     expect(keep).toHaveLength(1);
+  });
+
+  it("never pairs a refund with the charge it reverses", () => {
+    const { keep } = selectUnmatched(existing, [
+      {
+        transactionDate: "2026-08-10",
+        amountCents: 1059,
+        description: "AMAZON MKTPL*5H1YV8C82",
+      },
+    ]);
+    expect(keep).toHaveLength(1);
+  });
+
+  it("gives each incoming row the nearest of two rows in reach, so both still pair", () => {
+    // Invented, unlike the positives above. Two identical charges two days apart. Aug 10 must take Aug 10; had it taken Aug 8
+    // (first scanned, also in reach), Aug 7 would be three days from what is left and be
+    // imported a second time.
+    const twice = [
+      {
+        transactionDate: "2026-08-08",
+        amountCents: -500,
+        description: "COFFEE SHOP 12",
+      },
+      {
+        transactionDate: "2026-08-10",
+        amountCents: -500,
+        description: "COFFEE SHOP 12",
+      },
+    ];
+    const { keep, matchedCount } = selectUnmatched(twice, [
+      {
+        transactionDate: "2026-08-10",
+        amountCents: -500,
+        description: "COFFEE SHOP 12",
+      },
+      {
+        transactionDate: "2026-08-07",
+        amountCents: -500,
+        description: "COFFEE SHOP 12",
+      },
+    ]);
+    expect(keep).toHaveLength(0);
+    expect(matchedCount).toBe(2);
   });
 
   it("keeps the second of two identical charges when only one is on file", () => {
