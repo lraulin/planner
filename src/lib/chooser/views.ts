@@ -448,17 +448,16 @@ export function applyDateFilter(
     const deadline = daysOut(item.effectiveDeadline, today);
     const start = daysOut(item.node.targetStart, today);
     const end = daysOut(item.node.targetEnd, today);
+    // The state the row reads as today, not the stored one: an expired shelf is never swept,
+    // so a routine due again is still stored `postponed` — the same reading `scheduleStatus`
+    // and `isChooserCandidate` make, or this filter and the Status column disagree.
+    const state = effectiveState(item.node.state, item.node.shelf, today);
 
     switch (filter) {
       case "current":
         // Started work, work whose start date has arrived (or was never set), or work
         // already up against its deadline.
-        if (
-          item.node.state === "in_progress" ||
-          item.node.state === "should_delegate"
-        ) {
-          return true;
-        }
+        if (state === "in_progress" || state === "should_delegate") return true;
         if (start === null || start <= 0) return true;
         return deadline !== null && deadline <= 0;
 
@@ -470,7 +469,7 @@ export function applyDateFilter(
         // end, NS with past target start, or started with past target end.
         if (deadline !== null && deadline < 0) return true;
         if (end !== null && end < 0) return true;
-        if (item.node.state === "not_started" && start !== null && start < 0) {
+        if (state === "not_started" && start !== null && start < 0) {
           return true;
         }
         return false;

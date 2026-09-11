@@ -566,6 +566,26 @@ describe("applyDateFilter", () => {
     expect(current).not.toContain("future-start");
   });
 
+  it("reads a routine back off its shelf as not started, as the Status column does", () => {
+    // Nothing sweeps an expired shelf, so the stored state is still `postponed` after the
+    // routine is due again. Status calls this Behind Schedule (`status.test.ts`, "puts a
+    // routine whose planned day has passed behind schedule"); the filter of the same name
+    // has to agree, and reading the stored state it never could.
+    const [routine] = build([
+      row({
+        id: "r",
+        type: "task",
+        name: "routine",
+        state: "postponed",
+        deferredDate: dayOut(-1),
+        targetStart: dayOut(-3),
+        sortKey: "r",
+      }),
+    ]);
+    expect(routine).toBeDefined();
+    expect(names(applyDateFilter([routine], "behind", TODAY))).toEqual(["routine"]);
+  });
+
   it("never changes a surviving item's score", () => {
     // The manual is explicit that the date filter is display-only.
     const before = new Map(items.map((item) => [item.node.id, item.score]));
