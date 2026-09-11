@@ -271,6 +271,15 @@ describe("resolveDrop on a corrupt tree", () => {
   // `canNest` can refuse every member of a `parent_id` ring, and the walk's stated
   // termination argument — "the top level hosts every type" — only holds for a chain that
   // reaches the top. A ring never does.
+  it("refuses a drop beside a row whose parent is missing", () => {
+    // Its level is unknown, so there is no honest place to say the node landed.
+    const orphaned = new Map<string, DropNode>([
+      ["orphan", node("orphan", "gone", "task", 2)],
+      ["drag", node("drag", null, "task", 0)],
+    ]);
+    expect(resolveDrop("drag", "orphan", "before", orphaned)).toBeNull();
+  });
+
   it("gives up rather than walking a parent cycle forever", () => {
     const node = (id: string, parentId: string): DropNode => ({
       id,

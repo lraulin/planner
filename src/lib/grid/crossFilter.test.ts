@@ -328,6 +328,18 @@ describe("describeCrossFilter", () => {
     ).toBe("[Priority] ≤ 'B2' AND [Assigned] ≠∅");
   });
 
+  it("says OR for an Or expression, so the chip does not claim the stricter filter", () => {
+    expect(
+      describeCrossFilter(
+        or(
+          { columnId: "state", op: "eq", value: "NS" },
+          { columnId: "state", op: "eq", value: "IP" },
+        ),
+        () => "State",
+      ),
+    ).toBe("[State] = 'NS' OR [State] = 'IP'");
+  });
+
   it("is empty for an empty expression", () => {
     expect(describeCrossFilter(and(), () => "x")).toBe("");
   });

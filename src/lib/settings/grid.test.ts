@@ -356,6 +356,29 @@ describe("hasViewOverrides", () => {
     expect(hasViewOverrides({ ...DEFAULT_GRID_SETTINGS, sorts: [] })).toBe(true);
   });
 
+  it("counts a flipped switch and an advanced filter as tweaks, so Reset can clear them", () => {
+    expect(
+      hasViewOverrides({ ...DEFAULT_GRID_SETTINGS, switches: { groups: true } }),
+    ).toBe(true);
+    expect(
+      hasViewOverrides({
+        ...DEFAULT_GRID_SETTINGS,
+        advancedFilter: { join: "and", conditions: [] },
+      }),
+    ).toBe(true);
+  });
+
+  it("leaves null fields out of what it stores, so they keep following the view", () => {
+    // Stored as JSON null, `parseSearch` / `parseDensity` would read a concrete empty and
+    // the working copy would look dirty the moment it was reset.
+    const blob = serializeGridSettings(DEFAULT_GRID_SETTINGS) as Record<
+      string,
+      unknown
+    >;
+    expect(Object.values(blob)).not.toContain(null);
+    expect(hasViewOverrides(parseGridSettings(blob))).toBe(false);
+  });
+
   it("ignores origin id and includeDeferred", () => {
     expect(
       hasViewOverrides({
