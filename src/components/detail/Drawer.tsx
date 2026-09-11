@@ -7,17 +7,18 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { comboboxOwnsEscape, useModalFocus } from "./focus";
 
 /**
- * The drawer's one leave path, for forms that opt in with `useDrawerLeaveGuard`.
+ * The drawer's one leave path, for forms that opt in with `DrawerLeaveGuard`.
  *
  * `drawer-pattern.md`: "every leave path must share the same dirty-aware handler." A drawer has
  * four — Escape, the backdrop, the header ×, the footer Cancel — and three of them used to be
- * wired by each form on its own. Six forms (Contact, Job, Residence, Resource, Amazon review,
- * Metric) wired none, or only some, and discarded unsaved edits silently on the rest. With the
- * guard on the drawer itself, a form renders `<DrawerLeaveGuard dirty={dirty} />` once and all four paths ask.
+ * wired by each form on its own. Contact, Job, Residence, Resource, Amazon review, Metric and
+ * the exercise editor wired none, or only some, and discarded unsaved edits silently on the
+ * rest. With the guard on the drawer itself, a form renders `<DrawerLeaveGuard dirty={dirty} />`
+ * once and all four paths ask.
  *
- * Forms that already route every path through their own confirm (Account, Payee, Transaction,
- * Target, the node drawer, Appointment) do not register, so the guard stays clean for them and
- * passes their handler straight through.
+ * Forms that still route every path through their own confirm (Account, Payee, Transaction,
+ * the node drawer, Appointment) do not register, so the guard stays clean for them and passes
+ * their handler straight through.
  */
 type LeaveGuard = {
   setDirty: (dirty: boolean) => void;
