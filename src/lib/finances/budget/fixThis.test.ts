@@ -205,6 +205,41 @@ describe("fixThisSourceMonths", () => {
   });
 });
 
+describe("fixThisSourceMonths — direction", () => {
+  it("never offers a month before the viewed one, however much it holds", () => {
+    // The hole is here; the source is here or later (past months stay historical).
+    const list = months([
+      { month: "2026-08-01", categoryId: "pizza", amountCents: 5_000 },
+    ]);
+    expect(
+      fixThisSourceMonths({
+        months: list,
+        viewedMonth: "2026-09-01",
+        groups: GROUPS,
+        categories: CATEGORIES,
+        showHidden: false,
+      }),
+    ).toEqual(["2026-09-01", "2026-10-01"]);
+  });
+});
+
+describe("fixThisSections — hidden groups", () => {
+  it("hides a visible envelope that sits in a hidden group", () => {
+    const groups = [group("food", "spending", null, true), group("bills", "bill")];
+    const list = months([
+      { month: "2026-08-01", categoryId: "groceries", amountCents: 5_000 },
+    ]);
+    expect(
+      fixThisSections({
+        month: august(list),
+        groups,
+        categories: CATEGORIES,
+        showHidden: false,
+      }),
+    ).toEqual([]);
+  });
+});
+
 describe("defaultUnassignCents", () => {
   it("uses the viewed month's hole, not the picker month's Available", () => {
     expect(defaultUnassignCents(5_000, -2_000)).toBe(2_000);
