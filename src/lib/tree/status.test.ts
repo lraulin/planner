@@ -76,6 +76,11 @@ describe("scheduleStatus — Behind Schedule", () => {
     expect(status({ deadline: day(3), targetEnd: day(5) })).toBe("behind_schedule");
   });
 
+  it("does not call started work behind on the day its target end falls", () => {
+    // Manual §3.8: behind only when the target end is *before* today. Ending today is due.
+    expect(status({ state: "in_progress", targetEnd: day(0) })).toBe("due_soon");
+  });
+
   it("lets overdue beat behind schedule when the deadline is past", () => {
     expect(status({ deadline: day(-1), targetStart: day(-5) })).toBe("overdue");
   });
@@ -84,6 +89,10 @@ describe("scheduleStatus — Behind Schedule", () => {
 describe("scheduleStatus — Need to Start, Ongoing, Waiting, Not Scheduled", () => {
   it("Need to Start is NS with target start today", () => {
     expect(status({ targetStart: day(0) })).toBe("need_to_start");
+  });
+
+  it("Need to Start is for work not yet begun; started work starting today is Ongoing", () => {
+    expect(status({ state: "in_progress", targetStart: day(0) })).toBe("ongoing");
   });
 
   it("Waiting state surfaces when nothing more urgent applies", () => {
@@ -106,6 +115,10 @@ describe("scheduleStatus — No Slack", () => {
     // Deadline in 10 days, end in 10 days → no slack; not close-to-deadline (that's on due).
     expect(status({ deadline: day(10), targetEnd: day(10) })).toBe("no_slack");
     expect(status({ deadline: day(10), targetEnd: day(9) })).toBe("no_slack");
+  });
+
+  it("does not fire with two days to spare", () => {
+    expect(status({ deadline: day(10), targetEnd: day(8) })).toBe("on_schedule");
   });
 });
 
@@ -203,6 +216,25 @@ describe("scheduleStatusById — propagation", () => {
     const map = scheduleStatusById(nodes, TODAY);
     expect(map.get("t")).toBe("overdue");
     expect(map.get("p")).toBe("overdue");
+  });
+
+  it("does not roll a child's Need to Start up to its parent", () => {
+    // Only the deadline and schedule-slip bands propagate (manual §3.8); a task that starts
+    // today says nothing about whether its project is on time.
+    const nodes = derive([
+      row({ id: "p", type: "project", name: "P", sortKey: "a", state: "in_progress" }),
+      row({
+        id: "t",
+        type: "task",
+        parentId: "p",
+        name: "T",
+        sortKey: "a",
+        targetStart: day(0),
+      }),
+    ]);
+    const map = scheduleStatusById(nodes, TODAY);
+    expect(map.get("t")).toBe("need_to_start");
+    expect(map.get("p")).toBe("ongoing");
   });
 
   it("does not let completed children paint the parent overdue", () => {
