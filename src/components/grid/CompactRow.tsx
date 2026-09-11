@@ -28,7 +28,7 @@ import {
 import { haptic } from "@/lib/touch/haptics";
 import { CommandGlyph } from "@/components/icons/commandIcons";
 import type { CommandIcon } from "@/lib/commands/icons";
-import type { CompactFields } from "@/lib/grid/compactFields";
+import { compactCellText, type CompactFields } from "@/lib/grid/compactFields";
 import type { SelectMods } from "@/lib/grid/selection";
 import { SelectionCheckbox } from "./SelectionCheckbox";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
@@ -434,10 +434,7 @@ function textOf<TCtx, TRow>(
     : column.compactText
       ? column.compactText(row)
       : (column.filterValue?.(row) ?? null);
-  // A date column's compact text can be a word ("Unscheduled") rather than a key, and the
-  // formatter returns "" for anything that is not a key — keep the word.
-  const text = isCalendarDayKind(column.filterKind) ? formatDate(raw) || raw : raw;
-  return text && text.trim() !== "" ? text : null;
+  return compactCellText(raw, isCalendarDayKind(column.filterKind), formatDate);
 }
 
 function fullTextOf<TCtx, TRow>(
@@ -451,8 +448,7 @@ function fullTextOf<TCtx, TRow>(
     : column.compactText
       ? column.compactText(row)
       : (column.filterValue?.(row) ?? null);
-  if (!raw || raw.trim() === "") return null;
-  return isCalendarDayKind(column.filterKind) ? formatFullDateKey(raw) || raw : raw;
+  return compactCellText(raw, isCalendarDayKind(column.filterKind), formatFullDateKey);
 }
 
 /**

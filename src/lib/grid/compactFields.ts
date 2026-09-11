@@ -99,3 +99,20 @@ export function resolveCompactFields<C extends CompactColumn>(
 
   return { leading, primary, accent, meta };
 }
+
+/**
+ * A column's compact text as the phone shows it, or null when there is nothing to show.
+ *
+ * A day column's value is a `YYYY-MM-DD` key and is printed in the user's date format — but a
+ * column may also supply its own words (Activity's "Sep 7, 2026, 5:08 PM", Bills'
+ * "Unscheduled"), and the formatter returns `""` for anything that is not a key. Formatting
+ * those unconditionally is what made them vanish from every phone row, so the words stand.
+ */
+export function compactCellText(
+  raw: string | null,
+  isDayColumn: boolean,
+  formatDay: (dateKey: string) => string,
+): string | null {
+  if (raw === null || raw.trim() === "") return null;
+  return isDayColumn ? formatDay(raw) || raw : raw;
+}

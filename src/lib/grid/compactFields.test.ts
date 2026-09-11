@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { resolveCompactFields, type CompactColumn } from "@/lib/grid/compactFields";
+import { formatDateKey } from "@/lib/dateFormat";
+import {
+  compactCellText,
+  resolveCompactFields,
+  type CompactColumn,
+} from "@/lib/grid/compactFields";
 
 const cols = (...specs: (string | CompactColumn)[]): CompactColumn[] =>
   specs.map((spec) => (typeof spec === "string" ? { id: spec } : spec));
@@ -132,5 +137,27 @@ describe("resolveCompactFields", () => {
 
     expect(result.primary?.id).toBe("name");
     expect(ids(result.meta)).toEqual(["title"]);
+  });
+});
+
+describe("compactCellText", () => {
+  const formatDay = (key: string) => formatDateKey(key, "M/D/YYYY");
+
+  it("prints a day column's key in the user's format", () => {
+    expect(compactCellText("2026-09-24", true, formatDay)).toBe("9/24/2026");
+  });
+
+  it("keeps a day column's own words instead of blanking them", () => {
+    // Activity's Time and Bills' "Unscheduled" both vanished from every phone row this way.
+    expect(compactCellText("Sep 7, 2026, 5:08 PM", true, formatDay)).toBe(
+      "Sep 7, 2026, 5:08 PM",
+    );
+    expect(compactCellText("Unscheduled", true, formatDay)).toBe("Unscheduled");
+  });
+
+  it("leaves other columns alone and drops blanks", () => {
+    expect(compactCellText("2026-09-24", false, formatDay)).toBe("2026-09-24");
+    expect(compactCellText("  ", true, formatDay)).toBeNull();
+    expect(compactCellText(null, true, formatDay)).toBeNull();
   });
 });
