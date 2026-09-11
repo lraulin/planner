@@ -120,6 +120,20 @@ describe("occurrenceAt", () => {
     expect(occurrenceAt(series, 0).dueKey).toBe("2026-03-01");
     expect(occurrenceAt(series, 1).dueKey).toBe("2026-09-01");
   });
+
+  it("phases by the lead even when it is long enough to cross into the next month", () => {
+    // Posted Feb 10 with a 20-day lead pays Mar 1. Read without the lead, the nearest due
+    // date is Feb 1, and every occurrence would land a month early.
+    const semi = bill({ cadenceMonths: 6, dueDay: 1, leadDays: 20 });
+    const series = declaredSeries(semi, "2026-02-10")!;
+    expect(occurrenceAt(series, 0).dueKey).toBe("2026-03-01");
+  });
+
+  it("phases a charge at a month's end by the due date it is nearest, the next month's", () => {
+    const semi = bill({ cadenceMonths: 6, dueDay: 1 });
+    const series = declaredSeries(semi, "2026-02-27")!;
+    expect(occurrenceAt(series, 0).dueKey).toBe("2026-03-01");
+  });
 });
 
 describe("nearestOccurrence", () => {
@@ -223,6 +237,11 @@ describe("suggestLeadDays", () => {
     // it. The mean is 4; the median is the arrangement that actually holds.
     const keys = ["2026-01-08", "2026-02-08", "2026-03-08", "2026-04-08", "2026-05-22"];
     expect(suggestLeadDays(15, keys, monthly)).toBe(7);
+  });
+
+  it("averages the middle two offsets of an even count", () => {
+    // Two and five days ahead of the 15th: 3.5, which rounds to 4.
+    expect(suggestLeadDays(15, ["2026-01-13", "2026-02-10"], monthly)).toBe(4);
   });
 
   it("clamps a bill that posts after its due date to no lead at all", () => {
