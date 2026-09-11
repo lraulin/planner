@@ -84,6 +84,27 @@ describe("billsNeedingReview", () => {
     const monthly = bill({ name: "Netflix", cadenceMonths: 1 });
     expect(reviews([monthly], "2026-07-10", "2026-08-16")).toEqual([]);
     expect(reviews([monthly], "2026-07-08", "2026-08-16")).toHaveLength(1);
+    // Seven days is still inside the grace; the question starts on the eighth.
+    expect(reviews([monthly], "2026-07-09", "2026-08-16")).toEqual([]);
+  });
+
+  it("lists the longest-missing bill first", () => {
+    const listed = billsNeedingReview(
+      [
+        {
+          ...bill({ id: "a", name: "Recent", cadenceMonths: 1 }),
+          expectedKey: "2026-08-01",
+          dueKey: null,
+        },
+        {
+          ...bill({ id: "b", name: "Oldest", cadenceMonths: 1 }),
+          expectedKey: "2026-06-01",
+          dueKey: null,
+        },
+      ],
+      "2026-08-16",
+    );
+    expect(listed.map((row) => row.name)).toEqual(["Oldest", "Recent"]);
   });
 
   it("scales the grace period with the cadence", () => {
@@ -191,6 +212,45 @@ describe("billsNeedingAmountReview", () => {
           { dateKey: "2026-06-01", costCents: 12000 },
           { dateKey: "2026-07-01", costCents: 21000 },
           { dateKey: "2026-08-01", costCents: 8900 },
+        ]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("reads the three most recent charges, so an old price does not outvote a new one", () => {
+    const streaming = bill({
+      id: "tv",
+      name: "TV",
+      cadenceMonths: 1,
+      expectedCents: 1_599,
+    });
+    const [row] = billsNeedingAmountReview(
+      [streaming],
+      charges("tv", [
+        { dateKey: "2026-02-01", costCents: 1_599 },
+        { dateKey: "2026-03-01", costCents: 1_599 },
+        { dateKey: "2026-04-01", costCents: 1_599 },
+        { dateKey: "2026-06-01", costCents: 1_899 },
+        { dateKey: "2026-07-01", costCents: 1_899 },
+        { dateKey: "2026-08-01", costCents: 1_899 },
+      ]),
+    );
+    expect(row).toMatchObject({ declaredCents: 1_599, observedCents: 1_899 });
+  });
+
+  it("waits for three charges before proposing a new amount", () => {
+    const streaming = bill({
+      id: "tv",
+      name: "TV",
+      cadenceMonths: 1,
+      expectedCents: 1_599,
+    });
+    expect(
+      billsNeedingAmountReview(
+        [streaming],
+        charges("tv", [
+          { dateKey: "2026-07-01", costCents: 1_899 },
+          { dateKey: "2026-08-01", costCents: 1_899 },
         ]),
       ),
     ).toEqual([]);
@@ -310,8 +370,8 @@ describe("projectForwardMonths", () => {
   it("walks from the latest charge on file, not the first", () => {
     const monthly = bill({ cadenceMonths: 1, expectedCents: 1_000 });
     const charges = [
-      { dateKey: "2026-06-03", costCents: -1_000 },
-      { dateKey: "2026-08-15", costCents: -1_000 },
+      { dateKey: "2026-06-03", costCents: 1_000 },
+      { dateKey: "2026-08-15", costCents: 1_000 },
     ];
     expect(datesOf(monthly, charges, "2026-08-16")[0]).toBe("2026-09-15");
   });
@@ -323,7 +383,7 @@ describe("projectForwardMonths", () => {
       expectedCents: 1_000,
       anchorDate: "2026-05-10",
     });
-    const charges = [{ dateKey: "2026-08-20", costCents: -1_000 }];
+    const charges = [{ dateKey: "2026-08-20", costCents: 1_000 }];
     expect(datesOf(monthly, charges, "2026-08-21")[0]).toBe("2026-09-20");
   });
 
@@ -338,7 +398,7 @@ describe("projectForwardMonths", () => {
 
   it("still projects a whole year from a charge eighteen months old", () => {
     const monthly = bill({ cadenceMonths: 1, expectedCents: 1_000 });
-    const charges = [{ dateKey: "2025-03-15", costCents: -1_000 }];
+    const charges = [{ dateKey: "2025-03-15", costCents: 1_000 }];
     const dates = datesOf(monthly, charges, "2026-09-16");
     expect(dates[0]).toBe("2026-10-15");
     expect(dates).toHaveLength(11);
@@ -351,7 +411,7 @@ describe("projectForwardMonths", () => {
       dueDay: 1,
       anchorDate: "2026-10-01",
     });
-    const charges = [{ dateKey: "2026-08-01", costCents: -1_000 }];
+    const charges = [{ dateKey: "2026-08-01", costCents: 1_000 }];
     expect(datesOf(quarterly, charges, "2026-09-10")[0]).toBe("2026-10-01");
   });
 
@@ -427,6 +487,13 @@ describe("billAnchor", () => {
       nextDueKey: "2026-09-01",
       dueKey: null,
     });
+  });
+
+  it("reads an anchor of today as due today, not next cycle", () => {
+    expect(
+      billAnchor({ ...monthly, anchorDate: "2026-08-21" }, null, "2026-08-21")
+        .nextDueKey,
+    ).toBe("2026-08-21");
   });
 
   it("prefers the last posted charge over a stale anchor", () => {
