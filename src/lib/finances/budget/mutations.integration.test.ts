@@ -839,6 +839,135 @@ describeDb("budget mutations", () => {
     expect(row?.budgetCategoryId).toBe(discretionaryId);
   });
 
+  describe("the default fill's limits", () => {
+    async function fixedDefault(owner: string, name = "Kroger") {
+      const ids = await envelopes(owner);
+      const discretionaryId = ids.get("Discretionary")!;
+      const payeeId = await createPayee(owner, { name });
+      await setPayeeAutoCategory(owner, payeeId, {
+        mode: "fixed",
+        defaultBudgetCategoryId: discretionaryId,
+      });
+      return { payeeId, discretionaryId, ids };
+    }
+
+    async function categoryOf(id: string): Promise<string | null> {
+      const [row] = await db
+        .select({ budgetCategoryId: financeTransactions.budgetCategoryId })
+        .from(financeTransactions)
+        .where(eq(financeTransactions.id, id));
+      return row?.budgetCategoryId ?? null;
+    }
+
+    it("skips off-budget accounts, internal transfers, and rows already filed", async () => {
+      const { checkingId, investmentId } = await seedAccounts(userId);
+      await seedBudget(userId, {
+        preset: "minimal",
+        startMonth: MONTH,
+        todayKey: TODAY,
+      });
+      const { payeeId, discretionaryId, ids } = await fixedDefault(userId);
+      const elsewhere = [...ids.values()].find((id) => id !== discretionaryId)!;
+      const [offBudget, transfer, filed] = await addTransactions(userId, [
+        {
+          accountId: investmentId,
+          date: "2026-08-05",
+          description: "KROGER",
+          amount: "-50.00",
+          payeeId,
+        },
+        {
+          accountId: checkingId,
+          date: "2026-08-06",
+          description: "KROGER",
+          amount: "-50.00",
+          payeeId,
+          flow: "internal_transfer",
+        },
+        {
+          accountId: checkingId,
+          date: "2026-08-07",
+          description: "KROGER",
+          amount: "-50.00",
+          payeeId,
+        },
+      ]);
+      await db
+        .update(financeTransactions)
+        .set({ budgetCategoryId: elsewhere })
+        .where(eq(financeTransactions.id, filed));
+
+      await applyPayeeAutoCategories(userId);
+      expect(await categoryOf(offBudget)).toBeNull();
+      expect(await categoryOf(transfer)).toBeNull();
+      expect(await categoryOf(filed)).toBe(elsewhere);
+    });
+
+    it("fills only the payees and the rows it is asked about", async () => {
+      const { checkingId } = await seedAccounts(userId);
+      await seedBudget(userId, {
+        preset: "minimal",
+        startMonth: MONTH,
+        todayKey: TODAY,
+      });
+      const kroger = await fixedDefault(userId);
+      const aldi = await fixedDefault(userId, "Aldi");
+      const [krogerRow, aldiRow] = await addTransactions(userId, [
+        {
+          accountId: checkingId,
+          date: "2026-08-05",
+          description: "KROGER",
+          amount: "-50.00",
+          payeeId: kroger.payeeId,
+        },
+        {
+          accountId: checkingId,
+          date: "2026-08-05",
+          description: "ALDI",
+          amount: "-20.00",
+          payeeId: aldi.payeeId,
+        },
+      ]);
+
+      await applyPayeeAutoCategories(userId, {
+        createdSince: new Date(Date.now() + 60_000),
+      });
+      expect(await categoryOf(krogerRow)).toBeNull();
+
+      await applyPayeeAutoCategories(userId, { payeeIds: [kroger.payeeId] });
+      expect(await categoryOf(krogerRow)).toBe(kroger.discretionaryId);
+      expect(await categoryOf(aldiRow)).toBeNull();
+    });
+
+    it("sends a charge a bill claim refused to the payee's default, not the bill", async () => {
+      const { checkingId } = await seedAccounts(userId);
+      await seedBudget(userId, {
+        preset: "minimal",
+        startMonth: MONTH,
+        todayKey: TODAY,
+      });
+      await upsertBillEnvelope(userId, {
+        name: "Hulu",
+        cadence: { unit: "month", n: 1 },
+        expectedCents: 9_900,
+      });
+      const { payeeId, discretionaryId, ids } = await fixedDefault(userId, "Hulu");
+      await replaceCommitmentPayees(userId, { id: ids.get("Hulu")! }, [payeeId]);
+      const [shop] = await addTransactions(userId, [
+        {
+          accountId: checkingId,
+          date: "2026-08-05",
+          description: "HULU",
+          amount: "-45.00",
+          payeeId,
+        },
+      ]);
+
+      await applyPayeeAutoCategories(userId);
+      expect(await categoryOf(shop)).toBe(discretionaryId);
+    });
+  });
+
   it("assigns, covers, and moves money without changing the total", async () => {
     const { checkingId } = await seedAccounts(userId);
     await addTransactions(userId, [
