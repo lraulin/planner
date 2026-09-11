@@ -6,6 +6,7 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { createNode, deleteNode } from "@/lib/tree/mutations";
 import {
   createNote,
+  createNoteOnce,
   deleteNote,
   indentNote,
   moveNote,
@@ -411,6 +412,26 @@ describeDb("user isolation", () => {
   it("does not show one user another's notes", async () => {
     expect(await loadNotes(intruder)).toEqual([]);
     expect(await loadNotes(owner)).toHaveLength(1);
+  });
+
+  it("does not hand one user another's note for the same external id", async () => {
+    // The Tomboy and RedNotebook importers and the agent API dedupe on this; looked up
+    // without the user, a second account importing the same file would get the first's note.
+    const external = { source: "tomboy", id: "shared-note" };
+    const mine = await createNoteOnce({
+      userId: owner,
+      values: { title: "Mine" },
+      external,
+    });
+    const theirs = await createNoteOnce({
+      userId: intruder,
+      values: { title: "Theirs" },
+      external,
+    });
+
+    expect(theirs.created).toBe(true);
+    expect(theirs.id).not.toBe(mine.id);
+    expect((await loadNotes(intruder)).map((note) => note.title)).toEqual(["Theirs"]);
   });
 
   it("does not let one user update another's note", async () => {

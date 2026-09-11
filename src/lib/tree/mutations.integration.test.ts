@@ -8,6 +8,7 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
   createNode,
+  createNodeOnce,
   deleteNode,
   expandThroughDepth,
   indentNode,
@@ -2112,6 +2113,33 @@ describeDb("tree mutations", () => {
 
       await renameNode(userId, theirs, "Hijacked");
       expect(await outlineOf(other)).toEqual(["Theirs"]);
+    });
+
+    it("does not hand one user another user's node for the same external id", async () => {
+      // `createNodeOnce` is the agent API's idempotency: a repeated external id returns the
+      // row it made before. Looked up without the user, the second caller would get the
+      // first caller's node back instead of a new one.
+      const other = await makeUser();
+      const external = { source: "apple_reminders", id: "shared-42" };
+      const mine = await createNodeOnce({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Mine",
+        external,
+      });
+      const theirs = await createNodeOnce({
+        userId: other,
+        parentId: null,
+        type: "result_area",
+        name: "Theirs",
+        external,
+      });
+
+      expect(theirs.created).toBe(true);
+      expect(theirs.id).not.toBe(mine.id);
+      expect(await outlineOf(other)).toEqual(["Theirs"]);
+      expect(await outlineOf(userId)).toEqual(["Mine"]);
     });
 
     it("does not set another user's deadline", async () => {

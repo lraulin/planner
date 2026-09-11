@@ -7,6 +7,8 @@ import { createNode, deleteNode } from "@/lib/tree/mutations";
 import {
   createMetric,
   createMetricEntry,
+  createMetricEntryOnce,
+  createMetricOnce,
   deleteMetric,
   deleteMetricEntry,
   importMetricEntries,
@@ -131,6 +133,30 @@ describeDb("metrics mutations", () => {
     await createMetricEntry(userId, id, { entryDate: "2025-01-01", value: 1 });
     await deleteMetric(userId, id);
     expect(await getMetricDetail(userId, id)).toBeNull();
+  });
+
+  it("does not hand a second user the first user's metric or entry for the same external id", async () => {
+    // The agent API dedupes creates on these; looked up without the user, the second
+    // caller would be handed the first caller's row instead of a new one.
+    const otherId = await makeUser();
+    const external = { source: "agent", id: "shared-1" };
+    const mine = await createMetricOnce(userId, { title: "Mine", external });
+    const theirs = await createMetricOnce(otherId, { title: "Theirs", external });
+    expect(theirs.created).toBe(true);
+    expect(theirs.id).not.toBe(mine.id);
+
+    const myEntry = await createMetricEntryOnce(userId, mine.id, {
+      entryDate: "2025-01-01",
+      value: 1,
+      external,
+    });
+    const theirEntry = await createMetricEntryOnce(otherId, theirs.id, {
+      entryDate: "2025-01-01",
+      value: 2,
+      external,
+    });
+    expect(theirEntry.created).toBe(true);
+    expect(theirEntry.id).not.toBe(myEntry.id);
   });
 
   it("does not let a second user read, change, or delete the first user's metric", async () => {
