@@ -1,15 +1,14 @@
+import { sliceBlock } from "@/lib/grid/serverQuery";
 import { describe, expect, it } from "vitest";
 import { customFilter, optionsFilter } from "@/lib/grid/customFilter";
 import { activityViewFilters } from "./registerActivity";
 import { THIS_MONTH_DATE_FILTER } from "./registerFields";
 import type { TransactionListRow } from "./types";
 import {
-  parseBlockOffset,
   parseRegisterQuery,
   prepareRegister,
   REGISTER_BLOCK_SIZE,
   registerQueryKey,
-  sliceRegisterBlock,
   type RegisterQuery,
   type RegisterQueryContext,
 } from "./registerQuery";
@@ -446,7 +445,7 @@ describe("prepareRegister", () => {
 
     const seen = new Set<string>();
     for (let offset = 0; offset < 7030; offset += REGISTER_BLOCK_SIZE) {
-      const block = sliceRegisterBlock(ledger, prepared.index.nodeIds, offset);
+      const block = sliceBlock(ledger, prepared.index.nodeIds, offset);
       const expectCount = Math.min(REGISTER_BLOCK_SIZE, 7030 - offset);
       expect(block).toHaveLength(expectCount);
       for (const row of block) {
@@ -470,16 +469,6 @@ describe("prepareRegister", () => {
     const prepared = prepareRegister(ledger, query({ collapsedGroups: [] }), EMPTY_CTX);
     expect(prepared.index.nodeIds).toHaveLength(250);
     expect(prepared.block.rows).toHaveLength(REGISTER_BLOCK_SIZE);
-  });
-});
-
-describe("parseBlockOffset", () => {
-  it("snaps to 100-row boundaries", () => {
-    expect(parseBlockOffset(0)).toBe(0);
-    expect(parseBlockOffset(99)).toBe(0);
-    expect(parseBlockOffset(100)).toBe(100);
-    expect(parseBlockOffset(-4)).toBe(0);
-    expect(parseBlockOffset("150")).toBe(100);
   });
 });
 

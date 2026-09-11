@@ -5,7 +5,6 @@ import type { AmazonItemListRow } from "./types";
 import {
   parseAmazonOrdersQuery,
   prepareAmazonOrders,
-  sliceAmazonBlock,
   AMAZON_BLOCK_SIZE,
   type AmazonOrdersQuery,
 } from "./ordersQuery";
@@ -209,17 +208,5 @@ describe("prepareAmazonOrders", () => {
       "114-bbb",
       "114-aaa",
     ]);
-  });
-});
-
-describe("sliceAmazonBlock", () => {
-  it("preserves requested id order and skips unknown ids", () => {
-    const items = [
-      item({ id: "a", orderDate: "2026-08-01" }),
-      item({ id: "b", orderDate: "2026-08-02" }),
-    ];
-    expect(
-      sliceAmazonBlock(items, ["b", "missing", "a"], 0).map((row) => row.id),
-    ).toEqual(["b", "a"]);
   });
 });

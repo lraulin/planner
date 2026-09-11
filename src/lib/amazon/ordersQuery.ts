@@ -7,18 +7,20 @@
  */
 
 import { applyGroupCollapse } from "@/lib/grid/collapse";
-import {
-  crossFilterActive,
-  parseCrossColumnFilter,
-  rowPassesCrossFilter,
-  type CrossColumnFilter,
-} from "@/lib/grid/crossFilter";
-import { parseColumnFilter, type ColumnFilter } from "@/lib/grid/customFilter";
+import type { CrossColumnFilter } from "@/lib/grid/crossFilter";
+import type { ColumnFilter } from "@/lib/grid/customFilter";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { filterActive, rowPassesFilters } from "@/lib/grid/filters";
-import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
+import {
+  asQueryRecord,
+  parseServerGridQuery,
+  passingRows,
+  SERVER_GRID_BLOCK_SIZE,
+  SERVER_GRID_PREFETCH,
+  sliceBlock,
+  type ServerGridFields,
+} from "@/lib/grid/serverQuery";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
-import { MAX_SORT_KEYS, type GridSort } from "@/lib/settings/grid";
+import type { GridSort } from "@/lib/settings/grid";
 import {
   AMAZON_FIELD_ID_SET,
   AMAZON_FIELDS,
@@ -36,9 +38,8 @@ import {
 } from "./grouping";
 import type { AmazonItemListRow } from "./types";
 
-export const AMAZON_BLOCK_SIZE = 100;
-export const AMAZON_SEARCH_MAX = 200;
-export const AMAZON_PREFETCH = 25;
+export const AMAZON_BLOCK_SIZE = SERVER_GRID_BLOCK_SIZE;
+export const AMAZON_PREFETCH = SERVER_GRID_PREFETCH;
 
 export type AmazonOrdersQuery = {
   search: string;
@@ -89,6 +90,11 @@ export type AmazonOrdersPrepared = {
 };
 
 const FIELD_KINDS = amazonFieldKinds();
+const FIELDS: ServerGridFields = {
+  ids: AMAZON_FIELD_ID_SET,
+  defaultVisible: AMAZON_VISIBLE_COLUMN_IDS,
+  sortable: (id) => Boolean(amazonFields[id as keyof typeof amazonFields].sortValue),
+};
 
 export function amazonOrdersQueryKey(query: AmazonOrdersQuery): string {
   return JSON.stringify({
@@ -103,144 +109,17 @@ export function amazonOrdersQueryKey(query: AmazonOrdersQuery): string {
   });
 }
 
-function asDateKey(value: unknown): string | null {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
-}
-
-function asSearch(value: unknown): string {
-  if (typeof value !== "string") return "";
-  return value.slice(0, AMAZON_SEARCH_MAX);
-}
-
-function asFilters(value: unknown): Record<string, ColumnFilter> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, ColumnFilter> = {};
-  for (const [columnId, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (!AMAZON_FIELD_ID_SET.has(columnId)) continue;
-    const parsed = parseColumnFilter(raw);
-    if (parsed && filterActive(parsed)) out[columnId] = parsed;
-  }
-  return out;
-}
-
-function asVisibleColumnIds(value: unknown): string[] {
-  if (!Array.isArray(value)) return [...AMAZON_VISIBLE_COLUMN_IDS];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const entry of value) {
-    if (typeof entry !== "string" || !AMAZON_FIELD_ID_SET.has(entry)) continue;
-    if (seen.has(entry)) continue;
-    seen.add(entry);
-    out.push(entry);
-  }
-  return out.length > 0 ? out : [...AMAZON_VISIBLE_COLUMN_IDS];
-}
-
-function asSorts(value: unknown, visibleColumnIds: readonly string[]): GridSort[] {
-  if (!Array.isArray(value)) return [{ columnId: "date", direction: "desc" }];
-  const visible = new Set(visibleColumnIds);
-  const out: GridSort[] = [];
-  for (const entry of value) {
-    if (!entry || typeof entry !== "object") continue;
-    const record = entry as Record<string, unknown>;
-    if (typeof record.columnId !== "string") continue;
-    if (!AMAZON_FIELD_ID_SET.has(record.columnId)) continue;
-    if (!visible.has(record.columnId)) continue;
-    if (!amazonFields[record.columnId as keyof typeof amazonFields].sortValue) continue;
-    const direction = record.direction === "asc" ? "asc" : "desc";
-    if (out.some((sort) => sort.columnId === record.columnId)) continue;
-    out.push({ columnId: record.columnId, direction });
-    if (out.length >= MAX_SORT_KEYS) break;
-  }
-  return out;
-}
-
-function allowListedAdvanced(
-  filter: CrossColumnFilter | null,
-): CrossColumnFilter | null {
-  if (filter === null) return null;
-  const conditions = filter.conditions.filter((condition) =>
-    AMAZON_FIELD_ID_SET.has(condition.columnId),
-  );
-  if (conditions.length === 0) return null;
-  return { join: filter.join, conditions };
-}
-
-function asCollapsedGroups(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const entry of value) {
-    if (typeof entry !== "string" || entry === "" || entry.length > 200) continue;
-    if (seen.has(entry)) continue;
-    seen.add(entry);
-    out.push(entry);
-  }
-  return out;
-}
-
 /** Allow-list and cap every Orders query field. Garbage degrades; it never throws. */
 export function parseAmazonOrdersQuery(value: unknown): AmazonOrdersQuery {
-  const record =
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {};
-  const visibleColumnIds = asVisibleColumnIds(record.visibleColumnIds);
+  const record = asQueryRecord(value);
   return {
-    search: asSearch(record.search),
-    filters: asFilters(record.filters),
-    advancedFilter: allowListedAdvanced(parseCrossColumnFilter(record.advancedFilter)),
-    sorts: asSorts(record.sorts, visibleColumnIds),
+    ...parseServerGridQuery(record, FIELDS),
     groupBy: asAmazonGroupBy(
       Array.isArray(record.groupBy)
         ? record.groupBy.filter((id): id is string => typeof id === "string")
         : ["year", "month"],
     ),
-    collapsedGroups: asCollapsedGroups(record.collapsedGroups),
-    visibleColumnIds,
-    today: asDateKey(record.today),
   };
-}
-
-export function parseAmazonBlockOffset(value: unknown): number {
-  const offset = typeof value === "number" ? value : Number(value);
-  if (!Number.isInteger(offset) || offset < 0) return 0;
-  return Math.floor(offset / AMAZON_BLOCK_SIZE) * AMAZON_BLOCK_SIZE;
-}
-
-function passingRows(
-  rows: readonly AmazonItemListRow[],
-  query: AmazonOrdersQuery,
-): AmazonItemListRow[] {
-  const narrowing =
-    Object.values(query.filters).some(filterActive) ||
-    crossFilterActive(query.advancedFilter) ||
-    searchActive(query.search);
-  if (!narrowing) return [...rows];
-
-  return rows.filter((row) => {
-    const values = amazonFilterValues(row);
-    return (
-      rowPassesFilters(values, query.filters, FIELD_KINDS, query.today) &&
-      rowPassesCrossFilter(values, query.advancedFilter, FIELD_KINDS) &&
-      rowMatchesSearch(values, query.search)
-    );
-  });
-}
-
-export function sliceAmazonBlock(
-  items: readonly AmazonItemListRow[],
-  nodeIds: readonly string[],
-  offset: number,
-): AmazonItemListRow[] {
-  const start = parseAmazonBlockOffset(offset);
-  const wanted = nodeIds.slice(start, start + AMAZON_BLOCK_SIZE);
-  if (wanted.length === 0) return [];
-  const byId = new Map(items.map((row) => [row.id, row]));
-  return wanted.flatMap((id) => {
-    const row = byId.get(id);
-    return row ? [row] : [];
-  });
 }
 
 export function prepareAmazonOrders(
@@ -256,7 +135,7 @@ export function prepareAmazonOrders(
     })),
     items,
   );
-  const matched = passingRows(items, query);
+  const matched = passingRows(items, query, amazonFilterValues, FIELD_KINDS);
   const grouped = groupAmazonItems(matched, query.groupBy);
   const paidByGroup = amazonGroupPaidCents(grouped);
   const orderTotalsByGroup = amazonGroupOrderTotals(grouped);
@@ -317,7 +196,7 @@ export function prepareAmazonOrders(
     block: {
       queryKey,
       offset: 0,
-      rows: sliceAmazonBlock(items, nodeIds, 0),
+      rows: sliceBlock(items, nodeIds, 0),
     },
   };
 }

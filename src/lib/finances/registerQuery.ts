@@ -27,22 +27,23 @@ import {
 } from "./registerFields";
 import type { TransactionListRow } from "./types";
 import { applyGroupCollapse } from "@/lib/grid/collapse";
-import {
-  crossFilterActive,
-  parseCrossColumnFilter,
-  rowPassesCrossFilter,
-  type CrossColumnFilter,
-} from "@/lib/grid/crossFilter";
-import { parseColumnFilter, type ColumnFilter } from "@/lib/grid/customFilter";
+import type { CrossColumnFilter } from "@/lib/grid/crossFilter";
+import type { ColumnFilter } from "@/lib/grid/customFilter";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { filterActive, rowPassesFilters } from "@/lib/grid/filters";
-import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
+import {
+  asQueryRecord,
+  parseServerGridQuery,
+  passingRows,
+  SERVER_GRID_BLOCK_SIZE,
+  SERVER_GRID_PREFETCH,
+  sliceBlock,
+  type ServerGridFields,
+} from "@/lib/grid/serverQuery";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
-import { MAX_SORT_KEYS, type GridSort } from "@/lib/settings/grid";
+import type { GridSort } from "@/lib/settings/grid";
 
-export const REGISTER_BLOCK_SIZE = 100;
-export const REGISTER_SEARCH_MAX = 200;
-export const REGISTER_PREFETCH = 25;
+export const REGISTER_BLOCK_SIZE = SERVER_GRID_BLOCK_SIZE;
+export const REGISTER_PREFETCH = SERVER_GRID_PREFETCH;
 
 export type RegisterViewId = "all" | "uncategorized" | "activity" | "report";
 
@@ -108,6 +109,12 @@ const VIEW_IDS: ReadonlySet<string> = new Set([
   "report",
 ]);
 const FIELD_KINDS = registerFieldKinds();
+const FIELDS: ServerGridFields = {
+  ids: REGISTER_FIELD_ID_SET,
+  defaultVisible: REGISTER_VISIBLE_COLUMN_IDS,
+  sortable: (id) =>
+    Boolean(registerFields[id as keyof typeof registerFields].sortValue),
+};
 
 export function registerQueryKey(query: RegisterQuery): string {
   return JSON.stringify({
@@ -132,91 +139,9 @@ function asViewId(value: unknown): RegisterViewId {
     : "all";
 }
 
-function asDateKey(value: unknown): string | null {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
-}
-
-function asSearch(value: unknown): string {
-  if (typeof value !== "string") return "";
-  return value.slice(0, REGISTER_SEARCH_MAX);
-}
-
-function asFilters(value: unknown): Record<string, ColumnFilter> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, ColumnFilter> = {};
-  for (const [columnId, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (!REGISTER_FIELD_ID_SET.has(columnId)) continue;
-    const parsed = parseColumnFilter(raw);
-    if (parsed && filterActive(parsed)) out[columnId] = parsed;
-  }
-  return out;
-}
-
-function asSorts(value: unknown, visibleColumnIds: readonly string[]): GridSort[] {
-  if (!Array.isArray(value)) return [{ columnId: "date", direction: "desc" }];
-  const visible = new Set(visibleColumnIds);
-  const out: GridSort[] = [];
-  for (const entry of value) {
-    if (!entry || typeof entry !== "object") continue;
-    const record = entry as Record<string, unknown>;
-    if (typeof record.columnId !== "string") continue;
-    if (!REGISTER_FIELD_ID_SET.has(record.columnId)) continue;
-    if (!visible.has(record.columnId)) continue;
-    if (!registerFields[record.columnId as keyof typeof registerFields].sortValue) {
-      continue;
-    }
-    const direction = record.direction === "asc" ? "asc" : "desc";
-    if (out.some((sort) => sort.columnId === record.columnId)) continue;
-    out.push({ columnId: record.columnId, direction });
-    if (out.length >= MAX_SORT_KEYS) break;
-  }
-  return out;
-}
-
-function asVisibleColumnIds(value: unknown): string[] {
-  if (!Array.isArray(value)) return [...REGISTER_VISIBLE_COLUMN_IDS];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const entry of value) {
-    if (typeof entry !== "string" || !REGISTER_FIELD_ID_SET.has(entry)) continue;
-    if (seen.has(entry)) continue;
-    seen.add(entry);
-    out.push(entry);
-  }
-  return out.length > 0 ? out : [...REGISTER_VISIBLE_COLUMN_IDS];
-}
-
-function allowListedAdvanced(
-  filter: CrossColumnFilter | null,
-): CrossColumnFilter | null {
-  if (filter === null) return null;
-  const conditions = filter.conditions.filter((condition) =>
-    REGISTER_FIELD_ID_SET.has(condition.columnId),
-  );
-  if (conditions.length === 0) return null;
-  return { join: filter.join, conditions };
-}
-
-function asCollapsedGroups(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const entry of value) {
-    if (typeof entry !== "string" || entry === "" || entry.length > 200) continue;
-    if (seen.has(entry)) continue;
-    seen.add(entry);
-    out.push(entry);
-  }
-  return out;
-}
-
 /** Allow-list and cap every Register query field. Garbage degrades; it never throws. */
 export function parseRegisterQuery(value: unknown): RegisterQuery {
-  const record =
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {};
-  const visibleColumnIds = asVisibleColumnIds(record.visibleColumnIds);
+  const record = asQueryRecord(value);
   let viewId = asViewId(record.viewId);
   const category = asRecordId(record.category);
   const month = monthKeyFromParam(
@@ -226,29 +151,17 @@ export function parseRegisterQuery(value: unknown): RegisterQuery {
   const report = parseReportDrill(record.report);
   if (viewId === "report" && !report) viewId = "all";
   return {
+    ...parseServerGridQuery(record, FIELDS),
     viewId,
     report: viewId === "report" ? report : null,
     category: viewId === "activity" ? category : null,
     month: viewId === "activity" ? month : null,
-    search: asSearch(record.search),
-    filters: asFilters(record.filters),
-    advancedFilter: allowListedAdvanced(parseCrossColumnFilter(record.advancedFilter)),
-    sorts: asSorts(record.sorts, visibleColumnIds),
     groupBy: asFinanceGroupBy(
       Array.isArray(record.groupBy)
         ? record.groupBy.filter((id): id is string => typeof id === "string")
         : ["year", "month"],
     ),
-    collapsedGroups: asCollapsedGroups(record.collapsedGroups),
-    visibleColumnIds,
-    today: asDateKey(record.today),
   };
-}
-
-export function parseBlockOffset(value: unknown): number {
-  const offset = typeof value === "number" ? value : Number(value);
-  if (!Number.isInteger(offset) || offset < 0) return 0;
-  return Math.floor(offset / REGISTER_BLOCK_SIZE) * REGISTER_BLOCK_SIZE;
 }
 
 export function annotateCategoryAssignability(
@@ -314,41 +227,6 @@ function viewRows(
   return [...ledger];
 }
 
-function passingRows(
-  rows: readonly TransactionListRow[],
-  query: RegisterQuery,
-): TransactionListRow[] {
-  const narrowing =
-    Object.values(query.filters).some(filterActive) ||
-    crossFilterActive(query.advancedFilter) ||
-    searchActive(query.search);
-  if (!narrowing) return [...rows];
-
-  return rows.filter((row) => {
-    const values = registerFilterValues(row);
-    return (
-      rowPassesFilters(values, query.filters, FIELD_KINDS, query.today) &&
-      rowPassesCrossFilter(values, query.advancedFilter, FIELD_KINDS) &&
-      rowMatchesSearch(values, query.search)
-    );
-  });
-}
-
-export function sliceRegisterBlock<Row extends TransactionListRow>(
-  ledger: readonly Row[],
-  nodeIds: readonly string[],
-  offset: number,
-): Row[] {
-  const start = parseBlockOffset(offset);
-  const wanted = nodeIds.slice(start, start + REGISTER_BLOCK_SIZE);
-  if (wanted.length === 0) return [];
-  const byId = new Map(ledger.map((row) => [row.id, row]));
-  return wanted.flatMap((id) => {
-    const row = byId.get(id);
-    return row ? [row] : [];
-  });
-}
-
 export function prepareRegister(
   ledger: readonly TransactionListRow[],
   query: RegisterQuery,
@@ -365,7 +243,7 @@ export function prepareRegister(
     })),
     base,
   );
-  const matched = passingRows(base, query);
+  const matched = passingRows(base, query, registerFilterValues, FIELD_KINDS);
   const grouped = groupTransactions(matched, query.groupBy);
   const collapsed = applyGroupCollapse(grouped, new Set(query.collapsedGroups));
   const keys = query.sorts.flatMap((entry) => {
@@ -420,7 +298,7 @@ export function prepareRegister(
     block: {
       queryKey,
       offset: 0,
-      rows: sliceRegisterBlock(preparedLedger, nodeIds, 0),
+      rows: sliceBlock(preparedLedger, nodeIds, 0),
     },
   };
 }
