@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amountMatches, approxThreshold } from "./amountMatch";
+import { amountMatches, approxThreshold, medianCents } from "./amountMatch";
 
 describe("approxThreshold", () => {
   it("is Actual's 7.5% band in cents", () => {
@@ -18,8 +18,29 @@ describe("amountMatches", () => {
     expect(amountMatches(99, 999)).toBe(false);
   });
 
+  it("includes the band's edge, as Actual's inclusive range does", () => {
+    expect(amountMatches(999 + 75, 999)).toBe(true);
+    expect(amountMatches(999 - 75, 999)).toBe(true);
+    expect(amountMatches(999 + 76, 999)).toBe(false);
+  });
+
+  it("measures the band from the target, not from the candidate", () => {
+    // $10.00's band is 75¢; $10.80's own would be 81¢ and let it in.
+    expect(amountMatches(1080, 1000)).toBe(false);
+  });
+
   it("treats a Geico premium as one amount across a small swing", () => {
     expect(amountMatches(59498, 59498)).toBe(true);
     expect(amountMatches(58000, 59498)).toBe(true);
+  });
+});
+
+describe("medianCents", () => {
+  it("averages the middle two of an even count", () => {
+    expect(medianCents([400, 100, 300, 200])).toBe(250);
+  });
+
+  it("has no answer for nothing", () => {
+    expect(medianCents([])).toBeNull();
   });
 });

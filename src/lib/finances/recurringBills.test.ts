@@ -52,6 +52,14 @@ describe("nextDueFrom", () => {
     );
   });
 
+  it("gives up on an anchor years stale instead of walking it up to today", () => {
+    // Past two years of cycles the anchor is wrong, and a confident date built on it is
+    // worse than a stale one that still reads as overdue.
+    expect(
+      nextDueFrom("2020-01-15", { unit: "month", n: 1 }, "2026-09-11") < "2026-09-11",
+    ).toBe(true);
+  });
+
   it("returns the first cycle when it is already ahead of today", () => {
     expect(nextDueFrom("2026-06-04", { unit: "month", n: 6 }, "2026-08-14")).toBe(
       "2026-12-04",
@@ -215,7 +223,30 @@ describe("detectCadence", () => {
 
   it("will not claim a day cadence from three charges", () => {
     // Four charges before the stronger claim can be made. Three is one coincidence away.
-    expect(detectCadence(VETSOURCE.slice(0, 3))).toEqual({ unit: "month", n: 1 });
+    // Apr 23, May 21, Jun 18: gaps of 28 and a day of the month that walked five days, so
+    // the charge count is the only rule standing between these and "every 28 days" — the
+    // first three (30th, 29th, 27th) never reached it, because they still read as anchored.
+    expect(detectCadence(VETSOURCE.slice(6, 9))).toEqual({ unit: "month", n: 1 });
+    expect(detectCadence(VETSOURCE.slice(6, 10))).toEqual({ unit: "day", n: 28 });
+  });
+
+  it("reads the same cadence whatever order the charges arrive in", () => {
+    const shuffled = [...VETSOURCE.slice(5), ...VETSOURCE.slice(0, 5)].reverse();
+    expect(detectCadence(shuffled)).toEqual({ unit: "day", n: 28 });
+  });
+
+  it("counts a long cycle in months even when its day of the month walks", () => {
+    // Every 91 days is a quarter to anyone reading it; "every 91 days" is the worse
+    // description past the 60-day cap.
+    expect(
+      detectCadence([
+        "2026-01-01",
+        "2026-04-02",
+        "2026-07-02",
+        "2026-10-01",
+        "2026-12-31",
+      ]),
+    ).toEqual({ unit: "month", n: 3 });
   });
 
   it("falls back to months when the gaps are ragged", () => {

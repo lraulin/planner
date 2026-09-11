@@ -27,6 +27,17 @@ describe("billChargeCents", () => {
     ).toBe(-505);
   });
 
+  it("prefers the declared amount to the median of what is on file", () => {
+    // History is what the claim filed before, including anything filed by hand — a
+    // declared $5.00 membership must not drift toward the shopping trips beside it.
+    expect(
+      billChargeCents(monthly(500), [
+        { transactionDate: "2026-06-01", amountCents: -2284 },
+        { transactionDate: "2026-07-01", amountCents: -2284 },
+      ]),
+    ).toBe(-500);
+  });
+
   it("has no answer for a bill that declares nothing and has no history", () => {
     expect(billChargeCents(monthly(null), [])).toBeNull();
   });
@@ -102,6 +113,15 @@ describe("billClaimAccepts", () => {
   it("keeps the old meaning when the bill declares nothing and has no history", () => {
     const accepted = billClaimAccepts(
       monthly(null),
+      [],
+      [{ id: "any", transactionDate: "2026-08-18", amountCents: -2284 }],
+    );
+    expect(accepted.has("any")).toBe(true);
+  });
+
+  it("files everything for a bill declared at $0.00, which has nothing to compare", () => {
+    const accepted = billClaimAccepts(
+      monthly(0),
       [],
       [{ id: "any", transactionDate: "2026-08-18", amountCents: -2284 }],
     );
