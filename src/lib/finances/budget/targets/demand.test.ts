@@ -147,6 +147,25 @@ describe("a pile measures what is actually in it", () => {
     const e = envelope(floor, { carryInCents: 9_950_000 });
     expect(targetDemand(e, "2026-08-01", NO_BILLS).amount).toBe(50_000);
   });
+
+  it("asks nothing of a pile holding more than it needs, never a negative", () => {
+    // The target editor previews this figure directly; an over-full pile must not read as
+    // an offer to take money back.
+    const floor = (cadence: Target["cadence"]): Target => ({
+      behavior: "balance",
+      cadence,
+      amountCents: 100_000,
+    });
+    const over = { carryInCents: 150_000 };
+    for (const cadence of [
+      { unit: "none" },
+      { unit: "by", month: "2026-12" },
+    ] as const) {
+      expect(
+        targetDemand(envelope(floor(cadence), over), "2026-08-01", NO_BILLS).amount,
+      ).toBe(0);
+    }
+  });
 });
 
 describe("a yearly upTo sinks toward its anchor month", () => {

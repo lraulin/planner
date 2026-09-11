@@ -253,6 +253,24 @@ describe("Underfunded", () => {
     expect(result.lines.slice(1).every((line) => line.status === "skipped")).toBe(true);
   });
 
+  it("ranks a yearly target with the dated asks, ahead of simple monthly", () => {
+    // "$600 by every December" has a deadline like a by-template does, so it competes for
+    // Ready to Assign by months left, not with the ordinary monthly asks after it.
+    const christmas = envelope({
+      id: "christmas",
+      name: "Christmas",
+      target: {
+        behavior: "balance",
+        cadence: { unit: "year", month: 12 },
+        amountCents: 60_000,
+      },
+    });
+    const result = run("underfunded", [envelope(), christmas], {
+      readyToAssignCents: 1,
+    });
+    expect(result.lines.map((line) => line.categoryId)).toEqual(["christmas", "food"]);
+  });
+
   it("leaves leftover Ready to Assign unassigned instead of spreading a remainder", () => {
     const save = envelope({
       id: "save",
