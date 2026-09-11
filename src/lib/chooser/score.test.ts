@@ -66,12 +66,17 @@ describe("priorityScore", () => {
 
   it("puts an item with no priority at all below every D", () => {
     expect(priorityScore(null, null, W)).toBeLessThan(priorityScore("D", 9, W));
+    // Including a bare D, the lowest a priority can read.
+    expect(priorityScore(null, null, W)).toBeLessThan(priorityScore("D", null, W));
   });
 
   it("does not let an absurd rank leak below the next letter", () => {
     // Ranks are clamped, so a stray 50 cannot drag an A beneath a B.
     expect(priorityScore("A", 50, W)).toBe(priorityScore("A", 9, W));
     expect(priorityScore("A", 50, W)).toBeGreaterThan(priorityScore("B", 1, W));
+    // Nor a 0 or a negative climb above A1.
+    expect(priorityScore("A", 0, W)).toBe(priorityScore("A", 1, W));
+    expect(priorityScore("B", -3, W)).toBe(priorityScore("B", 1, W));
   });
 });
 
