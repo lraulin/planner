@@ -15,6 +15,7 @@ import {
   applySync,
   deleteConnection,
   linkAccount,
+  renameConnection,
   replaceAccessUrl,
   saveBalance,
   saveConnection,
@@ -723,6 +724,9 @@ describeDb("cross-user isolation", () => {
     await expect(
       replaceAccessUrl(intruder, connectionId, "https://x:y@evil.test"),
     ).rejects.toThrow(/not found/i);
+    await expect(renameConnection(intruder, connectionId, "Pwned")).rejects.toThrow(
+      /not found/i,
+    );
     await expect(
       saveBalance(intruder, {
         linkId,
@@ -751,6 +755,7 @@ describeDb("cross-user isolation", () => {
     // Nothing moved.
     const [connection] = await loadConnectionsForSync(owner);
     expect(connection.accessUrl).toContain("owner-secret");
+    expect((await listConnections(owner))[0]?.label).toBe("Owner bank");
     expect(await listLinks(owner)).toHaveLength(1);
     const rows = await db
       .select({ id: financeTransactions.id })

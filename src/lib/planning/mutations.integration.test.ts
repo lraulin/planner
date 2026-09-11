@@ -11,6 +11,7 @@ import {
   setWeeklyPlanCompleted,
   updateWeeklyPlan,
   upsertPlanEntry,
+  updateWeeklyPlanEntries,
 } from "./mutations";
 import {
   getWeeklyPlan,
@@ -341,6 +342,26 @@ describeDb("cross-user isolation", () => {
     );
     const [node] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
     expect(node.focus).toBe(false);
+  });
+
+  it("does not let a batch write reach another user's plan or node", async () => {
+    // Step 4 saves every row at once through this path, so it re-checks what the one-row
+    // path checks: the plan is yours, and so is every node in it.
+    const theirNode = await makeNode(intruder, "project");
+    await expect(
+      updateWeeklyPlanEntries(intruder, planId, [
+        { nodeId: theirNode, committedMinutes: 999 },
+      ]),
+    ).rejects.toThrow(/not found/i);
+
+    const theirPlan = await ensureWeeklyPlan(intruder, { weekStart: midWeek() });
+    await expect(
+      updateWeeklyPlanEntries(intruder, theirPlan.id, [{ nodeId, focus: true }]),
+    ).rejects.toThrow(/not found/i);
+
+    const [node] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
+    expect(node.focus).toBe(false);
+    expect((await listPlanEntries(owner, planId))[0]?.committedMinutes).toBe(120);
   });
 
   it("keeps another user's rewrites out of the previous-week lookup", async () => {

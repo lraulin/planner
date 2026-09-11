@@ -15,6 +15,7 @@ import {
   moveNodeVertically,
   outdentNode,
   renameNode,
+  setDeadline,
   setAllCollapsed,
   setCollapsed,
   setEffort,
@@ -2111,6 +2112,21 @@ describeDb("tree mutations", () => {
 
       await renameNode(userId, theirs, "Hijacked");
       expect(await outlineOf(other)).toEqual(["Theirs"]);
+    });
+
+    it("does not set another user's deadline", async () => {
+      const other = await makeUser();
+      const theirs = await createNode({
+        userId: other,
+        parentId: null,
+        type: "project",
+        name: "Theirs",
+      });
+
+      await setDeadline(userId, theirs, new Date("2026-12-31T12:00:00Z"));
+      expect(
+        (await loadOutline(other)).find((n) => n.id === theirs)?.deadline,
+      ).toBeNull();
     });
 
     it("does not move a node under another user's parent", async () => {

@@ -20,6 +20,8 @@ import {
   importNodeItems,
   moveNodeItem,
   saveNodeDetail,
+  setGoalFields,
+  setResultAreaFields,
   updateNodeItem,
 } from "./mutations";
 import { loadNodeDetail } from "./queries";
@@ -733,6 +735,24 @@ describeDb("detail mutations", () => {
     expect(detail?.goal?.vision).toBe("Crossing the line still able to walk.");
     expect(detail?.goal?.progressReview).toBe("weekly");
     expect(detail?.goal?.contexts).toEqual(["@outside"]);
+  });
+
+  it("will not let another user set a goal's or a result area's inline fields", async () => {
+    // Both write their side table by node id alone; `requireNode` is the only thing
+    // standing between an intruder and someone else's goal.
+    const intruder = await makeUser();
+    await setGoalFields(userId, goalId, { range: "1-Year" });
+    await setResultAreaFields(userId, areaId, { importance: 80 });
+
+    await expect(
+      setGoalFields(intruder, goalId, { range: "5-Year" }),
+    ).rejects.toThrow();
+    await expect(
+      setResultAreaFields(intruder, areaId, { importance: 5 }),
+    ).rejects.toThrow();
+
+    expect((await loadNodeDetail(userId, goalId))?.goal?.range).toBe("1-Year");
+    expect((await loadNodeDetail(userId, areaId))?.resultArea?.importance).toBe(80);
   });
 
   describe("Result Area field", () => {

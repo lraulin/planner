@@ -5,6 +5,7 @@ import {
   financeAccounts,
   financeBudgetCategories,
   financeCategoryGroups,
+  financePayees,
   financeTransactions,
   users,
 } from "@/db/schema";
@@ -21,6 +22,7 @@ import {
   replaceCommitmentPayees,
   renamePayee,
   setPayeeAutoCategory,
+  setPayeeNotACommitment,
   updatePayeeDetails,
 } from "./mutations";
 import {
@@ -535,6 +537,9 @@ describeDb("payee mutations — cross-user isolation", () => {
         defaultBudgetCategoryId: null,
       }),
     ).rejects.toThrow();
+    await expect(
+      setPayeeNotACommitment(intruderId, ownedPayeeId, true),
+    ).rejects.toThrow();
 
     const intruderPayee = await createPayee(intruderId, { name: "Mine" });
     await expect(
@@ -546,6 +551,11 @@ describeDb("payee mutations — cross-user isolation", () => {
     expect(owner?.name).toBe("Walmart");
     expect(owner?.aliases).toEqual([ownedAlias]);
     expect(owner?.transactionCount).toBe(1);
+    const [flags] = await db
+      .select({ notACommitment: financePayees.notACommitment })
+      .from(financePayees)
+      .where(eq(financePayees.id, ownedPayeeId));
+    expect(flags?.notACommitment).toBe(false);
   });
 
   it("does not let the intruder delete the owner's alias", async () => {

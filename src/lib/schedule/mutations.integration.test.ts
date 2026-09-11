@@ -14,6 +14,7 @@ import {
   rescheduleAppointment,
   setAppointmentCheckState,
   updateAppointment,
+  updateTimeChart,
   updateTimeChartArea,
 } from "./mutations";
 import {
@@ -130,6 +131,9 @@ describeDb("time charts", () => {
     await expect(renameTimeChart(intruderId, chart.id, "Pwned")).rejects.toThrow(
       /not found/i,
     );
+    await expect(
+      updateTimeChart(intruderId, chart.id, { name: "Pwned", description: "Pwned" }),
+    ).rejects.toThrow(/not found/i);
     await expect(deleteTimeChart(intruderId, chart.id)).rejects.toThrow(/not found/i);
     expect(await getTimeChart(intruderId, chart.id)).toBeNull();
     expect(await listTimeCharts(intruderId)).toEqual([]);
