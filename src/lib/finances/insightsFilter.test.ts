@@ -73,6 +73,16 @@ describe("applyInsightsFilter", () => {
     ).toHaveLength(1);
   });
 
+  it("filters by the merchant as shown, which is the payee's name when there is one", () => {
+    const named = row({ description: "WM SUPERCENTER #1981", payeeName: "Walmart" });
+    expect(
+      applyInsightsFilter([named], {
+        ...EMPTY_INSIGHTS_FILTER,
+        merchants: ["Walmart"],
+      }),
+    ).toEqual([named]);
+  });
+
   it("does not reclassify a transfer when the other account is filtered out", () => {
     const filtered = applyInsightsFilter(rows, {
       ...EMPTY_INSIGHTS_FILTER,
@@ -114,6 +124,26 @@ describe("resolveInsightsRange", () => {
     expect(resolveInsightsRange("qtd", "2026-01-02", full)?.startKey).toBe(
       "2026-01-01",
     );
+  });
+
+  it("keeps the last month of each quarter in that quarter", () => {
+    expect(resolveInsightsRange("qtd", "2026-03-31", full)?.startKey).toBe(
+      "2026-01-01",
+    );
+    expect(resolveInsightsRange("qtd", "2026-09-15", full)?.startKey).toBe(
+      "2026-07-01",
+    );
+  });
+
+  it("collapses YTD onto the last imported day when nothing is imported this year", () => {
+    // History ends in 2025, so a 2026 year-to-date has no days to show — not a range that
+    // runs backwards from January to last December.
+    expect(
+      resolveInsightsRange("ytd", "2026-02-10", {
+        startKey: "2024-01-01",
+        endKey: "2025-12-20",
+      }),
+    ).toEqual({ startKey: "2025-12-20", endKey: "2025-12-20" });
   });
 
   it("returns all-time unchanged", () => {
