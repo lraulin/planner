@@ -74,6 +74,12 @@ export function BudgetSummary({
           <span className="mt-0.5 block text-[0.75rem] text-ink-muted">
             Ready to Assign
           </span>
+          {/* Inside the figure's own block: below the whole row, the phone's wrap put it under
+              Still needed, where "Still needed · unassigned from on-budget accounts" reads as
+              one sentence about the wrong number. */}
+          <span className="mt-1 block text-[0.8125rem] text-ink-muted">
+            {readyToAssignNote(ready)}
+          </span>
         </div>
         {onAction ? (
           <button
@@ -107,7 +113,6 @@ export function BudgetSummary({
           </span>
         ) : null}
       </div>
-      <p className="mt-1 text-[0.8125rem] text-ink-muted">{readyToAssignNote(ready)}</p>
 
       {/* Gated on the count, never on the amount: a backlog whose signed sum cancels to
           $0.00 is still a pile of transactions nobody has filed. */}
