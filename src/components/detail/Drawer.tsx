@@ -40,6 +40,24 @@ export function DrawerLeaveGuard({ dirty }: { dirty: boolean }): null {
   return null;
 }
 
+/**
+ * Whether another dialog is open over this drawer's panel — one that comes after it in the
+ * document, which is what stacks on top here (nothing is portalled). That covers a
+ * confirmation rendered inside the form or beside the panel, and a second drawer opened from
+ * or after this one; a drawer this panel sits inside comes *before* it and does not count.
+ * Escape belongs to the topmost.
+ */
+function dialogAbove(panel: HTMLElement | null): boolean {
+  if (!panel) return false;
+  return Array.from(
+    document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
+  ).some(
+    (dialog) =>
+      dialog !== panel &&
+      (panel.compareDocumentPosition(dialog) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+  );
+}
+
 /** `close`, or the discard confirmation first if a registered form is dirty. */
 function useLeave(close: () => void): () => void {
   const guard = useContext(LeaveGuardContext);
@@ -82,10 +100,6 @@ export function Drawer({
   const dirtyRef = useRef(false);
   // The close a discard confirmation is holding, while it is open.
   const [pending, setPending] = useState<{ close: () => void } | null>(null);
-  const pendingRef = useRef(pending);
-  useEffect(() => {
-    pendingRef.current = pending;
-  });
 
   const guard = useMemo<LeaveGuard>(
     () => ({
@@ -109,8 +123,10 @@ export function Drawer({
       if (event.key === "Escape") {
         // An expanded combobox closes its own list first — see `comboboxOwnsEscape`.
         if (comboboxOwnsEscape()) return;
-        // The discard confirmation is on top and answers its own Escape.
-        if (pendingRef.current) return;
+        // A dialog opened over the drawer — the discard confirmation, a Delete confirmation —
+        // answers its own Escape. Both listeners sit on `document` in the capture phase, so
+        // without this one Escape dismissed the dialog *and* closed the drawer under it.
+        if (dialogAbove(panelRef.current)) return;
         event.preventDefault();
         // Stop the outline's own Escape handling from also firing behind the drawer.
         event.stopPropagation();

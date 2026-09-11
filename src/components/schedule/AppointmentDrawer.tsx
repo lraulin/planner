@@ -151,6 +151,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -266,11 +267,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                 <button
                   type="button"
                   className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-priority-a hover:bg-surface-raised"
-                  onClick={() => {
-                    if (window.confirm("Delete this appointment?")) {
-                      onDelete(persistedId);
-                    }
-                  }}
+                  onClick={() => setConfirmDelete(true)}
                 >
                   Delete
                 </button>
@@ -657,6 +654,19 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
           onClose();
         }}
         onCancel={() => setConfirmClose(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete this appointment?"
+        message="There is no undo."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          setConfirmDelete(false);
+          if (persistedId) onDelete(persistedId);
+        }}
+        onCancel={() => setConfirmDelete(false)}
       />
     </>
   );

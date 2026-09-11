@@ -60,6 +60,7 @@ import { owningProjectId } from "@/lib/tree/owningProject";
 import { CommandBar } from "@/components/grid/CommandBar";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
+import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 
 import type { Command } from "@/lib/commands/registry";
 
@@ -175,6 +176,8 @@ export function ScheduleView({
    * arriving by a deep link and it would redirect you to wherever you were before.
    */
   const pagePath = `/schedule/${page}`;
+  // An appointment a context-menu Delete is asking about.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const hydrated = hydratePayload(initial);
   const [charts, setCharts] = useState<TimeChart[]>(hydrated.charts);
@@ -691,13 +694,10 @@ export function ScheduleView({
               icon: "delete",
               destructive: true,
               bindings: DELETE_ROW,
-              // The same `window.confirm` the drawer's Delete asks. Two ways to delete an
+              // The same confirmation the drawer's Delete asks. Two ways to delete an
               // appointment where one asks and one does not is worse than either alone, and
               // there is no undo to fall back on.
-              run: asyncHandler(async () => {
-                if (!window.confirm("Delete this appointment?")) return;
-                await handleDeleteAppointment(id);
-              }, reportError),
+              run: () => setPendingDeleteId(id),
             },
           ],
         },
@@ -1112,6 +1112,20 @@ export function ScheduleView({
           refresh();
         }}
         onDelete={asyncHandler(handleDeleteAppointment, reportError)}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="Delete this appointment?"
+        message="There is no undo."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          const id = pendingDeleteId;
+          setPendingDeleteId(null);
+          if (id) asyncHandler(handleDeleteAppointment, reportError)(id);
+        }}
+        onCancel={() => setPendingDeleteId(null)}
       />
     </div>
   );

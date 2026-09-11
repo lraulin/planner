@@ -28,6 +28,7 @@ import {
   DrawerHeader,
   DrawerLeaveGuard,
 } from "@/components/detail/Drawer";
+import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import { useGridState } from "@/components/grid/useGridState";
 import {
@@ -178,6 +179,10 @@ function MetricForm({
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // What a Delete is waiting on: one tracking entry, or the whole metric.
+  const [pendingDelete, setPendingDelete] = useState<
+    { kind: "entry"; id: string } | { kind: "metric" } | null
+  >(null);
   const [justSaved, setJustSaved] = useState(false);
   const [busy, startTransition] = useTransition();
   /** Newest first by default (matches Achieve and the list Last Value feel). */
@@ -405,7 +410,6 @@ function MetricForm({
   };
 
   const removeEntry = (entryId: string) => {
-    if (!window.confirm("Delete this tracking entry?")) return;
     startTransition(async () => {
       const result = await deleteMetricEntryAction(entryId);
       if (!result.ok) setError(result.error);
@@ -474,7 +478,6 @@ function MetricForm({
   };
 
   const removeMetric = () => {
-    if (!window.confirm("Delete this metric and all tracking values?")) return;
     startTransition(async () => {
       const result = await deleteMetricAction(detail.id);
       if (!result.ok) setError(result.error);
@@ -497,7 +500,7 @@ function MetricForm({
         actions={
           <button
             type="button"
-            onClick={removeMetric}
+            onClick={() => setPendingDelete({ kind: "metric" })}
             disabled={busy}
             className="min-h-tap flex-none rounded px-2 py-1 text-[0.8125rem] text-priority-a hover:bg-surface-raised md:min-h-0"
           >
@@ -873,7 +876,9 @@ function MetricForm({
                           */}
                           <button
                             type="button"
-                            onClick={() => removeEntry(entry.id)}
+                            onClick={() =>
+                              setPendingDelete({ kind: "entry", id: entry.id })
+                            }
                             className="flex h-tap w-tap items-center justify-center rounded text-[1.125rem] leading-none text-ink-faint hover:text-priority-a md:h-6 md:w-6 md:text-[0.875rem]"
                             title="Delete entry"
                             aria-label="Delete entry"
@@ -941,6 +946,29 @@ function MetricForm({
         onReset={trackingFields.resetColumns}
         onResetGrid={trackingFields.reset}
         onClose={() => setShowFields(false)}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={
+          pendingDelete?.kind === "metric"
+            ? "Delete this metric?"
+            : "Delete this entry?"
+        }
+        message={
+          pendingDelete?.kind === "metric"
+            ? "The metric and all of its tracking values are deleted."
+            : "This tracking value is deleted."
+        }
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          const target = pendingDelete;
+          setPendingDelete(null);
+          if (target?.kind === "metric") removeMetric();
+          else if (target?.kind === "entry") removeEntry(target.id);
+        }}
+        onCancel={() => setPendingDelete(null)}
       />
     </>
   );
