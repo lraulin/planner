@@ -6,6 +6,8 @@ export const PLANNER_BANK_SNAPSHOT_HEADER = "# planner-bank-snapshot v1";
 export const LEGACY_PLANNER_PENDING_HEADER = "# planner-pending v1";
 export const CAPITAL_ONE_SCRAPE_FEED = "scrape:capitalone";
 export const CHASE_SCRAPE_FEED = "scrape:chase";
+/** Every bank-page scrape source — what `isScrapeFeed` accepts, as a list SQL can use. */
+export const SCRAPE_FEEDS = [CAPITAL_ONE_SCRAPE_FEED, CHASE_SCRAPE_FEED] as const;
 
 export type BankSnapshotSource = "chase" | "capitalone";
 
@@ -108,7 +110,7 @@ const COMPLETENESS_KEYS = new Set([
 ]);
 
 export function isScrapeFeed(source: string): boolean {
-  return source === CAPITAL_ONE_SCRAPE_FEED || source === CHASE_SCRAPE_FEED;
+  return (SCRAPE_FEEDS as readonly string[]).includes(source);
 }
 
 export function looksLikeBankBrowserSnapshot(text: string): boolean {

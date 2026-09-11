@@ -22,9 +22,9 @@
  * Spec: `agent-os/specs/2026-08-29-1228-feed-ownership-watermark/` D1, D2.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 import { financeTransactions } from "@/db/schema";
-import { isScrapeFeed } from "./bankSnapshot";
+import { isScrapeFeed, SCRAPE_FEEDS } from "./bankSnapshot";
 import type { FinanceExecutor } from "./dbExecutor";
 import { bankRows } from "./splitRows";
 
@@ -111,7 +111,7 @@ export async function feedWatermarkForAccount(
         eq(financeTransactions.pending, false),
         sql`${financeTransactions.externalSource} is not null`,
         sql`${financeTransactions.externalSource} <> ''`,
-        sql`${financeTransactions.externalSource} not in ('scrape:capitalone', 'scrape:chase')`,
+        notInArray(financeTransactions.externalSource, [...SCRAPE_FEEDS]),
       ),
     );
   return row?.watermark ?? null;
