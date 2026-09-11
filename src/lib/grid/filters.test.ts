@@ -75,6 +75,7 @@ describe("matchesFilter — priority presets", () => {
   it("isolates A1 from the rest of the As", () => {
     expect(p("only-a1", "A1")).toBe(true);
     expect(p("only-a1", "A2")).toBe(false);
+    expect(p("only-a1", "A10")).toBe(false);
 
     expect(p("only-as", "A1")).toBe(true);
     expect(p("only-as", "A3")).toBe(true);
@@ -147,6 +148,15 @@ describe("matchesFilter — deadline presets", () => {
     expect(d("today-and-future", TODAY)).toBe(true);
     expect(d("today-and-future", "2026-07-20")).toBe(false);
     expect(d("today-future-and-none", null)).toBe(true);
+  });
+
+  it("holds each range's edges: seven and fourteen whole days, today where named", () => {
+    expect(d("last-7-days", "2026-07-21")).toBe(true);
+    expect(d("last-7-days", "2026-07-20")).toBe(false);
+    expect(d("next-14-days", "2026-08-11")).toBe(true);
+    expect(d("next-14-days", "2026-08-12")).toBe(false);
+    expect(d("today-past-and-none", TODAY)).toBe(true);
+    expect(d("today-past-and-none", "2026-07-29")).toBe(false);
   });
 
   it("does not hide date-filtered rows before hydration", () => {
