@@ -50,8 +50,24 @@ Hidden means two different jobs:
 - [ ] Payees learned/fixed Category is the same picker (Income included, hidden marked, clearable to None, no New…).
 - [ ] Supplies **Funded from** is the same picker (no Income, hidden marked, clearable to —, no New…). Grid cell list is not clipped.
 - [ ] Register / drawer / splits / Set category still show New {type}…, still list hidden marked, and still clear Category on empty commit.
-- [ ] `categoryPickerSections` / `commitCategoryPicker` unit tests cover `includeCreate: false` (no sentinels, empty types drop), `allowClear: false` (empty draft restores), `detail` is not a filter token, and the destination catalog omit of hidden / hidden-group descendants. No React component tests.
+- [x] `categoryPickerSections` / `commitCategoryPicker` unit tests cover `includeCreate: false` (no sentinels, empty types drop), `allowClear: false` (empty draft restores), `detail` is not a filter token, and the destination catalog omit of hidden / hidden-group descendants. No React component tests.
 - [ ] lint, typecheck, `test:unit` (Postgres up), `next build`, `npm run smoke`. Driven in the browser: all four new surfaces plus one Register cell (create and hidden still present).
+
+**Verification state (2026-09-11, overnight).** The whole non-browser half of the last box is
+green: lint, typecheck, `test:unit` (341 files, 4217 tests), `test:integration` (62 files, 1052
+tests, Postgres up and not skipped), `next build`, and `npm run smoke` (all 62 routes). The code
+behind boxes 1–5 was read and holds — `moveTargets` is
+`rows.filter((row) => row.id !== sourceId && !row.isIncome)`, so Move money omits the source and
+Income both; Assign is passed `[...envelopes, ...bills, ...savings]`, which is where its "no
+Income" comes from; both dialogs build through `visibleEnvelopeCatalog` (hidden dropped) with
+`allowClear={false}` and no `onCreate`; Supplies' `fundingCatalog` filters `kind !== "income"`
+and keeps hidden; Payees keeps Income and hidden via `pickerCatalog` and stays clearable to
+"None"; and Register, drawer, splits and the grid cell all still pass `onCreate`.
+
+Boxes 1–5 stay unticked on purpose: each also makes a **visual** claim — the Available suffix and
+closed-field name, hidden rows being _marked_, the Supplies cell list not being clipped — which
+code reading cannot settle. What the freeze still wants is exactly what change 5 below says: the
+Register spot-check and the 390×844 pass, in a browser.
 
 ## Changes from original plan
 
