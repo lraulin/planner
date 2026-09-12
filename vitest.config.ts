@@ -48,6 +48,16 @@ export default defineConfig({
         test: {
           name: "integration",
           include: ["src/**/*.integration.test.ts"],
+          /**
+           * Vitest's defaults — 5s a test, 10s a hook — are a budget for the assertion, not
+           * for the machine. Every test here opens a real Postgres connection; the slowest
+           * takes 851ms with the box idle. But an overnight run held at load 20-40 timed a
+           * 600ms test out at 7.9s, failing the pre-push hook on a different test each time
+           * while nothing was wrong with any of them. A ceiling this generous still catches
+           * a genuine hang — it just stops the hooks reporting "busy" as "broken".
+           */
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
         },
       },
     ],
