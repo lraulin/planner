@@ -24,7 +24,7 @@ export const AMAZON_VISIBLE_COLUMN_IDS = [
   "channel",
   "orderId",
   "refunded",
-] as const;
+] as const satisfies readonly AmazonFieldId[];
 
 export const AMAZON_FIELD_IDS = [
   "date",
