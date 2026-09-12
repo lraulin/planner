@@ -28,7 +28,7 @@ export const REGISTER_VISIBLE_COLUMN_IDS = [
   "balance",
   "source",
   "notes",
-] as const;
+] as const satisfies readonly RegisterFieldId[];
 
 export const REGISTER_FIELD_IDS = [
   "date",
