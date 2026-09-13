@@ -98,11 +98,18 @@ function newlySet(
   return before ? null : parsed;
 }
 
-/** The new value only when it actually differs from the stored one. */
+/**
+ * The new value only when it names a different **calendar day** from the stored one.
+ *
+ * Compared as day keys, not instants, for the reason `completedDateSet` gives: the drawer
+ * re-posts its whole draft as UTC noon, while a stored date may carry an older encoding of the
+ * same day (local midnight, from before `dates.md` settled). Compared as instants, a save that
+ * never touched the field read as a newly set deferred date and shelved the task again.
+ */
 function changedTo(before: Date | null, next: Date | string | null | undefined) {
   const parsed = asDate(next === undefined ? undefined : next);
   if (parsed === null) return null;
-  if (before && before.getTime() === parsed.getTime()) return null;
+  if (before && toDateKey(before) === toDateKey(parsed)) return null;
   return parsed;
 }
 

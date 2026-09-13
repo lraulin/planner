@@ -159,6 +159,27 @@ describeDb("detail mutations", () => {
       expect((await stateOf(projectId))?.state).toBe("postponed");
     });
 
+    it("does not re-shelve a task when the draft re-posts its deferred day in noon encoding", async () => {
+      // A task that is not postponed but still carries a future deferred date — what
+      // un-shelving from a grid leaves behind — stored at local midnight, the encoding
+      // before dates.md settled on UTC noon. The drawer posts that same *day* as UTC noon on
+      // every save. Compared as instants the two differ, so renaming the task read as "a
+      // deferred date was newly set" and shelved it again.
+      const id = await task("Renew passport");
+      await db
+        .update(nodes)
+        .set({ deferredDate: new Date("2027-02-15T05:00:00Z") })
+        .where(eq(nodes.id, id));
+
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Renew the passport",
+        deferredDate: fromDateKey("2027-02-15"),
+      });
+
+      expect((await stateOf(id))?.state).toBe("not_started");
+    });
+
     it("clears a stale deferred date when postponed by hand", async () => {
       // Otherwise it would un-shelve the instant it was shelved, since expiry is derived.
       const id = await task("Someday");
