@@ -14,7 +14,7 @@ import {
   optionalNumber,
   optionalString,
   optionalStringArray,
-  parseDate,
+  parseCalendarDate,
   requireString,
   optionalExternalRef,
 } from "./parse";
@@ -26,7 +26,7 @@ export async function createNoteTool(userId: string, args: Record<string, unknow
   const subject = optionalString(args, "subject");
   const body = optionalString(args, "body") ?? "";
   const nodeId = optionalNullableString(args, "nodeId");
-  const noteDate = parseDate(
+  const noteDate = parseCalendarDate(
     optionalNullableString(args, "noteDate") ?? undefined,
     "noteDate",
   );
@@ -63,7 +63,8 @@ export async function updateNoteTool(userId: string, args: Record<string, unknow
   }
   if (args.noteDate !== undefined) {
     patch.noteDate =
-      parseDate(optionalNullableString(args, "noteDate") ?? null, "noteDate") ?? null;
+      parseCalendarDate(optionalNullableString(args, "noteDate") ?? null, "noteDate") ??
+      null;
   }
   if (args.flag !== undefined) {
     patch.flag = requireString(args, "flag") as NoteFlag;

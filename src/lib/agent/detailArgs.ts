@@ -19,6 +19,7 @@ import {
   optionalNullableString,
   optionalNumber,
   optionalString,
+  parseCalendarDate,
   parseDate,
   parseNodeState,
   parsePriorityLetter,
@@ -46,6 +47,8 @@ const DATE_KEYS = new Set([
   "actualStartDate",
   "dateCompleted",
 ]);
+
+const INSTANT_KEYS = new Set(["reminderAt", "plannedStart"]);
 
 const BOOLEAN_KEYS = new Set([
   "focus",
@@ -146,7 +149,7 @@ export function parseNodeDetailPatch(args: Record<string, unknown>): NodeDetailP
     "deferredDate",
   ] as const) {
     if (args[key] !== undefined) {
-      const parsed = parseDate(optionalNullableString(args, key) ?? null, key);
+      const parsed = parseCalendarDate(optionalNullableString(args, key) ?? null, key);
       patch[key] = parsed === undefined ? null : parsed;
     }
   }
@@ -253,7 +256,10 @@ function coerceField(value: unknown, key: string, path: string): unknown {
     if (typeof value !== "string") {
       throw new AgentError("validation", `${path} must be an ISO date string or null`);
     }
-    return parseDate(value, path);
+    // Reminders and the scheduler's planned start are moments; the rest are calendar days.
+    return INSTANT_KEYS.has(key)
+      ? parseDate(value, path)
+      : parseCalendarDate(value, path);
   }
 
   if (BOOLEAN_KEYS.has(key)) {

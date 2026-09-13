@@ -1,6 +1,6 @@
 import type { CapturedItem } from "@/lib/capture/parse";
 import { AgentError } from "./errors";
-import { optionalNullableString, optionalString, parseDate } from "./parse";
+import { optionalNullableString, optionalString, parseCalendarDate } from "./parse";
 
 /**
  * Argument parsing for the `capture` tool, kept apart from the tool itself because it is
@@ -105,7 +105,10 @@ function parseItem(
   const note = str("note")?.trim() ?? "";
   // Passed straight through, not via `?? undefined`: absent and explicitly-null are
   // different answers here — one means "no opinion", the other "no deadline".
-  const deadline = parseDate(optionalNullableString(obj, "deadline"), `${at}deadline`);
+  const deadline = parseCalendarDate(
+    optionalNullableString(obj, "deadline"),
+    `${at}deadline`,
+  );
 
   const externalId = str("externalId")?.trim();
   const externalSource = str("externalSource")?.trim() ?? batchSource;

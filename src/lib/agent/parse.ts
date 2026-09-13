@@ -8,7 +8,7 @@ import {
 import type { ExternalRef } from "@/db/schema";
 import { daysInMonth } from "@/lib/dateMath";
 import { PRIORITY_LETTERS } from "@/lib/priority/letterRank";
-import { fromDateKey } from "@/lib/schedule/geometry";
+import { asCalendarDay, fromDateKey } from "@/lib/schedule/geometry";
 import { AgentError } from "./errors";
 
 export function asObject(body: unknown): Record<string, unknown> {
@@ -116,6 +116,27 @@ export function parseDate(
     throw new AgentError("validation", `${field} must be a valid ISO date`);
   }
   return d;
+}
+
+/**
+ * {@link parseDate} for a field that holds a **calendar day** — a deadline, a plan date, a
+ * note's date — rather than an instant.
+ *
+ * A timestamp counts as the day **written** in it, not its UTC day. The Apple Reminders drain
+ * sends `2026-09-12T21:00:00-0400` for a reminder due at 9pm; read as an instant that is 01:00Z
+ * on the 13th, and the save stores the UTC day, so every evening reminder landed a day late.
+ * The offset says where the sender was, not which day they meant. Same rule the Achieve
+ * importer follows (`decodeCalendarDay`). Instants (`startAt`, `reminderAt`) stay on
+ * `parseDate`.
+ */
+export function parseCalendarDate(
+  value: string | null | undefined,
+  field: string,
+): Date | null | undefined {
+  const parsed = parseDate(value, field);
+  if (!parsed || !value) return parsed;
+  const day = LEADING_DAY.exec(value.trim());
+  return day ? fromDateKey(`${day[1]}-${day[2]}-${day[3]}`) : asCalendarDay(parsed);
 }
 
 /**

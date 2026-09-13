@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fromDateKey } from "@/lib/schedule/geometry";
 import { MAX_CAPTURE_ITEMS, parseCaptureArgs } from "./captureArgs";
 
 /**
@@ -94,11 +95,20 @@ describe("parseCaptureArgs — batch", () => {
 });
 
 describe("parseCaptureArgs — deadlines", () => {
-  it("parses an ISO deadline into a Date", () => {
+  it("parses an ISO deadline into its calendar day", () => {
     const { items } = parseCaptureArgs({
       items: [{ name: "File taxes", deadline: "2026-04-15T00:00:00Z" }],
     });
-    expect(items[0].deadline).toEqual(new Date("2026-04-15T00:00:00Z"));
+    expect(items[0].deadline).toEqual(fromDateKey("2026-04-15"));
+  });
+
+  it("keeps an evening reminder on the day it is due, not the UTC day", () => {
+    // The Apple Reminders Shortcut's fixed `yyyy-MM-dd'T'HH:mm:ssZ`. 21:00 Eastern is 01:00Z
+    // on the 13th; the reminder is due on the 12th.
+    const { items } = parseCaptureArgs({
+      items: [{ name: "Put the bins out", deadline: "2026-09-12T21:00:00-0400" }],
+    });
+    expect(items[0].deadline).toEqual(fromDateKey("2026-09-12"));
   });
 
   it("leaves deadline unset when absent, and null when explicitly null", () => {

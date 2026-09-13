@@ -901,15 +901,15 @@ const fieldDescriptions: Record<string, string> = {
   movedOut: "Last day at the residence, YYYY-MM-DD. Null means you still live there.",
   eventDate: "The calendar day this life fact happened, YYYY-MM-DD.",
   deadline:
-    "Calendar day the work is due, YYYY-MM-DD. Send the day itself: a timestamp is read as its UTC day, which is tomorrow for an evening time in the Americas.",
+    "Calendar day the work is due, YYYY-MM-DD. A timestamp counts as the day written in it, whatever its offset.",
   targetStartDate:
-    "Calendar day work is planned to start, YYYY-MM-DD. A timestamp is read as its UTC day.",
+    "Calendar day work is planned to start, YYYY-MM-DD. A timestamp counts as the day written in it.",
   targetEndDate:
-    "Calendar day work is planned to finish, YYYY-MM-DD. A timestamp is read as its UTC day.",
+    "Calendar day work is planned to finish, YYYY-MM-DD. A timestamp counts as the day written in it.",
   deferredDate:
-    "Calendar day the item comes back off the shelf, YYYY-MM-DD. A timestamp is read as its UTC day.",
+    "Calendar day the item comes back off the shelf, YYYY-MM-DD. A timestamp counts as the day written in it.",
   noteDate:
-    "Calendar day the note is about, YYYY-MM-DD. A timestamp is read as its UTC day.",
+    "Calendar day the note is about, YYYY-MM-DD. A timestamp counts as the day written in it.",
   housingType: "Open vocabulary such as Rented, Owned, or Dorm — not a closed list.",
   payPeriod: "Open vocabulary such as Hourly, Monthly, or Annual — not a closed list.",
   location: "Employer city and country, formatted as one line.",
