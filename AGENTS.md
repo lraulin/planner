@@ -75,7 +75,7 @@ are the one gate that cannot be automated into a hook:
   rendering them because every page is `force-dynamic`. That gap once shipped a
   `ReferenceError` on every page with lint, typecheck, 2000 tests and the build all
   passing. After touching anything under `src/app/**`, start the dev server and run
-  **`npm run smoke`** — it loads all 23 routes and fails on any that will not render. It is
+  **`npm run smoke`** — it loads every route and fails on any that will not render. It is
   not in a git hook because it needs a server running; it is a step you take, not one that
   takes itself.
 
