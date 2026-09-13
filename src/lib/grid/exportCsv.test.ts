@@ -4,7 +4,6 @@ import { unplacedCommands, toolbarWithoutMenu } from "@/lib/commands/fileCommand
 import { buildMenus } from "@/lib/commands/menus";
 import {
   copyClipboardLabel,
-  csvFilename,
   exportableColumns,
   exportCellText,
   exportFilename,
@@ -330,7 +329,7 @@ describe("exportFilename", () => {
     expect(exportFilename("Outline", "json", PINNED)).toBe(
       "Outline_2026-08-29T134136-0400.json",
     );
-    expect(csvFilename("Today's task list", PINNED)).toBe(
+    expect(exportFilename("Today's task list", "csv", PINNED)).toBe(
       "Today_s_task_list_2026-08-29T134136-0400.csv",
     );
     expect(exportFilename("  Agenda  ", "yaml", PINNED)).toBe(

@@ -371,11 +371,6 @@ export function exportFilename(label: string, extension: string, at: Date): stri
   return `${slug || "grid"}_${formatExportStamp(at).filename}.${extension}`;
 }
 
-/** @deprecated Use {@link exportFilename} — kept so existing CSV call sites stay obvious. */
-export function csvFilename(label: string, at: Date): string {
-  return exportFilename(label, "csv", at);
-}
-
 export function exportMimeType(format: GridExportFormat): string {
   return FORMAT_MIME[format];
 }
