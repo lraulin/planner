@@ -250,8 +250,6 @@ describeDb("applyBankBrowserSnapshot", () => {
     expect(event).not.toBeNull();
     expect(event?.sourceEvidence).toEqual({
       format: "planner-bank-snapshot-v1",
-      // Nothing but the browser has ever written to this card, so it owns every day.
-      feedWatermark: null,
       rawText: raw,
     });
     expect(
@@ -416,5 +414,137 @@ describeDb("applyBankBrowserSnapshot", () => {
       ownerChanges.filter((change) => change.entityType === "bank_balance"),
     ).toHaveLength(1);
     expect(intruderEvents).toEqual([]);
+  });
+
+  it("carries a browser hold's envelope onto SimpleFIN's copy of the same charge instead of re-inserting it", async () => {
+    // Production case (D2): the page shows Starbucks posted; SimpleFIN already delivered
+    // the identical charge. The page copy must not become a second row, and the hold's
+    // Category and notes — made while it was still pending — must not be lost.
+    await db.insert(financeTransactions).values([
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-20",
+        postedDate: "2026-08-20",
+        pending: false,
+        description: "STARBUCKS 5678",
+        amount: "-5.57",
+        sourceCategory: "",
+        externalSource: "api:simplefin",
+        externalId: "simplefin-starbucks",
+      },
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-19",
+        postedDate: null,
+        pending: true,
+        description: "Starbucks",
+        amount: "-5.57",
+        sourceCategory: "",
+        notes: "coffee with Ana",
+        budgetCategoryId: envelopeId,
+        externalSource: "scrape:chase",
+        externalId: "old-starbucks-hold",
+      },
+    ]);
+
+    const raw = snapshot({
+      posted: [
+        ...posted.map(([date, description, amount]) => ({
+          transactionDate: date,
+          postedDate: date,
+          description,
+          category: "Shopping",
+          amount,
+        })),
+        {
+          transactionDate: "Aug 19, 2026",
+          postedDate: "Aug 20, 2026",
+          description: "Starbucks",
+          category: "",
+          amount: "$5.57",
+        },
+      ],
+    });
+
+    const result = await applyBankBrowserSnapshot(userId, raw);
+
+    expect(result.posted.coveredByFeed).toBe(1);
+    expect(result.posted.inserted).toBe(0);
+
+    const [feedRow] = await db
+      .select({
+        budgetCategoryId: financeTransactions.budgetCategoryId,
+        notes: financeTransactions.notes,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.externalId, "simplefin-starbucks"));
+    expect(feedRow.budgetCategoryId).toBe(envelopeId);
+    expect(feedRow.notes).toBe("coffee with Ana");
+
+    const holdGone = await db
+      .select({ id: financeTransactions.id })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.externalId, "old-starbucks-hold"));
+    expect(holdGone).toEqual([]);
+  });
+
+  it("D3b: carries a lost hold's envelope to a posted row within the tip band before removing it", async () => {
+    await db.insert(financeTransactions).values([
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-20",
+        postedDate: "2026-08-20",
+        pending: false,
+        description: "DOMINOS 1234",
+        amount: "-21.00",
+        sourceCategory: "",
+        externalSource: "api:simplefin",
+        externalId: "simplefin-dominos",
+      },
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-19",
+        postedDate: null,
+        pending: true,
+        description: "Domino's",
+        amount: "-20.11",
+        sourceCategory: "",
+        budgetCategoryId: envelopeId,
+        externalSource: "scrape:chase",
+        externalId: "old-dominos-hold",
+      },
+    ]);
+
+    // A page snapshot that no longer lists the Domino's hold — it cleared, one way or
+    // another, and this capture's pending list is complete for the browser's own holds.
+    const raw = snapshot({
+      posted: posted.map(([date, description, amount]) => ({
+        transactionDate: date,
+        postedDate: date,
+        description,
+        category: "Shopping",
+        amount,
+      })),
+    });
+
+    const result = await applyBankBrowserSnapshot(userId, raw);
+
+    expect(result.warnings).toEqual([]);
+    const [feedRow] = await db
+      .select({ budgetCategoryId: financeTransactions.budgetCategoryId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.externalId, "simplefin-dominos"));
+    expect(feedRow.budgetCategoryId).toBe(envelopeId);
+
+    const holdGone = await db
+      .select({ id: financeTransactions.id })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.externalId, "old-dominos-hold"));
+    expect(holdGone).toEqual([]);
+    expect(result.pending.removed).toBe(1);
   });
 });

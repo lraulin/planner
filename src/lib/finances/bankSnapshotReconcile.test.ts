@@ -43,16 +43,19 @@ function existing(
     externalSource: "scrape:chase",
     externalId: id,
     isParent: false,
+    budgetCategoryId: null,
+    notes: "",
+    flowOverride: null,
     ...over,
   };
 }
 
 describe("planBankSnapshotReconciliation", () => {
-  it("leaves a posted row the feed already owns to the feed", () => {
+  it("leaves a posted row a stored feed row already pairs with to the feed", () => {
     // The 2026-08-29 Capital One snapshot. The page says `Pizza Hut` and dates the charge
     // by the purchase day; the stored row carries the bank descriptor `PIZZA HUT 036874`
-    // and the posted day. Neither the description nor the transaction date lines up, and
-    // the charge duplicated. SimpleFIN has posted through the 24th, so it owns this day.
+    // and the posted day. Neither the description nor the transaction date lines up
+    // exactly, but the brand-stem rule and the date tolerance both reach across it.
     const plan = planBankSnapshotReconciliation(
       [
         existing("stored", "PIZZA HUT 036874", -3252, {
@@ -69,21 +72,19 @@ describe("planBankSnapshotReconciliation", () => {
         },
       ],
       [],
-      "2026-08-24",
     );
     expect(plan.postedCoveredByFeed).toBe(1);
     expect(plan.postedInserts).toEqual([]);
     expect(plan.postedDuplicates).toEqual([]);
   });
 
-  it("inserts a posted row past the watermark that no feed has delivered", () => {
-    // `CVS $22.84` on 2026-08-18: the Chase CSV ends 2026-08-10 and SimpleFIN's last Chase
-    // transaction is 2026-08-14, so this charge exists in no other feed and is real.
+  it("inserts a posted row no feed row pairs with", () => {
+    // `CVS $22.84` on 2026-08-18 pairs with nothing on file, so it is a real new charge —
+    // regardless of what any feed's own dates might otherwise suggest it should own.
     const plan = planBankSnapshotReconciliation(
       [],
       [incoming("CVS", -2284, "2026-08-18")],
       [],
-      "2026-08-14",
     );
     expect(plan.postedInserts).toHaveLength(1);
     expect(plan.postedCoveredByFeed).toBe(0);
@@ -94,7 +95,6 @@ describe("planBankSnapshotReconciliation", () => {
       [],
       [incoming("CVS", -2284, "2020-01-01")],
       [],
-      null,
     );
     expect(plan.postedInserts).toHaveLength(1);
   });
@@ -115,7 +115,6 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [first, second],
       [],
-      null,
     );
     expect(plan.postedDuplicates.map((row) => row.existingId)).toEqual(["a"]);
     // The two incoming rows carry the same stem, so only one can be the stored one; the
@@ -128,7 +127,6 @@ describe("planBankSnapshotReconciliation", () => {
       [existing("pending", "CVS PHARMACY", -2284)],
       [incoming("CVS PHARMACY", -2284, "2026-08-28")],
       [],
-      null,
     );
     expect(plan.postedTransitions).toEqual([
       expect.objectContaining({ existingId: "pending", amountChanged: false }),
@@ -140,7 +138,6 @@ describe("planBankSnapshotReconciliation", () => {
       [existing("gas", "SHEETZ 123", -10000)],
       [incoming("SHEETZ 123", -6789, "2026-08-28")],
       [],
-      null,
     );
     expect(plan.postedTransitions).toEqual([
       expect.objectContaining({ existingId: "gas", amountChanged: true }),
@@ -158,7 +155,6 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("SHEETZ 123", -6789, "2026-08-28")],
       [],
-      null,
     );
     expect(plan.postedTransitions).toEqual([
       expect.objectContaining({ existingId: "browser-gas", amountChanged: true }),
@@ -172,7 +168,6 @@ describe("planBankSnapshotReconciliation", () => {
       [existing("restaurant", "DINER", -5000, { isParent: true })],
       [incoming("DINER", -6200)],
       [],
-      null,
     );
     expect(plan.postedReplacements[0]?.existingId).toBe("restaurant");
     expect(plan.warnings[0]).toContain("split edits were discarded");
@@ -186,7 +181,6 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("RESTAURANT", -6200)],
       [],
-      null,
     );
     expect(plan.postedInserts).toHaveLength(1);
     expect(plan.postedTransitions).toEqual([]);
@@ -205,7 +199,6 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [posted],
       [],
-      null,
     );
     expect(plan.postedDuplicates.map((row) => row.existingId)).toEqual(["stored"]);
     expect(plan.pendingDeletes).toEqual(["hold"]);
@@ -219,7 +212,6 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("CVS PHARMACY", -2284, "2026-08-28")],
       [],
-      null,
     );
     expect(plan.postedTransitions.map((row) => row.existingId)).toEqual(["z-near"]);
   });
@@ -234,7 +226,6 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("CVS PHARMACY", -2284, "2026-08-28")],
       [],
-      null,
     );
     expect(plan.postedTransitions.map((row) => row.existingId)).toEqual([
       "browser-cvs",
@@ -247,7 +238,6 @@ describe("planBankSnapshotReconciliation", () => {
       [existing("restaurant", "DINER", -5000, { isParent: true })],
       [incoming("DINER", -5000)],
       [],
-      null,
     );
     expect(plan.postedTransitions.map((row) => row.existingId)).toEqual(["restaurant"]);
     expect(plan.postedReplacements).toEqual([]);
@@ -266,7 +256,6 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("SHEETZ 123", -6789, "2026-08-28")],
       [],
-      null,
     );
     expect(plan.postedTransitions).toEqual([]);
     expect(plan.postedInserts).toHaveLength(1);
@@ -282,9 +271,74 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [],
       [incoming("NEW", -300)],
-      null,
     );
     expect(plan.pendingDeletes).toEqual(["old-browser"]);
     expect(plan.pendingInserts).toHaveLength(1);
+  });
+
+  it("carries a pending hold's envelope onto the feed row its own posting pairs with", () => {
+    // The page proves CVS posted; SimpleFIN already has that exact charge stored. The
+    // page copy is not inserted (it is already held by the feed), but the hold it replaces
+    // still had a Category on it, and that has to land somewhere.
+    const plan = planBankSnapshotReconciliation(
+      [
+        existing("feed-cvs", "CVS/PHARMACY #01522", -2284, {
+          pending: false,
+          externalSource: "api:simplefin",
+        }),
+        existing("hold-cvs", "CVS", -2284, {
+          budgetCategoryId: "groceries",
+          notes: "receipt in the drawer",
+        }),
+      ],
+      [incoming("CVS", -2284, "2026-08-27")],
+      [],
+    );
+    expect(plan.postedCoveredByFeed).toBe(1);
+    expect(plan.postedInserts).toEqual([]);
+    expect(plan.pendingDeletes).toEqual(["hold-cvs"]);
+    expect(plan.pendingCarries).toEqual([
+      {
+        pendingId: "hold-cvs",
+        targetId: "feed-cvs",
+        carry: { budgetCategoryId: "groceries", notes: "receipt in the drawer" },
+      },
+    ]);
+  });
+
+  it("D3b: carries an omitted hold's state to the one posted row within the tip band", () => {
+    const plan = planBankSnapshotReconciliation(
+      [
+        existing("posted-dominos", "DOMINOS 1234", -2100, {
+          pending: false,
+          externalSource: "api:simplefin",
+        }),
+        existing("hold-dominos", "Domino's", -2011, {
+          budgetCategoryId: "dining",
+        }),
+      ],
+      [],
+      [],
+    );
+    expect(plan.pendingDeletes).toEqual(["hold-dominos"]);
+    expect(plan.pendingCarries).toEqual([
+      {
+        pendingId: "hold-dominos",
+        targetId: "posted-dominos",
+        carry: { budgetCategoryId: "dining" },
+      },
+    ]);
+    expect(plan.warnings).toEqual([]);
+  });
+
+  it("D3b: removes a vanished duplicate hold with a warning when there is no successor", () => {
+    const plan = planBankSnapshotReconciliation(
+      [existing("hold-xfinity", "XFINITY", -8900)],
+      [],
+      [],
+    );
+    expect(plan.pendingDeletes).toEqual(["hold-xfinity"]);
+    expect(plan.pendingCarries).toEqual([]);
+    expect(plan.warnings[0]).toContain("XFINITY");
   });
 });

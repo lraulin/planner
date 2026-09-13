@@ -246,7 +246,7 @@ export type TransactionListRow = {
    * The feed that wrote this row — `api:simplefin`, `scrape:chase`, a `csv:*` download.
    *
    * Surfaced because provenance questions here are recurring and the answer decides which
-   * feed owns the row's day (`feedWatermark.ts`). Null on nothing this app writes.
+   * rows pair as the same charge (`feedPairing.ts`). Null on nothing this app writes.
    */
   externalSource: string | null;
   /** Optional test fixture stand-in; not loaded from the database. */

@@ -159,9 +159,9 @@ and every hold removed without a successor is named in the receipt.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                    | Why                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | D3b's posted-row candidates are the account's stored posted rows only, not this same snapshot's own incoming posted list. | Extending it to incoming rows needs the apply layer to resolve a not-yet-inserted row's id after the insert, which is real plumbing for a case the acceptance criteria don't distinguish from the cross-capture one. The stored-only version already carries the Domino's-tip and Xfinity-duplicate examples; a same-capture tip charge is carried on the next reconciliation once it is stored, one cycle later than the cross-capture case. |
 
 > While this spec is **active**, when we make a material change to requirements, design, or scope
 > (including from feedback on what was implemented), update the relevant sections and append to

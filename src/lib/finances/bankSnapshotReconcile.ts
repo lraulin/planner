@@ -3,10 +3,11 @@ import {
   dateDistance,
   descriptionsOverlap,
 } from "./liveFeedMatch";
+import { pairRows, resolveLostHold, type PairableRow } from "./feedPairing";
+import { carryableFields, type CarriedState } from "./feedHandover";
 import { isScrapeFeed, type ParsedBankSnapshotRow } from "./bankSnapshot";
-import { splitByWatermark } from "./feedWatermark";
 
-export type ExistingBankSnapshotRow = {
+export type ExistingBankSnapshotRow = CarriedState & {
   id: string;
   transactionDate: string;
   postedDate: string | null;
@@ -35,6 +36,13 @@ export type BankSnapshotPendingUpdate = {
   incoming: ParsedBankSnapshotRow;
 };
 
+/** A pending row's envelope, notes and flow moving onto the posted row that succeeded it. */
+export type BankSnapshotPendingCarry = {
+  pendingId: string;
+  targetId: string;
+  carry: Partial<CarriedState>;
+};
+
 export type BankSnapshotReconciliationPlan = {
   postedDuplicates: { existingId: string; incoming: ParsedBankSnapshotRow }[];
   postedTransitions: BankSnapshotPostedTransition[];
@@ -42,12 +50,47 @@ export type BankSnapshotReconciliationPlan = {
   postedInserts: ParsedBankSnapshotRow[];
   pendingUpdates: BankSnapshotPendingUpdate[];
   pendingInserts: ParsedBankSnapshotRow[];
+  /** Before a delete, move a pending row's user state onto the posted row that replaced it. */
+  pendingCarries: BankSnapshotPendingCarry[];
   /** Browser-pending omitted by the complete page set, plus duplicate feed holds. */
   pendingDeletes: string[];
-  /** Incoming posted rows the history feed owns and will supply itself. */
+  /** Incoming posted rows a stored history-feed row already pairs with. */
   postedCoveredByFeed: number;
   warnings: string[];
 };
+
+/** True for the feeds that own history: SimpleFIN and every file download. */
+function isHistoryFeed(externalSource: string | null): boolean {
+  return (
+    externalSource !== null && externalSource !== "" && !isScrapeFeed(externalSource)
+  );
+}
+
+function toPairable(row: {
+  id: string;
+  transactionDate: string;
+  postedDate: string | null;
+  amountCents: number;
+  description: string;
+}): PairableRow {
+  return {
+    id: row.id,
+    transactionDate: row.transactionDate,
+    postedDate: row.postedDate,
+    amountCents: row.amountCents,
+    description: row.description,
+  };
+}
+
+function incomingPairable(row: ParsedBankSnapshotRow): PairableRow {
+  return {
+    id: row.externalId,
+    transactionDate: row.transactionDate,
+    postedDate: row.postedDate,
+    amountCents: row.amountCents,
+    description: row.description,
+  };
+}
 
 /**
  * Two records of one charge from the **same** browser feed.
@@ -116,21 +159,33 @@ function closestMatch(
  * Matching is occurrence-counted throughout: one stored row can absorb one incoming row.
  * Posted history is never deleted for being outside the bank page's current-cycle window.
  *
- * **Ownership is decided by date, not by description.** Incoming posted rows at or before
- * the account's feed watermark belong to SimpleFIN and are dropped; past it, the only thing
- * a posted row can already be is a previous paste of the same page, recognised by its own
- * `externalId` (`feedWatermark.ts`). Description overlap survives only where both records
- * describe a *hold* — a browser pending row this page is now posting — which is the
- * within-cycle matching the browser-authority window was built on.
+ * **Ownership is decided by identity, not by date** (`feedPairing.ts`'s `pairRows`, D2 of
+ * `agent-os/specs/2026-09-13-1127-ingest-by-identity/`). An incoming posted row that pairs
+ * with a stored history-feed row (`api:simplefin`, `csv:*`) is already held by the feed and
+ * is not inserted — whatever its date, which is what lets this page fill in a charge
+ * SimpleFIN is merely late on without that copy becoming a permanent duplicate once SimpleFIN
+ * catches up. A pair also resolves a browser or SimpleFIN pending twin of that same charge:
+ * its envelope, notes and flow move onto the feed row before the hold is dropped, rather than
+ * waiting for the next sync to notice.
+ *
+ * Everything left unpaired goes through the identity-free paths this always had: an
+ * `externalId` match against a stored row is a re-paste of the same page and is dropped; a
+ * pending row's own posting is recognised by amount, date and description
+ * (`sameEvent`/`sameDateAndDescription`); anything left is a genuinely new posted row.
+ *
+ * The browser's pending list is complete for its own prior holds (D3a): one it no longer
+ * lists is removed. Before removing it, D3b tries to carry its state onto a posted row within
+ * Actual's approximate-amount band and a wider date tolerance — a hold that posted with a tip
+ * added. No unique candidate removes the hold with a warning instead of guessing.
  */
 export function planBankSnapshotReconciliation(
   existing: readonly ExistingBankSnapshotRow[],
   posted: readonly ParsedBankSnapshotRow[],
   pending: readonly ParsedBankSnapshotRow[],
-  /** The latest posted day SimpleFIN or a file download holds for this account. */
-  watermark: string | null,
 ): BankSnapshotReconciliationPlan {
   const postedHistory = existing.filter((row) => !row.pending);
+  const postedHistoryById = new Map(postedHistory.map((row) => [row.id, row]));
+  const feedHistory = postedHistory.filter((row) => isHistoryFeed(row.externalSource));
   const existingPending = existing.filter((row) => row.pending);
   const browserPending = existingPending.filter((row) =>
     isScrapeFeed(row.externalSource ?? ""),
@@ -145,12 +200,33 @@ export function planBankSnapshotReconciliation(
   const postedTransitions: BankSnapshotPostedTransition[] = [];
   const postedReplacements: BankSnapshotPostedReplacement[] = [];
   const postedInserts: ParsedBankSnapshotRow[] = [];
+  const pendingCarries: BankSnapshotPendingCarry[] = [];
   const pendingDeletes = new Set<string>();
   const warnings: string[] = [];
   const unresolvedPosted: ParsedBankSnapshotRow[] = [];
 
-  const { owned: ownedPosted, covered } = splitByWatermark(posted, watermark);
-  for (const incoming of ownedPosted) {
+  const pairings = pairRows(posted.map(incomingPairable), feedHistory.map(toPairable));
+  const incomingByExternalId = new Map(posted.map((row) => [row.externalId, row]));
+  for (const pairing of pairings) {
+    const incoming = incomingByExternalId.get(pairing.browserId);
+    const feedRow = postedHistoryById.get(pairing.feedId);
+    if (!incoming || !feedRow) continue;
+    for (const pendingFeed of [browserPending, simpleFinPending]) {
+      const stale = closestMatch(pendingFeed, usedPending, incoming, sameEvent);
+      if (!stale) continue;
+      usedPending.add(stale.row.id);
+      pendingDeletes.add(stale.row.id);
+      pendingCarries.push({
+        pendingId: stale.row.id,
+        targetId: feedRow.id,
+        carry: carryableFields(stale.row, feedRow),
+      });
+    }
+  }
+  const pairedExternalIds = new Set(pairings.map((pairing) => pairing.browserId));
+  const unpaired = posted.filter((row) => !pairedExternalIds.has(row.externalId));
+
+  for (const incoming of unpaired) {
     const match = closestMatch(postedHistory, usedPosted, incoming, samePostedRow);
     if (!match) unresolvedPosted.push(incoming);
     else {
@@ -274,6 +350,22 @@ export function planBankSnapshotReconciliation(
       warnings.push(
         `Discarded split pending transaction "${row.description}" because the complete bank snapshot no longer listed it and no posted match was unambiguous.`,
       );
+      continue;
+    }
+    const resolution = resolveLostHold(row, postedHistory);
+    if (resolution.outcome === "carry") {
+      const target = postedHistoryById.get(resolution.postedId);
+      if (target) {
+        pendingCarries.push({
+          pendingId: row.id,
+          targetId: target.id,
+          carry: carryableFields(row, target),
+        });
+      }
+    } else {
+      warnings.push(
+        `Removed pending transaction "${row.description}" because the complete bank snapshot no longer listed it and no posted row could be confirmed as its successor.`,
+      );
     }
   }
 
@@ -284,8 +376,9 @@ export function planBankSnapshotReconciliation(
     postedInserts,
     pendingUpdates,
     pendingInserts,
+    pendingCarries,
     pendingDeletes: [...pendingDeletes],
-    postedCoveredByFeed: covered.length,
+    postedCoveredByFeed: pairings.length,
     warnings,
   };
 }

@@ -414,8 +414,8 @@ async function existingOnAccount(
   return (
     rows
       // A bank-page row never absorbs a file line. This import retires every browser row
-      // its watermark covers (`retireCoveredScrapeRows`, below), so a line skipped as its
-      // duplicate would leave the account holding neither copy.
+      // that pairs with what it just wrote (`retireCoveredScrapeRows`, below), so a line
+      // skipped as a scrape row's duplicate would leave the account holding neither copy.
       .filter((row) => !isScrapeFeed(row.externalSource ?? ""))
       .map((row) => ({
         transactionDate: row.transactionDate,

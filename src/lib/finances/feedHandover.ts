@@ -82,7 +82,7 @@ export function hasUserState(row: CarriedState): boolean {
  * Never overwrites: a value already on the feed row is the user's later word on the same
  * charge, and a handover is not the place to undo it.
  */
-function carryableFields(
+export function carryableFields(
   retiring: CarriedState,
   replacement: CarriedState,
 ): Partial<CarriedState> {

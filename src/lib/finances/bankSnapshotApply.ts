@@ -23,7 +23,6 @@ import {
   planBankSnapshotReconciliation,
   type ExistingBankSnapshotRow,
 } from "./bankSnapshotReconcile";
-import { feedWatermarkForAccount } from "./feedWatermark";
 import { recordSourceState } from "./sourceStateWrite";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import type { FinanceExecutor } from "./dbExecutor";
@@ -47,7 +46,7 @@ export type BankSnapshotApplyResult = {
     transitioned: number;
     replaced: number;
     duplicates: number;
-    /** Rows at or before the feed watermark, which SimpleFIN or a download supplies. */
+    /** Rows a stored history-feed row already pairs with, so nothing new was inserted. */
     coveredByFeed: number;
   };
   pending: {
@@ -443,6 +442,9 @@ export async function applyBankBrowserSnapshot(
         externalSource: financeTransactions.externalSource,
         externalId: financeTransactions.externalId,
         isParent: financeTransactions.isParent,
+        budgetCategoryId: financeTransactions.budgetCategoryId,
+        notes: financeTransactions.notes,
+        flowOverride: financeTransactions.flowOverride,
       })
       .from(financeTransactions)
       .where(
@@ -456,12 +458,10 @@ export async function applyBankBrowserSnapshot(
       ...row,
       amountCents: numericStringToCents(row.amount) ?? 0,
     }));
-    const watermark = await feedWatermarkForAccount(tx, userId, account.id);
     const plan = planBankSnapshotReconciliation(
       existing,
       snapshot.posted,
       snapshot.pending,
-      watermark,
     );
     const newIds: string[] = [];
 
@@ -521,6 +521,21 @@ export async function applyBankBrowserSnapshot(
     for (const row of plan.pendingInserts) {
       newIds.push(await insertSnapshotRow(tx, userId, account.id, snapshot, row, true));
     }
+    // Carry a retiring pending row's envelope, notes and flow onto its posted successor
+    // before that pending row is deleted below.
+    for (const carry of plan.pendingCarries) {
+      if (Object.keys(carry.carry).length === 0) continue;
+      await tx
+        .update(financeTransactions)
+        .set({ ...carry.carry, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            eq(financeTransactions.accountId, account.id),
+            eq(financeTransactions.id, carry.targetId),
+          ),
+        );
+    }
     if (plan.pendingDeletes.length > 0) {
       await tx
         .delete(financeTransactions)
@@ -535,8 +550,8 @@ export async function applyBankBrowserSnapshot(
     }
 
     // The capture writes its own stamp only. Re-pasting a clipboard captured before the
-    // last sync therefore imports its rows per the watermark and leaves the headline and
-    // the pending set exactly where they were.
+    // last sync therefore still imports its rows (identity-paired ones are simply already
+    // held by the feed) and leaves the headline and the pending set exactly where they were.
     const authority = await recordSourceState(tx, userId, account.id, {
       source: "browser",
       balanceCents: snapshot.currentBalanceCents,
@@ -561,7 +576,7 @@ export async function applyBankBrowserSnapshot(
       `${plan.postedTransitions.length + plan.postedReplacements.length} posted transition${plan.postedTransitions.length + plan.postedReplacements.length === 1 ? "" : "s"}, ` +
       `${plan.postedInserts.length} new posted, ${snapshot.pending.length} pending` +
       (plan.postedCoveredByFeed > 0
-        ? `; ${plan.postedCoveredByFeed} already covered by the bank feed through ${watermark}.`
+        ? `; ${plan.postedCoveredByFeed} already held by the bank feed.`
         : ".") +
       (authority.headlineMoved
         ? ""
@@ -580,7 +595,6 @@ export async function applyBankBrowserSnapshot(
           ],
       sourceEvidence: {
         format: "planner-bank-snapshot-v1",
-        feedWatermark: watermark,
         rawText: snapshot.rawText,
       },
       beforeCheckpoint,
