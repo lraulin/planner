@@ -47,12 +47,8 @@ import { formatBindings } from "@/lib/commands/bindings";
 import { COPY_AS_TEXT } from "@/lib/commands/chords";
 import { applySelect, selectOnly } from "@/lib/grid/selection";
 import { isTypingTarget } from "@/lib/keyboard";
-import {
-  formatMetricNumber,
-  isDateKey,
-  localDateKey,
-  parseMetricInput,
-} from "@/lib/metrics/parse";
+import { formatMetricNumber, isDateKey, parseMetricInput } from "@/lib/metrics/parse";
+import { localDateKey } from "@/lib/schedule/geometry";
 import {
   TRACKING_COLUMNS,
   TRACKING_DEFAULT_ORDER,
@@ -386,7 +382,7 @@ function MetricForm({
   const addEntry = () => {
     startTransition(async () => {
       const result = await createMetricEntryAction(detail.id, {
-        entryDate: localDateKey(),
+        entryDate: localDateKey(new Date()),
         value: 0,
         // Per-entry target is optional; objective target still drives the graph.
         target: null,

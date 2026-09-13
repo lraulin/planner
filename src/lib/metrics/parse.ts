@@ -1,5 +1,4 @@
 import { daysInMonth } from "@/lib/dateMath";
-import { localDateKey as wallClockDay } from "@/lib/schedule/geometry";
 
 /** Parse a DB `numeric` string (or number) into a finite number, else null. */
 export function parseNumeric(raw: string | number | null | undefined): number | null {
@@ -37,11 +36,6 @@ export function formatMetricNumber(n: number | null | undefined): string {
   if (Number.isInteger(n)) return String(n);
   const fixed = n.toFixed(6).replace(/\.?0+$/, "");
   return fixed;
-}
-
-/** `YYYY-MM-DD` today in local calendar (for default entry date). */
-export function localDateKey(d: Date = new Date()): string {
-  return wallClockDay(d);
 }
 
 /**

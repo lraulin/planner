@@ -9,7 +9,8 @@ import {
   updateMetricEntry as updateMetricEntryMutation,
 } from "@/lib/metrics/mutations";
 import { getMetricDetail, getMetricEntry, listMetrics } from "@/lib/metrics/queries";
-import { isDateKey, localDateKey } from "@/lib/metrics/parse";
+import { isDateKey } from "@/lib/metrics/parse";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { isMetricType } from "@/lib/metrics/derive";
 import type { MetricEntryInput, MetricInput, MetricType } from "@/lib/metrics/types";
 import { AgentError } from "./errors";
@@ -262,8 +263,8 @@ export async function logMetricEntryTool(
   const entryDateRaw = optionalString(args, "entryDate");
   const entryDate =
     entryDateRaw !== undefined
-      ? (parseDateKey(entryDateRaw, "entryDate") ?? localDateKey())
-      : localDateKey();
+      ? (parseDateKey(entryDateRaw, "entryDate") ?? localDateKey(new Date()))
+      : localDateKey(new Date());
 
   const input: MetricEntryInput = {
     entryDate,

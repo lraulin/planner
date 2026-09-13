@@ -55,7 +55,7 @@ import {
 import { listAccounts, listStatements } from "@/lib/finances/queries";
 import { reconcileAccounts } from "@/lib/finances/reconcile";
 import { searchTransactions } from "@/lib/finances/transactionSearch";
-import { localDateKey } from "@/lib/metrics/parse";
+import { localDateKey } from "@/lib/schedule/geometry";
 import type { InsightsAxis } from "@/lib/settings/finances";
 import type { FinanceFlowKind } from "@/db/schema";
 import { AgentError } from "./errors";
@@ -129,7 +129,7 @@ async function loadAnalyzed(userId: string, args: Record<string, unknown>) {
     window: parsed.window,
     axis: parsed.axis,
     levelRecurring: parsed.levelRecurring,
-    today: localDateKey(),
+    today: localDateKey(new Date()),
     range: explicitRange(parsed, rowsRange(rows)),
     statements,
   });
@@ -647,7 +647,7 @@ function legacyMatchers(
 
 export async function listCommitmentsTool(userId: string) {
   const [data, payees] = await Promise.all([loadDashboard(userId), listPayees(userId)]);
-  const today = localDateKey();
+  const today = localDateKey(new Date());
   return {
     bills: data.bills.map((bill) => {
       const last = data.billCharges
