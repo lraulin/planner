@@ -4,7 +4,11 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { ActionResult } from "@/app/actionResult";
 import type { NodeState } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import { cascadeStateChange, openDescendantCount } from "@/lib/tree/completionCascade";
+import {
+  cascadeStateChange,
+  openDescendantCount,
+  predictedState,
+} from "@/lib/tree/completionCascade";
 import { STATE_LABELS } from "@/lib/tree/hierarchy";
 
 /**
@@ -54,8 +58,12 @@ export function useStateChange({
 
   const commit = useCallback(
     (node: OutlineNode, state: NodeState, action: StateAction) => {
+      // The row itself shows what was asked until the refresh lands. Its neighbours follow
+      // what the server will actually do: a routine being completed cycles rather than
+      // settling, so its checklist must not be ticked off here (see `predictedState`).
       patch(node.id, { state });
-      for (const change of cascadeStateChange(nodes, node.id, state)) {
+      const next = predictedState(node, state);
+      for (const change of cascadeStateChange(nodes, node.id, next, state)) {
         patch(change.id, { state: change.state });
       }
       // One call: the server runs the same cascade inside a transaction, so a branch is
@@ -71,7 +79,7 @@ export function useStateChange({
    */
   const request = useCallback(
     (node: OutlineNode, state: NodeState, action: StateAction) => {
-      const count = openDescendantCount(nodes, node.id, state);
+      const count = openDescendantCount(nodes, node.id, predictedState(node, state));
       if (count === 0) {
         commit(node, state, action);
         return;

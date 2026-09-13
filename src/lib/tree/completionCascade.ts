@@ -1,4 +1,4 @@
-import type { NodeState } from "@/db/schema";
+import type { NodeState, NodeType, RecurrenceFrequency } from "@/db/schema";
 
 /**
  * What else changes when one node's state changes.
@@ -37,6 +37,34 @@ export type CascadeNode = {
 };
 
 export type StateChange = { id: string; state: NodeState };
+
+/**
+ * The state a requested change will actually leave the node in — which the cascade and the
+ * confirmation must both be computed from.
+ *
+ * Almost always the request itself. The exception is **completing a repeating task**: it does
+ * not settle, it cycles — `applyStateTransition` shelves it until the next occurrence and resets
+ * its checklist to Not started, and the server cascades from that result. Predicting from the
+ * request instead made the grid ask "3 open items underneath will also be marked Completed" on
+ * every routine with a checklist, which is false, and optimistically tick those items off.
+ *
+ * The one case this cannot see is a series' **last** occurrence, which really does complete:
+ * knowing that needs the completion count, which the outline row does not carry. The server
+ * still gets it right; only the prompt is skipped there.
+ */
+export function predictedState(
+  node: { type: NodeType; recurrenceFrequency: RecurrenceFrequency },
+  requested: NodeState,
+): NodeState {
+  if (
+    requested === "completed" &&
+    node.type === "task" &&
+    node.recurrenceFrequency !== "none"
+  ) {
+    return "postponed";
+  }
+  return requested;
+}
 
 /** Completed and cancelled both mean settled: the work is not coming back. */
 export function isSettled(state: NodeState | null): boolean {

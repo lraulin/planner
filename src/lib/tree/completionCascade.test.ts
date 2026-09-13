@@ -4,6 +4,7 @@ import {
   cascadeStateChange,
   isSettled,
   openDescendantCount,
+  predictedState,
   type CascadeNode,
 } from "./completionCascade";
 
@@ -258,5 +259,31 @@ describe("openDescendantCount", () => {
     ];
     expect(openDescendantCount(cyclic, "a", "completed")).toBe(2);
     expect(cascadeStateChange(cyclic, "a", "completed")).toHaveLength(3);
+  });
+});
+
+describe("predictedState", () => {
+  const task = { type: "task" as const, recurrenceFrequency: "none" as const };
+  const routine = { type: "task" as const, recurrenceFrequency: "weekly" as const };
+
+  it("predicts a repeating task's completion as a cycle, so its checklist is not settled", () => {
+    expect(predictedState(routine, "completed")).toBe("postponed");
+    // The grid's confirmation reads this count; a routine with a checklist must not ask.
+    const next = predictedState(routine, "completed");
+    expect(openDescendantCount(tree(), "task-b", next)).toBe(0);
+    // Its not-started ancestors still start, as they do on the server.
+    expect(cascadeStateChange(tree(), "task-b", next, "completed")).toContainEqual({
+      id: "project",
+      state: "in_progress",
+    });
+  });
+
+  it("leaves every other request as asked", () => {
+    expect(predictedState(task, "completed")).toBe("completed");
+    expect(predictedState(routine, "cancelled")).toBe("cancelled");
+    expect(predictedState(routine, "in_progress")).toBe("in_progress");
+    expect(
+      predictedState({ type: "project", recurrenceFrequency: "weekly" }, "completed"),
+    ).toBe("completed");
   });
 });
