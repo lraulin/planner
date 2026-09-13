@@ -5,8 +5,9 @@ import { toDateKey } from "@/lib/schedule/geometry";
  * The state a date edit implies.
  *
  * The dates and the state are two views of one fact, and the app already moved one
- * direction: setting a task In Progress stamps its actual start, completing it stamps the
- * completion. This closes the loop, because the fields are editable precisely so you can
+ * direction: completing a task stamps Date completed. (Setting it In Progress does **not**
+ * stamp Started on — nothing writes that field but the drawer.) This closes the loop, because
+ * the fields are editable precisely so you can
  * correct the record — and a record saying a task was finished on the 3rd while its state
  * says Not Started is not a corrected record, it is a contradictory one.
  *
