@@ -218,6 +218,58 @@ describeDb("detail mutations", () => {
       expect(row.constraintDate?.toISOString()).toBe("2026-10-05T12:00:00.000Z");
     });
 
+    describe("judging the State edit against the reader's day", () => {
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it("un-shelves a task deferred until tomorrow when the server's day has already turned", async () => {
+        // 00:30 on the 13th in the suite's zone — Vercel's UTC after ~8pm Eastern — while the
+        // reader is still on the 12th. The drawer showed Postponed (the shelf ends on the
+        // 13th), so choosing Not started is an edit. Judged by the server's day the shelf had
+        // already expired, the draft "matched what was shown", and the change was dropped.
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2027-03-13T05:30:00Z"));
+        const id = await task("Call the bank");
+        await db
+          .update(nodes)
+          .set({ state: "postponed", deferredDate: fromDateKey("2027-03-13") })
+          .where(eq(nodes.id, id));
+
+        await saveNodeDetail(
+          userId,
+          id,
+          { ...core, name: "Call the bank", state: "not_started" },
+          { today: "2027-03-12" },
+        );
+
+        expect((await stateOf(id))?.state).toBe("not_started");
+      });
+
+      it("ignores a reader's day more than a day from the server's", async () => {
+        // Untrusted input from a server action: a far-off `today` falls back to the server's.
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2027-03-13T16:00:00Z"));
+        const id = await task("Renew the lease");
+        await db
+          .update(nodes)
+          .set({ state: "postponed", deferredDate: fromDateKey("2027-03-10") })
+          .where(eq(nodes.id, id));
+
+        // By the server's day the shelf expired and the form showed Not started, so posting
+        // Not started is no edit and the stored residue stays. A forged `today` of 2027-03-01
+        // would have claimed the shelf still held and made it one.
+        await saveNodeDetail(
+          userId,
+          id,
+          { ...core, name: "Renew the lease", state: "not_started" },
+          { today: "2027-03-01" },
+        );
+
+        expect((await stateOf(id))?.state).toBe("postponed");
+      });
+    });
+
     it("clears a stale deferred date when postponed by hand", async () => {
       // Otherwise it would un-shelve the instant it was shelved, since expiry is derived.
       const id = await task("Someday");

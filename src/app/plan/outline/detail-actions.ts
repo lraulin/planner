@@ -38,8 +38,12 @@ export async function loadNodeDetailAction(
 export async function saveNodeDetailAction(
   nodeId: string,
   values: NodeDetailValues,
+  /** The reader's `YYYY-MM-DD`, so the save judges State against the day the form showed. */
+  today?: string | null,
 ): Promise<ActionResult> {
-  return run((userId) => detail.saveNodeDetail(userId, nodeId, values));
+  return run((userId) =>
+    detail.saveNodeDetail(userId, nodeId, values, { today: today ?? undefined }),
+  );
 }
 
 /** Goals grid: inline Definition / Range without a full drawer save. */

@@ -26,6 +26,7 @@ import { loadNodeChain } from "@/lib/tree/path";
 import { parentIdForResultAreaChange } from "./resultAreaParent";
 import {
   asCalendarDay,
+  daysBetweenKeys,
   fromDateKey,
   localDateKey,
   toDateKey,
@@ -408,10 +409,27 @@ async function assertItemContact(
  * record can be saved, since people routinely know a project exists before they know its
  * budget.
  */
+/**
+ * The reader's day when the caller knows it and it is plausible, else the server's.
+ *
+ * `dates.md` rule 8: no business rule may depend on the server's zone. The drawer judges "did the
+ * user really change State?" against what it *showed*, and it showed that with the reader's
+ * day — on Vercel, after ~8pm Eastern, the server's local day is already tomorrow. The value
+ * arrives through a server action, so it is trusted only within a day of the server's UTC day:
+ * every real zone falls inside that, and a forged date cannot move the judgement further.
+ */
+function readerToday(claimed: string | undefined): string {
+  const server = localDateKey(new Date());
+  if (!claimed || !/^\d{4}-\d{2}-\d{2}$/.test(claimed)) return server;
+  const utc = toDateKey(new Date());
+  return Math.abs(daysBetweenKeys(utc, claimed)) <= 1 ? claimed : server;
+}
+
 export async function saveNodeDetail(
   userId: string,
   nodeId: string,
   values: NodeDetailPatch,
+  options: { today?: string } = {},
 ): Promise<void> {
   let savedType: string | undefined;
   await db.transaction(async (tx) => {
@@ -470,7 +488,7 @@ export async function saveNodeDetail(
     // store `postponed`. A full-draft re-save therefore posts `not_started` without the user
     // having touched State — that is not an edit; writing it would sweep the residue the
     // shelving model deliberately leaves. See `isStateEdit`.
-    const today = localDateKey(new Date());
+    const today = readerToday(options.today);
     if (
       "state" in core &&
       core.state !== undefined &&
@@ -523,7 +541,7 @@ export async function saveNodeDetail(
         core.state === "postponed" &&
         core.deferredDate === undefined &&
         node.deferredDate &&
-        toDateKey(node.deferredDate) <= localDateKey(new Date())
+        toDateKey(node.deferredDate) <= today
           ? { deferredDate: null }
           : {}),
         updatedAt: new Date(),

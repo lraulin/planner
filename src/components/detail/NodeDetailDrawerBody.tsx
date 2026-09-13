@@ -496,7 +496,7 @@ function DetailForm({
   function save(options?: { close?: boolean }) {
     setError(null);
     startTransition(async () => {
-      const result = await saveNodeDetailAction(detail.id, values);
+      const result = await saveNodeDetailAction(detail.id, values, today);
 
       // Order matters: never close over a failed save — keep the input and let them fix it.
       if (!result.ok) {
