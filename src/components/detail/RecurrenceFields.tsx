@@ -7,9 +7,10 @@ import type {
   RecurrencePattern,
   TaskDetails,
 } from "@/db/schema";
+import { recurrenceAnchor } from "@/lib/recurrence/anchor";
 import { describeRule, nextOccurrence } from "@/lib/recurrence/pattern";
 import { nextDue } from "@/lib/recurrence/nextDue";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { DateField, FieldGrid, NumberField, Section, SelectField } from "./fields";
 
 /**
@@ -177,15 +178,18 @@ export function RecurrenceFields({
   const end = task.recurrenceEnd ?? "never";
   const rule = ruleOf(task);
 
-  // The same precedence `applyStateTransition` uses, so the preview cannot disagree with
-  // what completing the task will actually do.
-  const anchor = deadline ?? deferredDate ?? targetStartDate ?? new Date();
+  // The same rule `applyStateTransition` uses, so the preview cannot disagree with what
+  // completing the task will actually do — including skipping an expired deferred date.
+  const now = new Date();
+  const anchor =
+    recurrenceAnchor({ deadline, deferredDate, targetStartDate }, localDateKey(now)) ??
+    now;
 
   const next =
     frequency === "none"
       ? null
       : mode === "regenerate"
-        ? nextDue(new Date(), frequency, rule.interval)
+        ? nextDue(now, frequency, rule.interval)
         : nextOccurrence(rule, anchor);
 
   function setFrequency(value: RecurrenceFrequency) {

@@ -13,6 +13,7 @@ import type { ExternalRef, NodeState, NodeType, PriorityLetter } from "@/db/sche
 import { and, asc, count, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { addDays, daysBetween } from "@/lib/dateMath";
 import { nextDue } from "@/lib/recurrence/nextDue";
+import { recurrenceAnchor } from "@/lib/recurrence/anchor";
 import { nextOccurrence } from "@/lib/recurrence/pattern";
 import {
   asCalendarDay,
@@ -704,29 +705,6 @@ async function recurrenceOf(tx: Executor, userId: string, nodeId: string) {
 type Recurrence = NonNullable<Awaited<ReturnType<typeof recurrenceOf>>>;
 
 /**
- * The date the pattern is *about*: the deadline if there is one, else a *still-holding*
- * deferred date, else the target start.
- *
- * A deadline is the date a repeating task is named for — "the report is due every Friday"
- * means Friday is the deadline, not the day you start. Only when there is no deadline does
- * the defer date take over as the thing the schedule moves.
- *
- * An **expired** deferred date is shelf residue (expiry is derived, never swept) and must
- * not be the shift origin. Using it turned "complete the routine that came back today"
- * into a multi-year jump of every other date — target start leapt to 2033 from a 2020
- * residue in one case. Fall through to target start, or to null so `nextAnchor` can stand
- * on the completion day.
- *
- * `asOfDay` is the completion's local `YYYY-MM-DD` — the same day key the shelf itself
- * compares against.
- */
-function anchorOf(r: Recurrence, asOfDay: string): Date | null {
-  if (r.deadline) return r.deadline;
-  if (r.deferredDate && toDateKey(r.deferredDate) > asOfDay) return r.deferredDate;
-  return r.targetStartDate;
-}
-
-/**
  * Where the whole date set moves to, or null when the series has run out.
  *
  * The two modes differ only in what they measure from, and that difference is the feature:
@@ -948,7 +926,7 @@ export async function applyStateTransition(
     return;
   }
 
-  const anchor = anchorOf(recurrence, completedDayKey);
+  const anchor = recurrenceAnchor(recurrence, completedDayKey);
   const next = nextAnchor(recurrence, anchor, now);
 
   // Counted before the insert below, or "end after N occurrences" is off by one.
@@ -1369,7 +1347,7 @@ export async function skipRecurrence(userId: string, nodeId: string): Promise<vo
     if (!recurrence) throw new Error("That task does not repeat.");
 
     const now = new Date();
-    const anchor = anchorOf(recurrence, localDateKey(now));
+    const anchor = recurrenceAnchor(recurrence, localDateKey(now));
     const next = nextAnchor(recurrence, anchor, now);
 
     // Skipping cannot exhaust an "end after N" series, because it never counted toward
