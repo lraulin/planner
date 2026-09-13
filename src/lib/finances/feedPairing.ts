@@ -1,0 +1,131 @@
+/**
+ * Pairing a browser row with the history-feed row that is the same charge.
+ *
+ * `feedHandover.ts` used to pick, for each browser row in turn, whichever feed row had the
+ * nearest date at the same amount — with no ceiling on how near "nearest" had to be, and no
+ * look at the description. That is how a scraped **ChatGPT** −$21.20 carried its envelope
+ * onto SimpleFIN's **Claude** −$21.20 two days later: nothing stopped it, and nothing
+ * preferred ChatGPT's own row once one arrived.
+ *
+ * This module is the one pairing rule, used in both directions (`agent-os/specs/
+ * 2026-09-13-1127-ingest-by-identity/` D2): retirement pairs stored browser rows against
+ * stored feed rows; snapshot insertion pairs an incoming posted row against stored feed
+ * rows. A pair needs an exact amount, `dateDistance` within `DATE_TOLERANCE_DAYS`, and
+ * `descriptionsOverlap` — the same identity bar `liveFeedMatch.ts`'s `sameEvent` already
+ * holds live-feed rows to, because without a watermark to lean on, date and amount alone are
+ * not enough to say two rows are the same charge.
+ *
+ * Candidates are sorted **globally**, not per browser row: every eligible pair, nearest date
+ * first, ties broken by id for determinism, then taken greedily while neither side is
+ * already used. Global order is what lets ChatGPT's own feed row win its pairing even though
+ * Claude's row is also in range — the (ChatGPT, ChatGPT) pair is closer, so it is claimed
+ * before (ChatGPT, Claude) is ever considered. Per-row matching would have compared only
+ * ChatGPT's own two candidates and could not see that ordering across rows.
+ */
+
+import {
+  dateDistance,
+  descriptionsOverlap,
+  DATE_TOLERANCE_DAYS,
+} from "./liveFeedMatch";
+import { amountMatches } from "./amountMatch";
+
+export type PairableRow = {
+  id: string;
+  transactionDate: string;
+  postedDate?: string | null;
+  amountCents: number;
+  description: string;
+};
+
+export type RowPairing = {
+  browserId: string;
+  feedId: string;
+};
+
+/**
+ * Pair browser rows against history-feed rows for one account.
+ *
+ * Occurrence-counted: each id, on either side, appears in at most one returned pairing. A
+ * row with no eligible partner — wrong amount, too far apart, or no description overlap —
+ * is simply absent from the result; callers decide what an unpaired row means for them.
+ */
+export function pairRows(
+  browserRows: readonly PairableRow[],
+  feedRows: readonly PairableRow[],
+): RowPairing[] {
+  const candidates: { browser: PairableRow; feed: PairableRow; distance: number }[] =
+    [];
+
+  for (const browser of browserRows) {
+    for (const feed of feedRows) {
+      if (browser.amountCents !== feed.amountCents) continue;
+      const distance = dateDistance(browser, feed);
+      if (distance > DATE_TOLERANCE_DAYS) continue;
+      if (!descriptionsOverlap(browser.description, feed.description)) continue;
+      candidates.push({ browser, feed, distance });
+    }
+  }
+
+  candidates.sort(
+    (left, right) =>
+      left.distance - right.distance ||
+      `${left.browser.id}:${left.feed.id}`.localeCompare(
+        `${right.browser.id}:${right.feed.id}`,
+      ),
+  );
+
+  const usedBrowser = new Set<string>();
+  const usedFeed = new Set<string>();
+  const pairings: RowPairing[] = [];
+
+  for (const candidate of candidates) {
+    if (usedBrowser.has(candidate.browser.id) || usedFeed.has(candidate.feed.id))
+      continue;
+    usedBrowser.add(candidate.browser.id);
+    usedFeed.add(candidate.feed.id);
+    pairings.push({ browserId: candidate.browser.id, feedId: candidate.feed.id });
+  }
+
+  return pairings;
+}
+
+/**
+ * How long a hold may run before its posted twin shows up, for the lost-hold carry (D3b).
+ *
+ * Wider than `DATE_TOLERANCE_DAYS`: a hold is not the same-day disagreement pairing exists
+ * for, it is an authorization that can sit for the better part of a week before the bank
+ * posts the real charge.
+ */
+export const LOST_HOLD_TOLERANCE_DAYS = 7;
+
+export type LostHoldResolution =
+  { outcome: "carry"; postedId: string } | { outcome: "none" };
+
+/**
+ * Where an omitted hold's envelope and notes should land before the hold is removed.
+ *
+ * Bank-page pending sets omit a hold once it clears, one way or another: it posted, or it
+ * never did (a duplicate the page dropped). Only the first case has anywhere to carry state
+ * to. A posted row counts as that hold's successor when its amount is within Actual's 7.5%
+ * band (a tip added at settlement), it is dated within `LOST_HOLD_TOLERANCE_DAYS`, and the
+ * description overlaps. Anything but exactly one such row is treated as "no successor found"
+ * — zero because there is nothing to carry to, several because picking one would be a guess
+ * — and the caller removes the hold with a warning instead.
+ */
+export function resolveLostHold(
+  hold: PairableRow,
+  postedCandidates: readonly PairableRow[],
+): LostHoldResolution {
+  const matches = postedCandidates.filter(
+    (candidate) =>
+      amountMatches(candidate.amountCents, hold.amountCents) &&
+      dateDistance(hold, candidate) <= LOST_HOLD_TOLERANCE_DAYS &&
+      descriptionsOverlap(hold.description, candidate.description),
+  );
+
+  if (matches.length === 1) {
+    return { outcome: "carry", postedId: matches[0].id };
+  }
+  return { outcome: "none" };
+}
