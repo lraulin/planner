@@ -1,7 +1,8 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { db } from "@/db";
-import { notes, type NewNote, type NoteFlag } from "@/db/schema";
+import { nodes, notes, type NewNote, type NoteFlag } from "@/db/schema";
+import { assertContactOwned } from "@/lib/contacts/ownership";
 import type { ExternalRef } from "@/db/schema";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { between } from "@/lib/tree/sortKey";
@@ -29,6 +30,30 @@ async function requireNote(tx: Executor, userId: string, noteId: string) {
 
   if (!note) throw new Error("Note not found.");
   return note;
+}
+
+/**
+ * Refuse a link to a record or contact the caller does not own (`security.md`: prove ownership
+ * before writing). `undefined` leaves a link alone and `null` clears it, so both pass.
+ *
+ * Reads already scope the "Linked to" join by user, so a foreign id would not have shown the
+ * other user's name — but it would still store a pointer into their data, and their deleting
+ * that record would `set null` on this user's note.
+ */
+async function assertLinksOwned(
+  tx: Executor,
+  userId: string,
+  links: { nodeId?: string | null; contactId?: string | null },
+): Promise<void> {
+  if (links.nodeId) {
+    const [node] = await tx
+      .select({ id: nodes.id })
+      .from(nodes)
+      .where(and(eq(nodes.id, links.nodeId), eq(nodes.userId, userId)))
+      .limit(1);
+    if (!node) throw new Error("Linked record not found.");
+  }
+  await assertContactOwned(tx, userId, links.contactId);
 }
 
 /**
@@ -168,6 +193,7 @@ export async function createNoteOnce(params: {
 
     // Reaching under another user's note must not be possible even with a valid id.
     if (parentId !== null) await requireNote(tx, userId, parentId);
+    await assertLinksOwned(tx, userId, values);
 
     const sortKey = await sortKeyFor(tx, userId, parentId, position);
 
@@ -240,6 +266,8 @@ export async function updateNote(
   if (input.contexts !== undefined) patch.contexts = input.contexts;
   if (input.nodeId !== undefined) patch.nodeId = input.nodeId;
   if (input.contactId !== undefined) patch.contactId = input.contactId;
+
+  await assertLinksOwned(db, userId, input);
 
   const updated = await db
     .update(notes)

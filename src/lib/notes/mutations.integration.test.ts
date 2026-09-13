@@ -17,6 +17,7 @@ import {
   updateNote,
 } from "./mutations";
 import { saveJournal } from "@/lib/day/mutations";
+import { createContact } from "@/lib/contacts/mutations";
 import { JOURNAL_SUBJECT } from "@/lib/day/types";
 import { loadDiarySummaries, loadNotes, loadNotesForNode } from "./queries";
 import { toDateKey } from "@/lib/schedule/geometry";
@@ -462,6 +463,43 @@ describeDb("user isolation", () => {
 
     const [note] = await loadNotes(owner);
     expect(note.title).toBe("Private");
+  });
+
+  it("does not let one user link a note to another user's record or contact", async () => {
+    // security.md: prove ownership before writing. Reads already scope the join, so a
+    // foreign link would not show the other user's name — but it would still store a pointer
+    // into their data, and their deleting that record would rewrite this note.
+    const theirTask = await createNode({
+      userId: owner,
+      parentId: null,
+      type: "task",
+      name: "Owner's task",
+    });
+    const theirContact = await createContact(owner, { givenName: "Owner's friend" });
+
+    await expect(
+      createNote({ userId: intruder, values: { title: "Mine", nodeId: theirTask } }),
+    ).rejects.toThrow(/not found/i);
+    await expect(
+      createNote({
+        userId: intruder,
+        values: { title: "Mine", contactId: theirContact },
+      }),
+    ).rejects.toThrow(/not found/i);
+
+    const mine = await createNote({ userId: intruder, values: { title: "Mine" } });
+    await expect(updateNote(intruder, mine, { nodeId: theirTask })).rejects.toThrow(
+      /not found/i,
+    );
+    await expect(
+      updateNote(intruder, mine, { contactId: theirContact }),
+    ).rejects.toThrow(/not found/i);
+
+    const [note] = await loadNotes(intruder);
+    expect({ nodeId: note.nodeId, contactId: note.contactId }).toEqual({
+      nodeId: null,
+      contactId: null,
+    });
   });
 
   it("does not let one user delete another's note", async () => {
