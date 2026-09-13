@@ -8,7 +8,7 @@ import { notesPath } from "@/lib/url/viewState";
 import { createNoteAction } from "@/app/notes/actions";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
 
 /**
  * What a note can be filed against. A node — a project, a task — or a contact, which is
@@ -45,7 +45,8 @@ export function LinkedNotesPanel({
     setError(null);
     startTransition(async () => {
       const result = await createNoteAction({
-        values: { ...link, title: "" },
+        // The reader's own day: the server's "today" is its zone's, not theirs.
+        values: { ...link, title: "", noteDate: fromDateKey(localDateKey(new Date())) },
       });
       if (!result.ok) {
         setError(result.error);

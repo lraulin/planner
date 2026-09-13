@@ -3,6 +3,7 @@ import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { db } from "@/db";
 import { notes, type NewNote, type NoteFlag } from "@/db/schema";
 import type { ExternalRef } from "@/db/schema";
+import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { between } from "@/lib/tree/sortKey";
 import type { NotePosition } from "./types";
 
@@ -179,8 +180,11 @@ export async function createNoteOnce(params: {
       subject: values.subject ?? "General",
       body: values.body ?? "",
       // A note is about today unless said otherwise — matching Achieve, which pre-fills
-      // the Date field on a new note.
-      noteDate: values.noteDate ?? new Date(),
+      // the Date field on a new note. The date is a calendar day, so it is stored as that
+      // day's UTC noon: the bare instant read back through `toDateKey` as tomorrow after
+      // ~8pm Eastern. The server's "today" is its own zone's, which is why the app's create
+      // buttons send the reader's day instead of relying on this default.
+      noteDate: values.noteDate ?? fromDateKey(localDateKey(new Date())),
       flag: values.flag ?? "none",
       contexts: values.contexts ?? [],
       nodeId: values.nodeId ?? null,

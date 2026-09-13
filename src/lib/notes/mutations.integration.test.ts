@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -19,6 +19,7 @@ import {
 import { saveJournal } from "@/lib/day/mutations";
 import { JOURNAL_SUBJECT } from "@/lib/day/types";
 import { loadDiarySummaries, loadNotes, loadNotesForNode } from "./queries";
+import { toDateKey } from "@/lib/schedule/geometry";
 
 /**
  * Integration tests against the local Postgres (`npm run db:up`), following the harness in
@@ -73,6 +74,26 @@ describeDb("creating notes", () => {
     expect(note.noteDate).not.toBeNull();
     expect(note.flag).toBe("none");
     expect(note.contexts).toEqual([]);
+  });
+
+  describe("at 21:30 Eastern, when UTC is already tomorrow", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("dates an undated note on the local day, stored as that day's UTC noon", async () => {
+      // Only `Date` is faked, so the database driver's own timers keep running.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-09-12T01:30:00Z"));
+
+      await createNote({ userId });
+      const [note] = await loadNotes(userId);
+
+      // The suite runs in America/New_York, where this instant is still Sep 11. Storing the
+      // instant itself read back through `toDateKey` as the 12th — tomorrow.
+      expect(toDateKey(note.noteDate!)).toBe("2026-09-11");
+      expect(note.noteDate!.getUTCHours()).toBe(12);
+    });
   });
 
   it("appends to the end of the list by default", async () => {

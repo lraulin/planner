@@ -8,6 +8,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { isSelfOrDescendantIn } from "@/lib/tree/ancestry";
 import type { NoteFlag } from "@/db/schema";
 import { INSERT_AFTER, INSERT_CHILD } from "@/lib/commands/chords";
@@ -500,7 +501,11 @@ export function NotesGrid({
 
       setError(null);
       startTransition(async () => {
-        const result = await createNoteAction(params);
+        // The reader's own day: the server's "today" is its zone's, not theirs.
+        const result = await createNoteAction({
+          ...params,
+          values: { noteDate: fromDateKey(localDateKey(new Date())) },
+        });
         if (!result.ok) {
           setError(result.error);
           return;
