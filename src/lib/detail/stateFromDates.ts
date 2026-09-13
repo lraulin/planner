@@ -7,9 +7,9 @@ import { toDateKey } from "@/lib/schedule/geometry";
  * The dates and the state are two views of one fact, and the app already moved one
  * direction: completing a task stamps Date completed. (Setting it In Progress does **not**
  * stamp Started on — nothing writes that field but the drawer.) This closes the loop, because
- * the fields are editable precisely so you can
- * correct the record — and a record saying a task was finished on the 3rd while its state
- * says Not Started is not a corrected record, it is a contradictory one.
+ * the fields are editable precisely so you can correct the record — and a record saying a
+ * task was finished on the 3rd while its state says Not Started is not a corrected record, it
+ * is a contradictory one.
  *
  * Precedence, when a single save touches more than one: **finished beats shelved beats
  * started.** Completion is the strongest claim a record can make about itself.
