@@ -29,7 +29,10 @@ export function TimeBudgetStep({
   resources,
   onAvailableChange,
 }: Props) {
-  const projects = useMemo(() => selectProjectsForCommitment(ctx.nodes), [ctx.nodes]);
+  const projects = useMemo(
+    () => selectProjectsForCommitment(ctx.nodes, { today: ctx.today }),
+    [ctx.nodes, ctx.today],
+  );
 
   const rows = useMemo(
     () =>

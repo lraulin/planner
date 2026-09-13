@@ -31,6 +31,8 @@ export type StepContext = {
   resultAreaReviews: Map<string, ResultAreaReview>;
   previousRewrites: Map<string, { rewrite: string; weekStart: string }>;
   onError: (message: string) => void;
+  /** The reader's day, or null before hydration — shelves expire against it. */
+  today: string | null;
 };
 
 export const STEP_LABELS = [

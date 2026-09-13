@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { derive } from "@/lib/tree/derive";
 import { row } from "@/lib/tree/fixtures";
+import { fromDateKey } from "@/lib/schedule/geometry";
 import type { OutlineRow } from "@/lib/tree/types";
 import {
   isAtLeastPriority,
@@ -118,6 +119,65 @@ describe("selectGoalsForReview", () => {
   it("widens to every open goal when the minimum is lifted", () => {
     const names = selectGoalsForReview(nodes, { minPriority: null }).map((n) => n.name);
     expect(names).toEqual(["A dream", "A goal", "B goal"]);
+  });
+});
+
+describe("shelved work in the weekly plan", () => {
+  // Achieve's "New" and "Active" are what a row reads as today, not what it stores. Expiry is
+  // derived: a project deferred to yesterday is still stored `postponed` and is back on your
+  // plate; one under a postponed goal is stored `not_started` and is not.
+  const today = "2026-09-12";
+  const nodes = tree([
+    row({ id: "ra", type: "result_area", sortKey: "V" }),
+    row({
+      id: "back",
+      type: "project",
+      parentId: "ra",
+      sortKey: "V",
+      name: "Came back",
+      state: "postponed",
+      deferredDate: fromDateKey("2026-09-11"),
+    }),
+    row({
+      id: "goal",
+      type: "goal",
+      parentId: "ra",
+      sortKey: "W",
+      name: "Someday goal",
+      state: "postponed",
+      priorityLetter: "A",
+      priorityRank: 1,
+    }),
+    row({
+      id: "under",
+      type: "project",
+      parentId: "goal",
+      sortKey: "V",
+      name: "Under a shelf",
+    }),
+    row({
+      id: "returned-goal",
+      type: "goal",
+      parentId: "ra",
+      sortKey: "X",
+      name: "Returned goal",
+      state: "postponed",
+      deferredDate: fromDateKey("2026-09-01"),
+      priorityLetter: "A",
+      priorityRank: 2,
+    }),
+  ]);
+
+  it("offers a project whose shelf has expired, and not one shelved by its goal", () => {
+    expect(selectProjectsForCommitment(nodes, { today }).map((n) => n.name)).toEqual([
+      "Came back",
+    ]);
+  });
+
+  it("reviews a goal whose shelf has expired, and not one still shelved", () => {
+    expect(selectGoalsForReview(nodes, { today }).map((n) => n.name)).toEqual([
+      "Returned goal",
+    ]);
   });
 });
 

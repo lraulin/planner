@@ -1,4 +1,5 @@
 import type { NodeState, PriorityLetter } from "@/db/schema";
+import { effectiveState } from "@/lib/tree/shelving";
 import type { OutlineNode } from "@/lib/tree/types";
 
 /**
@@ -29,8 +30,18 @@ export function isAtLeastPriority(
   return PRIORITY_ORDER.indexOf(letter) <= PRIORITY_ORDER.indexOf(minimum);
 }
 
-function isOpen(node: OutlineNode): boolean {
-  return node.state !== null && REVIEW_STATES.includes(node.state);
+/**
+ * "New" or "Active" **as the row reads today**, not as stored.
+ *
+ * Expiry is derived, so a project deferred to last week is still stored `postponed` while being
+ * back on your plate, and one under a postponed goal is stored `not_started` while shelved.
+ * Reading the stored column left the first out of the week and put the second in — the same
+ * slip the Chooser's date filter once made. `today` is null before hydration, where a dated
+ * shelf still holds, so nothing that might be shelved is offered early.
+ */
+function isOpen(node: OutlineNode, today: string | null): boolean {
+  const state = effectiveState(node.state, node.shelf, today);
+  return state !== null && REVIEW_STATES.includes(state);
 }
 
 /**
@@ -50,12 +61,15 @@ export function selectResultAreasForReview(nodes: OutlineNode[]): OutlineNode[] 
  */
 export function selectGoalsForReview(
   nodes: OutlineNode[],
-  options: { minPriority?: PriorityLetter | null } = {},
+  options: { minPriority?: PriorityLetter | null; today?: string | null } = {},
 ): OutlineNode[] {
   const minimum = options.minPriority === undefined ? "A" : options.minPriority;
+  const today = options.today ?? null;
   const eligible = nodes.filter(
     (n) =>
-      n.type === "goal" && isOpen(n) && isAtLeastPriority(n.priorityLetter, minimum),
+      n.type === "goal" &&
+      isOpen(n, today) &&
+      isAtLeastPriority(n.priorityLetter, minimum),
   );
   return [...eligible.filter((n) => n.isDream), ...eligible.filter((n) => !n.isDream)];
 }
@@ -69,8 +83,13 @@ export function selectGoalsForReview(
  */
 export function selectProjectsForCommitment(
   nodes: OutlineNode[],
-  options: { leafOnly?: boolean; includeCompleted?: boolean } = {},
+  options: {
+    leafOnly?: boolean;
+    includeCompleted?: boolean;
+    today?: string | null;
+  } = {},
 ): OutlineNode[] {
+  const today = options.today ?? null;
   const leafOnly = options.leafOnly ?? true;
   const projectParentIds = new Set(
     nodes.filter((n) => n.type === "project" && n.parentId).map((n) => n.parentId!),
@@ -78,7 +97,7 @@ export function selectProjectsForCommitment(
 
   return nodes.filter((n) => {
     if (n.type !== "project") return false;
-    if (!options.includeCompleted && !isOpen(n)) return false;
+    if (!options.includeCompleted && !isOpen(n, today)) return false;
     if (leafOnly && projectParentIds.has(n.id)) return false;
     return true;
   });

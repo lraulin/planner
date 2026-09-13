@@ -100,13 +100,13 @@ export function ScheduleBlocksStep({
   }
 
   const committedProjects = useMemo(() => {
-    const leaf = selectProjectsForCommitment(ctx.nodes);
+    const leaf = selectProjectsForCommitment(ctx.nodes, { today: ctx.today });
     return leaf.filter((p) => {
       const committed = ctx.entryFor(p.id).committedMinutes;
       return committed != null && committed > 0;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.nodes, ctx.entries]);
+  }, [ctx.nodes, ctx.entries, ctx.today]);
 
   const remainingById = useMemo(() => {
     const map = new Map<string, number | null>();

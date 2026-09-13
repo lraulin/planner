@@ -14,7 +14,10 @@ type Props = {
  * The rewrite is plan-scoped history; it never overwrites the goal itself.
  */
 export function GoalsStep({ ctx }: Props) {
-  const items = useMemo(() => selectGoalsForReview(ctx.nodes), [ctx.nodes]);
+  const items = useMemo(
+    () => selectGoalsForReview(ctx.nodes, { today: ctx.today }),
+    [ctx.nodes, ctx.today],
+  );
   const [index, setIndex] = useState(0);
   const item = items[index] ?? null;
   const entry = item ? ctx.entryFor(item.id) : null;

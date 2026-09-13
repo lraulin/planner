@@ -7,6 +7,7 @@ import type { WeeklyPlanPayload } from "@/lib/planning/queries";
 import type { PlanEntryPatch, WeeklyPlanPatch } from "@/lib/planning/mutations";
 import { fromDateKey, startOfWeek, toDateKey, weekDays } from "@/lib/schedule/geometry";
 import { asyncHandler } from "@/lib/eventHandler";
+import { useToday } from "@/components/grid/useToday";
 import {
   setWeeklyPlanCompletedAction,
   startWeeklyPlanAction,
@@ -72,6 +73,7 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
 
   const weekStart = fromDateKey(weekKey);
   const [error, setError] = useState<string | null>(null);
+  const today = useToday();
 
   const [plan, setPlan] = useState<WeeklyPlan | null>(payload.plan);
   const [entries, setEntries] = useState(() => entriesToMap(payload.entries));
@@ -260,6 +262,7 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
         resultAreaReviews,
         previousRewrites,
         onError: setError,
+        today,
       }
     : null;
 
