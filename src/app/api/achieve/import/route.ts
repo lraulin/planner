@@ -1,7 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
-import { importAchieveXml, type ImportMode } from "@/lib/achieve/import";
+import { importAchieveXml } from "@/lib/achieve/import";
+import { parseImportMode } from "@/lib/achieve/importMode";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -17,8 +18,14 @@ export async function POST(request: Request) {
   try {
     const userId = await getCurrentUserId();
     const form = await request.formData();
-    const modeRaw = String(form.get("mode") ?? "replace");
-    const mode: ImportMode = modeRaw === "merge" ? "merge" : "replace";
+    // Replace deletes the outline first, so it has to be asked for by name.
+    const mode = parseImportMode(form.get("mode"));
+    if (!mode) {
+      return NextResponse.json(
+        { ok: false, error: "Choose whether to merge or replace." },
+        { status: 400 },
+      );
+    }
 
     const file = form.get("file");
     if (!(file instanceof File)) {
