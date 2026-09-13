@@ -112,6 +112,17 @@ describeDb("detail mutations", () => {
     });
   });
 
+  /**
+   * A local `YYYY-MM-DD` this many days from now. Tests that need a date to still be in the
+   * future use this rather than a literal, which would expire and start failing the gate.
+   */
+  function daysAhead(days: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
   /** The core half of a save, for tests that only care about the side table. */
   const core = {
     priorityLetter: null,
@@ -149,11 +160,12 @@ describeDb("detail mutations", () => {
     });
 
     it("shelves a project when a future deferred date is set", async () => {
-      // The case this whole model exists for, and a project rather than a task.
+      // The case this whole model exists for, and a project rather than a task. Relative to
+      // today: a hard-coded date stops being "future" and this starts failing the gate.
       await saveNodeDetail(userId, projectId, {
         ...core,
         name: "Pay Taxes",
-        deferredDate: new Date("2027-02-15T00:00:00Z"),
+        deferredDate: fromDateKey(daysAhead(150)),
       });
 
       expect((await stateOf(projectId))?.state).toBe("postponed");
@@ -166,15 +178,16 @@ describeDb("detail mutations", () => {
       // every save. Compared as instants the two differ, so renaming the task read as "a
       // deferred date was newly set" and shelved it again.
       const id = await task("Renew passport");
+      const day = daysAhead(150);
       await db
         .update(nodes)
-        .set({ deferredDate: new Date("2027-02-15T05:00:00Z") })
+        .set({ deferredDate: new Date(`${day}T05:00:00Z`) })
         .where(eq(nodes.id, id));
 
       await saveNodeDetail(userId, id, {
         ...core,
         name: "Renew the passport",
-        deferredDate: fromDateKey("2027-02-15"),
+        deferredDate: fromDateKey(day),
       });
 
       expect((await stateOf(id))?.state).toBe("not_started");

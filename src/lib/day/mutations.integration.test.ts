@@ -905,15 +905,18 @@ describeDb("shelving and day lines", () => {
   it("keeps a later plan while deferred earlier — the shelf does not swallow it", async () => {
     // The case that forbids "postponed ⇒ no day line". Expiry is derived, so nothing writes
     // on the morning the shelf ends; the later plan's line has to exist the whole time.
-    // Local midnights, matching how `setDayPlan` writes dates. Both dates must be in the
-    // future — a deferred date already past shelves nothing.
+    // Both dates must be in the future — a deferred date already past shelves nothing — so
+    // they are relative to today. This test once named 2026-10-15 and 2026-11-15, and would
+    // have started failing the pre-push gate the day after the first one arrived.
     const nodeId = await makeTask(userId, "Pay the estimated tax");
+    const shelfUntil = dayKey(30);
+    const planned = dayKey(60);
     await saveNodeDetail(userId, nodeId, {
-      deferredDate: new Date("2026-10-15T00:00:00"),
-      targetStartDate: new Date("2026-11-15T00:00:00"),
+      deferredDate: fromDateKey(shelfUntil),
+      targetStartDate: fromDateKey(planned),
     });
 
-    expect(await plannedDayForNode(userId, nodeId)).toBe("2026-11-15");
+    expect(await plannedDayForNode(userId, nodeId)).toBe(planned);
     const [row] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
     expect(row.state).toBe("postponed");
   });
