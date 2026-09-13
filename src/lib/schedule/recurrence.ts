@@ -144,13 +144,18 @@ export function expandRecurrence(
 
   if (freq === "daily") {
     let start = new Date(master.startAt);
-    // Fast-forward to near rangeStart.
-    if (start < rangeStart) {
-      const daysBehind = Math.floor((rangeStart.getTime() - start.getTime()) / MS_DAY);
+    // Fast-forward past the occurrences that have **ended** by rangeStart — not merely
+    // started. One that began last night and is still running overlaps the window, and
+    // skipping it dropped the after-midnight half of an overnight series from the calendar.
+    const endedBy = (s: Date) => s.getTime() + duration <= rangeStart.getTime();
+    if (endedBy(start)) {
+      const daysBehind = Math.floor(
+        (rangeStart.getTime() - duration - start.getTime()) / MS_DAY,
+      );
       const steps = Math.floor(daysBehind / interval);
       start = addDays(start, steps * interval);
       index = steps;
-      while (start < rangeStart && index < maxOccurrences) {
+      while (endedBy(start) && index < maxOccurrences) {
         start = addDays(start, interval);
         index++;
       }
@@ -187,10 +192,13 @@ export function expandRecurrence(
 
     // Walk week by week from series start.
     let weekIndex = 0;
-    // Fast-forward weeks.
-    if (seriesWeekStart < rangeStart) {
+    // Fast-forward to the week holding the earliest occurrence that could still be running
+    // at rangeStart — reach back by the duration, as daily does. Jumping straight to the week
+    // containing rangeStart dropped a Saturday-night occurrence from a Sunday-start week.
+    const reach = rangeStart.getTime() - duration;
+    if (seriesWeekStart.getTime() < reach) {
       const weeksBehind = Math.floor(
-        (rangeStart.getTime() - seriesWeekStart.getTime()) / (7 * MS_DAY),
+        (reach - seriesWeekStart.getTime()) / (7 * MS_DAY),
       );
       weekIndex = Math.floor(weeksBehind / interval) * interval;
 

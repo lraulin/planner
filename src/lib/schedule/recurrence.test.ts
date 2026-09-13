@@ -120,6 +120,42 @@ function window(from: string, to: string): [Date, Date] {
 const keysOf = (occ: { startAt: Date }[]) => occ.map((o) => toDateKey(o.startAt));
 
 describe("expandRecurrence — daily", () => {
+  it("keeps last night's occurrence that is still running when the window opens", () => {
+    // 22:00–06:00 every night. A calendar range opening at midnight must show the 00:00–06:00
+    // tail of the night before.
+    const startAt = new Date(2026, 2, 2, 22, 0);
+    const endAt = new Date(2026, 2, 3, 6, 0);
+    const occ = expandRecurrence(
+      master({ startAt, endAt, recurrenceFrequency: "daily" }),
+      new Date(2026, 2, 5),
+      new Date(2026, 2, 6),
+    );
+    expect(occ.map((o) => o.startAt.getTime())).toEqual([
+      new Date(2026, 2, 4, 22, 0).getTime(),
+      new Date(2026, 2, 5, 22, 0).getTime(),
+    ]);
+  });
+
+  it("counts the running occurrence toward end-after-N like any other", () => {
+    // Occurrences are Mar 2, 3, 4. The Mar 4 one runs into Mar 5, and nothing starts after it.
+    const startAt = new Date(2026, 2, 2, 22, 0);
+    const endAt = new Date(2026, 2, 3, 6, 0);
+    const occ = expandRecurrence(
+      master({
+        startAt,
+        endAt,
+        recurrenceFrequency: "daily",
+        recurrenceEnd: "count",
+        recurrenceCount: 3,
+      }),
+      new Date(2026, 2, 5),
+      new Date(2026, 2, 6),
+    );
+    expect(occ.map((o) => o.startAt.getTime())).toEqual([
+      new Date(2026, 2, 4, 22, 0).getTime(),
+    ]);
+  });
+
   it("steps by the interval rather than every day", () => {
     const occ = expandRecurrence(
       master({
@@ -287,6 +323,46 @@ describe("expandRecurrence — weekly", () => {
       ...window("2026-03-01", "2026-03-29"),
     );
     expect(occ).toEqual([]);
+  });
+});
+
+describe("expandRecurrence — occurrences running into the window", () => {
+  it("keeps a weekly Saturday-night occurrence in a week view that starts on Sunday", () => {
+    const startAt = new Date(2026, 1, 7, 22, 0); // Sat Feb 7
+    const endAt = new Date(2026, 1, 8, 6, 0);
+    const occ = expandRecurrence(
+      master({
+        startAt,
+        endAt,
+        recurrenceFrequency: "weekly",
+        recurrenceByWeekday: [6],
+      }),
+      new Date(2026, 2, 1), // Sun Mar 1
+      new Date(2026, 2, 8),
+    );
+    expect(occ.map((o) => o.startAt.getTime())).toEqual([
+      new Date(2026, 1, 28, 22, 0).getTime(),
+      new Date(2026, 2, 7, 22, 0).getTime(),
+    ]);
+  });
+
+  it("does not resurrect a counted weekly series by reaching back", () => {
+    // Two Saturdays, Feb 7 and 14. Reaching back one duration from Mar 1 must not revive it.
+    const occ = expandRecurrence(
+      master({
+        startAt: new Date(2026, 1, 7, 22, 0),
+        endAt: new Date(2026, 1, 8, 6, 0),
+        recurrenceFrequency: "weekly",
+        recurrenceByWeekday: [6],
+        recurrenceEnd: "count",
+        recurrenceCount: 2,
+      }),
+      new Date(2026, 1, 15),
+      new Date(2026, 2, 8),
+    );
+    expect(occ.map((o) => o.startAt.getTime())).toEqual([
+      new Date(2026, 1, 14, 22, 0).getTime(),
+    ]);
   });
 });
 
