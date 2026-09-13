@@ -304,14 +304,35 @@ describe("expandRecurrence — monthly and yearly", () => {
       master({ ...at9("2026-01-31"), recurrenceFrequency: "monthly" }),
       ...window("2026-01-01", "2026-05-01"),
     );
-    // February has no 31st. What matters is that every emitted date is real and
-    // ordered; the exact clamp policy is pinned here so a change is deliberate.
+    // February has no 31st, so it clamps to the 28th — for February only. Stepping each
+    // occurrence from the one before compounded the clamp into Mar 28, Apr 28 and every
+    // month after, which task recurrence and bills both refuse to do.
     expect(keysOf(occ)).toEqual([
       "2026-01-31",
       "2026-02-28",
-      "2026-03-28",
-      "2026-04-28",
+      "2026-03-31",
+      "2026-04-30",
     ]);
+  });
+
+  it("returns a 31st series to the 31st long after February", () => {
+    const occ = expandRecurrence(
+      master({ ...at9("2026-01-31"), recurrenceFrequency: "monthly" }),
+      ...window("2027-07-01", "2027-09-01"),
+    );
+    expect(keysOf(occ)).toEqual(["2027-07-31", "2027-08-31"]);
+  });
+
+  it("clamps from the series start on a multi-month interval", () => {
+    const occ = expandRecurrence(
+      master({
+        ...at9("2025-08-31"),
+        recurrenceFrequency: "monthly",
+        recurrenceInterval: 6,
+      }),
+      ...window("2026-01-01", "2027-01-01"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-02-28", "2026-08-31"]);
   });
 
   it("repeats annually", () => {
@@ -328,6 +349,27 @@ describe("expandRecurrence — monthly and yearly", () => {
       ...window("2025-01-01", "2026-01-01"),
     );
     expect(keysOf(occ)).toEqual(["2025-02-28"]);
+  });
+
+  it("returns a Feb 29 series to the 29th in the next leap year", () => {
+    const occ = expandRecurrence(
+      master({ ...at9("2024-02-29"), recurrenceFrequency: "yearly" }),
+      ...window("2028-01-01", "2029-01-01"),
+    );
+    expect(keysOf(occ)).toEqual(["2028-02-29"]);
+  });
+
+  it("still ends an end-after-N monthly series on its Nth date", () => {
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-01-31"),
+        recurrenceFrequency: "monthly",
+        recurrenceEnd: "count",
+        recurrenceCount: 3,
+      }),
+      ...window("2026-01-01", "2027-01-01"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
   });
 });
 

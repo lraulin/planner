@@ -229,23 +229,26 @@ export function expandRecurrence(
   }
 
   if (freq === "monthly" || freq === "yearly") {
-    let start = new Date(master.startAt);
-    const step = (d: Date) =>
-      freq === "monthly" ? addMonths(d, interval) : addYears(d, interval);
+    // Every occurrence is measured from the series start, never from the occurrence
+    // before it. The month clamp is lossy — Jan 31 + 1 month is Feb 28 — so stepping from
+    // Feb 28 lands on Mar 28, and a series on the 31st stayed on the 28th forever after
+    // its first February. The same holds for a yearly Feb 29 in every later leap year.
+    const nth = (i: number) =>
+      freq === "monthly"
+        ? addMonths(master.startAt, interval * i)
+        : addYears(master.startAt, interval * i);
 
-    // No fast-forward here, unlike daily and weekly: month lengths vary, so the only
-    // way to land on the right dates is to walk every step from the series start. That
-    // caps reach at `maxOccurrences` steps — about 41 years of monthly recurrence.
+    // No fast-forward here, unlike daily and weekly: `index` is also the end-after-N
+    // tally, so the walk starts at the series start. That caps reach at `maxOccurrences`
+    // steps — about 41 years of monthly recurrence.
     while (index < maxOccurrences) {
+      const start = nth(index);
       if (pastSeriesEnd(master, start, index)) break;
       if (start >= rangeEnd) break;
       const end = new Date(start.getTime() + duration);
       if (inWindow(start, end, rangeStart, rangeEnd)) {
-        out.push(occurrenceOf(master, new Date(start)));
+        out.push(occurrenceOf(master, start));
       }
-      const next = step(start);
-      if (next.getTime() === start.getTime()) break;
-      start = next;
       index++;
     }
     return out;
