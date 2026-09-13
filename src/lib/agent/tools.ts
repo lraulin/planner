@@ -900,6 +900,16 @@ const fieldDescriptions: Record<string, string> = {
   movedIn: "First day at the residence, YYYY-MM-DD. Null while unknown.",
   movedOut: "Last day at the residence, YYYY-MM-DD. Null means you still live there.",
   eventDate: "The calendar day this life fact happened, YYYY-MM-DD.",
+  deadline:
+    "Calendar day the work is due, YYYY-MM-DD. Send the day itself: a timestamp is read as its UTC day, which is tomorrow for an evening time in the Americas.",
+  targetStartDate:
+    "Calendar day work is planned to start, YYYY-MM-DD. A timestamp is read as its UTC day.",
+  targetEndDate:
+    "Calendar day work is planned to finish, YYYY-MM-DD. A timestamp is read as its UTC day.",
+  deferredDate:
+    "Calendar day the item comes back off the shelf, YYYY-MM-DD. A timestamp is read as its UTC day.",
+  noteDate:
+    "Calendar day the note is about, YYYY-MM-DD. A timestamp is read as its UTC day.",
   housingType: "Open vocabulary such as Rented, Owned, or Dorm — not a closed list.",
   payPeriod: "Open vocabulary such as Hourly, Monthly, or Annual — not a closed list.",
   location: "Employer city and country, formatted as one line.",
