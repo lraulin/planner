@@ -594,7 +594,11 @@ export async function saveNodeDetail(
       for (const key of ["reminderAt", "constraintDate", "recurrenceUntil"] as const) {
         if (key in set && set[key] != null) {
           const parsed = asDate(set[key]);
-          if (parsed) (set as Record<string, unknown>)[key] = parsed;
+          if (!parsed) continue;
+          // The reminder is a moment. The other two are DateFields — calendar days — and get
+          // the UTC-noon encoding every plan date on this save gets.
+          (set as Record<string, unknown>)[key] =
+            key === "reminderAt" ? parsed : asCalendarDay(parsed);
         }
       }
       // Record dates: local midnight, never in the future.

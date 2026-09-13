@@ -10,7 +10,7 @@ import type {
 import { recurrenceAnchor } from "@/lib/recurrence/anchor";
 import { describeRule, nextOccurrence } from "@/lib/recurrence/pattern";
 import { nextDue } from "@/lib/recurrence/nextDue";
-import { localDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { DateField, FieldGrid, NumberField, Section, SelectField } from "./fields";
 
 /**
@@ -236,7 +236,12 @@ export function RecurrenceFields({
       return;
     }
     if (value === "until" && task.recurrenceUntil == null) {
-      patchTask({ recurrenceEnd: value, recurrenceUntil: next ?? new Date() });
+      // The reader's own day, in the stored encoding. `next` from a calendar pattern is a
+      // local midnight and `new Date()` is an instant — already tomorrow in UTC after ~8pm.
+      patchTask({
+        recurrenceEnd: value,
+        recurrenceUntil: fromDateKey(localDateKey(next ?? new Date())),
+      });
       return;
     }
     patchTask({ recurrenceEnd: value });

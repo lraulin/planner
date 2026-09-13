@@ -180,6 +180,31 @@ describeDb("detail mutations", () => {
       expect((await stateOf(id))?.state).toBe("not_started");
     });
 
+    it("stores a series end and a constraint date as calendar days, like the plan dates", async () => {
+      // Both are DateFields, so both are calendar days — but the save only coerced them to a
+      // Date, keeping whatever encoding arrived. A local-midnight value (what the recurrence
+      // preview seeds "until" with) stayed a local midnight while every other plan date on
+      // the same save was re-encoded as UTC noon.
+      const id = await task("Water the ferns");
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Water the ferns",
+        task: {
+          recurrenceFrequency: "weekly",
+          recurrenceEnd: "until",
+          recurrenceUntil: new Date("2026-10-01T04:00:00Z"),
+          constraintDate: new Date("2026-10-05T04:00:00Z"),
+        },
+      });
+
+      const [row] = await db
+        .select()
+        .from(taskDetails)
+        .where(eq(taskDetails.nodeId, id));
+      expect(row.recurrenceUntil?.toISOString()).toBe("2026-10-01T12:00:00.000Z");
+      expect(row.constraintDate?.toISOString()).toBe("2026-10-05T12:00:00.000Z");
+    });
+
     it("clears a stale deferred date when postponed by hand", async () => {
       // Otherwise it would un-shelve the instant it was shelved, since expiry is derived.
       const id = await task("Someday");
