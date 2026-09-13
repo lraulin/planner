@@ -108,7 +108,9 @@ export function formatPlateLoad(load: PlateLoad | null): string | null {
   if (!load) return null;
 
   if (load.perSide.length === 0) {
-    if (load.total <= load.bar && load.remainder === 0) {
+    // Only the bar itself is "bar only". A lighter weight cannot go on this bar at all, and
+    // naming the bar's mass beside it would contradict the set.
+    if (load.total === load.bar) {
       return `bar only (${load.bar} ${load.unit})`;
     }
     return null;

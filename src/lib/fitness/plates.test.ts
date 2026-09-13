@@ -30,6 +30,12 @@ describe("calculatePlates (American lb)", () => {
     expect(formatPlateLoad(load)).toBe("bar only (45 lb)");
   });
 
+  it("offers no hint for a weight lighter than the bar", () => {
+    // 30 lb cannot be loaded on a 45 lb bar; "bar only (45 lb)" would contradict the set.
+    expect(plateHint(30, "lb")).toBeNull();
+    expect(plateHint(15, "kg")).toBeNull();
+  });
+
   it("returns null for non-positive totals", () => {
     expect(calculatePlates(0, "lb")).toBeNull();
     expect(calculatePlates(-10, "lb")).toBeNull();
