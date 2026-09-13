@@ -18,7 +18,7 @@ import {
 } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
-import { effectiveShelfOf, setDayPlan } from "./sync";
+import { assertPlannableOn, effectiveShelfOf, setDayPlan } from "./sync";
 import { shelfHolds } from "@/lib/tree/shelving";
 import { JOURNAL_SUBJECT } from "./types";
 import type { DayAssignment } from "./priority";
@@ -248,6 +248,16 @@ async function moveItemToDay(
   const item = await requireItem(tx, userId, itemId);
   if (item.day === day) return;
 
+  // Dragging an unfinished task to another day is re-planning it, so both ends of its
+  // target range move with it — otherwise the drawer would go on claiming the old day. A
+  // completed or forwarded row is history and does not re-plan anything.
+  const replannedNodeId =
+    item.nodeId && item.completedAt === null && item.forwardedTo === null
+      ? item.nodeId
+      : null;
+  // Checked before anything moves, with the same refusal dropping it on that day gives.
+  if (replannedNodeId) await assertPlannableOn(tx, userId, replannedNodeId, day);
+
   await tx
     .update(dailyItems)
     .set({
@@ -259,15 +269,12 @@ async function moveItemToDay(
     })
     .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
 
-  // Dragging an unfinished task to another day is re-planning it, so both ends of its
-  // target range move with it — otherwise the drawer would go on claiming the old day. A
-  // completed or forwarded row is history and does not re-plan anything.
-  if (item.nodeId && item.completedAt === null && item.forwardedTo === null) {
+  if (replannedNodeId) {
     const date = fromDateKey(day);
     await tx
       .update(nodes)
       .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
-      .where(and(eq(nodes.id, item.nodeId), eq(nodes.userId, userId)));
+      .where(and(eq(nodes.id, replannedNodeId), eq(nodes.userId, userId)));
   }
 }
 

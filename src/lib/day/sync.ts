@@ -323,6 +323,36 @@ export async function syncDayLinesInSubtree(
  * date into the form is a finer act than dropping a card on a day, and overwriting a target
  * end you had set on purpose would be presumptuous.
  */
+/**
+ * Refuse to plan a task on a day before its deferred date.
+ *
+ * `nodes_start_not_before_deferred` would reject the write, and a raw constraint error is not
+ * something to show a person who just dragged a card. Refusing is the right answer rather than
+ * clearing the shelf for them: dropping a task on a day says when you mean to do it, not that
+ * you have changed your mind about hiding it until February.
+ *
+ * Shared by every write that plans a task onto a day — dropping it there (`setDayPlan`) and
+ * dragging its line to another one (`moveDailyItemToDay`) — so both refuse the same way.
+ */
+export async function assertPlannableOn(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  day: string,
+): Promise<void> {
+  const [row] = await tx
+    .select({ deferredDate: nodes.deferredDate, name: nodes.name })
+    .from(nodes)
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .limit(1);
+
+  if (row?.deferredDate && toDateKey(row.deferredDate) > day) {
+    throw new Error(
+      `"${row.name}" is deferred until ${toDateKey(row.deferredDate)}, so it cannot be planned for ${day}.`,
+    );
+  }
+}
+
 export async function setDayPlan(
   tx: Executor,
   userId: string,
@@ -331,23 +361,7 @@ export async function setDayPlan(
 ): Promise<void> {
   const date = day ? fromDateKey(day) : null;
 
-  if (day) {
-    // `nodes_start_not_before_deferred` would reject this write, and a raw constraint error
-    // is not something to show a person who just dragged a card. Refusing is the right
-    // answer rather than clearing the shelf for them: dropping a task on a day says when you
-    // mean to do it, not that you have changed your mind about hiding it until February.
-    const [row] = await tx
-      .select({ deferredDate: nodes.deferredDate, name: nodes.name })
-      .from(nodes)
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
-      .limit(1);
-
-    if (row?.deferredDate && toDateKey(row.deferredDate) > day) {
-      throw new Error(
-        `"${row.name}" is deferred until ${toDateKey(row.deferredDate)}, so it cannot be planned for ${day}.`,
-      );
-    }
-  }
+  if (day) await assertPlannableOn(tx, userId, nodeId, day);
 
   await tx
     .update(nodes)

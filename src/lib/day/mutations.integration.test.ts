@@ -918,6 +918,30 @@ describeDb("shelving and day lines", () => {
     expect(row.state).toBe("postponed");
   });
 
+  it("refuses to drag a shelved task's line to a day before its shelf ends", async () => {
+    // The same refusal planning it there gives, not a raw `nodes_start_not_before_deferred`
+    // error: moving a line re-plans the task, so it goes through the same guard.
+    const nodeId = await makeTask(userId, "Renew the passport");
+    const shelfUntil = dayKey(10);
+    const planned = dayKey(20);
+    await saveNodeDetail(userId, nodeId, {
+      deferredDate: fromDateKey(shelfUntil),
+      targetStartDate: fromDateKey(planned),
+    });
+    const [line] = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+    expect(line.day).toBe(planned);
+
+    await expect(moveDailyItemToDay(userId, line.id, dayKey(2))).rejects.toThrow(
+      /is deferred until/,
+    );
+
+    // Nothing moved: the line and the plan both stay where they were.
+    expect(await plannedDayForNode(userId, nodeId)).toBe(planned);
+  });
+
   it("suppresses every open day line under an indefinite shelf", async () => {
     const nodeId = await makeTask(userId, "Someday maybe");
     await planNodeForDay(userId, nodeId, MON);
