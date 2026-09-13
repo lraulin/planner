@@ -1,5 +1,6 @@
 import type { NodeState, NodeType } from "@/db/schema";
 import { effectiveState, type Shelf } from "@/lib/tree/shelving";
+import { compare } from "@/lib/tree/sortKey";
 
 export type OrganizerQueueNode = {
   id: string;
@@ -28,5 +29,5 @@ export function organizerQueue<T extends OrganizerQueueNode>(
         node.state !== "completed" &&
         node.state !== "cancelled",
     )
-    .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    .sort((a, b) => compare(a.sortKey, b.sortKey));
 }

@@ -215,6 +215,23 @@ describe("buildAchieveXml", () => {
     expect(xml).toContain("A &amp; B &lt;C&gt;");
   });
 
+  it("numbers siblings in the outline's byte order, not locale order", () => {
+    // `between` generates both cases: "V" sorts before "l" by code unit, and after it under
+    // locale collation, which would swap these two on export.
+    const { xml } = buildAchieveXml([
+      row({ id: "p1", type: "project", name: "Parent", sortKey: "V" }),
+      row({ id: "t1", parentId: "p1", type: "task", name: "Upper", sortKey: "V" }),
+      row({ id: "t2", parentId: "p1", type: "task", name: "Lower", sortKey: "l" }),
+    ]);
+
+    const ordinalOf = (name: string) =>
+      new RegExp(
+        `<Name>${name}</Name>[\\s\\S]*?<__ORDINAL__>(\\d+)</__ORDINAL__>`,
+      ).exec(xml)?.[1];
+    expect(ordinalOf("Upper")).toBe("0");
+    expect(ordinalOf("Lower")).toBe("1");
+  });
+
   it("round-trips a tiny tree through export then parse/map", () => {
     const { xml } = buildAchieveXml([
       row({

@@ -32,6 +32,21 @@ describe("organizerQueue", () => {
     ]);
   });
 
+  it("orders by the outline's byte order, where uppercase keys precede lowercase", () => {
+    // "V" < "l" by code unit — the order Postgres and the outline use — but not under
+    // locale collation. Real keys mix both cases once a list passes ten or so items.
+    const rows = [
+      node({ id: "inbox", type: "project", isInbox: true }),
+      node({ id: "lower", parentId: "inbox", sortKey: "l" }),
+      node({ id: "upper", parentId: "inbox", sortKey: "V" }),
+    ];
+
+    expect(organizerQueue(rows, "2026-08-09").map((row) => row.id)).toEqual([
+      "upper",
+      "lower",
+    ]);
+  });
+
   it("hides settled and active-shelf roots but restores an expired shelf", () => {
     const rows = [
       node({ id: "inbox", type: "project", isInbox: true }),

@@ -1,5 +1,6 @@
 import type { NodeState, NodeType, ProgressReview } from "@/db/schema";
 import { formatExportStamp } from "@/lib/grid/exportCsv";
+import { compare } from "@/lib/tree/sortKey";
 import {
   encodeEffortFromMinutes,
   encodePercentComplete,
@@ -159,7 +160,7 @@ export function buildAchieveXml(
     byExportParent.set(item.exportParentId, list);
   }
   for (const [, list] of byExportParent) {
-    list.sort((a, b) => a.row.sortKey.localeCompare(b.row.sortKey));
+    list.sort((a, b) => compare(a.row.sortKey, b.row.sortKey));
     list.forEach((item, i) => ordinalById.set(item.row.id, i));
   }
 
@@ -395,9 +396,7 @@ export function buildAchieveXml(
   }
 
   // Metrics + tracking (owner is GoalId when linked to an exported goal).
-  const sortedMetrics = [...metricRows].sort((a, b) =>
-    a.sortKey.localeCompare(b.sortKey),
-  );
+  const sortedMetrics = [...metricRows].sort((a, b) => compare(a.sortKey, b.sortKey));
   sortedMetrics.forEach((m, i) => {
     counts.metric++;
     parts.push(
