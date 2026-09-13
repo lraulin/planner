@@ -27,6 +27,7 @@ import {
   skipRecurrence,
 } from "./mutations";
 import { loadOutline } from "./queries";
+import { effectiveState } from "./shelving";
 
 /**
  * Integration tests against the local Postgres (`npm run db:up`). Each test works under its
@@ -1283,6 +1284,40 @@ describeDb("tree mutations", () => {
       expect(localKey(row.deferredDate!)).toBe(daysFromToday(1));
       expect(localKey(row.targetStartDate!)).toBe(daysFromToday(1));
       expect(await completionsOf(userId, task)).toHaveLength(2);
+    });
+
+    it("postpones a due-again routine from the grids, not just from the drawer", async () => {
+      // The row still stores `postponed` with yesterday's deferred date, so it reads as Not
+      // started. Choosing Postponed must shelve it indefinitely — date-model.md: shelving by
+      // hand clears a deferred date that has passed, or it un-shelves the instant it is
+      // shelved. The drawer did this; `setState`, which the grids use, did not.
+      const task = await recurringTask({ frequency: "daily", interval: 1 });
+      await setState(userId, task, "completed");
+      const yesterday = fromDateKey(daysFromToday(-1));
+      await db
+        .update(nodes)
+        .set({ deferredDate: yesterday, targetStartDate: yesterday })
+        .where(eq(nodes.id, task));
+
+      await setState(userId, task, "postponed");
+
+      const row = await nodeRow(task);
+      expect(row.state).toBe("postponed");
+      expect(row.deferredDate).toBeNull();
+      const node = (await loadOutline(userId)).find((n) => n.id === task)!;
+      expect(effectiveState(node.state, node.shelf, daysFromToday(0))).toBe(
+        "postponed",
+      );
+    });
+
+    it("keeps a future deferred date when a shelved row is postponed again", async () => {
+      const task = await recurringTask({ frequency: "weekly", interval: 1 });
+      await setState(userId, task, "completed");
+      const before = await nodeRow(task);
+
+      await setState(userId, task, "postponed");
+
+      expect((await nodeRow(task)).deferredDate).toEqual(before.deferredDate);
     });
 
     it("is not undone by progress values submitted in the same drawer save", async () => {

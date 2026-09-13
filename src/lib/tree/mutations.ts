@@ -12,7 +12,7 @@ import {
 import type { ExternalRef, NodeState, NodeType, PriorityLetter } from "@/db/schema";
 import { and, asc, count, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { addDays, daysBetween } from "@/lib/dateMath";
-import { nextDue } from "@/lib/recurrence/nextDue";
+import { isDeferred, nextDue } from "@/lib/recurrence/nextDue";
 import { recurrenceAnchor } from "@/lib/recurrence/anchor";
 import { nextOccurrence } from "@/lib/recurrence/pattern";
 import {
@@ -860,7 +860,7 @@ export async function applyStateTransition(
   at: Date = new Date(),
 ): Promise<void> {
   const [node] = await tx
-    .select({ type: nodes.type })
+    .select({ type: nodes.type, deferredDate: nodes.deferredDate })
     .from(nodes)
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
     .limit(1);
@@ -884,9 +884,22 @@ export async function applyStateTransition(
   }
 
   if (state !== "completed") {
+    // Shelving by hand onto a deferred date that has already gone by would un-shelve the row
+    // the instant it was shelved, since expiry is derived — and a routine that came back is
+    // still *stored* postponed, so the write changed nothing at all. Choosing Postponed means
+    // an indefinite shelf, so the stale date goes (`date-model.md`). A future date stays: it
+    // is the shelf's expiry. The drawer applies the same rule in `saveNodeDetail`, which writes
+    // the state itself rather than coming through here.
+    const staleShelf =
+      state === "postponed" && !isDeferred(node.deferredDate, localDateKey(now));
     await tx
       .update(nodes)
-      .set({ state, completedAt: null, updatedAt: now })
+      .set({
+        state,
+        completedAt: null,
+        ...(staleShelf && node.deferredDate ? { deferredDate: null } : {}),
+        updatedAt: now,
+      })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
     await reopenDayLine(tx, userId, nodeId, now);
     // Shelving clears descendant plans that fall inside the shelf and drops their day lines.
