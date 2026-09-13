@@ -182,6 +182,9 @@ export function googleEventToFields(
 
 /** RRULE `UNTIL` is UTC basic format: `20260731T235959Z`. */
 function formatUntil(until: Date, allDay: boolean): string {
+  // `recurrenceUntil` is a calendar day (UTC noon), so an all-day UNTIL is that day's key.
+  // Going through local end-of-day first put it on the next day anywhere west of UTC.
+  if (allDay) return toDateKey(until).replace(/-/g, "");
   // Our expander treats `recurrenceUntil` as inclusive of its calendar day, so anchor to
   // the end of that local day before converting. Truncating to the raw timestamp would
   // silently drop the final occurrence of a series that ends "on" a date.
@@ -191,7 +194,7 @@ function formatUntil(until: Date, allDay: boolean): string {
     .toISOString()
     .replace(/[-:]/g, "")
     .replace(/\.\d{3}/, "");
-  return allDay ? `${iso.slice(0, 8)}` : iso;
+  return iso;
 }
 
 const FREQ_BY_FREQUENCY: Record<Exclude<RecurrenceFrequency, "none">, string> = {

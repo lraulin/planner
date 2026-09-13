@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import {
   appointmentToGoogleEvent,
   buildRecurrenceRule,
@@ -268,6 +268,19 @@ describe("buildRecurrenceRule", () => {
       }),
     );
     expect(rule?.[0]).toMatch(/UNTIL=\d{8}$/);
+  });
+
+  it("names the until day itself in an all-day UNTIL, whatever the process zone", () => {
+    // Stored as the day's UTC noon. Pushing it to local 23:59:59 first put it on Aug 1 in
+    // New York, and Google would have added an occurrence on a day the series had ended.
+    const rule = buildRecurrenceRule(
+      recurrence({
+        allDay: true,
+        recurrenceEnd: "until",
+        recurrenceUntil: fromDateKey("2026-07-31"),
+      }),
+    );
+    expect(rule?.[0]).toBe("RRULE:FREQ=WEEKLY;UNTIL=20260731");
   });
 
   it("prefers COUNT over UNTIL when the end mode says count", () => {

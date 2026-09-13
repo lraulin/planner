@@ -26,7 +26,7 @@ import {
 } from "@/app/schedule/actions";
 import { GOOGLE_EVENT_COLORS } from "@/lib/google/eventColors";
 import { googleCalendarEventUrl } from "@/lib/google/eventUrl";
-import { toDateKey, WEEKDAY_LABELS } from "@/lib/schedule/geometry";
+import { fromDateKey, toDateKey, WEEKDAY_LABELS } from "@/lib/schedule/geometry";
 import { appointmentRecurrenceSummary } from "@/lib/schedule/recurrence";
 import {
   checkStateLabel,
@@ -215,7 +215,10 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
       recurrenceCount: recurrenceEnd === "count" ? recurrenceCount : null,
       recurrenceUntil:
         recurrenceEnd === "until" && recurrenceUntil
-          ? new Date(recurrenceUntil + "T23:59:59").toISOString()
+          ? // A calendar day, stored as its UTC noon and read back with `toDateKey` above.
+            // Local 23:59:59 was already tomorrow in UTC west of Greenwich, so every save
+            // moved the end date one day later.
+            fromDateKey(recurrenceUntil).toISOString()
           : null,
     };
 
