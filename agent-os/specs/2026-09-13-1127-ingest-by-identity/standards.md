@@ -1,6 +1,6 @@
 # Standards for ingest by identity, not by date
 
-**Status: active**
+**Status: frozen / complete** (2026-09-13)
 
 Applied as of standards commit `c06db72a35f9ae6e2e23203fe89596fee3536759`. References, not
 copies — see AGENTS.md.

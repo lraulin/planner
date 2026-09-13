@@ -1,6 +1,6 @@
 # References for ingest by identity, not by date
 
-**Status: active**
+**Status: frozen / complete** (2026-09-13)
 
 ## Governing specs
 

@@ -1,6 +1,6 @@
 # Ingest by identity, not by date — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-13)
 
 ## Scope
 

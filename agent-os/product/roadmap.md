@@ -876,6 +876,18 @@ dollar is in is working against the point.
   overtakes in the same commit, carrying the envelope, notes and splits forward. A bill
   envelope's payee claim files only that bill's own charge, so a $22.84 CVS trip stops
   spending a $5.00 membership envelope. The register gained a **Source** column.
+  **D1–D3 (watermark decides which rows exist) superseded 2026-09-13** by ingest-by-identity
+  below; D4 (user state crosses the handover) and D5–D8 stand.
+  ✅ Ingest by identity shipped 2026-09-13 —
+  `agent-os/specs/2026-09-13-1127-ingest-by-identity/`. A posted row leaves the register only
+  when a history-feed row pairs with it (exact amount, per-row date tolerance, description
+  overlap, global nearest-first) — never because a feed's dates now cover it. The same pairing
+  decides snapshot insertion, so a late SimpleFIN charge is filled by the bank page and retired
+  when the feed catches up. Pending holds survive syncs until the page omits them or a posted
+  twin pairs. The sync window anchors on the stalest linked account `balance-date`, and a
+  same-day file/feed tie is broken by which source holds posted rows that day. Production:
+  the Sep 10 watermark deletion would now keep Sep 1–7; Vetsource, Domino's and Starbucks
+  holds returned and survived the next sync; ChatGPT no longer takes Claude's envelope.
   ✅ Source currency shipped 2026-09-01 —
   `agent-os/specs/2026-09-01-1205-source-as-of-authority/`. Which figure an account shows
   is now a function of **when each source's data was true**, not of how long ago it was

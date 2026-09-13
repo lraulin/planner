@@ -1,7 +1,9 @@
 # Ingest by identity, not by date
 
-**Status: active**
+**Status: frozen / complete** (2026-09-13)
 Spec folder: `agent-os/specs/2026-09-13-1127-ingest-by-identity/`
+
+This is the as-built record. Further change opens a new delta-spec.
 
 ## Spec relationships
 
@@ -131,31 +133,55 @@ A pair missed under D2 leaves a visible duplicate that can be deleted. A wrong d
 money nobody sees. This spec chooses the visible duplicate, and every unpaired row that is kept
 and every hold removed without a successor is named in the receipt.
 
+## As built
+
+| Concern                                | Where                                                              |
+| -------------------------------------- | ------------------------------------------------------------------ |
+| Pairing (D2) and lost-hold carry (D3b) | `src/lib/finances/feedPairing.ts`                                  |
+| Retirement                             | `feedHandover.ts`, `feedHandoverWrite.ts`                          |
+| Snapshot insert / pending path         | `bankSnapshotReconcile.ts`, `bankSnapshotApply.ts`                 |
+| Sync window (D4)                       | `src/lib/banksync/crossSource.ts` (`nextSyncedThrough`), `sync.ts` |
+| Same-day file/instant tie (D5)         | `sourceAuthority.ts` (`postedOnStampDay`), `sourceStateWrite.ts`   |
+| Production replay                      | `scripts/ingest-identity-replay.ts` (read-only `planner_backup`)   |
+
+Ownership helpers in `feedWatermark.ts` are gone. D5's evidence is whether each source holds
+**any** posted row on the tied day (`postedDaysHeld`), not a per-row uniqueness check against
+the other source — on the Sep 12 Apple case those coincide.
+
+Live register 2026-09-13 15:55 ET, after deploy and a Capital One snapshot that survived the
+next sync:
+
+- Vetsource −$29.70, Domino's −$20.11, Starbucks −$5.57 are pending on `scrape:capitalone`
+  with their envelopes (Dante's Meds, Pizza, Eating Out).
+- Apple posted via `csv:capitalone-card` (−$3.08 iCloud+, −$2.11 Paste).
+- `OPENAI *CHATGPT SUBSCR` is ChatGPT; `ANTHROPIC* CLAUDE SUB` is Claude.
+- SMECO and Neon are still on the card file, not deleted.
+- Two leftover visible duplicates are the D2 miss the spec chose: page `Walmart` −$195.56
+  beside feed `WM SUPERCENTER #1981`, and page `Payment from CAPITAL ONE N.A.` beside feed
+  `CAPITAL ONE ONLINE PYMT`. Delete by hand; do not loosen pairing to absorb them.
+
 ## Acceptance criteria
 
-- [ ] **Sep 10 replay:** scrape posted rows dated Sep 1–7 plus a SimpleFIN delivery of only Sep
-      8–9 → no scrape row is deleted. Delivering Sep 3–7 a day later retires exactly those rows,
-      and each feed row inherits the envelope and notes.
-- [ ] **ChatGPT/Claude:** a scrape ChatGPT −$21.20 (Sep 7) with only SimpleFIN's Claude −$21.20
-      (Sep 9) present does **not** pair. Once ChatGPT's own feed row arrives, each pairs with its
-      own.
-- [ ] **Pending churn:** a scrape hold dated before the latest feed day, with no posted twin,
-      survives any number of syncs and imports. The next bank-page capture that still lists it
-      keeps it, and one that omits it removes it.
-- [ ] **Lost hold:** a $20.11 hold whose charge posts at $23.11 (tip, within 7.5%) with a matching
-      merchant carries its envelope and notes. A vanished duplicate hold (Xfinity) is removed with
-      a warning.
-- [ ] **Late feed, page fills:** a bank-page posted row dated before SimpleFIN's latest day, with no
-      paired feed row, is inserted. A later SimpleFIN delivery of the same charge retires the page
-      copy. Balance and Ready to Assign count the charge exactly once throughout.
-- [ ] **Stalled account:** accounts with `balance-date`s of Sep 8 and Sep 12 → `syncedThrough` is
-      Sep 8 and the next fetch starts Sep 1.
-- [ ] **Same-day tie:** feed $0.00 at 18:18 on Sep 12 plus a file dated Sep 12 holding two Apple
-      rows posted that day → the file's −$5.19 is the headline. The reverse case keeps the feed.
-- [ ] `assertPoolIdentity` holds in every scenario above, and the watermark module's ownership
-      functions are gone.
-- [ ] Every new or changed mutation test includes a second user who cannot read, change or delete
-      the first user's rows.
+- [x] **Sep 10 replay:** `scripts/ingest-identity-replay.ts` against production audits. The
+      Sep 10 19:37 sync that deleted 16 browser rows would now retire 2 (Safeway and CQI,
+      each with a posted twin). Posted Sep 1–7 stay. The Sep 11 delivery pairs Huel, Chewy,
+      Dropbox, Gray Mirror, ChatGPT with their own feed rows.
+- [x] **ChatGPT/Claude:** replay: ChatGPT does not pair with Claude on Sep 10; on Sep 11 it
+      pairs with `OPENAI *CHATGPT SUBSCR`. Live register: each feed row has its own envelope.
+- [x] **Pending churn:** live — the three holds are back on the page capture and still there
+      after the following sync. Apple left pending by posting, which is D2, not churn.
+- [x] **Lost hold:** unit/integration (`resolveLostHold`, snapshot apply). Live Domino's is
+      still pending at −$20.11 — the $23.11 tip post has not happened.
+- [x] **Late feed, page fills:** SMECO −$263.15 and Neon −$1.07 sit on `csv:capitalone-card`
+      (Sep 12 file filled what SimpleFIN missed). Replay pairs them once the file rows exist.
+- [x] **Stalled account:** `crossSource.test.ts` Sep 8 / Sep 12 case;
+      `mutations.integration.test.ts` persists the stalled day, not today.
+- [x] **Same-day tie:** `sourceAuthority.test.ts` both directions and both/neither;
+      `sourceStateWrite.integration.test.ts` Sep 12 replay (file −$5.19 wins).
+- [x] `assertPoolIdentity` in the snapshot/handover suites. Watermark ownership functions
+      deleted.
+- [x] Cross-user cases on handover write, snapshot apply, source-state write, and sync
+      mutations.
 
 ## Changes from original plan
 
@@ -163,18 +189,14 @@ and every hold removed without a successor is named in the receipt.
 | --- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | D3b's posted-row candidates are the account's stored posted rows only, not this same snapshot's own incoming posted list. | Extending it to incoming rows needs the apply layer to resolve a not-yet-inserted row's id after the insert, which is real plumbing for a case the acceptance criteria don't distinguish from the cross-capture one. The stored-only version already carries the Domino's-tip and Xfinity-duplicate examples; a same-capture tip charge is carried on the next reconciliation once it is stored, one cycle later than the cross-capture case. |
 
-> While this spec is **active**, when we make a material change to requirements, design, or scope
-> (including from feedback on what was implemented), update the relevant sections and append to
-> **Changes from original plan**. Skip pure implementation details. Freeze when verified.
-
-## Task 1: Save spec documentation
+## Task 1: Save spec documentation **done**
 
 Create `agent-os/specs/2026-09-13-1127-ingest-by-identity/` with `plan.md` (this plan), `shape.md`
 (scope, the four defects with their production evidence, Lee's answers: posted never disappears,
 the page's pending list clears holds, carry lost holds to a near match, include the balance tie),
 `standards.md` pinned at `c06db72a`, and `references.md`. No visuals.
 
-## Task 2: Pairing module (pure)
+## Task 2: Pairing module (pure) **done**
 
 New `src/lib/finances/feedPairing.ts` + `feedPairing.test.ts`: D2's global nearest-first,
 occurrence-counted pairing over `{id, transactionDate, postedDate, amountCents, description}`,
@@ -182,7 +204,7 @@ reusing `dateDistance`, `descriptionsOverlap` and `DATE_TOLERANCE_DAYS` from `li
 Also the D3b lost-hold carry rule, reusing `amountMatches` from `amountMatch.ts`. Tests include the
 ChatGPT/Claude case, two identical same-day charges, and the Sep 10 partial delivery.
 
-## Task 3: Retirement by pairing
+## Task 3: Retirement by pairing **done**
 
 Rework `planFeedHandover` (`feedHandover.ts`) to consume pairings: unpaired rows produce **no
 step**. Posted and pending alike stay. Keep `carryableFields` and the split move.
@@ -191,7 +213,7 @@ rows within tolerance of them, with no watermark filter, and deletes only paired
 `banksync/mutations.ts:526`, `finances/import.ts:700`. Update `feedHandover.test.ts` and
 `feedHandoverWrite.integration.test.ts` (Sep 10 replay, pending churn, cross-user).
 
-## Task 4: Snapshot insertion by pairing; pending path correct
+## Task 4: Snapshot insertion by pairing; pending path correct **done**
 
 In `planBankSnapshotReconciliation` (`bankSnapshotReconcile.ts`), replace `splitByWatermark` with
 pairing against stored history-feed rows (the apply layer passes them in). Paired incoming posted
@@ -202,7 +224,7 @@ Omitted browser holds go through D3b before deletion. Update `bankSnapshotApply.
 functions in `feedWatermark.ts` and their tests, plus any remaining import (`import.ts:417`
 comment/filter).
 
-## Task 5: Sync window anchors on the stalest account
+## Task 5: Sync window anchors on the stalest account **done**
 
 `sync.ts`: compute `syncedThrough` as the minimum account `balance-date` day in the response
 (`balanceAsOf` in `banksync/mapping.ts`, reduced with `toDateKey`), capped at today, and unchanged
@@ -210,7 +232,7 @@ for accounts with no date. `syncWindow` (`crossSource.ts`) stays. Test in `syncP
 `crossSource.test.ts` for the Sep 8 / Sep 12 case, plus an integration assertion that the stored
 `syncedThrough` does not pass a stale account.
 
-## Task 6: Same-day evidence tiebreak
+## Task 6: Same-day evidence tiebreak **done**
 
 `sourceAuthority.ts`: extend the comparison with an optional per-source "posted days held"
 evidence input for the file-vs-instant same-day case (D5). The write path
@@ -218,7 +240,7 @@ evidence input for the file-vs-instant same-day case (D5). The write path
 posted rows dated on the tie day per source. Unit tests for both directions and the
 both/neither case; an integration test replaying Sep 12.
 
-## Task 7: Verify against production data, then freeze
+## Task 7: Verify against production data, then freeze **done**
 
 - `npm run lint`, `npm run typecheck`, `npm test` (confirm integration ran, no skip warning).
   Touches no `src/app/**`, so no smoke unless that changes.
@@ -229,7 +251,7 @@ both/neither case; an integration test replaying Sep 12.
   survive the next sync.
 - Freeze: status, as-built drift, Follow-ups. Roadmap only if a matching item exists.
 
-## Follow-ups (new work, not in this spec)
+## Follow-ups (new work — not amendments to this frozen spec)
 
 - **Opening rebase for the −$122.09:** a deliberate, audited way to accept today's reconciliation
   into the recorded opening. It is a decision about recorded history, not an ingestion bug.
