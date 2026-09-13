@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { nodes, taskCompletions, taskDetails, users } from "@/db/schema";
 import type { RecurrenceFrequency } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { fromDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
@@ -1357,6 +1357,35 @@ describeDb("tree mutations", () => {
         return new Date(`${iso}T00:00:00`);
       }
 
+      /** The first Monday at least `days` from today, as a local `YYYY-MM-DD`. */
+      function mondayAtLeastDaysAhead(days: number): string {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        d.setDate(d.getDate() + ((8 - d.getDay()) % 7));
+        return localKey(d);
+      }
+
+      /** `{ year, month }` (1–12) that many months after this one. */
+      function monthsAhead(months: number): { year: number; month: number } {
+        const d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() + months);
+        return { year: d.getFullYear(), month: d.getMonth() + 1 };
+      }
+
+      /** Walk back from the month's last day to its Saturday. */
+      function lastSaturdayOf({
+        year,
+        month,
+      }: {
+        year: number;
+        month: number;
+      }): string {
+        const d = new Date(year, month, 0);
+        while (d.getDay() !== 6) d.setDate(d.getDate() - 1);
+        return localKey(d);
+      }
+
       /**
        * `set` is the recurrence rule, which lives on `task_details`. `core` is the dates it
        * is anchored on, which live on `nodes` — deadline, target start and the shelf.
@@ -1382,11 +1411,12 @@ describeDb("tree mutations", () => {
         // Start Mon, deadline Fri, no target end. A week on, the four-day window survives
         // and the empty field is still empty.
         //
-        // Anchored in September so the +7 shelf lands after wall-clock "today" in the
-        // test suite: when this fixture lived in early August, completing on 10 Aug made
-        // the shifted deferred equal today, and moveDates re-anchored start+defer onto
-        // the next Friday — failing the equal-shift assertion for a calendar reason,
-        // not a recurrence one.
+        // The +7 shelf has to land after wall-clock "today", or moveDates re-anchors the
+        // start and defer onto the next Friday and this fails for a calendar reason, not a
+        // recurrence one. Hard-coding a month ahead only postponed that: the fixture moved
+        // from August to September for exactly this, and its shelf date would have become
+        // "today" on 2026-09-14. So the week is chosen relative to today.
+        const monday = mondayAtLeastDaysAhead(14);
         const task = await ruleTask(
           {
             recurrenceFrequency: "weekly",
@@ -1395,9 +1425,9 @@ describeDb("tree mutations", () => {
             recurrenceByWeekday: [5],
           },
           {
-            deadline: day("2026-09-11"),
-            targetStartDate: day("2026-09-07"),
-            deferredDate: day("2026-09-07"),
+            deadline: day(shiftDateKey(monday, 4)),
+            targetStartDate: day(monday),
+            deferredDate: day(monday),
           },
         );
 
@@ -1405,9 +1435,9 @@ describeDb("tree mutations", () => {
 
         const detail = await nodeRow(task);
         const [node] = await loadOutline(userId);
-        expect(localKey(node.deadline!)).toBe("2026-09-18");
-        expect(localKey(detail.targetStartDate!)).toBe("2026-09-14");
-        expect(localKey(detail.deferredDate!)).toBe("2026-09-14");
+        expect(localKey(node.deadline!)).toBe(shiftDateKey(monday, 11));
+        expect(localKey(detail.targetStartDate!)).toBe(shiftDateKey(monday, 7));
+        expect(localKey(detail.deferredDate!)).toBe(shiftDateKey(monday, 7));
         expect(detail.targetEndDate).toBeNull();
       });
 
@@ -1503,7 +1533,13 @@ describeDb("tree mutations", () => {
       });
 
       it("follows a monthly ordinal pattern", async () => {
-        // The last Saturday of the month. August 2026 has five; September has four.
+        // The last Saturday of the month — counted from the end, so a month with five
+        // Saturdays lands on the fifth. The anchor must be a deferred date that still holds:
+        // this once used 2026-08-29, which had already expired, so the step silently ran from
+        // the completion and passed only while 2026-09-26 happened to be the next last
+        // Saturday after today.
+        const month = monthsAhead(3);
+        const next = monthsAhead(4);
         const task = await ruleTask(
           {
             recurrenceFrequency: "monthly",
@@ -1511,12 +1547,14 @@ describeDb("tree mutations", () => {
             recurrenceOrdinal: -1,
             recurrenceWeekday: 6,
           },
-          { deferredDate: day("2026-08-29") },
+          { deferredDate: day(lastSaturdayOf(month)) },
         );
 
         await setState(userId, task, "completed");
 
-        expect(localKey((await nodeRow(task)).deferredDate!)).toBe("2026-09-26");
+        expect(localKey((await nodeRow(task)).deferredDate!)).toBe(
+          lastSaturdayOf(next),
+        );
       });
 
       it("finishes for real on the last occurrence of a counted series", async () => {
