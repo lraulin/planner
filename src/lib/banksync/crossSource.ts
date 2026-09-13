@@ -5,6 +5,8 @@
  */
 
 import { DATE_TOLERANCE_DAYS } from "@/lib/finances/liveFeedMatch";
+import { toDateKey } from "@/lib/schedule/geometry";
+import { balanceAsOf, type SimpleFinAccount } from "./mapping";
 
 export { DATE_TOLERANCE_DAYS };
 
@@ -51,4 +53,34 @@ export function syncWindow(
     compareFrom: shiftDay(fetchFrom, -DATE_TOLERANCE_DAYS),
     compareTo: shiftDay(today, DATE_TOLERANCE_DAYS),
   };
+}
+
+/**
+ * Where the next sync should resume from, anchored on the **stalest** linked account rather
+ * than the day this sync happened to run.
+ *
+ * `syncedThrough` used to mean "the day we last called" and advanced to today on every sync,
+ * even when an account's own data had stalled. On 2026-09-13 Capital One's `balance-date`
+ * stuck at Sep 8 for six days while other accounts kept moving; the old anchor advanced
+ * anyway, so the next fetch started past Sep 8 and two charges the provider was merely late
+ * on (SMECO, Neon, posted Sep 2) never arrived once it caught up.
+ *
+ * The oldest `balance-date` day across the accounts in this response is the day every linked
+ * account is confirmed current through, so that is the new anchor — capped at today in case a
+ * clock disagrees. An account the response says nothing about (no `balance-date` at all)
+ * cannot make the anchor either older or newer, so it is simply excluded; if nothing in the
+ * response has one, the anchor is left exactly where it was.
+ */
+export function nextSyncedThrough(
+  accounts: readonly SimpleFinAccount[],
+  previous: string | null,
+  today: string,
+): string {
+  const dateKeys = accounts.flatMap((account) => {
+    const asOf = balanceAsOf(account);
+    return asOf ? [toDateKey(asOf)] : [];
+  });
+  if (dateKeys.length === 0) return previous ?? today;
+  const oldest = dateKeys.reduce((min, key) => (key < min ? key : min));
+  return oldest > today ? today : oldest;
 }

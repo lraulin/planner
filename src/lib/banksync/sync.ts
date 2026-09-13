@@ -26,7 +26,7 @@ import {
   type BankConnectionForSync,
 } from "./queries";
 import { planSync } from "./syncPlan";
-import { syncWindow } from "./crossSource";
+import { nextSyncedThrough, syncWindow } from "./crossSource";
 import { financeAuditBatchId } from "@/lib/finances/audit/writes";
 
 /** How stale a connection may be before a page load refreshes it on its own. */
@@ -148,7 +148,11 @@ async function syncOne(
       inserts: plan.inserts,
       updates: plan.updates,
       deletes: plan.deletes,
-      syncedThrough: today(),
+      syncedThrough: nextSyncedThrough(
+        set.accounts ?? [],
+        connection.syncedThrough,
+        today(),
+      ),
       unmatchedAccountCount: plan.unlinkedAccountIds.length,
       providerErrors,
       auditBatchId,

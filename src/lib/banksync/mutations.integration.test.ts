@@ -29,8 +29,9 @@ import {
   listLinks,
   loadConnectionsForSync,
 } from "./queries";
-import type { SimpleFinTransaction } from "./mapping";
+import type { SimpleFinAccount, SimpleFinTransaction } from "./mapping";
 import { planSync, type BankInsert } from "./syncPlan";
+import { nextSyncedThrough } from "./crossSource";
 
 /**
  * Integration tests against the local Postgres (`npm run db:up`).
@@ -253,6 +254,32 @@ describeDb("applySync", () => {
     expect(result.auditBatchId).toEqual(expect.any(String));
     expect((await loadConnectionsForSync(userId))[0].syncedThrough).toBe("2026-08-16");
     expect((await listConnections(userId))[0].lastSyncedAt).not.toBeNull();
+  });
+
+  it("stores an anchor that does not pass a stalled account, not today's date", async () => {
+    // D4: a response where one linked account's balance-date is stuck behind another's
+    // must not advance the stored syncedThrough past the stalled one, or the next fetch
+    // starts after data that account has not delivered yet.
+    const userId = await makeUser();
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const accountId = await makeAccount(userId);
+    const accounts: SimpleFinAccount[] = [
+      { id: "stalled", name: "Stalled", balance: "0", "balance-date": 1_788_868_800 }, // 2026-09-08T12:00:00Z
+      { id: "moving", name: "Moving", balance: "0", "balance-date": 1_789_214_400 }, // 2026-09-12T12:00:00Z
+    ];
+
+    await applySync(userId, {
+      connectionId,
+      inserts: [insertRow(accountId, { externalId: "t1" })],
+      updates: [],
+      deletes: [],
+      syncedThrough: nextSyncedThrough(accounts, null, "2026-09-13"),
+      unmatchedAccountCount: 0,
+    });
+
+    expect((await loadConnectionsForSync(userId))[0].syncedThrough).toBe("2026-09-08");
   });
 
   it("is idempotent — re-applying the same insert adds nothing", async () => {
