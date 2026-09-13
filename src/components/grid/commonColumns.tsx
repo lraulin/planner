@@ -57,11 +57,6 @@ import { LetterRankCell } from "@/components/grid/LetterRankCell";
  */
 export type OutlineColumnCtx = {
   today: string | null;
-  /**
-   * @deprecated Prefer `useRowSelected()` — kept optional so older column renders that
-   * still compare against it keep compiling during the selection-context migration.
-   */
-  selectedId?: string | null;
   editingId: string | null;
   onToggleCollapsed: (node: OutlineNode) => void;
   onOpenDetail: (node: OutlineNode) => void;
