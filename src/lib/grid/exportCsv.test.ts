@@ -227,6 +227,24 @@ describe("yamlScalar", () => {
     expect(yamlScalar("a: b")).toBe('"a: b"');
     expect(yamlScalar("say #1")).toBe('"say #1"');
   });
+
+  it("quotes the scalars a YAML reader would turn into null, a date or a number", () => {
+    // Each of these loads as something other than a string in js-yaml's default schema —
+    // a date column exported bare comes back as a Date, and `~` as null.
+    for (const value of [
+      "~",
+      "2026-09-12",
+      ".inf",
+      "-.inf",
+      ".NaN",
+      "0x1F",
+      "0o17",
+      "+12",
+    ]) {
+      expect(yamlScalar(value)).toBe(JSON.stringify(value));
+    }
+    expect(yamlScalar("Sep 12")).toBe("Sep 12");
+  });
 });
 
 describe("tableToYaml", () => {

@@ -271,14 +271,18 @@ export function stampExportBody(
 }
 
 /**
- * Quote when a bare scalar would be a different YAML value (bool, null, number) or
+ * Quote when a bare scalar would be a different YAML value (bool, null, number, date) or
  * would break the document (colon, hash, leading space, newline).
  */
 export function yamlScalar(value: string): string {
   if (value === "") return '""';
   if (
-    /^(?:true|false|null|yes|no|on|off|y|n)$/i.test(value) ||
-    /^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) ||
+    /^(?:true|false|null|yes|no|on|off|y|n|~)$/i.test(value) ||
+    /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) ||
+    /^[-+]?\.(?:inf|nan)$/i.test(value) ||
+    /^0(?:x[\da-f]+|o[0-7]+)$/i.test(value) ||
+    // A bare date key is a timestamp to YAML 1.1 readers, and date columns export as keys.
+    /^\d{4}-\d{1,2}-\d{1,2}$/.test(value) ||
     /[\n\r:#{}[\],&*!|>'"%@`\\]/.test(value) ||
     /^[\s-]/.test(value) ||
     /\s$/.test(value) ||
