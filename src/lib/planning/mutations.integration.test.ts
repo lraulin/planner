@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { createTimeChart } from "@/lib/schedule/mutations";
 import { initialStateForType } from "@/lib/tree/lifecycle";
 import {
   deleteWeeklyPlan,
@@ -294,6 +295,16 @@ describeDb("cross-user isolation", () => {
     planId = (await ensureWeeklyPlan(owner, { weekStart: midWeek() })).id;
     nodeId = await makeNode(owner, "project");
     await upsertPlanEntry(owner, planId, nodeId, { committedMinutes: 120 });
+  });
+
+  it("does not let another user point their plan at the owner's Time Chart", async () => {
+    const theirChart = (await createTimeChart(owner, "Owner's chart")).id;
+    const mine = (await ensureWeeklyPlan(intruder, { weekStart: midWeek() })).id;
+
+    await expect(
+      updateWeeklyPlan(intruder, mine, { timeChartId: theirChart }),
+    ).rejects.toThrow(/not found/i);
+    expect((await getWeeklyPlanById(intruder, mine))?.timeChartId).toBeNull();
   });
 
   it("does not let another user read the plan", async () => {

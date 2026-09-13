@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { appointments, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { createNode } from "@/lib/tree/mutations";
 import {
   createAppointment,
   createTimeChart,
@@ -417,6 +418,65 @@ describeDb("appointments", () => {
     await expect(deleteAppointment(intruderId, appt.id)).rejects.toThrow(/not found/i);
 
     expect((await getAppointment(userId, appt.id))?.subject).toBe("Private");
+  });
+});
+
+describeDb("links into another user's outline", () => {
+  // security.md: prove ownership before writing. A guessed node id must not attach this
+  // user's appointment or Time Chart area to someone else's project or Result Area.
+  let owner: string;
+  let intruder: string;
+  let theirProject: string;
+
+  beforeEach(async () => {
+    owner = await makeUser();
+    intruder = await makeUser();
+    theirProject = await createNode({
+      userId: owner,
+      parentId: null,
+      type: "project",
+      name: "Owner's project",
+    });
+  });
+
+  it("refuses an appointment filed under another user's project", async () => {
+    await expect(
+      createAppointment(intruder, {
+        subject: "Mine",
+        ...hourAt("2026-07-28"),
+        projectId: theirProject,
+      }),
+    ).rejects.toThrow(/not found/i);
+
+    const mine = await makeAppointment(intruder, {
+      subject: "Mine",
+      ...hourAt("2026-07-28"),
+    });
+    await expect(
+      updateAppointment(intruder, mine.id, { projectId: theirProject }),
+    ).rejects.toThrow(/not found/i);
+    expect((await getAppointment(intruder, mine.id))?.projectId).toBeNull();
+  });
+
+  it("refuses a Time Chart area tied to another user's Result Area", async () => {
+    const chartId = (await createTimeChart(intruder, "Mine")).id;
+    const area = {
+      name: "Work",
+      daysOfWeek: [1],
+      startMinute: 540,
+      durationMinutes: 60,
+    };
+
+    await expect(
+      createTimeChartArea(intruder, chartId, { ...area, resultAreaId: theirProject }),
+    ).rejects.toThrow(/not found/i);
+
+    const mine = await createTimeChartArea(intruder, chartId, area);
+    await expect(
+      updateTimeChartArea(intruder, mine.id, { resultAreaId: theirProject }),
+    ).rejects.toThrow(/not found/i);
+    const [stored] = await listTimeChartAreas(intruder, chartId);
+    expect(stored.resultAreaId).toBeNull();
   });
 });
 

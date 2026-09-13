@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { nodes, weeklyPlanEntries, weeklyPlans } from "@/db/schema";
+import { nodes, timeCharts, weeklyPlanEntries, weeklyPlans } from "@/db/schema";
 import { startOfWeek } from "@/lib/schedule/geometry";
 
 /**
@@ -90,7 +90,18 @@ export async function updateWeeklyPlan(
     values.availableMinutes =
       patch.availableMinutes === null ? null : Math.max(0, patch.availableMinutes);
   }
-  if (patch.timeChartId !== undefined) values.timeChartId = patch.timeChartId;
+  if (patch.timeChartId !== undefined) {
+    // Prove the chart is this user's before pointing the plan at it (`security.md`).
+    if (patch.timeChartId !== null) {
+      const [chart] = await db
+        .select({ id: timeCharts.id })
+        .from(timeCharts)
+        .where(and(eq(timeCharts.id, patch.timeChartId), eq(timeCharts.userId, userId)))
+        .limit(1);
+      if (!chart) throw new Error("Time Chart not found.");
+    }
+    values.timeChartId = patch.timeChartId;
+  }
   if (patch.blockSizeMinutes !== undefined) {
     values.blockSizeMinutes = Math.max(5, patch.blockSizeMinutes);
   }

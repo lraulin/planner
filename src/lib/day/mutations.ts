@@ -18,6 +18,7 @@ import {
 } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
+import { assertNodeOwned } from "@/lib/tree/ownership";
 import { assertPlannableOn, effectiveShelfOf, setDayPlan } from "./sync";
 import { shelfHolds } from "@/lib/tree/shelving";
 import { JOURNAL_SUBJECT } from "./types";
@@ -101,6 +102,8 @@ export async function createDailyItem(params: {
   assertRankedLetterPriorities([{ letter: priorityLetter, rank: priorityRank }]);
 
   return db.transaction(async (tx) => {
+    // A guessed id must not put another user's task on this user's day (`security.md`).
+    await assertNodeOwned(tx, userId, nodeId, "Task");
     // A task already sitting on another day moves rather than being duplicated — the
     // partial unique index would reject the second row anyway, and moving is what the
     // user meant.

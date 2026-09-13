@@ -1101,6 +1101,17 @@ describeDb("cross-user isolation", () => {
     await setDailyPriorities(owner, [{ id: itemId, letter: "A", rank: 1 }]);
   });
 
+  it("cannot put another user's task on their own day list", async () => {
+    await expect(
+      createDailyItem({ userId: intruder, day: MON, title: "Borrowed", nodeId }),
+    ).rejects.toThrow(/not found/i);
+    const [row] = await db
+      .select({ id: dailyItems.id })
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, intruder), eq(dailyItems.nodeId, nodeId)));
+    expect(row).toBeUndefined();
+  });
+
   it("cannot read another user's day", async () => {
     const day = await loadDay(intruder, MON, WED);
     expect(day.items).toEqual([]);

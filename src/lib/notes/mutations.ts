@@ -1,8 +1,9 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { db } from "@/db";
-import { nodes, notes, type NewNote, type NoteFlag } from "@/db/schema";
+import { notes, type NewNote, type NoteFlag } from "@/db/schema";
 import { assertContactOwned } from "@/lib/contacts/ownership";
+import { assertNodeOwned } from "@/lib/tree/ownership";
 import type { ExternalRef } from "@/db/schema";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { between } from "@/lib/tree/sortKey";
@@ -45,14 +46,7 @@ async function assertLinksOwned(
   userId: string,
   links: { nodeId?: string | null; contactId?: string | null },
 ): Promise<void> {
-  if (links.nodeId) {
-    const [node] = await tx
-      .select({ id: nodes.id })
-      .from(nodes)
-      .where(and(eq(nodes.id, links.nodeId), eq(nodes.userId, userId)))
-      .limit(1);
-    if (!node) throw new Error("Linked record not found.");
-  }
+  await assertNodeOwned(tx, userId, links.nodeId, "Linked record");
   await assertContactOwned(tx, userId, links.contactId);
 }
 

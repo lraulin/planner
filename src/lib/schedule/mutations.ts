@@ -20,6 +20,7 @@ import {
   type PushableAppointment,
 } from "@/lib/google/writeThrough";
 import { normalizeColorId } from "@/lib/google/eventColors";
+import { assertNodeOwned } from "@/lib/tree/ownership";
 import { allDayRange } from "./allDay";
 import { sortDays, startOfWeek } from "./geometry";
 
@@ -128,6 +129,7 @@ export async function createTimeChartArea(
     .where(and(eq(timeCharts.id, timeChartId), eq(timeCharts.userId, userId)))
     .limit(1);
   if (!chart) throw new Error("Time Chart not found.");
+  await assertNodeOwned(db, userId, input.resultAreaId, "Result Area");
 
   const [row] = await db
     .insert(timeChartAreas)
@@ -165,6 +167,7 @@ export async function updateTimeChartArea(
   if (input.foreColor !== undefined) patch.foreColor = input.foreColor;
   if (input.backColor !== undefined) patch.backColor = input.backColor;
   if (input.description !== undefined) patch.description = input.description;
+  await assertNodeOwned(db, userId, input.resultAreaId, "Result Area");
 
   const [row] = await db
     .update(timeChartAreas)
@@ -237,6 +240,7 @@ export async function createAppointment(
   const startAt = bounds?.startAt ?? input.startAt;
   const endAt = bounds?.endAt ?? input.endAt;
   assertRange(startAt, endAt);
+  await assertNodeOwned(db, userId, input.projectId, "Project");
   const values: NewAppointment = {
     userId,
     subject: input.subject.trim() || "Appointment",
@@ -310,6 +314,7 @@ export async function updateAppointment(
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
     .limit(1);
   if (!existing) throw new Error("Appointment not found.");
+  await assertNodeOwned(db, userId, input.projectId, "Project");
 
   const allDay = input.allDay ?? existing.allDay;
   const rawStart = input.startAt ?? existing.startAt;
