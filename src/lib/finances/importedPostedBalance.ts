@@ -42,6 +42,19 @@ export function postedActivityDate(row: {
 }
 
 /**
+ * Calendar days on which these posted rows land.
+ *
+ * D5's same-day tiebreak asks whether a source holds posted activity on the tied day, not
+ * how many rows or which merchants. The write path loads each source's posted rows and
+ * checks membership of the stamp's day in this set.
+ */
+export function postedDaysHeld(
+  rows: readonly { transactionDate: string; postedDate: string | null }[],
+): ReadonlySet<string> {
+  return new Set(rows.map(postedActivityDate));
+}
+
+/**
  * The bank's current posted figure, when the file carries a running-balance column.
  *
  * Newest day wins. Several rows on that day are chained (each row's previous balance is

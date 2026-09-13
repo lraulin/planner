@@ -134,6 +134,111 @@ describe("pickAuthoritative", () => {
     );
     expect(picked?.source).toBe("file");
   });
+
+  const sep12File = day("2026-09-12");
+  const sep12Feed = at("2026-09-12T22:18:00Z");
+
+  it("keeps the incumbent on a same-day file/feed tie when neither side offers evidence", () => {
+    // The D2 mixed-precision rule, and the Sep 12 bug: without the file's Apple rows
+    // being weighed, SimpleFIN's $0.00 at 6:18 PM stays and Ready to Assign invents $5.19.
+    expect(
+      pickAuthoritative(
+        [
+          { source: "feed", stamp: sep12Feed, value: "feed" },
+          { source: "file", stamp: sep12File, value: "file" },
+        ],
+        "feed",
+      )?.source,
+    ).toBe("feed");
+  });
+
+  it("lets the file win a same-day tie when only the file holds posted rows that day", () => {
+    expect(
+      pickAuthoritative(
+        [
+          {
+            source: "feed",
+            stamp: sep12Feed,
+            value: "feed",
+            postedOnStampDay: false,
+          },
+          {
+            source: "file",
+            stamp: sep12File,
+            value: "file",
+            postedOnStampDay: true,
+          },
+        ],
+        "feed",
+      )?.source,
+    ).toBe("file");
+  });
+
+  it("lets the feed win a same-day tie when only the feed holds posted rows that day", () => {
+    expect(
+      pickAuthoritative(
+        [
+          {
+            source: "feed",
+            stamp: sep12Feed,
+            value: "feed",
+            postedOnStampDay: true,
+          },
+          {
+            source: "file",
+            stamp: sep12File,
+            value: "file",
+            postedOnStampDay: false,
+          },
+        ],
+        "file",
+      )?.source,
+    ).toBe("feed");
+  });
+
+  it("keeps the incumbent when both sources hold posted rows on the tied day", () => {
+    expect(
+      pickAuthoritative(
+        [
+          {
+            source: "feed",
+            stamp: sep12Feed,
+            value: "feed",
+            postedOnStampDay: true,
+          },
+          {
+            source: "file",
+            stamp: sep12File,
+            value: "file",
+            postedOnStampDay: true,
+          },
+        ],
+        "feed",
+      )?.source,
+    ).toBe("feed");
+  });
+
+  it("keeps the incumbent when neither source holds posted rows on the tied day", () => {
+    expect(
+      pickAuthoritative(
+        [
+          {
+            source: "feed",
+            stamp: sep12Feed,
+            value: "feed",
+            postedOnStampDay: false,
+          },
+          {
+            source: "file",
+            stamp: sep12File,
+            value: "file",
+            postedOnStampDay: false,
+          },
+        ],
+        "feed",
+      )?.source,
+    ).toBe("feed");
+  });
 });
 
 describe("browserOwnsPending", () => {

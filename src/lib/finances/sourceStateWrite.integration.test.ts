@@ -6,6 +6,7 @@ import {
   bankConnections,
   financeAccountSourceState,
   financeAccounts,
+  financeTransactions,
   users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
@@ -213,6 +214,118 @@ describeDb("recordSourceState", () => {
   });
 });
 
+const SEP12_FEED: SourceReport = {
+  source: "feed",
+  balanceCents: 0,
+  availableCents: null,
+  asOf: new Date("2026-09-12T22:18:00Z"),
+  asOfDay: null,
+};
+const SEP12_FILE: SourceReport = {
+  source: "file",
+  balanceCents: -519,
+  availableCents: null,
+  asOf: null,
+  asOfDay: "2026-09-12",
+};
+
+async function insertPosted(
+  userId: string,
+  accountId: string,
+  input: { description: string; amount: string; externalSource: string },
+): Promise<void> {
+  await db.insert(financeTransactions).values({
+    userId,
+    accountId,
+    transactionDate: "2026-09-12",
+    postedDate: "2026-09-12",
+    pending: false,
+    description: input.description,
+    amount: input.amount,
+    externalSource: input.externalSource,
+    externalId: `id-${crypto.randomUUID()}`,
+  });
+}
+
+describeDb("same-day file-vs-feed evidence (D5)", () => {
+  it("lets the file's −$5.19 win when it holds Sep 12 Apple rows SimpleFIN does not", async () => {
+    const userId = await makeUser();
+    const accountId = await makeLinkedAccount(userId);
+    await insertPosted(userId, accountId, {
+      description: "APPLE.COM/BILL",
+      amount: "-3.08",
+      externalSource: "csv:capitalone-card",
+    });
+    await insertPosted(userId, accountId, {
+      description: "APPLE.COM/BILL",
+      amount: "-2.11",
+      externalSource: "csv:capitalone-card",
+    });
+
+    await recordSourceState(db, userId, accountId, SEP12_FEED);
+    await recordSourceState(db, userId, accountId, SEP12_FILE);
+
+    expect(await headline(userId, accountId)).toMatchObject({
+      balanceCents: -519,
+      balanceSource: "file",
+    });
+  });
+
+  it("lets the feed win the reverse: SimpleFIN holds that day's posted rows and the file does not", async () => {
+    const userId = await makeUser();
+    const accountId = await makeLinkedAccount(userId);
+    await insertPosted(userId, accountId, {
+      description: "SMECO",
+      amount: "-263.15",
+      externalSource: "api:simplefin",
+    });
+
+    await recordSourceState(db, userId, accountId, SEP12_FILE);
+    await recordSourceState(db, userId, accountId, SEP12_FEED);
+
+    expect(await headline(userId, accountId)).toMatchObject({
+      balanceCents: 0,
+      balanceSource: "feed",
+    });
+  });
+
+  it("keeps the incumbent when both sources hold posted rows on the tied day", async () => {
+    const userId = await makeUser();
+    const accountId = await makeLinkedAccount(userId);
+    await insertPosted(userId, accountId, {
+      description: "APPLE.COM/BILL",
+      amount: "-3.08",
+      externalSource: "csv:capitalone-card",
+    });
+    await insertPosted(userId, accountId, {
+      description: "SMECO",
+      amount: "-263.15",
+      externalSource: "api:simplefin",
+    });
+
+    await recordSourceState(db, userId, accountId, SEP12_FEED);
+    await recordSourceState(db, userId, accountId, SEP12_FILE);
+
+    expect(await headline(userId, accountId)).toMatchObject({
+      balanceCents: 0,
+      balanceSource: "feed",
+    });
+  });
+
+  it("keeps the incumbent when neither source holds posted rows on the tied day", async () => {
+    const userId = await makeUser();
+    const accountId = await makeLinkedAccount(userId);
+
+    await recordSourceState(db, userId, accountId, SEP12_FEED);
+    await recordSourceState(db, userId, accountId, SEP12_FILE);
+
+    expect(await headline(userId, accountId)).toMatchObject({
+      balanceCents: 0,
+      balanceSource: "feed",
+    });
+  });
+});
+
 describeDb("cross-user isolation", () => {
   it("refuses to read, change or delete another user's source state", async () => {
     const owner = await makeUser();
@@ -254,6 +367,70 @@ describeDb("cross-user isolation", () => {
       (await loadAccountSourceStamps(db, owner, [accountId])).get(accountId)?.browser
         ?.asOf,
     ).toEqual(BROWSER.asOf);
+  });
+
+  it("does not let another user's rows decide the same-day tie, or be read, changed, or deleted", async () => {
+    const owner = await makeUser();
+    const intruder = await makeUser();
+    const accountId = await makeLinkedAccount(owner);
+    await recordSourceState(db, owner, accountId, SEP12_FEED);
+
+    // Planted on the owner's account id but owned by the intruder — a dropped userId on
+    // the evidence query would treat these as the file's Sep 12 Apple rows and wrongly
+    // promote the file.
+    await insertPosted(intruder, accountId, {
+      description: "APPLE.COM/BILL",
+      amount: "-3.08",
+      externalSource: "csv:capitalone-card",
+    });
+    await insertPosted(intruder, accountId, {
+      description: "APPLE.COM/BILL",
+      amount: "-2.11",
+      externalSource: "csv:capitalone-card",
+    });
+
+    await recordSourceState(db, owner, accountId, SEP12_FILE);
+    expect(await headline(owner, accountId)).toMatchObject({
+      balanceCents: 0,
+      balanceSource: "feed",
+    });
+
+    expect(await loadAccountSourceStamps(db, intruder, [accountId])).toEqual(new Map());
+
+    const result = await recordSourceState(db, intruder, accountId, {
+      ...SEP12_FILE,
+      balanceCents: -1,
+    });
+    expect(result.headlineSource).toBeNull();
+    expect(await headline(owner, accountId)).toMatchObject({
+      balanceCents: 0,
+      balanceSource: "feed",
+    });
+
+    await db
+      .delete(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, intruder),
+          eq(financeTransactions.accountId, accountId),
+        ),
+      );
+    await db
+      .delete(financeAccountSourceState)
+      .where(
+        and(
+          eq(financeAccountSourceState.userId, intruder),
+          eq(financeAccountSourceState.accountId, accountId),
+        ),
+      );
+    expect(
+      (await loadAccountSourceStamps(db, owner, [accountId])).get(accountId)?.feed
+        ?.asOf,
+    ).toEqual(SEP12_FEED.asOf);
+    expect(await headline(owner, accountId)).toMatchObject({
+      balanceCents: 0,
+      balanceSource: "feed",
+    });
   });
 });
 

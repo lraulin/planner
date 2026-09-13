@@ -3,6 +3,7 @@ import {
   importedPostedHeadline,
   latestRunningBalance,
   postedActivityDate,
+  postedDaysHeld,
   type RunningBalanceRow,
 } from "./importedPostedBalance";
 
@@ -25,6 +26,18 @@ describe("postedActivityDate", () => {
     expect(
       postedActivityDate({ transactionDate: "2026-08-31", postedDate: null }),
     ).toBe("2026-08-31");
+  });
+});
+
+describe("postedDaysHeld", () => {
+  it("uses the posting day, not the transaction day, so a same-day tie sees the right source", () => {
+    expect(
+      postedDaysHeld([
+        { transactionDate: "2026-09-11", postedDate: "2026-09-12" },
+        { transactionDate: "2026-09-12", postedDate: "2026-09-12" },
+        { transactionDate: "2026-09-10", postedDate: null },
+      ]),
+    ).toEqual(new Set(["2026-09-12", "2026-09-10"]));
   });
 });
 

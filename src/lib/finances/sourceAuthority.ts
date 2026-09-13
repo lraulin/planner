@@ -10,6 +10,7 @@
  * could not take the headline back for 36 hours.
  *
  * Spec: `agent-os/specs/2026-09-01-1205-source-as-of-authority/` D2.
+ * Same-day file-vs-instant evidence: `agent-os/specs/2026-09-13-1127-ingest-by-identity/` D5.
  */
 
 import { toDateKey } from "@/lib/schedule/geometry";
@@ -39,9 +40,14 @@ export function isDated(stamp: SourceStamp | null): stamp is SourceStamp {
 }
 
 /** The calendar day a stamp falls on, reducing an instant the way `import.ts` already does. */
-function dayKeyOf(stamp: SourceStamp): string | null {
+export function dayKeyOf(stamp: SourceStamp): string | null {
   if (stamp.asOf !== null) return toDateKey(stamp.asOf);
   return stamp.asOfDay;
+}
+
+/** A stamp that only knows a calendar day — a file, never a feed or browser capture. */
+function isDayOnly(stamp: SourceStamp): boolean {
+  return stamp.asOf === null && stamp.asOfDay !== null;
 }
 
 /**
@@ -75,7 +81,38 @@ export type SourceCandidate<T> = {
   source: SourceKind;
   stamp: SourceStamp | null;
   value: T;
+  /**
+   * D5: does this source hold a **posted** register row dated on its own stamp's day?
+   *
+   * Only consulted for the one case D2's strictly-newer rule cannot resolve — a day-only
+   * `file` stamp tying on the calendar day with a dated feed or browser stamp. Omit it (or
+   * pass `false`) anywhere that evidence has not been computed; a tie with no evidence on
+   * either side keeps the incumbent exactly as before.
+   */
+  postedOnStampDay?: boolean;
 };
+
+/**
+ * Does `candidate` win a same-day file-vs-instant tie against `incumbent` under D5?
+ *
+ * `isStrictlyNewer` already ruled out every other case — this only ever runs when neither
+ * side is strictly newer than the other. It applies only when exactly one side is a bare
+ * calendar day (a `file` stamp) and the other carries a real instant, and both reduce to
+ * the same day: on 2026-09-12 a same-day tie between SimpleFIN's $0.00 (6:18 PM) and a
+ * Capital One CSV kept the stale feed figure, inventing $5.19 of Ready to Assign, because
+ * the file's own posted Apple rows that day were never weighed against SimpleFIN's lack of
+ * them. Evidence is which side's own posted rows actually land on the shared day: the side
+ * with rows the other lacks wins; both, neither, or missing evidence keeps the incumbent.
+ */
+function sameDayFileEvidenceWins<T>(
+  candidate: SourceCandidate<T>,
+  incumbent: SourceCandidate<T>,
+): boolean {
+  if (!isDated(candidate.stamp) || !isDated(incumbent.stamp)) return false;
+  if (isDayOnly(candidate.stamp) === isDayOnly(incumbent.stamp)) return false;
+  if (dayKeyOf(candidate.stamp) !== dayKeyOf(incumbent.stamp)) return false;
+  return candidate.postedOnStampDay === true && incumbent.postedOnStampDay !== true;
+}
 
 /**
  * The source whose figure the account should show, or null when nothing has reported.
@@ -97,7 +134,11 @@ export function pickAuthoritative<T>(
   ];
   let best: SourceCandidate<T> | null = null;
   for (const entry of ordered) {
-    if (best === null || isStrictlyNewer(entry.stamp, best.stamp)) best = entry;
+    if (best === null || isStrictlyNewer(entry.stamp, best.stamp)) {
+      best = entry;
+    } else if (sameDayFileEvidenceWins(entry, best)) {
+      best = entry;
+    }
   }
   return best;
 }

@@ -13,14 +13,22 @@
  * so the authority move and the write that caused it appear as one thing that happened.
  *
  * Spec: `agent-os/specs/2026-09-01-1205-source-as-of-authority/` D1, D4.
+ * Same-day file-vs-instant evidence: `agent-os/specs/2026-09-13-1127-ingest-by-identity/` D5.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { fromDateKey } from "@/lib/schedule/geometry";
-import { bankAccountLinks, financeAccountSourceState } from "@/db/schema";
+import {
+  bankAccountLinks,
+  financeAccountSourceState,
+  financeTransactions,
+} from "@/db/schema";
 import type { FinanceAuditChange } from "./audit/types";
 import type { FinanceExecutor } from "./dbExecutor";
+import { postedDaysHeld } from "./importedPostedBalance";
 import {
+  dayKeyOf,
+  isDated,
   isStrictlyNewer,
   pickAuthoritative,
   SOURCE_KINDS,
@@ -69,6 +77,91 @@ function auditShape(headline: LinkHeadline) {
 
 function isSourceKind(value: string | null): value is SourceKind {
   return value !== null && (SOURCE_KINDS as readonly string[]).includes(value);
+}
+
+function sourceKindForExternal(source: string | null): SourceKind | null {
+  if (source === "api:simplefin") return "feed";
+  if (source?.startsWith("scrape:")) return "browser";
+  if (source?.startsWith("csv:")) return "file";
+  return null;
+}
+
+/**
+ * Days on which a day-only stamp (a file) and an instant stamp (feed or browser) tie.
+ *
+ * D5 only applies in that mixed-precision case, so we skip the posted-row load when
+ * nothing in this account's source rows can hit it.
+ */
+function fileInstantTieDays(
+  entries: readonly { stamp: SourceStamp | null }[],
+): string[] {
+  const dayOnly = new Set<string>();
+  const instants = new Set<string>();
+  for (const entry of entries) {
+    if (!isDated(entry.stamp)) continue;
+    const day = dayKeyOf(entry.stamp);
+    if (day === null) continue;
+    if (entry.stamp.asOf === null) dayOnly.add(day);
+    else instants.add(day);
+  }
+  return [...dayOnly].filter((day) => instants.has(day));
+}
+
+async function postedOnStampDayBySource(
+  executor: FinanceExecutor,
+  userId: string,
+  accountId: string,
+  entries: readonly { source: SourceKind; stamp: SourceStamp | null }[],
+  tieDays: readonly string[],
+): Promise<Map<SourceKind, boolean>> {
+  const out = new Map<SourceKind, boolean>();
+  if (tieDays.length === 0) return out;
+
+  const rows = await executor
+    .select({
+      externalSource: financeTransactions.externalSource,
+      transactionDate: financeTransactions.transactionDate,
+      postedDate: financeTransactions.postedDate,
+    })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financeTransactions.accountId, accountId),
+        eq(financeTransactions.pending, false),
+        isNull(financeTransactions.parentId),
+        or(
+          inArray(financeTransactions.postedDate, [...tieDays]),
+          and(
+            isNull(financeTransactions.postedDate),
+            inArray(financeTransactions.transactionDate, [...tieDays]),
+          ),
+        ),
+      ),
+    );
+
+  const bySource = new Map<
+    SourceKind,
+    { transactionDate: string; postedDate: string | null }[]
+  >();
+  for (const row of rows) {
+    const kind = sourceKindForExternal(row.externalSource);
+    if (kind === null) continue;
+    const bucket = bySource.get(kind) ?? [];
+    bucket.push({
+      transactionDate: row.transactionDate,
+      postedDate: row.postedDate,
+    });
+    bySource.set(kind, bucket);
+  }
+
+  for (const entry of entries) {
+    if (!isDated(entry.stamp)) continue;
+    const day = dayKeyOf(entry.stamp);
+    if (day === null) continue;
+    out.set(entry.source, postedDaysHeld(bySource.get(entry.source) ?? []).has(day));
+  }
+  return out;
 }
 
 /**
@@ -194,7 +287,7 @@ export async function recomputeAccountBalanceAuthority(
       ),
     );
 
-  const candidates = rows.flatMap((row) =>
+  const stamped = rows.flatMap((row) =>
     isSourceKind(row.source) && row.balanceCents !== null
       ? [
           {
@@ -205,6 +298,18 @@ export async function recomputeAccountBalanceAuthority(
         ]
       : [],
   );
+  const tieDays = fileInstantTieDays(stamped);
+  const postedOnStampDay = await postedOnStampDayBySource(
+    executor,
+    userId,
+    accountId,
+    stamped,
+    tieDays,
+  );
+  const candidates = stamped.map((entry) => ({
+    ...entry,
+    postedOnStampDay: postedOnStampDay.get(entry.source) ?? false,
+  }));
   const incumbent = isSourceKind(link.balanceSource) ? link.balanceSource : null;
   const winner = pickAuthoritative(candidates, incumbent);
   if (winner === null)
