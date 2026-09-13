@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACH_PRIORITY_NONE,
+  decodeCalendarDay,
   decodeDateTime,
   decodeEffortToMinutes,
   decodePercentComplete,
@@ -156,5 +157,22 @@ describe("decodeDateTime", () => {
   it("still accepts the days that do exist, leap years included", () => {
     expect(decodeDateTime("2024-02-29")).toBeInstanceOf(Date);
     expect(decodeDateTime("2011-02-28T00:00:00+09:00")).toBeInstanceOf(Date);
+  });
+});
+
+describe("decodeCalendarDay", () => {
+  it("keeps the written day in UTC-noon encoding, whichever side of Greenwich wrote it", () => {
+    expect(decodeCalendarDay("2011-03-02T00:00:00+09:00")?.toISOString()).toBe(
+      "2011-03-02T12:00:00.000Z",
+    );
+    expect(decodeCalendarDay("2017-04-16T00:00:00-04:00")?.toISOString()).toBe(
+      "2017-04-16T12:00:00.000Z",
+    );
+  });
+
+  it("rejects what decodeDateTime rejects", () => {
+    expect(decodeCalendarDay("")).toBeNull();
+    expect(decodeCalendarDay("not-a-date")).toBeNull();
+    expect(decodeCalendarDay("2026-06-31T00:00:00+09:00")).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import type { NodeType, ProgressReview } from "@/db/schema";
 import {
   boolField,
+  decodeCalendarDay,
   decodeDateTime,
   decodeEffortToMinutes,
   decodePercentComplete,
@@ -503,16 +504,16 @@ function baseNode(args: {
   if (isCompleted && state !== null) state = "completed";
 
   const deadline = args.deadlineField
-    ? decodeDateTime(row[args.deadlineField])
-    : decodeDateTime(row.Deadline);
+    ? decodeCalendarDay(row[args.deadlineField])
+    : decodeCalendarDay(row.Deadline);
   const targetStart = args.targetStartField
-    ? decodeDateTime(row[args.targetStartField])
-    : decodeDateTime(row.TargetStartDate ?? row.PlannedStartDate);
+    ? decodeCalendarDay(row[args.targetStartField])
+    : decodeCalendarDay(row.TargetStartDate ?? row.PlannedStartDate);
   const targetEnd = args.targetEndField
-    ? decodeDateTime(row[args.targetEndField])
-    : decodeDateTime(row.TargetEndDate);
+    ? decodeCalendarDay(row[args.targetEndField])
+    : decodeCalendarDay(row.TargetEndDate);
   const deferredDate = args.deferredField
-    ? decodeDateTime(row[args.deferredField])
+    ? decodeCalendarDay(row[args.deferredField])
     : null;
   const completedAt =
     decodeDateTime(row.CompletedDate) ?? decodeDateTime(row.DateCompleted);

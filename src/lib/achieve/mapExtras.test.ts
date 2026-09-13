@@ -7,6 +7,7 @@ import {
   parseIsoDurationMinutes,
 } from "./mapExtras";
 import { parseAchXml } from "./parseXml";
+import { toDateKey } from "@/lib/schedule/geometry";
 
 describe("parseIsoDurationMinutes", () => {
   it("parses PT durations", () => {
@@ -94,6 +95,7 @@ describe("mapExtras", () => {
     <Title>Life Plan</Title>
     <Subject>General</Subject>
     <NoteText>18 credits remaining</NoteText>
+    <Date>2011-03-02T00:00:00+09:00</Date>
     <Flag>0</Flag>
     <Expanded>true</Expanded>
     <__ORDINAL__>0</__ORDINAL__>
@@ -124,6 +126,9 @@ describe("mapExtras", () => {
     expect(extras.notes).toHaveLength(1);
     expect(extras.notes[0]?.title).toBe("Life Plan");
     expect(extras.notes[0]?.body).toBe("18 credits remaining");
+    // A note's date is a calendar day: the day the dump names, not 15:00Z the day before.
+    const noteDate = extras.notes[0]?.noteDate;
+    expect(noteDate ? toDateKey(noteDate) : null).toBe("2011-03-02");
 
     expect(extras.metrics).toHaveLength(0);
     expect(extras.metricEntries).toHaveLength(0);

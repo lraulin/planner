@@ -1,5 +1,11 @@
 import type { AppointmentCheck, NodeItemKind, NoteFlag, ShowAs } from "@/db/schema";
-import { boolField, decodeDateTime, decodePriority, intField } from "./encodings";
+import {
+  boolField,
+  decodeCalendarDay,
+  decodeDateTime,
+  decodePriority,
+  intField,
+} from "./encodings";
 import { tableRows } from "./parseXml";
 import { rtfToPlainText } from "./rtf";
 import type { AchDocument, AchPriority } from "./types";
@@ -356,7 +362,7 @@ function mapNotes(doc: AchDocument, warnings: string[]): MappedNote[] {
       title: row.Title ?? "",
       subject: row.Subject ?? "General",
       body,
-      noteDate: decodeDateTime(row.Date),
+      noteDate: decodeCalendarDay(row.Date),
       flag: decodeNoteFlag(intField(row, "Flag")),
       collapsed: !boolField(row, "Expanded", true),
       ordinal: intField(row, "__ORDINAL__") ?? 0,

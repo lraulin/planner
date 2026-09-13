@@ -1,5 +1,6 @@
 import type { NodeState, PriorityLetter, ProgressReview } from "@/db/schema";
 import { daysInMonth } from "@/lib/dateMath";
+import { asCalendarDay, fromDateKey } from "@/lib/schedule/geometry";
 import type { AchPriority } from "./types";
 
 /**
@@ -166,6 +167,24 @@ export function decodeDateTime(text: string | null | undefined): Date | null {
 
   const d = new Date(text);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Parse an Achieve date that means a **calendar day** — a deadline, a plan date, a note's
+ * date — into the stored encoding (`dates.md`: UTC noon of that day).
+ *
+ * Achieve writes these as local midnight with the exporting machine's offset
+ * (`2011-03-02T00:00:00+09:00`). Read as an instant that is 15:00Z on March 1, and everything
+ * downstream decodes stored days with UTC components, so a dump written east of Greenwich
+ * imported every date a day early — and one written west of it stored the old local-midnight
+ * encoding. The day written in the text is the fact; the offset only says where the export
+ * ran. Instants proper (completion times, appointment times) stay on `decodeDateTime`.
+ */
+export function decodeCalendarDay(text: string | null | undefined): Date | null {
+  const instant = decodeDateTime(text);
+  if (!instant || !text) return null;
+  const day = LEADING_DAY.exec(text.trim());
+  return day ? fromDateKey(`${day[1]}-${day[2]}-${day[3]}`) : asCalendarDay(instant);
 }
 
 /** Read a field as int; missing or unparseable → null. */

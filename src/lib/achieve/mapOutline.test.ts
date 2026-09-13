@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { importedCategoryName, mapOutline } from "./mapOutline";
 import { parseAchXml } from "./parseXml";
+import { toDateKey } from "@/lib/schedule/geometry";
 
 const fixture = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "fixtures/minimal.achxml"),
@@ -61,6 +62,42 @@ describe("mapOutline", () => {
 </AchieveDB>`;
     const mapped = mapOutline(parseAchXml(xml));
     expect(mapped.nodes[0]?.state).toBe("completed");
+  });
+
+  it("keeps plan dates on the day the dump names, whatever offset it was written in", () => {
+    // Achieve writes local midnight with the exporting machine's offset. Read as an instant,
+    // `2011-03-02T00:00:00+09:00` is 15:00Z on March 1, and every reader decodes stored
+    // calendar days with UTC components — so a dump written east of Greenwich imported every
+    // plan date one day early.
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <Tasks>
+    <TaskId>aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</TaskId>
+    <ResultAreaId>11111111-2222-3333-4444-555555555555</ResultAreaId>
+    <Name>Renew visa</Name>
+    <Status>0</Status>
+    <Deadline>2011-03-02T00:00:00+09:00</Deadline>
+    <TargetStartDate>2011-03-05T00:00:00+09:00</TargetStartDate>
+    <TargetEndDate>2011-03-06T00:00:00-05:00</TargetEndDate>
+    <DeferredDate>2011-03-04T00:00:00+09:00</DeferredDate>
+    <__ORDINAL__>0</__ORDINAL__>
+  </Tasks>
+</AchieveDB>`;
+    const [task] = mapOutline(parseAchXml(xml)).nodes;
+    const key = (date: Date | null) => (date ? toDateKey(date) : null);
+    expect({
+      deadline: key(task.deadline),
+      targetStart: key(task.targetStart),
+      targetEnd: key(task.targetEnd),
+      deferredDate: key(task.deferredDate),
+    }).toEqual({
+      deadline: "2011-03-02",
+      targetStart: "2011-03-05",
+      targetEnd: "2011-03-06",
+      deferredDate: "2011-03-04",
+    });
+    // Stored in the calendar-day encoding dates.md prescribes, not as the dump's instant.
+    expect(task.deadline?.getUTCHours()).toBe(12);
   });
 
   it("ignores lifecycle fields on Result Areas", () => {
