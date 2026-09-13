@@ -1,24 +1,31 @@
 /**
- * Retiring the browser's tail once the authoritative feed catches up to it.
+ * Retiring the browser's tail once the authoritative feed has delivered the same charge.
  *
- * When a SimpleFIN sync or a file import advances an account's feed watermark, every
- * `scrape:*` row at or before the new watermark is the same money as a row the feed has now
- * delivered. Keeping both would double it, so the browser copy is deleted in the same
- * transaction as the write that advanced the watermark — the handover is explicit rather
- * than an accumulation of near-duplicates nobody asked for.
+ * A browser row and a history-feed row (`api:simplefin`, `csv:*`) that pair under
+ * `feedPairing.ts` are the same money told twice. Keeping both would double it, so the
+ * browser copy is deleted in the same transaction as the write that delivered its feed
+ * twin — the handover is explicit rather than an accumulation of near-duplicates nobody
+ * asked for.
  *
- * **The carry-over of user-owned state is a convenience, not an identity decision**, and
- * that distinction is the whole point. Matching is by exact amount and nearest date within
- * the account; description never enters into it, because the two feeds spell a merchant
- * differently and no rule reconciles that (`feedWatermark.ts`). A miss costs a Category,
- * which then shows up in the uncategorized-activity count and in this handover's warnings.
- * It can never produce a duplicate, which is the failure nobody catches.
+ * **This module used to decide retirement by date alone**: whichever feed row had the
+ * nearest date at the same amount, with no ceiling on "nearest" and no look at the
+ * description. That deleted posted rows a feed's dates merely *covered*, whether or not the
+ * feed had actually delivered the same charge — a `scrape:*` hold with no real successor,
+ * or a scraped **ChatGPT** row carrying its envelope onto SimpleFIN's **Claude** row two
+ * days away. Retirement now runs entirely off `pairRows` (D2 of `agent-os/specs/
+ * 2026-09-13-1127-ingest-by-identity/`): a browser row with no pair is not retired, full
+ * stop — it stays in the register with its envelope intact, and if it really is wrong, the
+ * user deletes it by hand.
  *
- * Spec: `agent-os/specs/2026-08-29-1228-feed-ownership-watermark/` D3, D4.
+ * **The carry-over of user-owned state is a convenience, not the identity decision.** Once
+ * a pair exists, its envelope, notes and split move onto the feed row — never overwriting a
+ * value the user has already put there.
+ *
+ * Spec: `agent-os/specs/2026-09-13-1127-ingest-by-identity/` D1, D2.
  */
 
 import type { FinanceFlowKind } from "@/db/schema";
-import { dateDistance } from "./liveFeedMatch";
+import { pairRows, type PairableRow } from "./feedPairing";
 
 /** The user-owned fields that survive a handover. Everything else is the bank's. */
 export type CarriedState = {
@@ -42,13 +49,13 @@ export type ReplacementRow = CarriedState & {
   transactionDate: string;
   postedDate: string | null;
   amountCents: number;
+  description: string;
   isParent: boolean;
 };
 
 export type FeedHandoverStep = {
   retiredId: string;
-  /** The feed row inheriting this one's user state, or null when nothing matched. */
-  replacementId: string | null;
+  replacementId: string;
   /** Only the fields the replacement does not already hold; empty when nothing moves. */
   carry: Partial<CarriedState>;
   /** Move this parent's children onto the replacement before deleting it. */
@@ -92,49 +99,39 @@ function carryableFields(
   return carry;
 }
 
+function toPairable(row: RetiringRow | ReplacementRow): PairableRow {
+  return {
+    id: row.id,
+    transactionDate: row.transactionDate,
+    postedDate: row.postedDate,
+    amountCents: row.amountCents,
+    description: row.description,
+  };
+}
+
 /**
  * Plan one account's handover.
  *
- * Occurrence-counted: each feed row can absorb at most one browser row, so two identical
- * charges on one day stay two charges. Nearest date wins among equal amounts, so a
- * recurring charge pairs with its own occurrence rather than the first one scanned.
+ * A retiring row with no pair produces no step — it is not retired, so there is nothing to
+ * warn about. Everything else here is what to do with a row that *did* pair: carry its
+ * state, and move a split onto the replacement when the replacement is not already split.
  */
 export function planFeedHandover(
   retiring: readonly RetiringRow[],
   replacements: readonly ReplacementRow[],
 ): FeedHandoverPlan {
-  const used = new Set<string>();
+  const retiringById = new Map(retiring.map((row) => [row.id, row]));
+  const replacementById = new Map(replacements.map((row) => [row.id, row]));
+  const pairings = pairRows(retiring.map(toPairable), replacements.map(toPairable));
+
   const steps: FeedHandoverStep[] = [];
   const warnings: string[] = [];
 
-  for (const row of retiring) {
-    const match = replacements
-      .filter(
-        (candidate) =>
-          !used.has(candidate.id) && candidate.amountCents === row.amountCents,
-      )
-      .sort(
-        (left, right) =>
-          dateDistance(left, row) - dateDistance(right, row) ||
-          left.id.localeCompare(right.id),
-      )[0];
+  for (const pairing of pairings) {
+    const row = retiringById.get(pairing.browserId);
+    const match = replacementById.get(pairing.feedId);
+    if (!row || !match) continue;
 
-    if (!match) {
-      if (hasUserState(row) || row.isParent) {
-        warnings.push(
-          `The bank feed replaced "${row.description}" but no matching row could be found to carry its envelope and notes onto; check it in the register.`,
-        );
-      }
-      steps.push({
-        retiredId: row.id,
-        replacementId: null,
-        carry: {},
-        moveSplitTo: null,
-      });
-      continue;
-    }
-
-    used.add(match.id);
     // A split moves only when it transfers without changing its financial meaning. The
     // amounts are equal by construction, so the children still sum to their new parent —
     // unless the feed row is already split, where merging two allocations would invent one.

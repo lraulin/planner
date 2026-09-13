@@ -54,6 +54,7 @@ type RowOverrides = Partial<{
   notes: string;
   isParent: boolean;
   externalSource: string;
+  description: string;
 }>;
 
 async function insertRow(
@@ -72,7 +73,7 @@ async function insertRow(
       transactionDate,
       postedDate: over.postedDate === undefined ? transactionDate : over.postedDate,
       pending: over.pending ?? false,
-      description: externalId,
+      description: over.description ?? externalId,
       amount: (amountCents / 100).toFixed(2),
       sourceCategory: "",
       notes: over.notes ?? "",
@@ -126,14 +127,18 @@ describeDb("retireCoveredScrapeRows", () => {
     envelopeId = await envelopeFor(userId);
   });
 
-  it("deletes the browser rows the feed now covers and carries their state forward", async () => {
+  it("deletes a browser row that pairs with a feed row and carries their state forward", async () => {
     const browserId = await insertRow(
       userId,
       accountId,
       "browser-cvs",
       "2026-08-22",
       -2284,
-      { budgetCategoryId: envelopeId, notes: "receipt in the drawer" },
+      {
+        budgetCategoryId: envelopeId,
+        notes: "receipt in the drawer",
+        description: "CVS",
+      },
     );
     const feedId = await insertRow(
       userId,
@@ -141,7 +146,7 @@ describeDb("retireCoveredScrapeRows", () => {
       "simplefin-cvs",
       "2026-08-24",
       -2284,
-      { externalSource: "api:simplefin" },
+      { externalSource: "api:simplefin", description: "CVS/PHARMACY #01522" },
     );
 
     const result = await retireCoveredScrapeRows(db, userId, accountId);
@@ -171,6 +176,7 @@ describeDb("retireCoveredScrapeRows", () => {
     // since the failure this spec fixes was budget numbers moving with no money movement.
     await insertRow(userId, accountId, "browser-cvs", "2026-08-22", -2284, {
       budgetCategoryId: envelopeId,
+      description: "CVS",
     });
 
     const before = await loadBudget(userId, "2026-08-01");
@@ -202,11 +208,14 @@ describeDb("retireCoveredScrapeRows", () => {
     expect(await idsOn(userId, accountId)).toEqual(["simplefin-cvs"]);
   });
 
-  it("leaves the browser's tail alone — it is past the watermark", async () => {
+  it("leaves an unrelated browser row alone", async () => {
     await insertRow(userId, accountId, "simplefin-old", "2026-08-14", -1000, {
       externalSource: "api:simplefin",
+      description: "Merchant A",
     });
-    await insertRow(userId, accountId, "browser-tail", "2026-08-28", -2284);
+    await insertRow(userId, accountId, "browser-tail", "2026-08-28", -2284, {
+      description: "Merchant B",
+    });
 
     const result = await retireCoveredScrapeRows(db, userId, accountId);
 
@@ -214,13 +223,15 @@ describeDb("retireCoveredScrapeRows", () => {
     expect(await idsOn(userId, accountId)).toEqual(["browser-tail", "simplefin-old"]);
   });
 
-  it("retires a covered browser hold along with the covered posted rows", async () => {
-    await insertRow(userId, accountId, "simplefin-posted", "2026-08-24", -1000, {
+  it("retires a browser hold once its own posted twin arrives on the feed", async () => {
+    await insertRow(userId, accountId, "simplefin-posted", "2026-08-24", -2284, {
       externalSource: "api:simplefin",
+      description: "CVS/PHARMACY #01522",
     });
-    await insertRow(userId, accountId, "browser-hold", "2026-08-23", -555, {
+    await insertRow(userId, accountId, "browser-hold", "2026-08-23", -2284, {
       pending: true,
       postedDate: null,
+      description: "CVS",
     });
 
     const result = await retireCoveredScrapeRows(db, userId, accountId);
@@ -229,18 +240,131 @@ describeDb("retireCoveredScrapeRows", () => {
     expect(await idsOn(userId, accountId)).toEqual(["simplefin-posted"]);
   });
 
-  it("warns rather than losing a Category no feed row can absorb", async () => {
+  it("D1: a pending hold with no posted twin survives any number of syncs", async () => {
+    // The production defect: Vetsource, Domino's, Starbucks and Apple holds were deleted
+    // by date coverage even though nothing on the feed was actually that charge. A hold
+    // with no real pair must never be deleted just because a sync ran.
     await insertRow(userId, accountId, "simplefin-other", "2026-08-24", -1000, {
       externalSource: "api:simplefin",
+      description: "Merchant Other",
+    });
+    await insertRow(userId, accountId, "browser-hold", "2026-08-23", -2970, {
+      pending: true,
+      postedDate: null,
+      budgetCategoryId: envelopeId,
+      description: "Vetsource",
+    });
+
+    for (let run = 0; run < 3; run++) {
+      const result = await retireCoveredScrapeRows(db, userId, accountId);
+      expect(result.retired).toBe(0);
+    }
+    expect(await idsOn(userId, accountId)).toEqual(["browser-hold", "simplefin-other"]);
+    const [hold] = await db
+      .select({ budgetCategoryId: financeTransactions.budgetCategoryId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.externalId, "browser-hold"));
+    expect(hold.budgetCategoryId).toBe(envelopeId);
+  });
+
+  it("D1: a posted row with no matching feed row stays, with no warning", async () => {
+    await insertRow(userId, accountId, "simplefin-other", "2026-08-24", -1000, {
+      externalSource: "api:simplefin",
+      description: "Merchant Other",
     });
     await insertRow(userId, accountId, "browser-orphan", "2026-08-22", -2284, {
       budgetCategoryId: envelopeId,
+      description: "Merchant Orphan",
     });
 
     const result = await retireCoveredScrapeRows(db, userId, accountId);
 
-    expect(result).toMatchObject({ retired: 1, carried: 0 });
-    expect(result.warnings[0]).toContain("browser-orphan");
+    expect(result).toMatchObject({ retired: 0, carried: 0, warnings: [] });
+    expect(await idsOn(userId, accountId)).toEqual([
+      "browser-orphan",
+      "simplefin-other",
+    ]);
+  });
+
+  it("does not pair a scraped ChatGPT row onto SimpleFIN's Claude row two days away", async () => {
+    await insertRow(userId, accountId, "browser-chatgpt", "2026-09-07", -2120, {
+      budgetCategoryId: envelopeId,
+      description: "ChatGPT",
+    });
+    await insertRow(userId, accountId, "simplefin-claude", "2026-09-09", -2120, {
+      externalSource: "api:simplefin",
+      description: "Claude",
+    });
+
+    const result = await retireCoveredScrapeRows(db, userId, accountId);
+
+    expect(result).toMatchObject({ retired: 0, carried: 0 });
+    expect(await idsOn(userId, accountId)).toEqual([
+      "browser-chatgpt",
+      "simplefin-claude",
+    ]);
+  });
+
+  it("Sep 10 replay: a partial delivery only retires the day it actually covers", async () => {
+    await insertRow(userId, accountId, "scrape-sep-1", "2026-09-01", -101, {
+      description: "Merchant A",
+    });
+    const sep7Id = await insertRow(
+      userId,
+      accountId,
+      "scrape-sep-7",
+      "2026-09-07",
+      -707,
+      {
+        description: "Merchant G",
+        budgetCategoryId: envelopeId,
+      },
+    );
+    await insertRow(userId, accountId, "feed-sep-8", "2026-09-08", -808, {
+      externalSource: "api:simplefin",
+      description: "Merchant H",
+    });
+    await insertRow(userId, accountId, "feed-sep-9", "2026-09-09", -909, {
+      externalSource: "api:simplefin",
+      description: "Merchant I",
+    });
+
+    const firstRun = await retireCoveredScrapeRows(db, userId, accountId);
+    expect(firstRun.retired).toBe(0);
+    expect(await idsOn(userId, accountId)).toEqual([
+      "feed-sep-8",
+      "feed-sep-9",
+      "scrape-sep-1",
+      "scrape-sep-7",
+    ]);
+
+    const feedSep7Id = await insertRow(
+      userId,
+      accountId,
+      "feed-sep-7",
+      "2026-09-07",
+      -707,
+      { externalSource: "api:simplefin", description: "Merchant G" },
+    );
+
+    const secondRun = await retireCoveredScrapeRows(db, userId, accountId);
+    expect(secondRun).toMatchObject({ retired: 1, carried: 1 });
+    expect(await idsOn(userId, accountId)).toEqual([
+      "feed-sep-7",
+      "feed-sep-8",
+      "feed-sep-9",
+      "scrape-sep-1",
+    ]);
+    const [gone] = await db
+      .select({ id: financeTransactions.id })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, sep7Id));
+    expect(gone).toBeUndefined();
+    const [feedRow] = await db
+      .select({ budgetCategoryId: financeTransactions.budgetCategoryId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, feedSep7Id));
+    expect(feedRow.budgetCategoryId).toBe(envelopeId);
   });
 
   it("moves a split onto the replacing row rather than cascading it away", async () => {
@@ -250,7 +374,7 @@ describeDb("retireCoveredScrapeRows", () => {
       "browser-split",
       "2026-08-22",
       -2284,
-      { isParent: true },
+      { isParent: true, description: "CVS" },
     );
     await db.insert(financeTransactions).values({
       userId,
@@ -282,7 +406,7 @@ describeDb("retireCoveredScrapeRows", () => {
       "simplefin-split",
       "2026-08-24",
       -2284,
-      { externalSource: "api:simplefin" },
+      { externalSource: "api:simplefin", description: "CVS/PHARMACY #01522" },
     );
 
     const result = await retireCoveredScrapeRows(db, userId, accountId);
@@ -310,11 +434,14 @@ describeDb("retireCoveredScrapeRows", () => {
     const otherAccountId = await makeAccount(otherId);
     await insertRow(otherId, otherAccountId, "other-simplefin", "2026-08-24", -1000, {
       externalSource: "api:simplefin",
+      description: "CVS/PHARMACY #01522",
     });
-    await insertRow(otherId, otherAccountId, "other-browser", "2026-08-22", -1000);
+    await insertRow(otherId, otherAccountId, "other-browser", "2026-08-22", -1000, {
+      description: "CVS",
+    });
 
-    // The first user asking about the second user's account must retire nothing: the
-    // watermark query, the candidate query and the delete are all scoped by `userId`.
+    // The first user asking about the second user's account must retire nothing: every
+    // query and the final delete are all scoped by `userId`.
     const trespass = await retireCoveredScrapeRows(db, userId, otherAccountId);
     expect(trespass).toMatchObject({ retired: 0, carried: 0 });
     expect(await idsOn(otherId, otherAccountId)).toEqual([

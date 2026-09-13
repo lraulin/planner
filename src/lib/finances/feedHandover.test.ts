@@ -28,6 +28,7 @@ function replacement(over: Partial<ReplacementRow> = {}): ReplacementRow {
     transactionDate: "2026-08-24",
     postedDate: "2026-08-24",
     amountCents: -2284,
+    description: "CVS",
     isParent: false,
     budgetCategoryId: null,
     notes: "",
@@ -54,14 +55,25 @@ describe("planFeedHandover", () => {
     expect(plan.warnings).toEqual([]);
   });
 
-  it("matches on amount alone — the two feeds spell the merchant differently", () => {
-    // `Pizza Hut` on the page against `PIZZA HUT 036874` from SimpleFIN. No description
-    // rule bridges those, which is why this one never looks at the description.
+  it("pairs even though the two feeds spell the merchant differently, via the brand stem", () => {
+    // `Pizza Hut` on the page against `PIZZA HUT 036874` from SimpleFIN. No fold-equality
+    // or containment bridges those; the brand-stem rule in `feedPairing.ts` does.
     const plan = planFeedHandover(
       [retiring({ description: "Pizza Hut", amountCents: -3252 })],
-      [replacement({ amountCents: -3252 })],
+      [replacement({ description: "PIZZA HUT 036874", amountCents: -3252 })],
     );
     expect(plan.steps[0].replacementId).toBe("feed");
+  });
+
+  it("does not pair, and does not retire, when the descriptions name different things", () => {
+    // Production case: a scraped ChatGPT row must not carry its envelope onto SimpleFIN's
+    // Claude row just because the amount matches and the dates are close.
+    const plan = planFeedHandover(
+      [retiring({ description: "ChatGPT", budgetCategoryId: "subscriptions" })],
+      [replacement({ description: "Claude", transactionDate: "2026-08-23" })],
+    );
+    expect(plan.steps).toEqual([]);
+    expect(plan.warnings).toEqual([]);
   });
 
   it("never overwrites a value the user has already put on the feed row", () => {
@@ -80,46 +92,35 @@ describe("planFeedHandover", () => {
       ],
       [replacement({ id: "only" })],
     );
-    expect(plan.steps.map((step) => step.replacementId)).toEqual(["only", null]);
+    expect(plan.steps).toHaveLength(1);
+    expect(plan.steps[0].replacementId).toBe("only");
   });
 
-  it("prefers the nearest date among equal amounts", () => {
+  it("prefers the nearer date when several feed rows are in range", () => {
     const plan = planFeedHandover(
-      [
-        retiring({
-          id: "aug",
-          transactionDate: "2026-08-01",
-          postedDate: "2026-08-01",
-          budgetCategoryId: "rent",
-        }),
-      ],
+      [retiring({ transactionDate: "2026-08-22", postedDate: "2026-08-22" })],
       [
         replacement({
-          id: "july",
-          transactionDate: "2026-07-01",
-          postedDate: "2026-07-01",
+          id: "far",
+          transactionDate: "2026-08-24",
+          postedDate: "2026-08-24",
         }),
         replacement({
-          id: "august",
-          transactionDate: "2026-08-02",
-          postedDate: "2026-08-02",
+          id: "near",
+          transactionDate: "2026-08-23",
+          postedDate: "2026-08-23",
         }),
       ],
     );
-    expect(plan.steps[0].replacementId).toBe("august");
+    expect(plan.steps[0].replacementId).toBe("near");
   });
 
-  it("warns rather than silently losing a Category when nothing matches", () => {
+  it("does not retire a row with no matching feed row — it stays, envelope intact", () => {
     const plan = planFeedHandover(
       [retiring({ budgetCategoryId: "groceries" })],
       [replacement({ amountCents: -999 })],
     );
-    expect(plan.steps[0]).toMatchObject({ replacementId: null, carry: {} });
-    expect(plan.warnings[0]).toContain("CVS");
-  });
-
-  it("stays quiet about a row that held nothing of the user's", () => {
-    const plan = planFeedHandover([retiring()], [replacement({ amountCents: -1 })]);
+    expect(plan.steps).toEqual([]);
     expect(plan.warnings).toEqual([]);
   });
 

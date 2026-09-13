@@ -1,10 +1,10 @@
 /**
  * The database half of the feed handover — see `feedHandover.ts` for why it exists.
  *
- * Called from inside the transaction that advances an account's watermark (a SimpleFIN
- * sync, a CSV or statement import), never on its own: the browser rows must stop existing
- * in the same commit that makes the feed rows authoritative, or a crash between the two
- * leaves the register holding the same money twice.
+ * Called from inside the transaction that writes new history-feed rows (a SimpleFIN sync, a
+ * CSV or statement import), never on its own: a browser row must stop existing in the same
+ * commit that makes its feed twin authoritative, or a crash between the two leaves the
+ * register holding the same money twice.
  */
 
 import { and, eq, gte, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
@@ -13,7 +13,6 @@ import { financeTransactions } from "@/db/schema";
 import type { FinanceAuditChange } from "./audit/types";
 import type { FinanceExecutor } from "./dbExecutor";
 import { SCRAPE_FEEDS } from "./bankSnapshot";
-import { feedWatermarkForAccount } from "./feedWatermark";
 import {
   planFeedHandover,
   type ReplacementRow,
@@ -24,7 +23,7 @@ import { numericStringToCents } from "./money";
 import { bankRows } from "./splitRows";
 
 export type FeedHandoverResult = {
-  /** Browser rows deleted because the feed now covers their day. */
+  /** Browser rows deleted because a history-feed row paired with them. */
   retired: number;
   /** Retired rows whose envelope, notes or split moved onto the replacing feed row. */
   carried: number;
@@ -40,7 +39,12 @@ const EMPTY: FeedHandoverResult = {
 };
 
 /**
- * Retire every `scrape:*` row on this account that the feed watermark now covers.
+ * Retire every `scrape:*` row on this account that pairs with a stored history-feed row.
+ *
+ * Loads the account's scrape rows with no date restriction — D1 of the spec above means a
+ * row's age no longer says anything about whether it should go — then loads the
+ * history-feed rows within `DATE_TOLERANCE_DAYS` of them to pair against. A scrape row with
+ * no pair is left exactly alone.
  *
  * Returns the audit changes rather than writing its own event, so the handover and the
  * write that caused it appear as one thing that happened.
@@ -50,9 +54,6 @@ export async function retireCoveredScrapeRows(
   userId: string,
   accountId: string,
 ): Promise<FeedHandoverResult> {
-  const watermark = await feedWatermarkForAccount(executor, userId, accountId);
-  if (watermark === null) return EMPTY;
-
   const stored = await executor
     .select({
       id: financeTransactions.id,
@@ -75,12 +76,6 @@ export async function retireCoveredScrapeRows(
         eq(financeTransactions.accountId, accountId),
         bankRows,
         inArray(financeTransactions.externalSource, [...SCRAPE_FEEDS]),
-        // A pending browser hold whose day the feed has posted is covered too: the feed's
-        // posted row is the settled truth for that charge.
-        lte(
-          sql`coalesce(${financeTransactions.postedDate}, ${financeTransactions.transactionDate})`,
-          watermark,
-        ),
       ),
     );
   if (stored.length === 0) return EMPTY;
@@ -115,6 +110,7 @@ export async function retireCoveredScrapeRows(
       id: financeTransactions.id,
       transactionDate: financeTransactions.transactionDate,
       postedDate: financeTransactions.postedDate,
+      description: financeTransactions.description,
       amount: financeTransactions.amount,
       isParent: financeTransactions.isParent,
       budgetCategoryId: financeTransactions.budgetCategoryId,
@@ -148,6 +144,7 @@ export async function retireCoveredScrapeRows(
     id: row.id,
     transactionDate: row.transactionDate,
     postedDate: row.postedDate,
+    description: row.description,
     amountCents: numericStringToCents(row.amount) ?? 0,
     isParent: row.isParent,
     budgetCategoryId: row.budgetCategoryId,
@@ -162,7 +159,7 @@ export async function retireCoveredScrapeRows(
 
   for (const step of plan.steps) {
     const hasCarry = Object.keys(step.carry).length > 0;
-    if (step.replacementId && (hasCarry || step.moveSplitTo)) {
+    if (hasCarry || step.moveSplitTo) {
       if (step.moveSplitTo) {
         const moved = await executor
           .update(financeTransactions)
