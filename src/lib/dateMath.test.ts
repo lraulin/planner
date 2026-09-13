@@ -5,6 +5,7 @@ import {
   addYears,
   daysBetween,
   daysInMonth,
+  msUntilNextLocalDay,
   startOfDay,
 } from "./dateMath";
 
@@ -145,5 +146,20 @@ describe("local wall-clock date math", () => {
       startOfDay(original);
       expect(original.getHours()).toBe(13);
     });
+  });
+});
+
+describe("msUntilNextLocalDay", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  it("counts to the coming local midnight", () => {
+    expect(msUntilNextLocalDay(new Date(2026, 8, 12, 21, 30))).toBe(2.5 * HOUR);
+  });
+
+  it("is a 23-hour day across a spring-forward and 25 across a fall-back", () => {
+    // Suite TZ is America/New_York: 2026-03-08 and 2026-11-01. Subtracting from 24 hours
+    // would be an hour out on both, firing the "new day" refresh at 23:00 or 01:00.
+    expect(msUntilNextLocalDay(new Date(2026, 2, 8, 0, 0))).toBe(23 * HOUR);
+    expect(msUntilNextLocalDay(new Date(2026, 10, 1, 0, 0))).toBe(25 * HOUR);
   });
 });

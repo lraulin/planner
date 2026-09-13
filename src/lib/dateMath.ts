@@ -69,3 +69,14 @@ export function addMonths(date: Date, months: number): Date {
 export function addYears(date: Date, years: number): Date {
   return addMonths(date, years * 12);
 }
+
+/**
+ * Milliseconds from `now` until the next local midnight — when "today" changes for the reader.
+ *
+ * Built from the next day's local midnight, not `86_400_000 - msSinceMidnight`, because the day
+ * a clock springs forward or falls back is 23 or 25 hours long.
+ */
+export function msUntilNextLocalDay(now: Date): number {
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return next.getTime() - now.getTime();
+}
