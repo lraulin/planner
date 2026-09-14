@@ -5,7 +5,7 @@
  * accounts. Spec: `agent-os/specs/2026-08-24-2206-single-pool-budget/` D2.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import type { FinanceExecutor } from "./dbExecutor";
 import { financeTransactions } from "@/db/schema";
@@ -60,6 +60,12 @@ export async function loadWorkingPendingSelection(
       and(
         eq(financeTransactions.userId, userId),
         eq(financeTransactions.pending, true),
+        // D4: a hold the page has confirmed posted at the bank is already inside the
+        // headline balance that same page reported (`recordSourceState`) — counting it here
+        // too would double it. It stays pending for the register (envelope, split, backlog
+        // math all keep counting it via the ordinary money-rows sum); only the
+        // headline-plus-pending arithmetic here has to leave it out.
+        isNull(financeTransactions.postedAtBank),
       ),
     );
 

@@ -72,6 +72,7 @@ describe("planBankSnapshotReconciliation", () => {
         },
       ],
       [],
+      false,
     );
     expect(plan.postedCoveredByFeed).toBe(1);
     expect(plan.postedInserts).toEqual([]);
@@ -85,6 +86,7 @@ describe("planBankSnapshotReconciliation", () => {
       [],
       [incoming("CVS", -2284, "2026-08-18")],
       [],
+      false,
     );
     expect(plan.postedInserts).toHaveLength(1);
     expect(plan.postedCoveredByFeed).toBe(0);
@@ -95,6 +97,7 @@ describe("planBankSnapshotReconciliation", () => {
       [],
       [incoming("CVS", -2284, "2020-01-01")],
       [],
+      false,
     );
     expect(plan.postedInserts).toHaveLength(1);
   });
@@ -115,6 +118,7 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [first, second],
       [],
+      false,
     );
     expect(plan.postedDuplicates.map((row) => row.existingId)).toEqual(["a"]);
     // The two incoming rows carry the same stem, so only one can be the stored one; the
@@ -127,6 +131,7 @@ describe("planBankSnapshotReconciliation", () => {
       [existing("pending", "CVS PHARMACY", -2284)],
       [incoming("CVS PHARMACY", -2284, "2026-08-28")],
       [],
+      false,
     );
     expect(plan.postedTransitions).toEqual([
       expect.objectContaining({ existingId: "pending", amountChanged: false }),
@@ -138,6 +143,7 @@ describe("planBankSnapshotReconciliation", () => {
       [existing("gas", "SHEETZ 123", -10000)],
       [incoming("SHEETZ 123", -6789, "2026-08-28")],
       [],
+      false,
     );
     expect(plan.postedTransitions).toEqual([
       expect.objectContaining({ existingId: "gas", amountChanged: true }),
@@ -155,6 +161,7 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("SHEETZ 123", -6789, "2026-08-28")],
       [],
+      false,
     );
     expect(plan.postedTransitions).toEqual([
       expect.objectContaining({ existingId: "browser-gas", amountChanged: true }),
@@ -168,6 +175,7 @@ describe("planBankSnapshotReconciliation", () => {
       [existing("restaurant", "DINER", -5000, { isParent: true })],
       [incoming("DINER", -6200)],
       [],
+      false,
     );
     expect(plan.postedReplacements[0]?.existingId).toBe("restaurant");
     expect(plan.warnings[0]).toContain("split edits were discarded");
@@ -181,6 +189,7 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("RESTAURANT", -6200)],
       [],
+      false,
     );
     expect(plan.postedInserts).toHaveLength(1);
     expect(plan.postedTransitions).toEqual([]);
@@ -199,6 +208,7 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [posted],
       [],
+      false,
     );
     expect(plan.postedDuplicates.map((row) => row.existingId)).toEqual(["stored"]);
     expect(plan.pendingDeletes).toEqual(["hold"]);
@@ -212,6 +222,7 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("CVS PHARMACY", -2284, "2026-08-28")],
       [],
+      false,
     );
     expect(plan.postedTransitions.map((row) => row.existingId)).toEqual(["z-near"]);
   });
@@ -226,6 +237,7 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("CVS PHARMACY", -2284, "2026-08-28")],
       [],
+      false,
     );
     expect(plan.postedTransitions.map((row) => row.existingId)).toEqual([
       "browser-cvs",
@@ -238,6 +250,7 @@ describe("planBankSnapshotReconciliation", () => {
       [existing("restaurant", "DINER", -5000, { isParent: true })],
       [incoming("DINER", -5000)],
       [],
+      false,
     );
     expect(plan.postedTransitions.map((row) => row.existingId)).toEqual(["restaurant"]);
     expect(plan.postedReplacements).toEqual([]);
@@ -256,6 +269,7 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("SHEETZ 123", -6789, "2026-08-28")],
       [],
+      false,
     );
     expect(plan.postedTransitions).toEqual([]);
     expect(plan.postedInserts).toHaveLength(1);
@@ -271,6 +285,7 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [],
       [incoming("NEW", -300)],
+      false,
     );
     expect(plan.pendingDeletes).toEqual(["old-browser"]);
     expect(plan.pendingInserts).toHaveLength(1);
@@ -293,6 +308,7 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [incoming("CVS", -2284, "2026-08-27")],
       [],
+      false,
     );
     expect(plan.postedCoveredByFeed).toBe(1);
     expect(plan.postedInserts).toEqual([]);
@@ -319,6 +335,7 @@ describe("planBankSnapshotReconciliation", () => {
       ],
       [],
       [],
+      false,
     );
     expect(plan.pendingDeletes).toEqual(["hold-dominos"]);
     expect(plan.pendingCarries).toEqual([
@@ -336,9 +353,152 @@ describe("planBankSnapshotReconciliation", () => {
       [existing("hold-xfinity", "XFINITY", -8900)],
       [],
       [],
+      false,
     );
     expect(plan.pendingDeletes).toEqual(["hold-xfinity"]);
     expect(plan.pendingCarries).toEqual([]);
     expect(plan.warnings[0]).toContain("XFINITY");
+  });
+
+  describe("D4: feed-covered accounts never write posted history", () => {
+    it("Sep 14 replay: a posted row with no stored hold and no feed pair is not inserted", () => {
+      // 12 Amazon charges Chase's page reports as newly posted, already held by SimpleFIN,
+      // never seen pending on this page at all — nothing to mark, nothing to insert.
+      const plan = planBankSnapshotReconciliation(
+        [],
+        [incoming("Amazon.com", -1377, "2026-09-13")],
+        [],
+        true,
+      );
+      expect(plan.postedInserts).toEqual([]);
+      expect(plan.postedTransitions).toEqual([]);
+      expect(plan.postedAtBankMarks).toEqual([]);
+      expect(plan.warnings).toEqual([]);
+    });
+
+    it("marks a matching hold posted-at-bank instead of transitioning it", () => {
+      const plan = planBankSnapshotReconciliation(
+        [existing("hold", "CVS PHARMACY", -2284)],
+        [incoming("CVS PHARMACY", -2284, "2026-08-28")],
+        [],
+        true,
+      );
+      expect(plan.postedAtBankMarks).toEqual(["hold"]);
+      expect(plan.postedTransitions).toEqual([]);
+      expect(plan.postedInserts).toEqual([]);
+      expect(plan.pendingDeletes).toEqual([]);
+    });
+
+    it("marks the hold posted-at-bank instead of replacing it when the amount changed (a tip)", () => {
+      const plan = planBankSnapshotReconciliation(
+        [existing("gas", "SHEETZ 123", -10000)],
+        [incoming("SHEETZ 123", -10500, "2026-08-28")],
+        [],
+        true,
+      );
+      expect(plan.postedAtBankMarks).toEqual(["gas"]);
+      expect(plan.postedTransitions).toEqual([]);
+      expect(plan.postedReplacements).toEqual([]);
+      expect(plan.postedInserts).toEqual([]);
+      expect(plan.warnings).toEqual([]);
+    });
+
+    it("discards an ambiguous amount-changed posted row instead of inserting it", () => {
+      // Both holds are still listed pending, so D3a has nothing to resolve — this test is
+      // only about the ambiguous-amount-change branch not inserting the posted row.
+      const plan = planBankSnapshotReconciliation(
+        [
+          existing("one", "RESTAURANT", -5000, { isParent: true }),
+          existing("two", "RESTAURANT", -5100),
+        ],
+        [incoming("RESTAURANT", -6200)],
+        [incoming("RESTAURANT", -5000), incoming("RESTAURANT", -5100)],
+        true,
+      );
+      expect(plan.postedInserts).toEqual([]);
+      expect(plan.postedTransitions).toEqual([]);
+      expect(plan.postedReplacements).toEqual([]);
+      expect(plan.warnings).toEqual([]);
+    });
+
+    it("Amazon hold retirement: D3b carries a hold to its sole successor despite the page's generic display name", () => {
+      // The page's own pending description ("Amazon.com") never overlaps SimpleFIN's
+      // fuller descriptor ("AMAZON MKTPL*537NK9DZ2") — the exact mismatch class D4 exists
+      // to fix. A single qualifying candidate retires the hold regardless.
+      const plan = planBankSnapshotReconciliation(
+        [
+          existing("feed-amazon", "AMAZON MKTPL*537NK9DZ2", -1377, {
+            pending: false,
+            externalSource: "api:simplefin",
+          }),
+          existing("hold-amazon", "Amazon.com", -1377, {
+            budgetCategoryId: "shopping",
+          }),
+        ],
+        [],
+        [],
+        true,
+      );
+      expect(plan.pendingDeletes).toEqual(["hold-amazon"]);
+      expect(plan.pendingCarries).toEqual([
+        {
+          pendingId: "hold-amazon",
+          targetId: "feed-amazon",
+          carry: { budgetCategoryId: "shopping" },
+        },
+      ]);
+      expect(plan.warnings).toEqual([]);
+    });
+
+    it("ChatGPT/Claude: still picks its own successor over an unrelated same-amount charge when both candidates exist", () => {
+      // The production case `feedPairing.ts` exists for, replayed through D3b: a scraped
+      // ChatGPT hold vanishes from the page's pending list, and both ChatGPT's own feed
+      // row and an unrelated Claude charge at the same amount are on file. Ranking by
+      // description still picks ChatGPT — ranking is not the same as no longer checking.
+      const plan = planBankSnapshotReconciliation(
+        [
+          existing("feed-claude", "Claude", -2120, {
+            pending: false,
+            externalSource: "api:simplefin",
+            transactionDate: "2026-08-29",
+          }),
+          existing("feed-chatgpt", "ChatGPT", -2120, {
+            pending: false,
+            externalSource: "api:simplefin",
+          }),
+          existing("hold-chatgpt", "ChatGPT", -2120),
+        ],
+        [],
+        [],
+        true,
+      );
+      expect(plan.pendingDeletes).toEqual(["hold-chatgpt"]);
+      expect(plan.pendingCarries).toEqual([
+        { pendingId: "hold-chatgpt", targetId: "feed-chatgpt", carry: {} },
+      ]);
+    });
+
+    it("keeps an ambiguous lost hold instead of guessing, and does not delete it", () => {
+      const plan = planBankSnapshotReconciliation(
+        [
+          existing("posted-1", "DOMINOS 1234", -2100, {
+            pending: false,
+            externalSource: "api:simplefin",
+          }),
+          existing("posted-2", "DOMINOS 5678", -2050, {
+            pending: false,
+            externalSource: "api:simplefin",
+          }),
+          existing("hold-dominos", "Domino's", -2000),
+        ],
+        [],
+        [],
+        true,
+      );
+      expect(plan.pendingDeletes).toEqual([]);
+      expect(plan.pendingCarries).toEqual([]);
+      expect(plan.warnings[0]).toContain("Domino's");
+      expect(plan.warnings[0]).toContain("Kept");
+    });
   });
 });

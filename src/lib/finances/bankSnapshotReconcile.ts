@@ -54,6 +54,11 @@ export type BankSnapshotReconciliationPlan = {
   pendingCarries: BankSnapshotPendingCarry[];
   /** Browser-pending omitted by the complete page set, plus duplicate feed holds. */
   pendingDeletes: string[];
+  /**
+   * D4: on a feed-covered account, a stored hold the page now shows posted — stays pending,
+   * envelope intact, flagged rather than turned into page-authored posted history.
+   */
+  postedAtBankMarks: string[];
   /** Incoming posted rows a stored history-feed row already pairs with. */
   postedCoveredByFeed: number;
   warnings: string[];
@@ -168,20 +173,37 @@ function closestMatch(
  * its envelope, notes and flow move onto the feed row before the hold is dropped, rather than
  * waiting for the next sync to notice.
  *
+ * **`feedCovered` accounts never get page-authored posted history**
+ * (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D4). Chase and Capital One's page
+ * display names (`Amazon.com`) routinely share nothing with SimpleFIN's fuller descriptors
+ * (`AMAZON MKTPL*537NK9DZ2`), so a page-side match against a stored hold can fail even when
+ * it is unambiguously the same charge — and every failure used to fall through to inserting
+ * the page's own copy as a brand new posted row, a permanent duplicate once the feed's own
+ * copy also arrived. Now, for these accounts: an incoming posted row with no stored feed pair
+ * is never inserted (the feed will bring it), and one that matches a stored hold does not
+ * transition that hold into posted — it stays pending, envelope intact, flagged
+ * `postedAtBankMarks` instead. `resolveLostHold` (below) is what eventually retires it once
+ * the feed's own row arrives, on a later capture.
+ *
  * Everything left unpaired goes through the identity-free paths this always had: an
  * `externalId` match against a stored row is a re-paste of the same page and is dropped; a
  * pending row's own posting is recognised by amount, date and description
- * (`sameEvent`/`sameDateAndDescription`); anything left is a genuinely new posted row.
+ * (`sameEvent`/`sameDateAndDescription`); anything left is a genuinely new posted row —
+ * unless `feedCovered`, where it is simply not inserted.
  *
  * The browser's pending list is complete for its own prior holds (D3a): one it no longer
  * lists is removed. Before removing it, D3b tries to carry its state onto a posted row within
  * Actual's approximate-amount band and a wider date tolerance — a hold that posted with a tip
- * added. No unique candidate removes the hold with a warning instead of guessing.
+ * added, or a page-side name a feed's descriptor never matched. `resolveLostHold` ranks
+ * candidates by description rather than requiring it to match (D4): exactly one qualifying
+ * row retires the hold outright; several retire it only with one clear description winner;
+ * several with none keeps the hold and warns instead of guessing.
  */
 export function planBankSnapshotReconciliation(
   existing: readonly ExistingBankSnapshotRow[],
   posted: readonly ParsedBankSnapshotRow[],
   pending: readonly ParsedBankSnapshotRow[],
+  feedCovered: boolean,
 ): BankSnapshotReconciliationPlan {
   const postedHistory = existing.filter((row) => !row.pending);
   const postedHistoryById = new Map(postedHistory.map((row) => [row.id, row]));
@@ -202,6 +224,7 @@ export function planBankSnapshotReconciliation(
   const postedInserts: ParsedBankSnapshotRow[] = [];
   const pendingCarries: BankSnapshotPendingCarry[] = [];
   const pendingDeletes = new Set<string>();
+  const postedAtBankMarks = new Set<string>();
   const warnings: string[] = [];
   const unresolvedPosted: ParsedBankSnapshotRow[] = [];
 
@@ -253,6 +276,12 @@ export function planBankSnapshotReconciliation(
       continue;
     }
     usedPending.add(match.row.id);
+    if (feedCovered) {
+      // D4: the page confirms one of its own holds posted, but it never authors posted
+      // history for this account — stays pending, envelope intact, flagged instead.
+      postedAtBankMarks.add(match.row.id);
+      continue;
+    }
     if (match.row.isParent && match.candidateCount > 1) {
       const warning = `Replaced an ambiguous split pending transaction "${match.row.description}" when it posted; its split edits could not be attached safely.`;
       postedReplacements.push({ existingId: match.row.id, incoming, warning });
@@ -294,6 +323,7 @@ export function planBankSnapshotReconciliation(
       ? 1
       : browserCandidates.length + simpleFinCandidates.length;
     if (occurrenceCount !== 1 || incomingOccurrences !== 1) {
+      if (feedCovered) continue; // D4: the feed will bring it; nothing here to attach or lose.
       postedInserts.push(incoming);
       if (candidates.some((candidate) => candidate.isParent)) {
         const warning = `Could not attach the ambiguous split pending transaction to posted "${incoming.description}"; the complete pending set decides whether that split is retained or discarded.`;
@@ -306,6 +336,10 @@ export function planBankSnapshotReconciliation(
     // the browser identity, where edits made during the page-authority window live.
     const matched = browserCandidates[0] ?? simpleFinCandidates[0];
     usedPending.add(matched.id);
+    if (feedCovered) {
+      postedAtBankMarks.add(matched.id);
+      continue;
+    }
     if (crossSourceDuplicate) {
       const duplicate = simpleFinCandidates[0];
       usedPending.add(duplicate.id);
@@ -345,8 +379,8 @@ export function planBankSnapshotReconciliation(
   // remains stored so it can resume after the 36-hour browser authority window.
   for (const row of browserPending) {
     if (usedPending.has(row.id) || usedBrowserForCurrent.has(row.id)) continue;
-    pendingDeletes.add(row.id);
     if (row.isParent) {
+      pendingDeletes.add(row.id);
       warnings.push(
         `Discarded split pending transaction "${row.description}" because the complete bank snapshot no longer listed it and no posted match was unambiguous.`,
       );
@@ -356,13 +390,22 @@ export function planBankSnapshotReconciliation(
     if (resolution.outcome === "carry") {
       const target = postedHistoryById.get(resolution.postedId);
       if (target) {
+        pendingDeletes.add(row.id);
         pendingCarries.push({
           pendingId: row.id,
           targetId: target.id,
           carry: carryableFields(row, target),
         });
       }
+    } else if (resolution.outcome === "ambiguous") {
+      // D4: several posted rows qualify and none is a clear description winner — kept
+      // rather than guessed onto the wrong successor. The hold stays pending, exactly as
+      // it was, until a later capture narrows the field or the user resolves it by hand.
+      warnings.push(
+        `Kept pending transaction "${row.description}" because more than one posted row could be its successor and none was a clear match by description; resolve it by hand.`,
+      );
     } else {
+      pendingDeletes.add(row.id);
       warnings.push(
         `Removed pending transaction "${row.description}" because the complete bank snapshot no longer listed it and no posted row could be confirmed as its successor.`,
       );
@@ -378,6 +421,7 @@ export function planBankSnapshotReconciliation(
     pendingInserts,
     pendingCarries,
     pendingDeletes: [...pendingDeletes],
+    postedAtBankMarks: [...postedAtBankMarks],
     postedCoveredByFeed: pairings.length,
     warnings,
   };

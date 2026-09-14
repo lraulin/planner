@@ -193,7 +193,10 @@ describeDb("applyBankBrowserSnapshot", () => {
     });
   });
 
-  it("keeps working balance and every budget checkpoint unchanged as pending posts", async () => {
+  it("marks posted-at-bank instead of transitioning, and keeps every checkpoint unchanged", async () => {
+    // D4: this account has a SimpleFIN link (feed-covered), so the page's own posted list
+    // never turns a stored hold into posted history — it stays pending, flagged, and every
+    // total that does not care about pending-vs-posted (money, RTA) is untouched.
     const raw = snapshot();
     const beforeBudget = await loadBudget(userId, MONTH);
     const beforeMonth = findMonth(beforeBudget.months, MONTH)!;
@@ -205,9 +208,11 @@ describeDb("applyBankBrowserSnapshot", () => {
 
     expect(result.posted).toMatchObject({
       received: 8,
-      transitioned: 8,
+      transitioned: 0,
+      replaced: 0,
       inserted: 0,
       duplicates: 0,
+      markedPostedAtBank: 8,
     });
     expect(result.pending.received).toBe(2);
     expect(result.currentBalanceCents).toBe(-37_080);
@@ -220,15 +225,9 @@ describeDb("applyBankBrowserSnapshot", () => {
     const account = (await listAccounts(userId))[0];
     expect(account.balanceCents).toBe(-37_080);
     const rows = await listTransactions(userId);
-    expect(rows.filter((row) => row.pending)).toHaveLength(2);
-    expect(
-      rows.filter((row) => row.pending).reduce((sum, row) => sum + row.amountCents, 0),
-    ).toBe(-8_471);
-    expect(rows.filter((row) => !row.pending)).toHaveLength(8);
-    expect(
-      rows.filter((row) => !row.pending).reduce((sum, row) => sum + row.amountCents, 0),
-    ).toBe(-19_192);
-    expect(account.balanceCents - 8_471).toBe(-45_551);
+    expect(rows).toHaveLength(10);
+    expect(rows.every((row) => row.pending)).toBe(true);
+    expect(rows.reduce((sum, row) => sum + row.amountCents, 0)).toBe(-27_663);
 
     const afterBudget = await loadBudget(userId, MONTH);
     const afterMonth = findMonth(afterBudget.months, MONTH)!;
@@ -240,8 +239,20 @@ describeDb("applyBankBrowserSnapshot", () => {
       notes: "Keep this note",
       flowOverride: "spend",
       budgetCategoryId: envelopeId,
-      pending: false,
+      pending: true,
     });
+    const [preservedRow] = await db
+      .select({ postedAtBank: financeTransactions.postedAtBank })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, preserved.id));
+    expect(preservedRow.postedAtBank).not.toBeNull();
+
+    const untouched = rows.find((row) => row.description === "SHEETZ")!;
+    const [untouchedRow] = await db
+      .select({ postedAtBank: financeTransactions.postedAtBank })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, untouched.id));
+    expect(untouchedRow.postedAtBank).toBeNull();
 
     const event = await loadFinanceAuditEvent(userId, result.auditEventId);
     expect(event).not.toBeNull();
@@ -266,7 +277,11 @@ describeDb("applyBankBrowserSnapshot", () => {
       inserted: 0,
       transitioned: 0,
       replaced: 0,
-      duplicates: 8,
+      duplicates: 0,
+      // Recognised again (the plan still finds the match); nothing is written the second
+      // time, since the stamp from the first capture already answers "when was this
+      // noticed" and a later paste noticing the same hold again is not new information.
+      markedPostedAtBank: 8,
     });
     expect(second.pending).toMatchObject({ inserted: 0, updated: 2, removed: 0 });
     const event = await loadFinanceAuditEvent(userId, second.auditEventId);
@@ -543,5 +558,151 @@ describeDb("applyBankBrowserSnapshot", () => {
       .where(eq(financeTransactions.externalId, "old-dominos-hold"));
     expect(holdGone).toEqual([]);
     expect(result.pending.removed).toBe(1);
+  });
+
+  it("Amazon hold retirement: carries a lost hold to its sole successor despite the page's generic display name", async () => {
+    // D4's own regression case: the page's own hold description ("Amazon.com") never
+    // overlaps SimpleFIN's fuller descriptor ("AMAZON MKTPL*537NK9DZ2"). Before D4 this
+    // hold could never retire — description was a gate, not a rank — and stayed in the
+    // register forever, un-carried, once SimpleFIN's copy also arrived.
+    await db.insert(financeTransactions).values([
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-13",
+        postedDate: "2026-08-13",
+        pending: false,
+        description: "AMAZON MKTPL*537NK9DZ2",
+        amount: "-13.77",
+        sourceCategory: "",
+        externalSource: "api:simplefin",
+        externalId: "simplefin-amazon",
+      },
+      {
+        userId,
+        accountId,
+        transactionDate: "2026-08-12",
+        postedDate: null,
+        pending: true,
+        description: "Amazon.com",
+        amount: "-13.77",
+        sourceCategory: "",
+        budgetCategoryId: envelopeId,
+        notes: "gift wrap",
+        externalSource: "scrape:chase",
+        externalId: "old-amazon-hold",
+      },
+    ]);
+
+    // A page snapshot that no longer lists the Amazon.com hold — it cleared, and this
+    // capture's pending list is complete for the browser's own holds.
+    const raw = snapshot({
+      posted: posted.map(([date, description, amount]) => ({
+        transactionDate: date,
+        postedDate: date,
+        description,
+        category: "Shopping",
+        amount,
+      })),
+    });
+
+    const result = await applyBankBrowserSnapshot(userId, raw);
+
+    expect(result.warnings).toEqual([]);
+    const [feedRow] = await db
+      .select({
+        budgetCategoryId: financeTransactions.budgetCategoryId,
+        notes: financeTransactions.notes,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.externalId, "simplefin-amazon"));
+    expect(feedRow.budgetCategoryId).toBe(envelopeId);
+    expect(feedRow.notes).toBe("gift wrap");
+
+    const holdGone = await db
+      .select({ id: financeTransactions.id })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.externalId, "old-amazon-hold"));
+    expect(holdGone).toEqual([]);
+    expect(result.pending.removed).toBe(1);
+  });
+
+  it("Sep 14 replay: posted rows SimpleFIN already holds under a different descriptor insert nothing and leave RTA unchanged", async () => {
+    // The actual incident: 12 Amazon charges Chase's page reported as newly posted, all
+    // already delivered by SimpleFIN under its own fuller descriptor
+    // (`AMAZON MKTPL*537NK9DZ2` vs the page's `Amazon.com`) — never seen pending on this
+    // page at all, so there is no hold to mark either. Before D4, `descriptionsOverlap`
+    // failing on that mismatch sent all 12 straight into postedInserts.
+    const amazonCharges = [
+      { day: "13", cents: -1377, feedName: "AMAZON MKTPL*537NK9DZ2" },
+      { day: "12", cents: -2450, feedName: "AMAZON MKTPL*7Q2FH8XN3" },
+      { day: "11", cents: -899, feedName: "AMAZON MKTPL*9K1RT4LP2" },
+      { day: "10", cents: -4599, feedName: "Amazon Prime Membership" },
+      { day: "09", cents: -1250, feedName: "AMAZON MKTPL*3H7YB2QW1" },
+      { day: "08", cents: -3299, feedName: "AMAZON MKTPL*5N8KC1VZ4" },
+      { day: "07", cents: -675, feedName: "AMAZON MKTPL*2R9TF6MD8" },
+      { day: "06", cents: -1899, feedName: "AMAZON MKTPL*8L3XQ7YN5" },
+      { day: "05", cents: -2199, feedName: "AMAZON MKTPL*4J6WV9PK3" },
+      { day: "04", cents: -549, feedName: "AMAZON MKTPL*1G5RH3TC7" },
+      { day: "03", cents: -3450, feedName: "AMAZON MKTPL*6M2ZL8SB1" },
+      { day: "02", cents: -1725, feedName: "AMAZON MKTPL*9D4NF7QW6" },
+    ];
+    await db.insert(financeTransactions).values(
+      amazonCharges.map((charge, index) => ({
+        userId,
+        accountId,
+        transactionDate: `2026-08-${charge.day}`,
+        postedDate: `2026-08-${charge.day}`,
+        pending: false,
+        description: charge.feedName,
+        amount: (charge.cents / 100).toFixed(2),
+        sourceCategory: "",
+        externalSource: "api:simplefin",
+        externalId: `simplefin-amazon-${index}`,
+        budgetCategoryId: envelopeId,
+      })),
+    );
+
+    const beforeBudget = await loadBudget(userId, MONTH);
+    const beforeMonth = findMonth(beforeBudget.months, MONTH)!;
+
+    const raw = snapshot({
+      posted: [
+        ...posted.map(([date, description, amount]) => ({
+          transactionDate: date,
+          postedDate: date,
+          description,
+          category: "Shopping",
+          amount,
+        })),
+        ...amazonCharges.map((charge) => ({
+          transactionDate: `Aug ${charge.day}, 2026`,
+          postedDate: `Aug ${charge.day}, 2026`,
+          // The page's own generic display name — never overlaps the feed's descriptor.
+          description: "Amazon.com",
+          category: "Shopping",
+          amount: `$${(Math.abs(charge.cents) / 100).toFixed(2)}`,
+        })),
+      ],
+    });
+
+    const result = await applyBankBrowserSnapshot(userId, raw);
+
+    // Nothing inserted for the Amazon rows — the 8 marks are the unrelated fixture holds
+    // from beforeEach, included in `posted` here only so this capture reads as complete.
+    expect(result.posted.inserted).toBe(0);
+    expect(result.posted.markedPostedAtBank).toBe(8);
+    expect(result.checkpointDelta.readyToAssignCents).toBe(0);
+
+    const afterBudget = await loadBudget(userId, MONTH);
+    const afterMonth = findMonth(afterBudget.months, MONTH)!;
+    expect(afterMonth.readyToAssignCents).toBe(beforeMonth.readyToAssignCents);
+
+    const rows = await listTransactions(userId);
+    expect(rows.filter((row) => row.externalSource === "api:simplefin")).toHaveLength(
+      amazonCharges.length,
+    );
+    // Nothing scraped landed beside the SimpleFIN copies under the page's own display name.
+    expect(rows.filter((row) => row.description === "Amazon.com")).toEqual([]);
   });
 });

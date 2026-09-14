@@ -143,14 +143,14 @@ and fix the userscript/parse so credits keep their sign (suspected non-ASCII min
 
 ## Acceptance criteria
 
-- [ ] Replaying the Sep 14 Chase capture (fixture from the audit event) inserts 0 posted rows and
+- [x] Replaying the Sep 14 Chase capture (fixture from the audit event) inserts 0 posted rows and
       leaves RTA unchanged.
 - [ ] A duplicate categorized charge written straight into the ledger overspends its envelope
       and leaves current RTA unchanged; a bank headline change alone leaves RTA unchanged.
 - [x] Income arriving and assign/unassign are the only fold inputs that move RTA (unit tests), plus
       uncategorized activity and Reconcile adjustments. _(Reconcile adjustments: Task 6.)_
 - [x] Ledger identity holds in every budget/snapshot/handover suite (`assertPoolIdentity` replaced).
-- [ ] A hold posted at the bank survives D3a with its envelope and is retired onto the SimpleFIN
+- [x] A hold posted at the bank survives D3a with its envelope and is retired onto the SimpleFIN
       row when it arrives, including an Amazon-style description mismatch.
 - [x] Per-account openings sum to the budget opening; membership change adds/removes one account's
       opening; cross-user cases on every new mutation.
@@ -162,10 +162,12 @@ and fix the userscript/parse so credits keep their sign (suspected non-ASCII min
 
 ## Changes from original plan
 
-| #   | Change                                                                                           | Why                                                                                                                  |
-| --- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| 1   | D4 retirement: feed row's description wins over the page's, on hold→feed carry-state.            | Lee: the feed descriptor has more information; page-scraped text is a placeholder until a better source arrives.     |
-| 2   | D2 rollout: `loadBudget` falls back to the legacy total until every on-budget account is seeded. | Lee's call between three rollout options — keeps the live app unchanged between Task 3 landing and Task 8's cutover. |
+| #   | Change                                                                                                                   | Why                                                                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | D4 retirement: feed row's description wins over the page's, on hold→feed carry-state.                                    | Lee: the feed descriptor has more information; page-scraped text is a placeholder until a better source arrives.                                                                                              |
+| 2   | D2 rollout: `loadBudget` falls back to the legacy total until every on-budget account is seeded.                         | Lee's call between three rollout options — keeps the live app unchanged between Task 3 landing and Task 8's cutover.                                                                                          |
+| 3   | D4's description-ranks-not-gates rule applies to `resolveLostHold` (D3b) only; `pairRows`'s batch matching is unchanged. | Applying it to `pairRows` too would have called the "two identical same-day charges" case ambiguous and broken pairing that already works — a bipartite-matching concern D3b's per-hold search doesn't share. |
+| 4   | D4 also excludes `postedAtBank`-flagged rows from `loadWorkingPendingSelection`'s pending-money sum.                     | Found writing the integration tests: without it, a flagged hold's money double-counts against the browser headline that already reports it posted.                                                            |
 
 > While this spec is **active**, when we make a material change to requirements, design, or scope
 > (including from feedback on what was implemented), update the relevant sections and append to
@@ -216,13 +218,41 @@ every account's mismatch showing as "—" (none seeded yet, exactly the rollout 
 Activity grid's Headline impact column correctly shows a nonzero RTA delta for a historical
 SimpleFIN sync that the old pool-based column would have hidden.
 
-## Task 5: Bank pages stop writing posted history
+## Task 5: Bank pages stop writing posted history **done**
 
-`bankSnapshotReconcile.ts`/`bankSnapshotApply.ts`: feed-covered accounts skip posted inserts;
-posted-at-bank hold state (column or flag on the pending row; decide by schema read, generated
-migration if needed); `feedPairing.ts` successor match ranks by description instead of gating for
-hold→feed retirement and D3b, ambiguous → keep + warn. Tests: Sep 14 Chase replay fixture, Amazon
-hold retirement, ChatGPT/Claude still not cross-carried when both candidates exist.
+`planBankSnapshotReconciliation` gained a `feedCovered` parameter (always true for its one caller
+today — both scraped cards already carry a SimpleFIN link — kept explicit rather than assumed,
+since D4's rule is about accounts with a history feed, not about this one caller). When true: an
+incoming posted row with no stored match is dropped, never inserted; one that matches a stored
+hold is flagged `postedAtBankMarks` (new `finance_transactions.posted_at_bank`, migration 0097)
+instead of transitioning it to posted — envelope, notes and split untouched, only the first
+capture to notice it writes the stamp. `feedPairing.ts`'s `resolveLostHold` (D3b) drops the
+description gate: exactly one amount+date-qualifying row retires the hold regardless of
+description; several retire it only with one clear description winner; several with none is a
+new `"ambiguous"` outcome — kept, not deleted, warned instead of guessed.
+
+**`pairRows` itself stays unchanged** — a deliberate scope decision, not an oversight. It does
+global bipartite matching (many rows against many rows at once, e.g. two identical same-day
+charges pairing 1:1), where "several candidates, no clear winner" already covers the legitimate
+mutually-interchangeable-duplicate case; applying D3b's per-hold ambiguity rule there would have
+flagged that case ambiguous too and broken pairing that already works. `resolveLostHold` is a
+per-hold search over a small, already-relevant candidate set, where the new rule is safe. Every
+existing `pairRows` test (including both ChatGPT/Claude regression tests) still passes unchanged.
+
+**Found and fixed while writing the integration tests, not before them:** flagging a hold
+posted-at-bank without excluding it from `loadWorkingPendingSelection`'s pending-money sum
+double-counts it — the browser headline balance already reflects it as posted, and the row was
+still being added again as "pending" on top. Fixed by excluding `postedAtBank IS NOT NULL` rows
+from that one query only (`workingPendingQuery.ts`) — envelope activity, opening-position and
+backlog math all keep counting the row normally via the ordinary money-rows sum, since they never
+consult that selection.
+
+Tests: unit (`bankSnapshotReconcile.test.ts`, `feedPairing.test.ts`) cover the Sep 14 replay shape,
+Amazon-style hold retirement despite a page/feed description mismatch, the ambiguous-keep-warn
+outcome, and ChatGPT/Claude through both `pairRows` and the new `resolveLostHold`. Integration
+(`bankSnapshotApply.integration.test.ts`) replays the actual incident shape end to end (0 inserted,
+RTA unchanged) and verifies the double-count fix against real Postgres. Verified against real dev
+data: Accounts and Budget render unchanged (no rows are flagged yet, exactly the rollout design).
 
 ## Task 6: Reconcile action
 

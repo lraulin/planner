@@ -1,0 +1,1 @@
+ALTER TABLE "finance_transactions" ADD COLUMN "posted_at_bank" timestamp with time zone;

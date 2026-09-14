@@ -2204,6 +2204,16 @@ export const financeTransactions = pgTable(
      * replaces it when the real one posts, which is why user edits on one are not durable.
      */
     pending: boolean("pending").notNull().default(false),
+    /**
+     * When a bank page reported this hold as posted at the bank, for a feed-covered account.
+     *
+     * The row stays `pending: true` with its envelope intact — the page is never the source
+     * of posted history for these accounts (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/`
+     * D4) — until a history-feed row (SimpleFIN, a CSV) actually succeeds it and the usual
+     * hold-retirement path removes this row. Null means the page has not (yet, or ever)
+     * reported it posted.
+     */
+    postedAtBank: timestamp("posted_at_bank", { withTimezone: true }),
     description: text("description").notNull(),
     /** Signed; positive is money into the account. */
     amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),

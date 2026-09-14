@@ -680,6 +680,13 @@
       "when": 1789399326420,
       "tag": "0096_nappy_risque",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1789402231302,
+      "tag": "0097_equal_sunspot",
+      "breakpoints": true
     }
   ]
 }

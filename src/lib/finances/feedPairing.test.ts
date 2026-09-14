@@ -160,9 +160,15 @@ describe("resolveLostHold", () => {
     expect(resolveLostHold(hold, [posted])).toEqual({ outcome: "none" });
   });
 
-  it("finds nothing when the description does not overlap", () => {
+  it("carries to the one qualifying row even when its description does not overlap", () => {
+    // D4: a page's own display name for a hold routinely shares nothing with a feed's
+    // fuller descriptor (Amazon.com vs AMAZON MKTPL*537NK9DZ2). Description ranks
+    // candidates; it never gates the single one that qualifies on amount and date.
     const posted = row({ id: "posted", amountCents: -2100, description: "Pizza Hut" });
-    expect(resolveLostHold(hold, [posted])).toEqual({ outcome: "none" });
+    expect(resolveLostHold(hold, [posted])).toEqual({
+      outcome: "carry",
+      postedId: "posted",
+    });
   });
 
   it("refuses to guess between several equally plausible successors", () => {
@@ -176,7 +182,27 @@ describe("resolveLostHold", () => {
       amountCents: -2050,
       description: "DOMINOS 5678",
     });
-    expect(resolveLostHold(hold, [first, second])).toEqual({ outcome: "none" });
+    expect(resolveLostHold(hold, [first, second])).toEqual({
+      outcome: "ambiguous",
+      candidateIds: ["posted-1", "posted-2"],
+    });
+  });
+
+  it("picks the one clear description winner among several qualifying rows", () => {
+    const winner = row({
+      id: "posted-winner",
+      amountCents: -2100,
+      description: "DOMINOS 1234",
+    });
+    const stranger = row({
+      id: "posted-stranger",
+      amountCents: -2050,
+      description: "Pizza Hut",
+    });
+    expect(resolveLostHold(hold, [winner, stranger])).toEqual({
+      outcome: "carry",
+      postedId: "posted-winner",
+    });
   });
 
   it("accepts a posted row right at the tolerance boundary", () => {

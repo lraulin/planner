@@ -100,32 +100,48 @@ export function pairRows(
 export const LOST_HOLD_TOLERANCE_DAYS = 7;
 
 export type LostHoldResolution =
-  { outcome: "carry"; postedId: string } | { outcome: "none" };
+  | { outcome: "carry"; postedId: string }
+  | { outcome: "none" }
+  | { outcome: "ambiguous"; candidateIds: string[] };
 
 /**
  * Where an omitted hold's envelope and notes should land before the hold is removed.
  *
  * Bank-page pending sets omit a hold once it clears, one way or another: it posted, or it
  * never did (a duplicate the page dropped). Only the first case has anywhere to carry state
- * to. A posted row counts as that hold's successor when its amount is within Actual's 7.5%
- * band (a tip added at settlement), it is dated within `LOST_HOLD_TOLERANCE_DAYS`, and the
- * description overlaps. Anything but exactly one such row is treated as "no successor found"
- * — zero because there is nothing to carry to, several because picking one would be a guess
- * — and the caller removes the hold with a warning instead.
+ * to. A posted row qualifies as a candidate successor when its amount is within Actual's
+ * 7.5% band (a tip added at settlement) and it is dated within `LOST_HOLD_TOLERANCE_DAYS`.
+ *
+ * **Description ranks candidates; it does not gate them**
+ * (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D4). A page's own display name
+ * for a hold (`Amazon.com`) routinely shares nothing with a feed's fuller descriptor
+ * (`AMAZON MKTPL*537NK9DZ2`) — requiring overlap lost every one of those retirements and
+ * left the hold, and the duplicate it caused, in the register forever. So: exactly one
+ * qualifying row retires the hold outright, whatever its description. Several qualifying
+ * rows retire it only when exactly one of them also overlaps the hold's description — a
+ * clear winner among plausible successors. Several with no clear winner keep the hold
+ * rather than guess which one it became; the caller warns instead of removing it.
  */
 export function resolveLostHold(
   hold: PairableRow,
   postedCandidates: readonly PairableRow[],
 ): LostHoldResolution {
-  const matches = postedCandidates.filter(
+  const qualifying = postedCandidates.filter(
     (candidate) =>
       amountMatches(candidate.amountCents, hold.amountCents) &&
-      dateDistance(hold, candidate) <= LOST_HOLD_TOLERANCE_DAYS &&
-      descriptionsOverlap(hold.description, candidate.description),
+      dateDistance(hold, candidate) <= LOST_HOLD_TOLERANCE_DAYS,
   );
 
-  if (matches.length === 1) {
-    return { outcome: "carry", postedId: matches[0].id };
+  if (qualifying.length === 0) return { outcome: "none" };
+  if (qualifying.length === 1) {
+    return { outcome: "carry", postedId: qualifying[0].id };
   }
-  return { outcome: "none" };
+
+  const overlapping = qualifying.filter((candidate) =>
+    descriptionsOverlap(hold.description, candidate.description),
+  );
+  if (overlapping.length === 1) {
+    return { outcome: "carry", postedId: overlapping[0].id };
+  }
+  return { outcome: "ambiguous", candidateIds: qualifying.map((row) => row.id) };
 }

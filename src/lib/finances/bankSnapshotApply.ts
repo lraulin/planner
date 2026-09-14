@@ -48,6 +48,11 @@ export type BankSnapshotApplyResult = {
     duplicates: number;
     /** Rows a stored history-feed row already pairs with, so nothing new was inserted. */
     coveredByFeed: number;
+    /**
+     * D4: a feed-covered account's own hold, flagged as posted at the bank rather than
+     * turned into page-authored posted history. Always 0 for an account with no history feed.
+     */
+    markedPostedAtBank: number;
   };
   pending: {
     received: number;
@@ -72,6 +77,7 @@ type NormalizedTransactionState = {
   transactionDate: string;
   postedDate: string | null;
   pending: boolean;
+  postedAtBank: Date | null;
   amountCents: number;
   sourceCategory: string;
   derivedFlow: string | null;
@@ -330,6 +336,7 @@ async function loadNormalizedTransactionState(
       transactionDate: financeTransactions.transactionDate,
       postedDate: financeTransactions.postedDate,
       pending: financeTransactions.pending,
+      postedAtBank: financeTransactions.postedAtBank,
       amount: financeTransactions.amount,
       sourceCategory: financeTransactions.sourceCategory,
       derivedFlow: financeTransactions.derivedFlow,
@@ -351,6 +358,7 @@ async function loadNormalizedTransactionState(
         transactionDate: row.transactionDate,
         postedDate: row.postedDate,
         pending: row.pending,
+        postedAtBank: row.postedAtBank,
         amountCents: numericStringToCents(row.amount) ?? 0,
         sourceCategory: row.sourceCategory,
         derivedFlow: row.derivedFlow,
@@ -422,6 +430,10 @@ export async function applyBankBrowserSnapshot(
     if (!link) {
       throw new Error(`${account.name} has no bank balance link to update.`);
     }
+    // Every account this function accepts already has a SimpleFIN link (the guard above),
+    // so this is always true today — kept explicit rather than assumed, since D4's rule is
+    // about accounts with a history feed, not about this one caller.
+    const feedCovered = link !== undefined;
 
     const scope = snapshotScope(snapshot, account);
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(
@@ -462,6 +474,7 @@ export async function applyBankBrowserSnapshot(
       existing,
       snapshot.posted,
       snapshot.pending,
+      feedCovered,
     );
     const newIds: string[] = [];
 
@@ -521,6 +534,24 @@ export async function applyBankBrowserSnapshot(
     for (const row of plan.pendingInserts) {
       newIds.push(await insertSnapshotRow(tx, userId, account.id, snapshot, row, true));
     }
+    // D4: the page confirms one of its own holds posted, but never authors posted history
+    // for a feed-covered account — flagged, still pending, envelope untouched. Only the
+    // first capture to notice writes the stamp: a later paste that notices the same hold
+    // again is then a true no-op, not a moving timestamp with nothing else to show for it.
+    if (plan.postedAtBankMarks.length > 0) {
+      await tx
+        .update(financeTransactions)
+        .set({ postedAtBank: snapshot.capturedAt, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            eq(financeTransactions.accountId, account.id),
+            eq(financeTransactions.pending, true),
+            isNull(financeTransactions.postedAtBank),
+            inArray(financeTransactions.id, plan.postedAtBankMarks),
+          ),
+        );
+    }
     // Carry a retiring pending row's envelope, notes and flow onto its posted successor
     // before that pending row is deleted below.
     for (const carry of plan.pendingCarries) {
@@ -576,8 +607,12 @@ export async function applyBankBrowserSnapshot(
       `${plan.postedTransitions.length + plan.postedReplacements.length} posted transition${plan.postedTransitions.length + plan.postedReplacements.length === 1 ? "" : "s"}, ` +
       `${plan.postedInserts.length} new posted, ${snapshot.pending.length} pending` +
       (plan.postedCoveredByFeed > 0
-        ? `; ${plan.postedCoveredByFeed} already held by the bank feed.`
-        : ".") +
+        ? `; ${plan.postedCoveredByFeed} already held by the bank feed`
+        : "") +
+      (plan.postedAtBankMarks.length > 0
+        ? `; ${plan.postedAtBankMarks.length} marked posted at the bank, awaiting the feed`
+        : "") +
+      "." +
       (authority.headlineMoved
         ? ""
         : " A more current figure is already in force, so the headline was left alone.");
@@ -615,6 +650,7 @@ export async function applyBankBrowserSnapshot(
         replaced: plan.postedReplacements.length,
         duplicates: plan.postedDuplicates.length,
         coveredByFeed: plan.postedCoveredByFeed,
+        markedPostedAtBank: plan.postedAtBankMarks.length,
       },
       pending: {
         received: snapshot.pending.length,
