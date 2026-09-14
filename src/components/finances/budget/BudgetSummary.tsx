@@ -3,6 +3,7 @@
 import { formatUsd } from "@/lib/finances/money";
 import { readyToAssignNote, type BudgetMonth } from "@/lib/finances/budget/envelope";
 import { stillNeededGroups, type StillNeeded } from "@/lib/finances/budget/assign/plan";
+import type { BudgetMismatch } from "@/lib/finances/budget/queries";
 
 /**
  * Ready to Assign, the backlog that explains it, and the arithmetic behind it.
@@ -27,6 +28,7 @@ import { stillNeededGroups, type StillNeeded } from "@/lib/finances/budget/assig
 export function BudgetSummary({
   month,
   accountPoolCents,
+  mismatch,
   action = "assign",
   onAction,
   uncategorizedCount = 0,
@@ -35,8 +37,11 @@ export function BudgetSummary({
   stillNeeded,
 }: {
   month: BudgetMonth;
-  /** When viewing the current month, the live on-budget working pool. */
+  /** When viewing the current month, the live on-budget working pool. A diagnostic only —
+   * Ready to Assign no longer reconciles to it (D1). */
   accountPoolCents?: number;
+  /** Per-account and transfer drift from the register (D3). Whole-budget, not this month's. */
+  mismatch?: BudgetMismatch;
   /** Same slot: Assign, or Fix This when Ready to Assign is negative on a current/future month. */
   action?: "assign" | "fix-this";
   onAction?: () => void;
@@ -63,6 +68,24 @@ export function BudgetSummary({
   const groups = stillNeededGroups(stillNeeded);
   // Both readings of the one question: what is unassigned, and what has still to arrive.
   const toArrive = Math.max(0, needed - Math.max(0, ready));
+
+  // Warnings, never Ready to Assign terms (D3) — a bank disagreement is visible here, never
+  // folded into the headline above.
+  const mismatchedAccounts = (mismatch?.accounts ?? []).filter(
+    (account) => account.mismatchCents !== 0,
+  );
+  const hasTransferMismatch = (mismatch?.unmatchedTransferCents ?? 0) !== 0;
+  const mismatchTotalCents =
+    mismatchedAccounts.reduce((sum, account) => sum + account.mismatchCents, 0) +
+    (mismatch?.unmatchedTransferCents ?? 0);
+  const mismatchLabel = [
+    mismatchedAccounts.length > 0
+      ? `${mismatchedAccounts.length} ${mismatchedAccounts.length === 1 ? "account" : "accounts"}`
+      : "",
+    hasTransferMismatch ? "an unmatched transfer" : "",
+  ]
+    .filter(Boolean)
+    .join(" and ");
 
   return (
     <section className="rounded border border-rule bg-surface p-3">
@@ -146,6 +169,36 @@ export function BudgetSummary({
         </p>
       ) : null}
 
+      {/* D3: a bank disagreement is a warning with a link, never an RTA term. Gated on
+          `mismatchLabel` being non-empty rather than the total: an account $5 over and one
+          $5 under would cancel to a $0.00 total that still needs a look. */}
+      {mismatchLabel ? (
+        <p
+          role="status"
+          className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-[var(--goal-unmet)] bg-[var(--goal-unmet)]/10 px-3 py-2 text-[0.8125rem] text-ink"
+        >
+          <span aria-hidden="true" className="text-[var(--goal-unmet)]">
+            ⚠
+          </span>
+          <span>
+            {mismatchLabel}{" "}
+            {mismatchedAccounts.length + (hasTransferMismatch ? 1 : 0) === 1
+              ? "doesn't"
+              : "don't"}{" "}
+            match the bank
+          </span>
+          <span className="tabular text-ink-muted">
+            {formatUsd(mismatchTotalCents)}
+          </span>
+          <a
+            href="/finances/accounts"
+            className="ml-auto inline-flex min-h-tap items-center rounded border border-[var(--goal-unmet)] px-2 text-ink hover:bg-[color-mix(in_srgb,var(--goal-unmet)_16%,transparent)] md:min-h-0 md:py-1"
+          >
+            Review
+          </a>
+        </p>
+      ) : null}
+
       <details className="group mt-3 border-t border-rule pt-2">
         <summary className="flex min-h-tap cursor-pointer list-none items-center gap-1.5 text-[0.8125rem] text-ink-muted marker:content-none hover:text-ink md:min-h-0">
           <span aria-hidden="true" className="inline-block group-open:rotate-90">
@@ -172,14 +225,10 @@ export function BudgetSummary({
         {accountPoolCents !== undefined ? (
           <p className="mt-2 max-w-prose text-[0.75rem] leading-snug text-ink-muted">
             Account pool{" "}
-            <span className="tabular text-ink">{formatUsd(accountPoolCents)}</span>
-            {" = "}
-            Ready to Assign + envelope balances
-            {month.assignedInFutureMonthsCents !== 0
-              ? " + assigned in future months"
-              : ""}
-            {month.bufferedCents !== 0 ? " + held" : ""}. Credit-card debt reduces the
-            pool; a payment between on-budget accounts does not.
+            <span className="tabular text-ink">{formatUsd(accountPoolCents)}</span> —
+            the live bank position, shown for reference. It no longer defines Ready to
+            Assign; a disagreement between the two shows up above as a mismatch to fix,
+            not a silent change to this figure.
           </p>
         ) : null}
       </details>

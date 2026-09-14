@@ -1591,6 +1591,7 @@ export function BudgetView({
           accountPoolCents={
             data.month === monthKeyOf(data.todayKey) ? data.accountPoolCents : undefined
           }
+          mismatch={data.mismatch}
           uncategorizedCount={data.uncategorizedCount}
           uncategorizedCents={data.uncategorizedCents}
           uncategorizedSinceLabel={

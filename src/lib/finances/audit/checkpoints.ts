@@ -58,6 +58,11 @@ export async function captureFinanceMoneyCheckpoint(
             month: month.month,
             readyToAssignCents: month.readyToAssignCents,
             accountPoolCents: budget.accountPoolCents,
+            mismatchTotalCents:
+              budget.mismatch.accounts.reduce(
+                (sum, account) => sum + account.mismatchCents,
+                0,
+              ) + budget.mismatch.unmatchedTransferCents,
             uncategorizedCount: budget.uncategorizedCount,
             uncategorizedActivityCents: month.uncategorizedActivityCents,
             envelopes: budget.categories

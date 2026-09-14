@@ -58,6 +58,7 @@ export type ActivityCheckpointSection = {
   budgets: readonly {
     month: string;
     readyToAssign: string;
+    mismatch: string;
     uncategorized: string;
     envelopes: readonly { name: string; detail: string }[];
   }[];
@@ -147,6 +148,10 @@ function checkpointSection(
           prior && budget
             ? moneyChange(prior.readyToAssignCents, budget.readyToAssignCents)
             : formatUsd(display.readyToAssignCents),
+        mismatch:
+          prior && budget
+            ? moneyChange(prior.mismatchTotalCents, budget.mismatchTotalCents)
+            : formatUsd(display.mismatchTotalCents),
         uncategorized:
           prior && budget
             ? moneyChange(
@@ -249,6 +254,7 @@ function checkpointRows(section: ActivityCheckpointSection): TwoCol[] {
   for (const budget of section.budgets) {
     rows.push({ label: `Budget ${budget.month}`, value: "", depth: 0 });
     rows.push({ label: "Ready to Assign", value: budget.readyToAssign, depth: 1 });
+    rows.push({ label: "Mismatch", value: budget.mismatch, depth: 1 });
     rows.push({
       label: "Uncategorized activity",
       value: budget.uncategorized,
@@ -320,6 +326,7 @@ function activityToYamlObject(
           budgets: body.checkpoints.budgets.map((budget) => ({
             month: budget.month,
             readyToAssign: budget.readyToAssign,
+            mismatch: budget.mismatch,
             uncategorized: budget.uncategorized,
             envelopes: budget.envelopes.map((envelope) => ({ ...envelope })),
           })),

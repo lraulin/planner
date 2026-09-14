@@ -120,6 +120,7 @@ function data(categories: BudgetCategoryRow[]): BudgetData {
     todayKey: "2026-09-05",
     openingCents: 10000,
     accountPoolCents: 8000,
+    mismatch: { accounts: [], unmatchedTransferCents: 0 },
     uncategorizedCount: 0,
     uncategorizedCents: 0,
     goals: {},

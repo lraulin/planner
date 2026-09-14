@@ -147,14 +147,14 @@ and fix the userscript/parse so credits keep their sign (suspected non-ASCII min
       leaves RTA unchanged.
 - [ ] A duplicate categorized charge written straight into the ledger overspends its envelope
       and leaves current RTA unchanged; a bank headline change alone leaves RTA unchanged.
-- [ ] Income arriving and assign/unassign are the only fold inputs that move RTA (unit tests), plus
-      uncategorized activity and Reconcile adjustments.
-- [ ] Ledger identity holds in every budget/snapshot/handover suite (`assertPoolIdentity` replaced).
+- [x] Income arriving and assign/unassign are the only fold inputs that move RTA (unit tests), plus
+      uncategorized activity and Reconcile adjustments. _(Reconcile adjustments: Task 6.)_
+- [x] Ledger identity holds in every budget/snapshot/handover suite (`assertPoolIdentity` replaced).
 - [ ] A hold posted at the bank survives D3a with its envelope and is retired onto the SimpleFIN
       row when it arrives, including an Amazon-style description mismatch.
-- [ ] Per-account openings sum to the budget opening; membership change adds/removes one account's
+- [x] Per-account openings sum to the budget opening; membership change adds/removes one account's
       opening; cross-user cases on every new mutation.
-- [ ] Budget card shows the mismatch line (per account + unmatched transfers) and no reconciliation
+- [x] Budget card shows the mismatch line (per account + unmatched transfers) and no reconciliation
       term; Activity Headline impact is RTA delta.
 - [ ] Reconcile writes one audited adjustment that moves RTA by exactly the confirmed difference.
 - [ ] Production cutover dry-run receipt shows before/after RTA, per-account openings and their
@@ -197,13 +197,24 @@ existing delta maintenance. Pure statement-first/headline-fallback seed logic an
 itself is Task 8's). Integration tests: per-account seeding on join, staleness on leave, the
 fallback-then-sum transition, and a second user unable to touch the first user's opening.
 
-## Task 4: Mismatch model and UI
+## Task 4: Mismatch model and UI **done**
 
-Query per-account bank-vs-ledger and unmatched transfers in `budget/queries.ts`; `BudgetSummary.tsx`
-removes the reconciliation term, adds the amber line (reuse the uncategorized tray's link pattern);
-Accounts shows the per-account figure; `audit/checkpoints.ts` records RTA and mismatches;
-`ActivityDrawer`/Activity grid Headline impact → RTA delta. Agent contract fields that expose
-reconciliation (`src/lib/agent/*`) follow.
+`loadBudgetMismatch` (`budget/queries.ts`) computes per-account bank-vs-ledger drift
+(`openingPositionFor(…, [accountId]) − budgetOpeningCents`, D3's own formula rearranged to reuse
+that query) and the net of unpaired on-budget transfer-flow rows since start, via the pure
+`unmatchedTransferCents` from Task 2. `BudgetSummary.tsx` drops the stale pool-equals-RTA caption
+and adds the amber "doesn't match the bank" line (uncategorized-tray pattern), linking to Accounts.
+`AccountsView`/`accountColumns.tsx` gained a Mismatch column, sortable and filterable, fed through
+`operationalAccountRows`. `audit/checkpoints.ts`/`types.ts`/`export.ts`/`ActivityDrawer.tsx` carry
+`mismatchTotalCents` alongside RTA. `listFinanceAuditEvents`'s `headlineImpactCents` now diffs
+`budgets[0].readyToAssignCents` instead of `accountPoolCents` — verified against a real assign
+(pool unchanged, RTA moved) in a new integration test. `src/lib/agent/*` never exposed
+`accountReconciliationCents`, so there was nothing to follow there.
+
+Verified against real dev data: the Budget card and Accounts grid both render correctly with
+every account's mismatch showing as "—" (none seeded yet, exactly the rollout design), and the
+Activity grid's Headline impact column correctly shows a nonzero RTA delta for a historical
+SimpleFIN sync that the old pool-based column would have hidden.
 
 ## Task 5: Bank pages stop writing posted history
 

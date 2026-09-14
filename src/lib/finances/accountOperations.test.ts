@@ -34,6 +34,7 @@ it("keeps working, posted and pending separate and identifies the selected headl
     [],
     "2026-09-05",
     identity,
+    new Map(),
   );
   expect(row).toMatchObject({
     workingCents: 7000,
@@ -50,6 +51,7 @@ it("keeps working, posted and pending separate and identifies the selected headl
     [],
     "2026-09-05",
     identity,
+    new Map(),
   );
   expect(ledger).toMatchObject({
     workingCents: 10000,
@@ -89,6 +91,7 @@ it("puts a connection failure only beside its linked account, and stale captures
     connections,
     "2026-09-05",
     identity,
+    new Map(),
   );
   expect(rows.map((row) => row.freshness)).toEqual([
     "Reconnect bank",
@@ -107,6 +110,22 @@ it("prints a stale balance's date in the workspace format, not as a raw key", ()
     [],
     "2026-09-06",
     (key) => (key ? "5 Sep 2026" : ""),
+    new Map(),
   );
   expect(row.freshness).toBe("As of 5 Sep 2026 · refresh or import");
+});
+
+it("looks up the mismatch by account id and leaves it null when absent", () => {
+  const [withMismatch, withoutMismatch] = operationalAccountRows(
+    [account, { ...account, id: "b" }],
+    [],
+    new Set(),
+    [],
+    [],
+    "2026-09-05",
+    identity,
+    new Map([["a", -1234]]),
+  );
+  expect(withMismatch?.mismatchCents).toBe(-1234);
+  expect(withoutMismatch?.mismatchCents).toBeNull();
 });

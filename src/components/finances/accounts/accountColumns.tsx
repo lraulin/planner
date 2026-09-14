@@ -19,6 +19,7 @@ export type AccountColumnCtx = {
 export const ACCOUNT_COLUMN_IDS = [
   "name",
   "balance",
+  "mismatch",
   "posted",
   "pending",
   "asOf",
@@ -154,6 +155,33 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
         {formatUsd(row.node.workingCents)}
       </span>
     ),
+  },
+  {
+    id: "mismatch",
+    label: "Mismatch",
+    // D3: bank working balance − (recorded opening + rows since start). Null reads as a
+    // blank cell, not $0.00 — an off-budget or unseeded account has nothing to compare.
+    compactText: (row) =>
+      row.node.mismatchCents ? `Mismatch ${formatUsd(row.node.mismatchCents)}` : "",
+    width: "8rem",
+    align: "right",
+    filterKind: "number",
+    filterValue: (row) =>
+      row.node.mismatchCents === null ? null : formatUsd(row.node.mismatchCents),
+    sortValue: (row) => row.node.mismatchCents,
+    compact: "meta",
+    render: (row) =>
+      row.node.mismatchCents === null ? (
+        <span className="text-xs text-ink-faint">—</span>
+      ) : (
+        <span
+          className={`tabular text-[0.8125rem] ${
+            row.node.mismatchCents === 0 ? "text-ink-faint" : "text-[var(--goal-unmet)]"
+          }`}
+        >
+          {formatUsd(row.node.mismatchCents)}
+        </span>
+      ),
   },
   ...(["posted", "pending"] as const).map(
     (id): ColumnDef<AccountColumnCtx, OperationalAccount> => ({

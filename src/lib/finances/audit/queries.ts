@@ -113,8 +113,9 @@ export async function listFinanceAuditEvents(
           ? event.summary
           : `${event.summary} (+${eventCount - 1} related)`,
       headlineImpactCents:
-        firstBefore && latestAfter
-          ? latestAfter.accountPoolCents - firstBefore.accountPoolCents
+        firstBefore?.budgets[0] && latestAfter?.budgets[0]
+          ? latestAfter.budgets[0].readyToAssignCents -
+            firstBefore.budgets[0].readyToAssignCents
           : null,
     }),
   );

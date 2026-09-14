@@ -46,6 +46,8 @@ export type FinanceBudgetMoneyCheckpoint = {
   month: string;
   readyToAssignCents: number;
   accountPoolCents: number;
+  /** Σ per-account drift + unmatched transfers (D3) — a warning, never part of RTA. */
+  mismatchTotalCents: number;
   uncategorizedCount: number;
   uncategorizedActivityCents: number;
   envelopes: FinanceEnvelopeMoneyCheckpoint[];
@@ -85,6 +87,10 @@ export type FinanceAuditEventSummary = Pick<
   "id" | "batchId" | "kind" | "origin" | "occurredAt" | "summary" | "scope" | "warnings"
 > & {
   changeCount: number;
-  /** Current account-pool movement across the event, when checkpoints exist. */
+  /**
+   * Ready to Assign movement across the event's primary budget month, when checkpoints
+   * exist. The bank-pool figure is a diagnostic now (D1) and stays in the detail pane
+   * instead of driving this column.
+   */
   headlineImpactCents: number | null;
 };

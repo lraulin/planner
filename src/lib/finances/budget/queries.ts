@@ -29,6 +29,7 @@ import {
   monthEndKey,
   monthKeyOf,
   shiftMonthKey,
+  unmatchedTransferCents,
   type BudgetMonth,
   type MonthKey,
 } from "./envelope";
@@ -163,6 +164,8 @@ export type BudgetData = {
    * reconciles to this (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D1).
    */
   accountPoolCents: number;
+  /** Per-account and transfer drift from the register — warnings, never RTA terms (D3). */
+  mismatch: BudgetMismatch;
   /** On-budget rows since the start month with no envelope: the size of the backlog. */
   uncategorizedCount: number;
   uncategorizedCents: number;
@@ -392,6 +395,7 @@ export async function loadBudget(
     todayKey,
     openingCents: 0,
     accountPoolCents: poolCents,
+    mismatch: { accounts: [], unmatchedTransferCents: 0 },
     uncategorizedCount: 0,
     uncategorizedCents: 0,
     goals: {},
@@ -418,7 +422,7 @@ export async function loadBudget(
     BUDGET_HORIZON_MONTHS,
   );
 
-  const [allocations, bufferedRows, activity, backlog, accountOpenings] =
+  const [allocations, bufferedRows, activity, backlog, accountOpenings, mismatch] =
     await Promise.all([
       executor
         .select({
@@ -452,6 +456,7 @@ export async function loadBudget(
         })
         .from(financeAccounts)
         .where(eq(financeAccounts.userId, userId)),
+      loadBudgetMismatch(userId, startMonth, executor),
     ]);
   const foldActivity = activity.filter((row) => row.month >= startMonth);
   const preStartActivity = activity.filter((row) => row.month < startMonth);
@@ -514,6 +519,7 @@ export async function loadBudget(
     months,
     month,
     openingCents,
+    mismatch,
     goals,
     movementEvents,
     ...backlog,
@@ -578,6 +584,103 @@ export async function openingPositionFor(
     0,
   );
   return working - after;
+}
+
+export type AccountMismatch = {
+  accountId: string;
+  accountName: string;
+  /** Bank working balance − (recorded opening + rows since start). Zero means it matches. */
+  mismatchCents: number;
+};
+
+export type BudgetMismatch = {
+  accounts: readonly AccountMismatch[];
+  unmatchedTransferCents: number;
+};
+
+/**
+ * D3: how far each on-budget account's live position has drifted from its recorded opening,
+ * and the net of on-budget transfer-flow rows that have not been paired off since the start
+ * month. Both are warnings, never Ready to Assign terms — Reconcile (a later task) is the
+ * only deliberate way either moves RTA.
+ *
+ * Per account, `mismatchCents` is `openingPositionFor(…, [accountId]) − budgetOpeningCents`:
+ * `openingPositionFor` is `working − rows since start`, so subtracting the recorded opening
+ * from it is exactly `working − (opening + rows since start)`, D3's own formula, rearranged
+ * to reuse the query that already computes the live half of it.
+ *
+ * Unseeded accounts (`budget_opening_cents` still null) are left out — there is no recorded
+ * opening yet to have drifted from, and every account is unseeded until Task 8's cutover
+ * runs (`effectiveOpeningCents`'s rollout note in the ledger-rta spec).
+ */
+export async function loadBudgetMismatch(
+  userId: string,
+  startMonth: MonthKey | null,
+  executor: FinanceExecutor = db,
+): Promise<BudgetMismatch> {
+  if (!startMonth) return { accounts: [], unmatchedTransferCents: 0 };
+
+  const [accounts, openings] = await Promise.all([
+    listAccounts(userId, executor),
+    executor
+      .select({
+        id: financeAccounts.id,
+        offBudget: financeAccounts.offBudget,
+        budgetOpeningCents: financeAccounts.budgetOpeningCents,
+      })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.userId, userId)),
+  ]);
+  const openingById = new Map(openings.map((row) => [row.id, row]));
+  const seeded = accounts.filter((account) => {
+    const opening = openingById.get(account.id);
+    return opening && !opening.offBudget && opening.budgetOpeningCents !== null;
+  });
+
+  const [accountMismatches, pending] = await Promise.all([
+    Promise.all(
+      seeded.map(async (account): Promise<AccountMismatch> => {
+        const livePositionCents = await openingPositionFor(
+          userId,
+          startMonth,
+          [account.id],
+          executor,
+        );
+        const openingCents = openingById.get(account.id)?.budgetOpeningCents ?? 0;
+        return {
+          accountId: account.id,
+          accountName: account.name,
+          mismatchCents: livePositionCents - openingCents,
+        };
+      }),
+    ),
+    loadWorkingPendingSelection(userId, accounts, executor),
+  ]);
+
+  const transferRows = await executor
+    .select({ amount: financeTransactions.amount })
+    .from(financeTransactions)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financeAccounts.userId, userId),
+        eq(financeAccounts.offBudget, false),
+        moneyRows,
+        notSupersededPending(pending.supersededTransactionIds),
+        gte(financeTransactions.transactionDate, startMonth),
+        sql`(${financeTransactions.transferGroupId} is not null or coalesce(${financeTransactions.flowOverride}::text, ${financeTransactions.derivedFlow}::text, '') = 'internal_transfer')`,
+      ),
+    );
+
+  return {
+    accounts: accountMismatches,
+    unmatchedTransferCents: unmatchedTransferCents(
+      transferRows.map((row) => ({
+        amountCents: numericStringToCents(row.amount) ?? 0,
+      })),
+    ),
+  };
 }
 
 function storedBillOf(category: BudgetCategoryRow): StoredBill | null {

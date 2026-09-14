@@ -9,6 +9,7 @@ import {
 } from "@/lib/finances/accountOperations";
 import type { DashboardData } from "@/lib/finances/dashboardQueries";
 import { accountPoolBreakdown } from "@/lib/finances/accountPool";
+import type { BudgetMismatch } from "@/lib/finances/budget/queries";
 import {
   ACCOUNT_GROUP_BY_VALUES,
   accountTotals,
@@ -73,11 +74,14 @@ export function AccountsView({
   operations,
   links,
   todayKey,
+  mismatch,
 }: {
   initialAccounts: FinanceAccountRow[];
   operations: DashboardData;
   links: BankLinkRow[];
   todayKey: string;
+  /** D3: per-account drift from the register. Empty before the budget is set up. */
+  mismatch: BudgetMismatch;
 }) {
   const [snapshotOpen, setSnapshotOpen] = useState(false);
   const [rows, setRows] = useState(initialAccounts);
@@ -114,6 +118,13 @@ export function AccountsView({
   const gridState = views.grid;
   const formatDate = useDateFormatter();
 
+  const mismatchByAccountId = useMemo(
+    () =>
+      new Map(
+        mismatch.accounts.map((account) => [account.accountId, account.mismatchCents]),
+      ),
+    [mismatch],
+  );
   const accounts = useMemo(
     () =>
       operationalAccountRows(
@@ -124,8 +135,9 @@ export function AccountsView({
         operations.connections,
         todayKey,
         formatDate,
+        mismatchByAccountId,
       ),
-    [rows, operations, links, todayKey, formatDate],
+    [rows, operations, links, todayKey, formatDate, mismatchByAccountId],
   );
   const gridRows: GridRow<OperationalAccount>[] = useMemo(
     () => groupAccounts(accounts, gridState.groupBy),

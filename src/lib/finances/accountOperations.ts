@@ -7,6 +7,11 @@ export type OperationalAccount = FinanceAccountRow &
     freshness: string;
     balanceSourceLabel: string;
     needsConnection: boolean;
+    /**
+     * D3: bank working balance − (recorded opening + rows since start). Null when the
+     * account is off-budget or not yet seeded — there is nothing to compare against.
+     */
+    mismatchCents: number | null;
   };
 export function operationalAccountRows(
   accounts: readonly FinanceAccountRow[],
@@ -24,6 +29,8 @@ export function operationalAccountRows(
    * reintroduce the raw key and see nothing wrong.
    */
   formatDate: (dateKey: string | null | undefined) => string,
+  /** Keyed by account id, from `loadBudgetMismatch` — required for the same reason `today` is. */
+  mismatchByAccountId: ReadonlyMap<string, number>,
 ): OperationalAccount[] {
   return accounts.map((account) => {
     const link = links.find((row) => row.accountId === account.id);
@@ -56,6 +63,7 @@ export function operationalAccountRows(
       freshness,
       balanceSourceLabel,
       needsConnection,
+      mismatchCents: mismatchByAccountId.get(account.id) ?? null,
     };
   });
 }

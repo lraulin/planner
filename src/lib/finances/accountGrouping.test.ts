@@ -32,6 +32,7 @@ function account(partial: Partial<OperationalAccount> = {}): OperationalAccount 
     freshness: "Import or connect bank",
     balanceSourceLabel: "Transaction history",
     needsConnection: false,
+    mismatchCents: null,
     ...partial,
   };
 }

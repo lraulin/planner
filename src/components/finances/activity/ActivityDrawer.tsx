@@ -112,6 +112,12 @@ function CheckpointRail({
                   ? moneyChange(prior.readyToAssignCents, budget.readyToAssignCents)
                   : formatUsd(display.readyToAssignCents)}
               </span>
+              <span className="text-ink-muted">Mismatch</span>
+              <span className="tabular text-right text-ink">
+                {prior && budget
+                  ? moneyChange(prior.mismatchTotalCents, budget.mismatchTotalCents)
+                  : formatUsd(display.mismatchTotalCents)}
+              </span>
               <span className="text-ink-muted">Uncategorized activity</span>
               <span className="tabular text-right text-ink">
                 {prior && budget
