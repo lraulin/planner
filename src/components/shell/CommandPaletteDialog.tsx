@@ -10,6 +10,7 @@ import {
 } from "@/lib/commands/registry";
 import { formatBindings } from "@/lib/commands/bindings";
 import { CommandGlyph } from "@/components/icons/commandIcons";
+import { isComposingKey } from "@/lib/keyboard";
 import { useCommands } from "./CommandProvider";
 import { useGlobalCommands } from "./globalCommands";
 
@@ -94,6 +95,7 @@ export function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
               setActive((current) => step(current, -1));
               break;
             case "Enter":
+              if (isComposingKey(event.nativeEvent)) break;
               event.preventDefault();
               choose(results[active]);
               break;

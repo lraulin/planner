@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { matchContacts, resolveContactQuery } from "@/lib/contacts/match";
 import type { ContactOption } from "@/lib/contacts/types";
+import { isComposingKey } from "@/lib/keyboard";
 
 const INPUT_CLASS =
   "min-h-tap w-full rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] font-normal normal-case tracking-normal text-ink outline-none focus:border-select-edge disabled:opacity-50 md:min-h-0";
@@ -218,6 +219,7 @@ export function ContactSelect({
             return;
           }
           if (event.key === "Enter") {
+            if (isComposingKey(event.nativeEvent)) return;
             event.preventDefault();
             if (open) choose(rows[active]);
             return;

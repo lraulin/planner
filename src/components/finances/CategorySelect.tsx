@@ -13,6 +13,7 @@ import {
   type EnvelopeCatalog,
 } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind } from "@/db/schema";
+import { isComposingKey } from "@/lib/keyboard";
 
 /**
  * The Category picker: a typeahead whose open list is organised the way the Budget page
@@ -270,6 +271,7 @@ export function CategorySelect({
               step(-1);
               break;
             case "Enter":
+              if (isComposingKey(event.nativeEvent)) break;
               event.preventDefault();
               commit(true);
               break;

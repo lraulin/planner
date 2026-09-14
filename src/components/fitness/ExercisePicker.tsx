@@ -7,6 +7,7 @@ import {
   resolveExerciseQuery,
 } from "@/lib/fitness/exerciseMatch";
 import type { ExerciseSummary } from "@/lib/fitness/types";
+import { isComposingKey } from "@/lib/keyboard";
 
 type Row =
   | { kind: "empty" }
@@ -227,6 +228,7 @@ export function ExercisePicker({
             return;
           }
           if (event.key === "Enter") {
+            if (isComposingKey(event.nativeEvent)) return;
             event.preventDefault();
             if (open) choose(rows[active]);
             return;

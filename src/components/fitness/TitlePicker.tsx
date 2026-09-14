@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { titlesMatch } from "@/lib/fitness/titleMatch";
 import type { RepeatableTitle } from "@/lib/fitness/types";
+import { isComposingKey } from "@/lib/keyboard";
 
 /**
  * Type-to-filter list of titles this person has already used. Same interaction family as
@@ -103,6 +104,7 @@ export function TitlePicker({
             e.preventDefault();
             setActive((i) => Math.max(i - 1, 0));
           } else if (e.key === "Enter") {
+            if (isComposingKey(e.nativeEvent)) return;
             e.preventDefault();
             const chosen = matches[active];
             if (chosen) pick(chosen);
