@@ -339,7 +339,10 @@ async function backlogSince(
 ) {
   const [row] = await executor
     .select({
-      count: sql<number>`count(*)::int`,
+      // A Reconcile adjustment (D5) is deliberately uncategorized forever — that is what
+      // makes it an RTA term — so its amount belongs in the sum, but counting it here would
+      // nag Lee to file a transaction that was never meant to get an envelope.
+      count: sql<number>`count(*) filter (where ${financeTransactions.externalSource} is distinct from 'reconcile')::int`,
       amount: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
     })
     .from(financeTransactions)
@@ -601,8 +604,8 @@ export type BudgetMismatch = {
 /**
  * D3: how far each on-budget account's live position has drifted from its recorded opening,
  * and the net of on-budget transfer-flow rows that have not been paired off since the start
- * month. Both are warnings, never Ready to Assign terms — Reconcile (a later task) is the
- * only deliberate way either moves RTA.
+ * month. Both are warnings, never Ready to Assign terms — Reconcile (`reconcileAccount`)
+ * is the only deliberate way either moves RTA.
  *
  * Per account, `mismatchCents` is `openingPositionFor(…, [accountId]) − budgetOpeningCents`:
  * `openingPositionFor` is `working − rows since start`, so subtracting the recorded opening

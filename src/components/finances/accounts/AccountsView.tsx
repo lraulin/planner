@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { BankLinkRow } from "@/lib/banksync/queries";
 import {
   operationalAccountRows,
@@ -20,7 +21,11 @@ import { customFilter } from "@/lib/grid/customFilter";
 import { RefreshBanksButton, BankSnapshotPaste } from "./AccountOperations";
 import type { GridRow } from "@/lib/tree/slice";
 import type { FinanceAccountRow } from "@/lib/finances/types";
-import { deleteAccountAction, listAccountsAction } from "@/app/finances/actions";
+import {
+  deleteAccountAction,
+  listAccountsAction,
+  reconcileAccountAction,
+} from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
@@ -69,6 +74,28 @@ function deleteMessage(account: FinanceAccountRow): string {
   return `Delete ${account.name} and its ${count} transaction${count === 1 ? "" : "s"}?`;
 }
 
+function reconcileDisabledReason(
+  account: OperationalAccount | undefined,
+  noRow: string | undefined,
+): string | undefined {
+  if (noRow || !account) return noRow ?? "Select a row first";
+  if (account.offBudget) {
+    return "Off-budget accounts are not in Ready to Assign";
+  }
+  if (account.mismatchCents === null) {
+    return "This account has no recorded opening yet";
+  }
+  if (account.mismatchCents === 0) {
+    return "Already matches the bank";
+  }
+  return undefined;
+}
+
+function reconcileMessage(account: OperationalAccount): string {
+  const difference = formatUsd(account.mismatchCents);
+  return `Write a ${difference} Reconcile adjustment dated today so ${account.name} matches the bank? Ready to Assign will move by that amount.`;
+}
+
 export function AccountsView({
   initialAccounts,
   operations,
@@ -91,6 +118,10 @@ export function AccountsView({
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FinanceAccountRow | null>(null);
+  const [pendingReconcile, setPendingReconcile] = useState<OperationalAccount | null>(
+    null,
+  );
+  const router = useRouter();
   const {
     open: importOpen,
     openImport,
@@ -207,15 +238,44 @@ export function AccountsView({
     });
   }, [pendingDelete, openId, closeDrawer, refresh, setPendingDelete]);
 
+  const requestReconcile = useCallback(
+    (id: string) => {
+      const row = accounts.find((entry) => entry.id === id);
+      if (row != null && row.mismatchCents != null && row.mismatchCents !== 0) {
+        setPendingReconcile(row);
+      }
+    },
+    [accounts, setPendingReconcile],
+  );
+
+  const confirmReconcile = useCallback(() => {
+    const target = pendingReconcile;
+    setPendingReconcile(null);
+    if (!target) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await reconcileAccountAction(target.id);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+      refresh();
+    });
+  }, [pendingReconcile, router, refresh, setPendingReconcile]);
+
   const capabilitiesFor = useCallback(
-    (rowId: string | null, count: number) =>
-      catalogCapabilities({
+    (rowId: string | null, count: number) => {
+      const selected = accounts.find((entry) => entry.id === rowId);
+      const noRow = rowId === null ? "Select a row first" : undefined;
+      const reconcileDisabled = reconcileDisabledReason(selected, noRow);
+      return catalogCapabilities({
         createLabel: "Import transactions…",
         openLabel: "Open account",
         selection: {
           id: rowId,
           count,
-          label: rows.find((entry) => entry.id === rowId)?.name,
+          label: selected?.name,
         },
         onCreate: openImport,
         onOpen: openDrawer,
@@ -223,8 +283,25 @@ export function AccountsView({
           if (ids[0]) requestDelete(ids[0]);
         },
         onSelectAll: selectAll,
-      }),
-    [rows, openImport, openDrawer, requestDelete, selectAll],
+        pageCommands: [
+          {
+            id: "accounts.reconcile",
+            label: "Reconcile",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            rowMenu: true,
+            keywords: "match bank adjustment ready to assign",
+            disabled: Boolean(reconcileDisabled),
+            title: reconcileDisabled,
+            run: () => {
+              if (rowId) requestReconcile(rowId);
+            },
+          },
+        ],
+      });
+    },
+    [accounts, openImport, openDrawer, requestDelete, requestReconcile, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -239,7 +316,8 @@ export function AccountsView({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (openId || pendingDelete || isTypingTarget(event.target)) return;
+      if (openId || pendingDelete || pendingReconcile || isTypingTarget(event.target))
+        return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
         move(1, event.shiftKey);
@@ -252,7 +330,7 @@ export function AccountsView({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, pendingDelete, move]);
+  }, [openId, pendingDelete, pendingReconcile, move]);
 
   const openAccount = gridRows.find((row) => row.kind === "node" && row.id === openId);
   const accountDetail = openAccount?.kind === "node" ? openAccount.node : null;
@@ -436,6 +514,14 @@ export function AccountsView({
         destructive
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
+      />
+      <ConfirmDialog
+        open={pendingReconcile !== null}
+        title={pendingReconcile ? `Reconcile ${pendingReconcile.name}?` : "Reconcile"}
+        message={pendingReconcile ? reconcileMessage(pendingReconcile) : ""}
+        confirmLabel="Reconcile"
+        onConfirm={confirmReconcile}
+        onCancel={() => setPendingReconcile(null)}
       />
     </div>
   );

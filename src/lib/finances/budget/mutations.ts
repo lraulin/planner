@@ -11,7 +11,8 @@ import {
   type EnvelopeKind,
 } from "@/db/schema";
 import { localDateKey } from "@/lib/schedule/geometry";
-import { serializeBudget } from "@/lib/settings/finances";
+import { parseBudget, serializeBudget } from "@/lib/settings/finances";
+import { readSetting } from "@/lib/settings/queries";
 import { writeUserSetting } from "@/lib/settings/mutations";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import * as sortKey from "@/lib/tree/sortKey";
@@ -21,7 +22,8 @@ import {
   categoryAssignableIds,
   partitionCategoryTargets,
 } from "../categoryEligibility";
-import { numericStringToCents } from "../money";
+import { centsToNumericString, formatUsd, numericStringToCents } from "../money";
+import { reconcileAdjustment } from "../reconcileAdjustment";
 import { applyPayeeClaims } from "../payees/claims";
 import { learnFromCategoryEdit } from "../payees/learn";
 import {
@@ -61,6 +63,7 @@ import {
   loadBillAnchors,
   loadBillSnapshots,
   loadBudget,
+  loadBudgetMismatch,
   openingPositionFor,
 } from "./queries";
 import { applyTemplates as runApply, templateCarryIn } from "./templates/apply";
@@ -1692,4 +1695,121 @@ export async function assignBudget(
     applied: result.lines.filter((line) => line.deltaCents !== 0).length,
     errors: result.errors.map((error) => `${error.categoryName}: ${error.message}`),
   };
+}
+
+// ─────────────────────────── Reconcile ───────────────────────────
+
+export type ReconcileReceipt = {
+  accountId: string;
+  accountName: string;
+  /** False when the difference had already closed — a second click, or someone else's fix. */
+  applied: boolean;
+  differenceCents: number;
+  transactionId: string | null;
+};
+
+/**
+ * D5: the one deliberate way a bank/ledger mismatch moves Ready to Assign.
+ *
+ * Re-verifies the account's D3 difference fresh, inside this transaction, rather than
+ * trusting whatever figure the confirmation dialog last showed — a row fixed or a sync
+ * landed in between must not let a stale number through. Writes one adjustment transaction
+ * for exactly that difference (`reconcileAdjustment`) and nothing else; a $0 difference is a
+ * no-op receipt, not an error, since confirming a gap that already closed is not a mistake.
+ */
+export async function reconcileAccount(
+  userId: string,
+  accountId: string,
+): Promise<ReconcileReceipt> {
+  return await db.transaction(async (tx) => {
+    const [account] = await tx
+      .select({ id: financeAccounts.id, name: financeAccounts.name })
+      .from(financeAccounts)
+      .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
+      .limit(1);
+    if (!account) throw new Error("Account not found.");
+
+    const settings = parseBudget(await readSetting(userId, BUDGET_SCOPE, tx));
+    const startMonth = settings.startMonth;
+    if (!startMonth) {
+      throw new Error("Set up the budget before reconciling an account.");
+    }
+
+    const todayKey = localDateKey(new Date());
+    const mismatch = await loadBudgetMismatch(userId, startMonth, tx);
+    const accountMismatch = mismatch.accounts.find(
+      (row) => row.accountId === accountId,
+    );
+    if (!accountMismatch) {
+      throw new Error(
+        `${account.name} has no recorded opening yet, so there is nothing to reconcile.`,
+      );
+    }
+    const differenceCents = accountMismatch.mismatchCents;
+    const adjustment = reconcileAdjustment(accountId, differenceCents, todayKey);
+    if (!adjustment) {
+      return {
+        accountId,
+        accountName: account.name,
+        applied: false,
+        differenceCents: 0,
+        transactionId: null,
+      };
+    }
+
+    const auditScope = {
+      accountIds: [accountId],
+      accountNames: [account.name],
+      budgetMonths: [monthKeyOf(todayKey)],
+    };
+    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(
+      userId,
+      auditScope,
+      tx,
+    );
+
+    const [inserted] = await tx
+      .insert(financeTransactions)
+      .values({
+        userId,
+        accountId,
+        transactionDate: adjustment.transactionDate,
+        description: adjustment.description,
+        amount: centsToNumericString(adjustment.amountCents),
+        flowOverride: adjustment.flowOverride,
+        externalSource: adjustment.externalSource,
+      })
+      .returning({ id: financeTransactions.id });
+
+    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, auditScope, tx);
+    await writeFinanceAuditEvent(tx, userId, {
+      kind: "reconciliation_adjustment",
+      origin: "Finance accounts",
+      summary: `Reconciled ${account.name}: ${formatUsd(differenceCents)} adjustment to match the bank.`,
+      scope: auditScope,
+      beforeCheckpoint,
+      afterCheckpoint,
+      changes: [
+        {
+          entityType: "transaction",
+          entityIdentity: inserted.id,
+          before: null,
+          after: {
+            accountId,
+            amountCents: adjustment.amountCents,
+            description: adjustment.description,
+            externalSource: adjustment.externalSource,
+          },
+        },
+      ],
+    });
+
+    return {
+      accountId,
+      accountName: account.name,
+      applied: true,
+      differenceCents,
+      transactionId: inserted.id,
+    };
+  });
 }

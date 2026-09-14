@@ -82,6 +82,7 @@ import {
   moveBudgetStructureItem,
   moveBudgetStructureItemIntoGroup,
   performBudgetOperation,
+  reconcileAccount,
   renameCategoryGroup,
   saveEnvelopeTarget,
   seedBudget,
@@ -184,6 +185,10 @@ export async function updateAccountAction(
 
 export async function deleteAccountAction(accountId: string): Promise<ActionResult> {
   return run((userId) => deleteAccount(userId, accountId));
+}
+
+export async function reconcileAccountAction(accountId: string): Promise<ActionResult> {
+  return run((userId) => reconcileAccount(userId, accountId));
 }
 
 async function registerContext(userId: string, rawQuery?: unknown) {

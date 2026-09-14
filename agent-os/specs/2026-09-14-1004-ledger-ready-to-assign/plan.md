@@ -156,7 +156,7 @@ and fix the userscript/parse so credits keep their sign (suspected non-ASCII min
       opening; cross-user cases on every new mutation.
 - [x] Budget card shows the mismatch line (per account + unmatched transfers) and no reconciliation
       term; Activity Headline impact is RTA delta.
-- [ ] Reconcile writes one audited adjustment that moves RTA by exactly the confirmed difference.
+- [x] Reconcile writes one audited adjustment that moves RTA by exactly the confirmed difference.
 - [ ] Production cutover dry-run receipt shows before/after RTA, per-account openings and their
       seed source, mismatches; applied only after Lee reads it.
 
@@ -254,12 +254,16 @@ outcome, and ChatGPT/Claude through both `pairRows` and the new `resolveLostHold
 RTA unchanged) and verifies the double-count fix against real Postgres. Verified against real dev
 data: Accounts and Budget render unchanged (no rows are flagged yet, exactly the rollout design).
 
-## Task 6: Reconcile action
+## Task 6: Reconcile action **done**
 
 Pure `src/lib/finances/reconcileAdjustment.ts` (difference, adjustment row) + test; audited
-mutation (`transaction_change` or new `reconciliation_adjustment` audit kind) with cross-user
-integration test; Accounts row command per `components/navigation` (menu + command registry),
-confirm dialog on `ModalShell`.
+mutation (`reconciliation_adjustment` audit kind) with cross-user integration test; Accounts
+row command per `components/navigation` (Item menu + command registry + row menu), confirm
+dialog on `ModalShell` via `ConfirmDialog`. The mutation re-reads D3's mismatch inside the
+transaction rather than trusting the dialog's figure. A Reconcile adjustment stays
+uncategorized (that is what makes it an RTA term) but is excluded from `uncategorizedCount`
+so it does not nag to be filed. The command is disabled with a reason when the account is
+off-budget, unseeded, or already matches.
 
 ## Task 7: Chase sign fix and duplicate report
 
