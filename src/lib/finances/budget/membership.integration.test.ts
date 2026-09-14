@@ -145,6 +145,12 @@ describeDb("account membership rebase", () => {
     const after = await load(userId);
     identityHolds(after);
     expect(after.settings.openingCents).toBe(before.settings.openingCents + 25_000);
+
+    const [investRow] = await db
+      .select({ budgetOpeningCents: financeAccounts.budgetOpeningCents })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.id, investId));
+    expect(investRow?.budgetOpeningCents).toBe(25_000);
   });
 
   it("subtracts that position when a flexible account leaves, and is idempotent", async () => {
@@ -161,6 +167,15 @@ describeDb("account membership rebase", () => {
     const receipt = await rebaseAccountMembership(userId, investId, true);
     expect(receipt.transitions).toHaveLength(1);
     expect(receipt.after.openingCents).toBe(included.settings.openingCents - 10_000);
+
+    // Leaving does not clear the stored per-account opening — it is excluded from the sum
+    // by offBudget alone, and the stale value is harmless because rejoining always
+    // recomputes before writing again.
+    const [investRow] = await db
+      .select({ budgetOpeningCents: financeAccounts.budgetOpeningCents })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.id, investId));
+    expect(investRow?.budgetOpeningCents).toBe(10_000);
 
     const again = await rebaseAccountMembership(userId, investId, true);
     expect(again.transitions).toHaveLength(0);
@@ -224,6 +239,99 @@ describeDb("account membership rebase", () => {
     expect(first.transitions).toHaveLength(1);
     expect((await load(userId)).settings.openingCents).toBe(opening + 30_000);
     identityHolds(await load(userId));
+
+    const [savingsRow] = await db
+      .select({ budgetOpeningCents: financeAccounts.budgetOpeningCents })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.id, savingsId));
+    expect(savingsRow?.budgetOpeningCents).toBe(30_000);
+  });
+
+  it("seeds every on-budget account's own opening at setup, summing to the combined total", async () => {
+    const checkingId = await addAccount(userId, { name: "Checking", kind: "checking" });
+    const savingsId = await addAccount(userId, { name: "Savings", kind: "savings" });
+    const investId = await addAccount(userId, {
+      name: "Brokerage",
+      kind: "investment",
+      offBudget: true,
+    });
+    await addTx(userId, checkingId, "2026-07-01", "40.00");
+    await addTx(userId, savingsId, "2026-07-01", "60.00");
+    await addTx(userId, investId, "2026-07-01", "500.00");
+
+    const result = await seedBudget(userId, {
+      preset: "minimal",
+      startMonth: MONTH,
+      todayKey: TODAY,
+    });
+
+    const rows = await db
+      .select({
+        id: financeAccounts.id,
+        budgetOpeningCents: financeAccounts.budgetOpeningCents,
+      })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.userId, userId));
+    const byId = new Map(rows.map((row) => [row.id, row.budgetOpeningCents]));
+    expect(byId.get(checkingId)).toBe(4_000);
+    expect(byId.get(savingsId)).toBe(6_000);
+    // Off-budget at setup: never seeded.
+    expect(byId.get(investId)).toBeNull();
+    expect((byId.get(checkingId) ?? 0) + (byId.get(savingsId) ?? 0)).toBe(
+      result.openingCents,
+    );
+
+    const data = await load(userId);
+    expect(data.openingCents).toBe(result.openingCents);
+  });
+
+  it("falls back to the legacy total until every on-budget account is seeded, then sums", async () => {
+    const checkingId = await addAccount(userId, { name: "Checking", kind: "checking" });
+    await addTx(userId, checkingId, "2026-07-01", "40.00");
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+
+    const seeded = await load(userId);
+    expect(seeded.openingCents).toBe(4_000);
+    expect(seeded.openingCents).toBe(seeded.settings.openingCents);
+
+    // The shape a real budget is in the moment this migration lands, before a cutover (or
+    // ordinary membership churn) has seeded every account: simulate an unseeded account by
+    // clearing the column this test just watched seedBudget fill in.
+    await db
+      .update(financeAccounts)
+      .set({ budgetOpeningCents: null })
+      .where(eq(financeAccounts.id, checkingId));
+
+    const midTransition = await load(userId);
+    expect(midTransition.openingCents).toBe(midTransition.settings.openingCents);
+
+    await db
+      .update(financeAccounts)
+      .set({ budgetOpeningCents: 4_000 })
+      .where(eq(financeAccounts.id, checkingId));
+
+    const afterSeeding = await load(userId);
+    expect(afterSeeding.openingCents).toBe(4_000);
+  });
+
+  it("does not let a second user seed or move the owner's account opening", async () => {
+    const otherUserId = await makeUser();
+    const checkingId = await addAccount(userId, { name: "Checking", kind: "checking" });
+    await addTx(userId, checkingId, "2026-07-01", "40.00");
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+
+    await expect(includeNewOnBudgetAccount(otherUserId, checkingId)).rejects.toThrow(
+      /Account not found/,
+    );
+    await expect(
+      rebaseAccountMembership(otherUserId, checkingId, true),
+    ).rejects.toThrow(/Account not found/);
+
+    const [row] = await db
+      .select({ budgetOpeningCents: financeAccounts.budgetOpeningCents })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.id, checkingId));
+    expect(row?.budgetOpeningCents).toBe(4_000);
   });
 });
 
@@ -297,10 +405,14 @@ describeDb("single-pool cutover", () => {
     identityHolds(await load(ownerId));
 
     const [row] = await db
-      .select({ offBudget: financeAccounts.offBudget })
+      .select({
+        offBudget: financeAccounts.offBudget,
+        budgetOpeningCents: financeAccounts.budgetOpeningCents,
+      })
       .from(financeAccounts)
       .where(eq(financeAccounts.id, savingsId));
     expect(row?.offBudget).toBe(false);
+    expect(row?.budgetOpeningCents).toBe(20_000);
 
     const retry = await applySinglePoolCutover(ownerId);
     expect(retry.transitions).toHaveLength(0);

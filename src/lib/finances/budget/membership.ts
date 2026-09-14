@@ -1,10 +1,16 @@
 /**
- * One-time opening rebase when an account enters or leaves the budget pool.
+ * Opening bookkeeping when an account enters or leaves the budget pool.
  *
- * Changing membership without rebasing `openingCents` corrupts every later month. All
- * boundary changes go through this module: account creation after the budget started,
+ * Changing membership without recording the account's opening corrupts every later month.
+ * All boundary changes go through this module: account creation after the budget started,
  * a flexible-kind toggle, a kind edit that forces a core account on-budget, and the
  * one-shot savings cutover.
+ *
+ * A joining account gets its own `finance_accounts.budget_opening_cents` set, which is what
+ * `loadBudget` sums once every on-budget account has one (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/`
+ * D2). Until then, `userSettings`'s legacy combined total is still maintained by the same
+ * delta arithmetic this module always used — that total is `effectiveOpeningCents`'s
+ * fallback, not dead weight, so it keeps being kept correct here.
  *
  * Spec: `agent-os/specs/2026-08-24-2206-single-pool-budget/` D5.
  */
@@ -81,7 +87,7 @@ function snapshotOf(data: Awaited<ReturnType<typeof loadBudget>>): LedgerSnapsho
     null;
   const throughMonth = current?.month ?? data.month;
   return {
-    openingCents: data.settings.openingCents,
+    openingCents: data.openingCents,
     categorizedActivityCents: categorizedActivityThrough(data.months, throughMonth),
     readyToAssignCents: current?.readyToAssignCents ?? 0,
     totalEnvelopeBalanceCents: current?.totalBalanceCents ?? 0,
@@ -154,9 +160,20 @@ async function applyTransitions(
   nextOpeningCents: number,
 ): Promise<void> {
   for (const transition of transitions) {
+    // A joining account (offBudgetAfter false) records its own opening — the fact
+    // `effectiveOpeningCents` eventually sums instead of reading the legacy total below.
+    // A leaving account's stored opening is left alone: it is excluded from the sum by
+    // `offBudget` regardless, and left stale is harmless if it rejoins (which always
+    // recomputes before writing again).
     const [updated] = await executor
       .update(financeAccounts)
-      .set({ offBudget: transition.offBudgetAfter, updatedAt: new Date() })
+      .set({
+        offBudget: transition.offBudgetAfter,
+        updatedAt: new Date(),
+        ...(startMonth !== null && !transition.offBudgetAfter
+          ? { budgetOpeningCents: transition.positionCents }
+          : {}),
+      })
       .where(
         and(
           eq(financeAccounts.id, transition.accountId),
@@ -230,8 +247,10 @@ export async function rebaseAccountMembership(
         : 0;
 
       const delta = offBudgetAfter ? -positionCents : positionCents;
+      // The legacy total's own delta arithmetic, kept correct independent of `before.openingCents`
+      // (now the *effective* opening — the sum once every account is seeded).
       const nextOpeningCents = assertIntegerCents(
-        before.openingCents + delta,
+        beforeData.settings.openingCents + delta,
         "opening position",
       );
 
@@ -323,8 +342,10 @@ export async function includeNewOnBudgetAccount(
       await openingPositionFor(userId, startMonth, [accountId], tx),
       "account position",
     );
+    // The legacy total's own delta arithmetic, kept correct independent of `before.openingCents`
+    // (now the *effective* opening — the sum once every account is seeded).
     const nextOpeningCents = assertIntegerCents(
-      before.openingCents + positionCents,
+      beforeData.settings.openingCents + positionCents,
       "opening position",
     );
     const auditScope = {
@@ -337,6 +358,12 @@ export async function includeNewOnBudgetAccount(
       auditScope,
       tx,
     );
+    await tx
+      .update(financeAccounts)
+      .set({ budgetOpeningCents: positionCents, updatedAt: new Date() })
+      .where(
+        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
+      );
     await writeOpeningCents(tx, userId, startMonth, nextOpeningCents);
     const afterData = await loadBudget(userId, null, tx);
     const after = snapshotOf(afterData);
@@ -432,8 +459,10 @@ export async function applySinglePoolCutover(
         });
       }
 
+      // The legacy total's own delta arithmetic, kept correct independent of `before.openingCents`
+      // (now the *effective* opening — the sum once every account is seeded).
       const nextOpeningCents = assertIntegerCents(
-        before.openingCents + delta,
+        beforeData.settings.openingCents + delta,
         "opening position",
       );
       await applyTransitions(tx, userId, transitions, startMonth, nextOpeningCents);

@@ -1,0 +1,1 @@
+ALTER TABLE "finance_accounts" ADD COLUMN "budget_opening_cents" integer;

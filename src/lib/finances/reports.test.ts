@@ -118,6 +118,7 @@ function data(categories: BudgetCategoryRow[]): BudgetData {
     settings: { startMonth: "2026-08-01", openingCents: 10000 },
     month: "2026-09-01",
     todayKey: "2026-09-05",
+    openingCents: 10000,
     accountPoolCents: 8000,
     uncategorizedCount: 0,
     uncategorizedCents: 0,

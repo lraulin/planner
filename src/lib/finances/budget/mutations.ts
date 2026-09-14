@@ -16,6 +16,7 @@ import { writeUserSetting } from "@/lib/settings/mutations";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import * as sortKey from "@/lib/tree/sortKey";
 import { effectiveFlow } from "../analytics";
+import { listAccounts } from "../queries";
 import {
   categoryAssignableIds,
   partitionCategoryTargets,
@@ -195,6 +196,20 @@ export async function seedBudget(
 
   const startMonth = options.startMonth ?? monthKeyOf(options.todayKey);
   const openingCents = await openingPositionFor(userId, startMonth);
+  // Each on-budget account gets its own recorded opening alongside the combined figure —
+  // the fact `effectiveOpeningCents` sums once every account has one
+  // (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D2). Computed per account
+  // rather than split out of `openingCents` because `openingPositionFor` already does this
+  // exact per-account sum internally; asking it once per account is one query shape, not two.
+  const onBudgetAccounts = (await listAccounts(userId)).filter(
+    (account) => !account.offBudget,
+  );
+  const accountOpenings = await Promise.all(
+    onBudgetAccounts.map(async (account) => ({
+      id: account.id,
+      openingCents: await openingPositionFor(userId, startMonth, [account.id]),
+    })),
+  );
   const groups = PRESET_GROUPS[options.preset];
   // One sibling sequence across every root-level item, because a preset entry may now be a
   // group *or* a run of envelopes sitting at the section root — per-entry sequences would
@@ -241,6 +256,15 @@ export async function seedBudget(
         })),
       );
       categoryCount += group.categories.length;
+    }
+
+    for (const account of accountOpenings) {
+      await tx
+        .update(financeAccounts)
+        .set({ budgetOpeningCents: account.openingCents, updatedAt: new Date() })
+        .where(
+          and(eq(financeAccounts.id, account.id), eq(financeAccounts.userId, userId)),
+        );
     }
   });
 

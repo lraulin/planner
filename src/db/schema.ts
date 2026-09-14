@@ -2124,6 +2124,17 @@ export const financeAccounts = pgTable(
      * may be included or excluded; new investments and loans default off.
      */
     offBudget: boolean("off_budget").notNull().default(false),
+    /**
+     * Signed on-budget position the day before the budget's start month, recorded once.
+     *
+     * Replaces recomputing this account's contribution to "funds from last month" from the
+     * register on every load (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D2):
+     * the recorded whole-budget total and the read-time per-account recompute were two
+     * answers to one missing fact — this column is the fact. Budget opening is the sum of
+     * this column over every on-budget account. Null until seeded; a membership change
+     * (joining on-budget) sets it, and it is otherwise left alone when an account leaves.
+     */
+    budgetOpeningCents: integer("budget_opening_cents"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

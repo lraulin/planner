@@ -79,6 +79,16 @@ that close and the start, where a statement covers it; otherwise today's `openin
 that account, flagged as "seeded from the bank headline" in the receipt. The seed must not absorb
 post-start register errors into openings where a statement exists.
 
+**Rollout (Lee, 2026-09-14):** `budget_opening_cents` lands nullable and Task 8's cutover is what
+actually seeds existing accounts from statements — so `loadBudget` cannot switch straight to
+`Σ budgetOpeningCents` in the same change without going blind (all null) for every account between
+this task landing and Task 8 running, on a single-user app Lee checks on the phone. Chosen fix:
+`effectiveOpeningCents` sums per-account openings **only once every on-budget account has one**;
+until then it reads the pre-existing `settings.openingCents` total exactly as before, which
+`membership.ts` keeps maintaining by the same delta arithmetic alongside the new per-account writes.
+Nothing changes for Lee before Task 8 runs; the fallback is dead weight after, by construction
+rather than by a later removal pass.
+
 ### D3 — Mismatches are warnings with links, never RTA terms
 
 The Budget card keeps the equation without `Account reconciliation`, and adds one amber
@@ -152,9 +162,10 @@ and fix the userscript/parse so credits keep their sign (suspected non-ASCII min
 
 ## Changes from original plan
 
-| #   | Change                                                                                | Why                                                                                                              |
-| --- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| 1   | D4 retirement: feed row's description wins over the page's, on hold→feed carry-state. | Lee: the feed descriptor has more information; page-scraped text is a placeholder until a better source arrives. |
+| #   | Change                                                                                           | Why                                                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| 1   | D4 retirement: feed row's description wins over the page's, on hold→feed carry-state.            | Lee: the feed descriptor has more information; page-scraped text is a placeholder until a better source arrives.     |
+| 2   | D2 rollout: `loadBudget` falls back to the legacy total until every on-budget account is seeded. | Lee's call between three rollout options — keeps the live app unchanged between Task 3 landing and Task 8's cutover. |
 
 > While this spec is **active**, when we make a material change to requirements, design, or scope
 > (including from feedback on what was implemented), update the relevant sections and append to
@@ -174,12 +185,17 @@ the pool check in `membership.ts`) and `unmatchedTransferCents`. Update `envelop
 `membership` tests, `export.ts`, `fixThis.ts`/`operations.ts` callers (they only read RTA). Check
 `docs/actual-budget/README.md` → `loot-core/.../budget/envelope.ts` for To Budget parity.
 
-## Task 3: Per-account openings (schema + seed)
+## Task 3: Per-account openings (schema + seed) **done**
 
-Generated migration adding `finance_accounts.budget_opening_cents` (nullable until seeded) per
-`database/migrations`. `loadBudget` sums openings; membership change (`budget/mutations.ts`) edits
-one account's opening. Seed logic pure in `src/lib/finances/budget/openingSeed.ts` (statement-first,
-headline fallback, source label) + test. Integration tests with a second user.
+Generated migration `0096` adding `finance_accounts.budget_opening_cents` (nullable). `loadBudget`
+sums it via `effectiveOpeningCents`, falling back to the legacy `settings.openingCents` total until
+every on-budget account is seeded (rollout note above). `membership.ts`'s three mutations
+(`rebaseAccountMembership`, `includeNewOnBudgetAccount`, `applySinglePoolCutover`) and `seedBudget`
+(`budget/mutations.ts`) now write a joining account's own opening alongside the legacy total's
+existing delta maintenance. Pure statement-first/headline-fallback seed logic and label in
+`src/lib/finances/budget/openingSeed.ts` + `openingSeed.test.ts` (the statement-lookup orchestration
+itself is Task 8's). Integration tests: per-account seeding on join, staleness on leave, the
+fallback-then-sum transition, and a second user unable to touch the first user's opening.
 
 ## Task 4: Mismatch model and UI
 

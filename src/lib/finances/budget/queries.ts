@@ -32,6 +32,7 @@ import {
   type BudgetMonth,
   type MonthKey,
 } from "./envelope";
+import { effectiveOpeningCents } from "./openingSeed";
 import { parseNullableTargetOrThrow, type Target } from "./targets/types";
 import { budgetEnvelopeLabel } from "./hierarchy";
 import type { BillSnapshot } from "./targets/derive";
@@ -151,8 +152,15 @@ export type BudgetData = {
   /** Today, so the pure operations can date their movement lines without an ambient clock. */
   todayKey: string;
   /**
+   * The opening actually fed to the fold: `Σ finance_accounts.budget_opening_cents` over
+   * on-budget accounts once every one of them is seeded, else the legacy `settings.openingCents`
+   * total (`effectiveOpeningCents`, D2). 0 when unconfigured.
+   */
+  openingCents: number;
+  /**
    * Signed sum of on-budget working balances right now — the same pending selection and
-   * headline anchoring the Dashboard uses. Current Ready to Assign reconciles to this.
+   * headline anchoring the Dashboard uses. A diagnostic only: Ready to Assign no longer
+   * reconciles to this (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D1).
    */
   accountPoolCents: number;
   /** On-budget rows since the start month with no envelope: the size of the backlog. */
@@ -172,7 +180,7 @@ export type BudgetData = {
    * their first Ready to Assign. Showing today's position there and seeding last month's is
    * the exact failure `2026-08-18-2058-commitments-clarity` was written about: the decision
    * surface reporting a different number than the system uses. Zero once configured, where
-   * the recorded `settings.openingCents` is the answer.
+   * `openingCents` is the answer.
    */
   prospectiveOpeningCents: number;
   /** Canonical immutable finance-audit entries for the selected month, newest first. */
@@ -382,6 +390,7 @@ export async function loadBudget(
     months: [],
     month: currentMonth,
     todayKey,
+    openingCents: 0,
     accountPoolCents: poolCents,
     uncategorizedCount: 0,
     uncategorizedCents: 0,
@@ -409,35 +418,44 @@ export async function loadBudget(
     BUDGET_HORIZON_MONTHS,
   );
 
-  const [allocations, bufferedRows, activity, backlog] = await Promise.all([
-    executor
-      .select({
-        month: financeBudgetAllocations.month,
-        categoryId: financeBudgetAllocations.categoryId,
-        amountCents: financeBudgetAllocations.amountCents,
-        carryover: financeBudgetAllocations.carryover,
-        snoozed: financeBudgetAllocations.snoozed,
-        goalCents: financeBudgetAllocations.goalCents,
-      })
-      .from(financeBudgetAllocations)
-      .where(eq(financeBudgetAllocations.userId, userId)),
-    executor
-      .select({
-        month: financeBudgetMonths.month,
-        bufferedCents: financeBudgetMonths.bufferedCents,
-      })
-      .from(financeBudgetMonths)
-      .where(eq(financeBudgetMonths.userId, userId)),
-    activitySince(
-      userId,
-      shiftMonthKey(startMonth, -ASSIGN_AVERAGE_MONTHS),
-      pending.supersededTransactionIds,
-      executor,
-    ),
-    backlogSince(userId, startMonth, pending.supersededTransactionIds, executor),
-  ]);
+  const [allocations, bufferedRows, activity, backlog, accountOpenings] =
+    await Promise.all([
+      executor
+        .select({
+          month: financeBudgetAllocations.month,
+          categoryId: financeBudgetAllocations.categoryId,
+          amountCents: financeBudgetAllocations.amountCents,
+          carryover: financeBudgetAllocations.carryover,
+          snoozed: financeBudgetAllocations.snoozed,
+          goalCents: financeBudgetAllocations.goalCents,
+        })
+        .from(financeBudgetAllocations)
+        .where(eq(financeBudgetAllocations.userId, userId)),
+      executor
+        .select({
+          month: financeBudgetMonths.month,
+          bufferedCents: financeBudgetMonths.bufferedCents,
+        })
+        .from(financeBudgetMonths)
+        .where(eq(financeBudgetMonths.userId, userId)),
+      activitySince(
+        userId,
+        shiftMonthKey(startMonth, -ASSIGN_AVERAGE_MONTHS),
+        pending.supersededTransactionIds,
+        executor,
+      ),
+      backlogSince(userId, startMonth, pending.supersededTransactionIds, executor),
+      executor
+        .select({
+          offBudget: financeAccounts.offBudget,
+          budgetOpeningCents: financeAccounts.budgetOpeningCents,
+        })
+        .from(financeAccounts)
+        .where(eq(financeAccounts.userId, userId)),
+    ]);
   const foldActivity = activity.filter((row) => row.month >= startMonth);
   const preStartActivity = activity.filter((row) => row.month < startMonth);
+  const openingCents = effectiveOpeningCents(accountOpenings, settings.openingCents);
 
   const months = buildBudget({
     categories: categories.map((category) => ({
@@ -462,7 +480,7 @@ export async function loadBudget(
     buffered: bufferedRows,
     startMonth,
     endMonth,
-    openingCents: settings.openingCents,
+    openingCents,
     current:
       currentMonth >= startMonth
         ? {
@@ -495,6 +513,7 @@ export async function loadBudget(
     configured: true,
     months,
     month,
+    openingCents,
     goals,
     movementEvents,
     ...backlog,
