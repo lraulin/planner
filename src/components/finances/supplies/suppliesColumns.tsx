@@ -5,6 +5,7 @@ import { CategorySelect } from "@/components/finances/CategorySelect";
 import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
 import { evalArithmetic } from "@/lib/arithmetic";
 import { formatUsd } from "@/lib/finances/money";
+import { isComposingKey } from "@/lib/keyboard";
 import {
   formatDeltaPercent,
   formatDerivedRate,
@@ -66,7 +67,9 @@ function TextCell({
       disabled={disabled}
       className={INPUT}
       onKeyDown={(event) => {
-        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Enter" && !isComposingKey(event.nativeEvent)) {
+          event.currentTarget.blur();
+        }
         if (event.key === "Escape") {
           event.currentTarget.value = value;
           event.currentTarget.blur();

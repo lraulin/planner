@@ -7,6 +7,7 @@ import {
 } from "@/app/contexts/actions";
 import { ModalShell } from "@/components/detail/ModalShell";
 import type { MasterContextOption } from "@/lib/contexts/queries";
+import { isComposingKey } from "@/lib/keyboard";
 
 export const MASTER_CONTEXTS_CHANGED_EVENT = "planner:master-contexts-changed";
 
@@ -84,6 +85,7 @@ export function MasterContextsDialog({
               onChange={(event) => setName(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
+                  if (isComposingKey(event.nativeEvent)) return;
                   event.preventDefault();
                   void add();
                 }

@@ -20,6 +20,7 @@ import type {
   EventInput,
 } from "@fullcalendar/core";
 import type { TimeChart, TimeChartArea } from "@/db/schema";
+import { isComposingKey } from "@/lib/keyboard";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
   createTimeChartAreaAction,
@@ -332,7 +333,7 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
           onChange={(e) => setChartName(e.target.value)}
           onBlur={asyncHandler(saveChartName, setError)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && !isComposingKey(e.nativeEvent)) {
               e.currentTarget.blur();
             }
           }}
@@ -345,7 +346,7 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
           onChange={(e) => setChartDescription(e.target.value)}
           onBlur={asyncHandler(saveChartDescription, setError)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && !isComposingKey(e.nativeEvent)) {
               e.currentTarget.blur();
             }
           }}

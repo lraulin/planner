@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
+import { isComposingKey } from "@/lib/keyboard";
 import { localDateKey } from "@/lib/schedule/geometry";
 import type { TimeChartListRow } from "@/lib/schedule/queries";
 
@@ -112,6 +113,7 @@ function ChartTextCell({
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
+          if (isComposingKey(event.nativeEvent)) return;
           event.preventDefault();
           event.currentTarget.blur();
         } else if (event.key === "Escape") {

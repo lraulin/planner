@@ -43,6 +43,7 @@ import {
   gridExportFormatOf,
 } from "@/lib/grid/exportCsv";
 import { writeClipboardText } from "@/lib/tree/copyAsText";
+import { isComposingKey } from "@/lib/keyboard";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { ContextMenu, type MenuItem } from "@/components/grid/ContextMenu";
 import { snoozeUnavailableReason } from "@/lib/finances/budget/snooze";
@@ -2212,6 +2213,7 @@ function GroupRenameInput({
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === "Enter") {
+          if (isComposingKey(event.nativeEvent)) return;
           event.preventDefault();
           onCommit(value);
           return;

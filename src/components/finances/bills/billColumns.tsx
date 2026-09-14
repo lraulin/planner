@@ -11,6 +11,7 @@ import {
   declaresBillSchedule,
 } from "@/lib/finances/budget/inspector";
 import { formatUsd } from "@/lib/finances/money";
+import { isComposingKey } from "@/lib/keyboard";
 import type { BudgetBillRow } from "@/lib/finances/budget/rows";
 import type { BillPatch } from "../budget/budgetColumns";
 import type { BudgetCategoryEdit } from "@/lib/finances/budget/mutations";
@@ -85,6 +86,7 @@ function RenameInput({
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === "Enter") {
+          if (isComposingKey(event.nativeEvent)) return;
           event.preventDefault();
           onCommit(value);
           return;

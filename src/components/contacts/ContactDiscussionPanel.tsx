@@ -6,6 +6,7 @@ import type { DiscussionItemSummary } from "@/lib/contacts/types";
 import { createDiscussionItemAction } from "@/app/library/contacts/actions";
 import { setStateAction } from "@/app/plan/outline/actions";
 import { formatPriority } from "@/lib/tree/format";
+import { isComposingKey } from "@/lib/keyboard";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
@@ -88,6 +89,7 @@ export function ContactDiscussionPanel({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
+                if (isComposingKey(event.nativeEvent)) return;
                 event.preventDefault();
                 create();
               }

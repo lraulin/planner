@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatBindings, matchBindings } from "@/lib/commands/bindings";
 import { MARKDOWN_BOLD, MARKDOWN_ITALIC } from "@/lib/commands/chords";
+import { isComposingKey } from "@/lib/keyboard";
 import {
   continueListOnEnter,
   indentOnTab,
@@ -74,7 +75,11 @@ export function MarkdownEditor({
       const target = event.currentTarget;
       const selection = { start: target.selectionStart, end: target.selectionEnd };
 
-      if (event.key === "Enter" && !event.shiftKey) {
+      if (
+        event.key === "Enter" &&
+        !event.shiftKey &&
+        !isComposingKey(event.nativeEvent)
+      ) {
         if (applyEdit(continueListOnEnter(target.value, selection))) {
           event.preventDefault();
         }

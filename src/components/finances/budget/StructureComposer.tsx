@@ -7,6 +7,7 @@ import {
   createCategoryGroupAction,
 } from "@/app/finances/actions";
 import type { EnvelopeKind } from "@/db/schema";
+import { isComposingKey } from "@/lib/keyboard";
 
 /** What one press of `+` is about to create, and where. */
 export type ComposerTarget = {
@@ -105,6 +106,7 @@ export function StructureComposer({
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
+            if (isComposingKey(event.nativeEvent)) return;
             event.preventDefault();
             submit();
             return;

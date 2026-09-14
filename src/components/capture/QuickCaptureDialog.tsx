@@ -15,6 +15,7 @@ import {
   EffortField,
   PriorityField,
 } from "@/components/detail/fields";
+import { isComposingKey } from "@/lib/keyboard";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 
 /**
@@ -109,7 +110,11 @@ export function QuickCaptureDialog({
     // second line of a multi-line capture unreachable. Below `md`, return means return, and
     // the Send button beside the composer is the way in.
     if (compact) return;
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !isComposingKey(event.nativeEvent)
+    ) {
       event.preventDefault();
       submit();
     }

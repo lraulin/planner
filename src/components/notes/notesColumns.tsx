@@ -11,6 +11,7 @@ import {
   noteDatePartLabel,
 } from "@/lib/notes/grouping";
 import { FLAG_LABELS } from "@/lib/notes/flags";
+import { isComposingKey } from "@/lib/keyboard";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnAlign, ColumnDef } from "@/components/grid/columns";
@@ -359,6 +360,7 @@ function TitleEditor({
       onBlur={() => onCommit(value.trim())}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
+          if (isComposingKey(event.nativeEvent)) return;
           event.preventDefault();
           onCommit(value.trim());
         } else if (event.key === "Escape") {

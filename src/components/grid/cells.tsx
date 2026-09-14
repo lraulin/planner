@@ -5,6 +5,7 @@ import type { NodeState, PriorityLetter } from "@/db/schema";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
 import { parseAmountEntryCents } from "@/lib/finances/money";
+import { isComposingKey } from "@/lib/keyboard";
 import { isSettled } from "@/lib/tree/completionCascade";
 import { isDeadlineOverdue } from "@/lib/tree/status";
 import type { OutlineNode } from "@/lib/tree/types";
@@ -265,6 +266,7 @@ function NameEditor({
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
+          if (isComposingKey(event.nativeEvent)) return;
           event.preventDefault();
           onCommit(value.trim());
         } else if (event.key === "Escape") {
@@ -764,6 +766,7 @@ export function TextCell({
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
+          if (isComposingKey(event.nativeEvent)) return;
           event.preventDefault();
           event.currentTarget.blur();
         } else if (event.key === "Escape") {

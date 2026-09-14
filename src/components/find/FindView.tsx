@@ -9,6 +9,7 @@ import { useSetting, type SettingCodec } from "@/components/settings/SettingsPro
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { makeMatcher } from "@/lib/find/matcher";
 import { FIND_MIN_QUERY_LENGTH, type FindOutcome } from "@/lib/find/types";
+import { isComposingKey } from "@/lib/keyboard";
 import { parseFindSettings, type FindSettings } from "@/lib/settings/find";
 import { FIND_COLUMN_IDS, findColumns } from "./findColumns";
 import { FindResults } from "./FindResults";
@@ -137,6 +138,7 @@ export function FindView({ initialQuery }: { initialQuery: string }) {
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
+              if (isComposingKey(event.nativeEvent)) return;
               event.preventDefault();
               submit();
             }

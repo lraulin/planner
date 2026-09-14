@@ -7,6 +7,7 @@ import {
   type WishKind,
   type WishListRow,
 } from "@/lib/detail/wishTypes";
+import { isComposingKey } from "@/lib/keyboard";
 import { priorityOrderValue } from "@/lib/priority/order";
 import { formatPriority, parsePriority } from "@/lib/tree/format";
 import type { ColumnDef } from "@/components/grid/columns";
@@ -183,6 +184,7 @@ function WishTextCell({
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
+          if (isComposingKey(event.nativeEvent)) return;
           event.preventDefault();
           event.currentTarget.blur();
         } else if (event.key === "Escape") {

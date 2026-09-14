@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTypingTarget } from "./keyboard";
+import { isComposingKey, isTypingTarget } from "./keyboard";
 
 /** Minimal stand-in for the HTML elements document-level handlers actually see. */
 function el(
@@ -42,5 +42,22 @@ describe("isTypingTarget", () => {
   it("leaves ordinary buttons and rows alone", () => {
     expect(isTypingTarget(el("button"))).toBe(false);
     expect(isTypingTarget(el("tr"))).toBe(false);
+  });
+});
+
+describe("isComposingKey", () => {
+  it("is false for an ordinary keystroke", () => {
+    expect(isComposingKey({})).toBe(false);
+    expect(isComposingKey({ isComposing: false, keyCode: 13 })).toBe(false);
+  });
+
+  it("is true while an IME composition is in progress", () => {
+    expect(isComposingKey({ isComposing: true })).toBe(true);
+  });
+
+  it("falls back to the legacy keyCode 229 some browsers send instead of isComposing", () => {
+    // The plausible mistake: checking only `isComposing` and missing the browsers that
+    // signal composition solely through this legacy code on the confirming Enter.
+    expect(isComposingKey({ isComposing: false, keyCode: 229 })).toBe(true);
   });
 });

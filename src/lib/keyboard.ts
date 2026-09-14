@@ -34,6 +34,22 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 /**
+ * True when this keydown is the IME confirming a composed character, not an ordinary keystroke.
+ *
+ * A CJK input method previews the syllable being typed and Enter confirms it into the field —
+ * the same Enter every commit-on-Enter handler in this app treats as "submit" or "select". Without
+ * this check, confirming a composition also fires the commit, which drops or duplicates the last
+ * character depending on browser and timing. `isComposing` is the standard signal; `keyCode ===
+ * 229` is the fallback some browsers still send only that way during composition.
+ */
+export function isComposingKey(event: {
+  isComposing?: boolean;
+  keyCode?: number;
+}): boolean {
+  return event.isComposing === true || event.keyCode === 229;
+}
+
+/**
  * True when a modal dialog is open anywhere on the page.
  *
  * For handlers that live outside the component owning the dialog and so cannot see its

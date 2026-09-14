@@ -13,6 +13,7 @@ import { formatUsd } from "@/lib/finances/money";
 import { activityRegisterHref } from "@/lib/finances/registerActivity";
 import type { Cadence } from "@/lib/finances/recurringBills";
 import { isQuietCancelledBill } from "@/lib/finances/budget/hierarchy";
+import { isComposingKey } from "@/lib/keyboard";
 import type { EnvelopeIndicator } from "@/lib/finances/budget/indicator";
 import { type BudgetBillRow, type BudgetRow } from "@/lib/finances/budget/rows";
 import { AvailablePill, FundingBar } from "./FundingChrome";
@@ -97,6 +98,7 @@ function RenameInput({
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === "Enter") {
+          if (isComposingKey(event.nativeEvent)) return;
           event.preventDefault();
           onCommit(value);
           return;
