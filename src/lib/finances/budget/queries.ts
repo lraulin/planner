@@ -467,7 +467,6 @@ export async function loadBudget(
       currentMonth >= startMonth
         ? {
             month: currentMonth,
-            accountPoolCents: poolCents,
             uncategorizedActivityCents: backlog.uncategorizedCents,
           }
         : undefined,

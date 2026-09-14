@@ -5,6 +5,7 @@ import {
   categoryMonth,
   findMonth,
   isMonthKey,
+  ledgerIdentity,
   monthEndKey,
   monthKeyFromParam,
   monthKeyOf,
@@ -14,6 +15,7 @@ import {
   nextMonthKey,
   prevMonthKey,
   shiftMonthKey,
+  unmatchedTransferCents,
   type BudgetInput,
   type BudgetMonth,
 } from "./envelope";
@@ -445,7 +447,7 @@ describe("buildBudget — the reconciliation invariant", () => {
   });
 });
 
-describe("buildBudget — current-month pool reconciliation", () => {
+describe("buildBudget — current-month terms", () => {
   it("subtracts later-month assignments from current Ready to Assign", () => {
     // Assigning $200 into September leaves August's leftover $100, and both months
     // show that same leftover once September has no income of its own.
@@ -460,11 +462,7 @@ describe("buildBudget — current-month pool reconciliation", () => {
           snoozed: false,
         },
       ],
-      current: {
-        month: "2026-08-01",
-        accountPoolCents: 300_000,
-        uncategorizedActivityCents: 0,
-      },
+      current: { month: "2026-08-01", uncategorizedActivityCents: 0 },
     });
 
     const august = findMonth(months, "2026-08-01")!;
@@ -473,6 +471,8 @@ describe("buildBudget — current-month pool reconciliation", () => {
     expect(august.readyToAssignCents).toBe(100_000);
     expect(september.readyToAssignCents).toBe(100_000);
     expect(august.readyToAssignCents).toBe(september.readyToAssignCents);
+    // No income or spending in this fixture, so the ledger holds nothing but the opening —
+    // the identity a bank pool used to stand in for.
     expect(
       august.readyToAssignCents +
         august.totalBalanceCents +
@@ -499,11 +499,7 @@ describe("buildBudget — current-month pool reconciliation", () => {
           snoozed: false,
         },
       ],
-      current: {
-        month: "2026-09-01",
-        accountPoolCents: 300_000,
-        uncategorizedActivityCents: 0,
-      },
+      current: { month: "2026-09-01", uncategorizedActivityCents: 0 },
     });
 
     const august = findMonth(months, "2026-08-01")!;
@@ -514,54 +510,15 @@ describe("buildBudget — current-month pool reconciliation", () => {
     expect(september.readyToAssignCents).toBe(100_000);
   });
 
-  it("makes Ready to Assign + envelopes + held equal the account pool", () => {
+  it("names uncategorized activity as its own term, no bank pool involved", () => {
     const months = build({
       openingCents: 100_000,
-      allocations: [
-        {
-          month: "2026-08-01",
-          categoryId: FOOD.id,
-          amountCents: 40_000,
-          carryover: false,
-          snoozed: false,
-        },
-      ],
-      activity: [{ month: "2026-08-01", categoryId: FOOD.id, amountCents: -10_000 }],
-      buffered: [{ month: "2026-08-01", bufferedCents: 5_000 }],
-      current: {
-        month: "2026-08-01",
-        accountPoolCents: 200_000,
-        uncategorizedActivityCents: 0,
-      },
-    });
-
-    const august = findMonth(months, "2026-08-01")!;
-    expect(
-      august.readyToAssignCents +
-        august.totalBalanceCents +
-        august.bufferedCents +
-        august.assignedInFutureMonthsCents,
-    ).toBe(200_000);
-    expect(august.terms.reduce((sum, term) => sum + term.cents, 0)).toBe(
-      august.readyToAssignCents,
-    );
-  });
-
-  it("names uncategorized activity separately from account reconciliation", () => {
-    const months = build({
-      openingCents: 100_000,
-      current: {
-        month: "2026-08-01",
-        accountPoolCents: 125_000,
-        uncategorizedActivityCents: -15_000,
-      },
+      current: { month: "2026-08-01", uncategorizedActivityCents: -15_000 },
     });
 
     const august = findMonth(months, "2026-08-01")!;
     expect(august.uncategorizedActivityCents).toBe(-15_000);
-    // Pool 125_000 − (base 100_000 + envelopes 0 + held 0 + uncategorized −15_000) = 40_000.
-    expect(august.accountReconciliationCents).toBe(40_000);
-    expect(august.readyToAssignCents).toBe(125_000);
+    expect(august.readyToAssignCents).toBe(85_000);
     expect(august.terms.map((term) => term.label)).toEqual([
       "Funds from last month",
       "Income this month",
@@ -569,72 +526,122 @@ describe("buildBudget — current-month pool reconciliation", () => {
       "Assigned",
       "Held for next month",
       "Uncategorized activity",
-      "Account reconciliation",
     ]);
+    expect(august.terms.reduce((sum, term) => sum + term.cents, 0)).toBe(
+      august.readyToAssignCents,
+    );
   });
 
-  it("moves categorized activity into the envelope without breaking the identity", () => {
-    const pool = 80_000;
+  it("relabels money from uncategorized to an envelope without changing the combined total", () => {
+    // Ready to Assign and the envelope balance are two ways of naming the same dollars;
+    // moving a dollar from "no job" to "an envelope's job" cannot change how many there are.
     const uncategorized = build({
       openingCents: 80_000,
-      current: {
-        month: "2026-08-01",
-        accountPoolCents: pool,
-        uncategorizedActivityCents: -20_000,
-      },
+      current: { month: "2026-08-01", uncategorizedActivityCents: -20_000 },
     });
     const categorized = build({
       openingCents: 80_000,
       activity: [{ month: "2026-08-01", categoryId: FOOD.id, amountCents: -20_000 }],
-      current: {
-        month: "2026-08-01",
-        accountPoolCents: pool,
-        uncategorizedActivityCents: 0,
-      },
+      current: { month: "2026-08-01", uncategorizedActivityCents: 0 },
     });
 
     const before = findMonth(uncategorized, "2026-08-01")!;
     const after = findMonth(categorized, "2026-08-01")!;
     expect(before.uncategorizedActivityCents).toBe(-20_000);
+    expect(before.readyToAssignCents).toBe(60_000);
     expect(after.uncategorizedActivityCents).toBe(0);
     expect(after.totalBalanceCents).toBe(-20_000);
-    expect(before.readyToAssignCents + before.totalBalanceCents).toBe(pool);
-    expect(after.readyToAssignCents + after.totalBalanceCents).toBe(pool);
+    expect(before.readyToAssignCents + before.totalBalanceCents).toBe(
+      after.readyToAssignCents + after.totalBalanceCents,
+    );
   });
 
-  it("leaves a past month's Ready to Assign historical and carries the reconciled amount forward", () => {
+  it("leaves a past month's Ready to Assign historical", () => {
     const months = build({
       openingCents: 50_000,
-      current: {
-        month: "2026-09-01",
-        accountPoolCents: 90_000,
-        uncategorizedActivityCents: 0,
-      },
+      current: { month: "2026-09-01", uncategorizedActivityCents: 0 },
     });
 
     const august = findMonth(months, "2026-08-01")!;
     const september = findMonth(months, "2026-09-01")!;
     const october = findMonth(months, "2026-10-01")!;
     expect(august.readyToAssignCents).toBe(50_000);
-    expect(august.accountReconciliationCents).toBe(0);
     expect(august.terms).toHaveLength(5);
-    expect(september.readyToAssignCents).toBe(90_000);
-    expect(october.fromLastMonthCents).toBe(90_000);
-    expect(october.readyToAssignCents).toBe(90_000);
+    expect(september.readyToAssignCents).toBe(50_000);
+    expect(october.fromLastMonthCents).toBe(50_000);
+    expect(october.readyToAssignCents).toBe(50_000);
   });
 
-  it("keeps signed card debt in the pool rather than taking its absolute value", () => {
+  it("keeps signed uncategorized backlog rather than taking its absolute value", () => {
     const months = build({
       openingCents: 10_000,
-      current: {
-        month: "2026-08-01",
-        accountPoolCents: -25_000,
-        uncategorizedActivityCents: 0,
-      },
+      current: { month: "2026-08-01", uncategorizedActivityCents: -35_000 },
     });
     const august = findMonth(months, "2026-08-01")!;
     expect(august.readyToAssignCents).toBe(-25_000);
-    expect(august.readyToAssignCents + august.totalBalanceCents).toBe(-25_000);
+  });
+});
+
+describe("unmatchedTransferCents", () => {
+  it("nets a correctly paired transfer to zero", () => {
+    expect(
+      unmatchedTransferCents([{ amountCents: 5_000 }, { amountCents: -5_000 }]),
+    ).toBe(0);
+  });
+
+  it("sums the signed flow of stray or mismatched legs", () => {
+    expect(unmatchedTransferCents([{ amountCents: 5_000 }])).toBe(5_000);
+    expect(
+      unmatchedTransferCents([{ amountCents: -5_000 }, { amountCents: 4_900 }]),
+    ).toBe(-100);
+  });
+
+  it("is 0 for no rows", () => {
+    expect(unmatchedTransferCents([])).toBe(0);
+  });
+
+  it("refuses fractional cents", () => {
+    expect(() => unmatchedTransferCents([{ amountCents: 1.5 }])).toThrow(
+      /integer cents/,
+    );
+  });
+});
+
+describe("ledgerIdentity", () => {
+  const base = {
+    openingCents: 100_000,
+    categorizedActivityCents: -10_000,
+    uncategorizedActivityCents: -5_000,
+    unmatchedTransferCents: 0,
+    // 100_000 − 10_000 − 5_000 = 85_000, split between Ready to Assign and an envelope.
+    readyToAssignCents: 60_000,
+    totalEnvelopeBalanceCents: 25_000,
+    heldForNextMonthCents: 0,
+    assignedInFutureMonthsCents: 0,
+  };
+
+  it("passes when opening plus activity equals Ready to Assign plus envelopes, held and future", () => {
+    expect(() => ledgerIdentity(base)).not.toThrow();
+  });
+
+  it("throws when a caller's numbers disagree by even one cent", () => {
+    expect(() =>
+      ledgerIdentity({ ...base, readyToAssignCents: base.readyToAssignCents - 1 }),
+    ).toThrow(/Ledger identity failed/);
+  });
+
+  it("accounts for held, future-assigned and unmatched transfers", () => {
+    // Ledger pool: 100_000 − 10_000 − 5_000 + 5_000 (unmatched transfer) = 90_000, split
+    // across Ready to Assign, envelopes, held and future-assigned.
+    expect(() =>
+      ledgerIdentity({
+        ...base,
+        readyToAssignCents: 45_000,
+        heldForNextMonthCents: 15_000,
+        assignedInFutureMonthsCents: 5_000,
+        unmatchedTransferCents: 5_000,
+      }),
+    ).not.toThrow();
   });
 });
 

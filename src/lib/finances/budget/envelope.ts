@@ -192,17 +192,13 @@ export type BufferedInput = {
 };
 
 /**
- * Current-month reconciliation against today's account pool.
+ * Current-month terms that read live state rather than stored allocations.
  *
- * Past months stay historical. The reconciled Ready to Assign is what later months inherit
- * as "funds from last month", so paging forward does not resurrect the old discrepancy.
- *
- * Spec: `agent-os/specs/2026-08-24-2206-single-pool-budget/` D3.
+ * Past months stay historical. No bank balance enters here — Ready to Assign is derived
+ * entirely from the ledger (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D1).
  */
 export type CurrentPoolInput = {
   month: MonthKey;
-  /** Signed sum of on-budget working balances, pending included the Dashboard's way. */
-  accountPoolCents: number;
   /**
    * Signed uncategorized on-budget activity from the start month through this month.
    * Named as a Ready to Assign term until those rows receive envelopes.
@@ -300,12 +296,6 @@ export type BudgetMonth = {
    * months; the current month carries the signed backlog through that month.
    */
   uncategorizedActivityCents: number;
-  /**
-   * Residual between the ledger-derived fold and today's working account pool. Zero on
-   * historical months. Opening-snapshot drift and bank-headline/ledger mismatch land here
-   * rather than being labelled income.
-   */
-  accountReconciliationCents: number;
   /**
    * The arithmetic in reading order, summing to `readyToAssignCents`.
    *
@@ -467,13 +457,7 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
     const uncategorizedActivityCents = current
       ? cents(current.uncategorizedActivityCents, "uncategorized activity")
       : 0;
-    const accountReconciliationCents = current
-      ? cents(current.accountPoolCents, "account pool") -
-        (baseRtaCents + totalBalanceCents + bufferedCents + uncategorizedActivityCents)
-      : 0;
-    const readyToAssignCents = current
-      ? baseRtaCents + uncategorizedActivityCents + accountReconciliationCents
-      : baseRtaCents;
+    const readyToAssignCents = baseRtaCents + uncategorizedActivityCents;
 
     const terms: BudgetTerm[] = [
       { label: "Funds from last month", cents: fromLastMonthCents },
@@ -483,10 +467,10 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
       { label: "Held for next month", cents: -bufferedCents },
     ];
     if (current) {
-      terms.push(
-        { label: "Uncategorized activity", cents: uncategorizedActivityCents },
-        { label: "Account reconciliation", cents: accountReconciliationCents },
-      );
+      terms.push({
+        label: "Uncategorized activity",
+        cents: uncategorizedActivityCents,
+      });
     }
 
     months.push({
@@ -503,7 +487,6 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
       assignedInFutureMonthsCents: 0,
       readyToAssignCents,
       uncategorizedActivityCents,
-      accountReconciliationCents,
       terms,
     });
 
@@ -558,4 +541,69 @@ export function findMonth(
 /** One envelope's row for a month, zeroed when it has neither allocation nor activity. */
 export function categoryMonth(month: BudgetMonth, categoryId: string): CategoryMonth {
   return month.categories[categoryId] ?? { ...ZERO_CATEGORY_MONTH, categoryId };
+}
+
+/**
+ * Net signed flow of the on-budget legs of transfers that have not been paired off since the
+ * start month. A correctly recorded transfer is two legs that sum to zero, so a fully paired
+ * set nets to 0; only a stray or mismatched leg contributes.
+ *
+ * Kept separate from `uncategorizedActivityCents` because a transfer leg is not unassigned
+ * income or spending — it is money moving between on-budget accounts and never was Ready to
+ * Assign's to give a job to. Spec: `agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D1.
+ */
+export function unmatchedTransferCents(
+  rows: readonly { amountCents: number }[],
+): number {
+  return rows.reduce((sum, row) => sum + cents(row.amountCents, "transfer flow"), 0);
+}
+
+/**
+ * What the ledger identity needs to know about one side of the equation: the money the
+ * ledger's own rows say is sitting in on-budget accounts.
+ *
+ * `categorizedActivityCents` is `Σ (totalIncomeCents + totalActivityCents)` over every month
+ * from the start through the one being checked — money already carrying an envelope.
+ * `uncategorizedActivityCents` and `unmatchedTransferCents` are the current month's backlog
+ * figures, the same ones the fold itself takes.
+ */
+export type LedgerIdentityInput = {
+  openingCents: number;
+  categorizedActivityCents: number;
+  uncategorizedActivityCents: number;
+  unmatchedTransferCents: number;
+  readyToAssignCents: number;
+  totalEnvelopeBalanceCents: number;
+  heldForNextMonthCents: number;
+  assignedInFutureMonthsCents: number;
+};
+
+/**
+ * The ledger's own accounting identity (D1), asserted rather than derived: every dollar the
+ * ledger's rows put in an on-budget account either has a job (an envelope balance), is held
+ * for next month, is assigned in a future month, is a transfer leg waiting for its pair, or is
+ * unassigned (Ready to Assign).
+ *
+ * No bank balance enters this — it is provably true by construction of `buildBudget` when
+ * every input is what it claims to be, so a failure here means a caller miscounted (an
+ * activity row double-summed, an opening not carried forward), not that the bank disagrees.
+ * That is what makes it a replacement for the old bank-pool check in `membership.ts`: it
+ * catches the same class of caller bug without reading a bank figure to do it.
+ */
+export function ledgerIdentity(input: LedgerIdentityInput): void {
+  const ledgerPoolCents =
+    cents(input.openingCents, "opening position") +
+    cents(input.categorizedActivityCents, "categorized activity") +
+    cents(input.uncategorizedActivityCents, "uncategorized activity") +
+    cents(input.unmatchedTransferCents, "unmatched transfer");
+  const rhs =
+    input.readyToAssignCents +
+    input.totalEnvelopeBalanceCents +
+    input.heldForNextMonthCents +
+    input.assignedInFutureMonthsCents;
+  if (rhs !== ledgerPoolCents) {
+    throw new Error(
+      `Ledger identity failed: opening + activity ${ledgerPoolCents} !== Ready to Assign ${input.readyToAssignCents} + envelopes ${input.totalEnvelopeBalanceCents} + held ${input.heldForNextMonthCents} + future assigned ${input.assignedInFutureMonthsCents}.`,
+    );
+  }
 }

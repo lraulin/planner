@@ -5,7 +5,7 @@ import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { seedBudget } from "./mutations";
 import { loadBudget, openingPositionFor } from "./queries";
-import { findMonth } from "./envelope";
+import { findMonth, ledgerIdentity } from "./envelope";
 import {
   applySinglePoolCutover,
   includeNewOnBudgetAccount,
@@ -94,9 +94,24 @@ async function addTx(
 function identityHolds(data: Awaited<ReturnType<typeof loadBudget>>) {
   const current = findMonth(data.months, data.month);
   if (!current) return;
-  expect(
-    current.readyToAssignCents + current.totalBalanceCents + current.bufferedCents,
-  ).toBe(data.accountPoolCents);
+  const categorizedActivityCents = data.months
+    .filter((month) => month.month <= current.month)
+    .reduce((sum, month) => sum + month.totalIncomeCents + month.totalActivityCents, 0);
+  // No bank figure here on purpose: the ledger identity (D1) checks the fold against its own
+  // opening + activity, not against `data.accountPoolCents` — that is a diagnostic now, and a
+  // fixture with uncategorized rows is exactly the case where the two would legitimately differ.
+  expect(() =>
+    ledgerIdentity({
+      openingCents: data.settings.openingCents,
+      categorizedActivityCents,
+      uncategorizedActivityCents: current.uncategorizedActivityCents,
+      unmatchedTransferCents: 0,
+      readyToAssignCents: current.readyToAssignCents,
+      totalEnvelopeBalanceCents: current.totalBalanceCents,
+      heldForNextMonthCents: current.bufferedCents,
+      assignedInFutureMonthsCents: current.assignedInFutureMonthsCents,
+    }),
+  ).not.toThrow();
 }
 
 describeDb("account membership rebase", () => {

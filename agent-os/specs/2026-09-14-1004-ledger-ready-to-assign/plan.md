@@ -102,6 +102,10 @@ one of its holds has posted.
 - Successor match for holds (retirement and D3b): exact or 7.5% band amount, date ≤ 7 days,
   description used to **rank**, not to gate. Exactly one candidate, or one clear description
   winner → carry state and retire. Several with no description winner → keep the hold, warn.
+  On retirement the **feed row's description wins** (`AMAZON MKTPL*537NK9DZ2` over the page's
+  `Amazon.com`) — the feed descriptor carries more identifying information, and the page's
+  scraped text was always a placeholder standing in until a better-sourced row arrived, not a
+  value worth preserving over it.
 - Accounts with no history feed keep today's page posted path.
 
 Direction of error: a charge the feed is late on is missing until SimpleFIN or a CSV brings it.
@@ -148,9 +152,9 @@ and fix the userscript/parse so credits keep their sign (suspected non-ASCII min
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                | Why                                                                                                              |
+| --- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 1   | D4 retirement: feed row's description wins over the page's, on hold→feed carry-state. | Lee: the feed descriptor has more information; page-scraped text is a placeholder until a better source arrives. |
 
 > While this spec is **active**, when we make a material change to requirements, design, or scope
 > (including from feedback on what was implemented), update the relevant sections and append to
@@ -162,7 +166,7 @@ Create the folder with `plan.md` (this), `shape.md` (scope, Sep 14 evidence, Lee
 pages stop adding posted rows; warn and keep out of RTA; show the cutover drop and add Reconcile),
 `standards.md` pinned at `30a9c769`, `references.md`. No visuals.
 
-## Task 2: Ledger-derived fold (pure)
+## Task 2: Ledger-derived fold (pure) **done**
 
 `src/lib/finances/budget/envelope.ts`: drop `accountPoolCents`/`accountReconciliationCents` from
 `CurrentPoolInput`/`BudgetMonth`/terms; keep uncategorized. Add a pure `ledgerIdentity` (replacing

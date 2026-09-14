@@ -37,7 +37,7 @@ async function main(): Promise<number> {
   const print = (label: string, snap: typeof receipt.before) => {
     console.log(`\n${label}:`);
     console.log(`  openingCents                ${usd(snap.openingCents)}`);
-    console.log(`  accountPoolCents            ${usd(snap.accountPoolCents)}`);
+    console.log(`  categorizedActivityCents    ${usd(snap.categorizedActivityCents)}`);
     console.log(`  readyToAssignCents          ${usd(snap.readyToAssignCents)}`);
     console.log(`  totalEnvelopeBalanceCents   ${usd(snap.totalEnvelopeBalanceCents)}`);
     console.log(`  heldForNextMonthCents       ${usd(snap.heldForNextMonthCents)}`);
@@ -46,9 +46,6 @@ async function main(): Promise<number> {
     );
     console.log(
       `  uncategorizedActivityCents  ${usd(snap.uncategorizedActivityCents)}`,
-    );
-    console.log(
-      `  accountReconciliationCents  ${usd(snap.accountReconciliationCents)}`,
     );
   };
   print("Before", receipt.before);

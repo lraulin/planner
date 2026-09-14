@@ -46,7 +46,6 @@ export type FinanceBudgetMoneyCheckpoint = {
   month: string;
   readyToAssignCents: number;
   accountPoolCents: number;
-  accountReconciliationCents: number;
   uncategorizedCount: number;
   uncategorizedActivityCents: number;
   envelopes: FinanceEnvelopeMoneyCheckpoint[];

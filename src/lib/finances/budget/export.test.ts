@@ -30,7 +30,6 @@ function month(overrides: Partial<BudgetMonth> = {}): BudgetMonth {
     assignedInFutureMonthsCents: 0,
     readyToAssignCents: 0,
     uncategorizedActivityCents: 0,
-    accountReconciliationCents: 0,
     terms: [
       { label: "Funds from last month", cents: 100_00 },
       { label: "Assigned this month", cents: -100_00 },

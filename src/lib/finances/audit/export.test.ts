@@ -39,7 +39,6 @@ function checkpoint(
         month: "2026-08-01T12:00:00.000Z",
         readyToAssignCents: 50_00,
         accountPoolCents: 80_00,
-        accountReconciliationCents: 0,
         uncategorizedCount: 0,
         uncategorizedActivityCents: 0,
         envelopes: [

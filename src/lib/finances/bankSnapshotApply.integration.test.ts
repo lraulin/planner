@@ -234,9 +234,6 @@ describeDb("applyBankBrowserSnapshot", () => {
     const afterMonth = findMonth(afterBudget.months, MONTH)!;
     expect(afterMonth.readyToAssignCents).toBe(0);
     expect(categoryMonth(afterMonth, envelopeId)).toEqual(beforeEnvelope);
-    expect(afterMonth.accountReconciliationCents).toBe(
-      beforeMonth.accountReconciliationCents,
-    );
 
     const preserved = rows.find((row) => row.description === "CVS")!;
     expect(preserved).toMatchObject({

@@ -112,15 +112,6 @@ function CheckpointRail({
                   ? moneyChange(prior.readyToAssignCents, budget.readyToAssignCents)
                   : formatUsd(display.readyToAssignCents)}
               </span>
-              <span className="text-ink-muted">Reconciliation</span>
-              <span className="tabular text-right text-ink">
-                {prior && budget
-                  ? moneyChange(
-                      prior.accountReconciliationCents,
-                      budget.accountReconciliationCents,
-                    )
-                  : formatUsd(display.accountReconciliationCents)}
-              </span>
               <span className="text-ink-muted">Uncategorized activity</span>
               <span className="tabular text-right text-ink">
                 {prior && budget

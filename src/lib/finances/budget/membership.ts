@@ -15,22 +15,21 @@ import { financeAccounts, userSettings, type FinanceAccountKind } from "@/db/sch
 import { isCoreBudgetKind, resolvedOffBudget } from "../accountKind";
 import { serializeBudget } from "@/lib/settings/finances";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
-import { monthKeyOf } from "./envelope";
+import { ledgerIdentity, monthKeyOf } from "./envelope";
 import { findMonth } from "./envelope";
 import { loadBudget, openingPositionFor } from "./queries";
 import type { FinanceExecutor } from "../dbExecutor";
 import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
 import { writeFinanceAuditEvent } from "../audit/writes";
 
-export type PoolSnapshot = {
+export type LedgerSnapshot = {
   openingCents: number;
-  accountPoolCents: number;
+  categorizedActivityCents: number;
   readyToAssignCents: number;
   totalEnvelopeBalanceCents: number;
   heldForNextMonthCents: number;
   assignedInFutureMonthsCents: number;
   uncategorizedActivityCents: number;
-  accountReconciliationCents: number;
 };
 
 export type AccountTransition = {
@@ -44,8 +43,8 @@ export type AccountTransition = {
 
 export type MembershipReceipt = {
   transitions: AccountTransition[];
-  before: PoolSnapshot;
-  after: PoolSnapshot;
+  before: LedgerSnapshot;
+  after: LedgerSnapshot;
 };
 
 class DryRunRollback extends Error {
@@ -61,34 +60,50 @@ function assertIntegerCents(value: number, what: string): number {
   return value;
 }
 
-function snapshotOf(data: Awaited<ReturnType<typeof loadBudget>>): PoolSnapshot {
+/**
+ * `Σ (totalIncomeCents + totalActivityCents)` over every folded month through `throughMonth` —
+ * on-budget money the ledger has already put into an envelope. `loadBudget` already folds
+ * every month in range, so this reads that result rather than querying again.
+ */
+function categorizedActivityThrough(
+  months: Awaited<ReturnType<typeof loadBudget>>["months"],
+  throughMonth: string,
+): number {
+  return months
+    .filter((month) => month.month <= throughMonth)
+    .reduce((sum, month) => sum + month.totalIncomeCents + month.totalActivityCents, 0);
+}
+
+function snapshotOf(data: Awaited<ReturnType<typeof loadBudget>>): LedgerSnapshot {
   const current =
     findMonth(data.months, monthKeyOf(data.todayKey)) ??
     data.months.find((month) => month.month === data.month) ??
     null;
+  const throughMonth = current?.month ?? data.month;
   return {
     openingCents: data.settings.openingCents,
-    accountPoolCents: data.accountPoolCents,
+    categorizedActivityCents: categorizedActivityThrough(data.months, throughMonth),
     readyToAssignCents: current?.readyToAssignCents ?? 0,
     totalEnvelopeBalanceCents: current?.totalBalanceCents ?? 0,
     heldForNextMonthCents: current?.bufferedCents ?? 0,
     assignedInFutureMonthsCents: current?.assignedInFutureMonthsCents ?? 0,
     uncategorizedActivityCents: current?.uncategorizedActivityCents ?? 0,
-    accountReconciliationCents: current?.accountReconciliationCents ?? 0,
   };
 }
 
-function assertPoolIdentity(snapshot: PoolSnapshot): void {
-  const rhs =
-    snapshot.readyToAssignCents +
-    snapshot.totalEnvelopeBalanceCents +
-    snapshot.heldForNextMonthCents +
-    snapshot.assignedInFutureMonthsCents;
-  if (rhs !== snapshot.accountPoolCents) {
-    throw new Error(
-      `Account pool identity failed: pool ${snapshot.accountPoolCents} !== Ready to Assign ${snapshot.readyToAssignCents} + envelopes ${snapshot.totalEnvelopeBalanceCents} + held ${snapshot.heldForNextMonthCents} + future assigned ${snapshot.assignedInFutureMonthsCents}.`,
-    );
-  }
+function assertLedgerIdentity(snapshot: LedgerSnapshot): void {
+  ledgerIdentity({
+    openingCents: snapshot.openingCents,
+    categorizedActivityCents: snapshot.categorizedActivityCents,
+    uncategorizedActivityCents: snapshot.uncategorizedActivityCents,
+    // Real transfer-flow rows are wired in `agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/`
+    // Task 4; a correctly paired set nets to 0, so 0 is the right value until then.
+    unmatchedTransferCents: 0,
+    readyToAssignCents: snapshot.readyToAssignCents,
+    totalEnvelopeBalanceCents: snapshot.totalEnvelopeBalanceCents,
+    heldForNextMonthCents: snapshot.heldForNextMonthCents,
+    assignedInFutureMonthsCents: snapshot.assignedInFutureMonthsCents,
+  });
 }
 
 async function requireOwnedAccount(
@@ -178,7 +193,7 @@ export async function rebaseAccountMembership(
   if (account.offBudget === offBudgetAfter) {
     const data = await loadBudget(userId, null);
     const snapshot = snapshotOf(data);
-    if (data.configured) assertPoolIdentity(snapshot);
+    if (data.configured) assertLedgerIdentity(snapshot);
     return { transitions: [], before: snapshot, after: snapshot };
   }
 
@@ -188,7 +203,7 @@ export async function rebaseAccountMembership(
       if (owned.offBudget === offBudgetAfter) {
         const data = await loadBudget(userId, null, tx);
         const snapshot = snapshotOf(data);
-        if (data.configured) assertPoolIdentity(snapshot);
+        if (data.configured) assertLedgerIdentity(snapshot);
         const receipt = { transitions: [], before: snapshot, after: snapshot };
         if (options.dryRun) throw new DryRunRollback(receipt);
         return receipt;
@@ -233,7 +248,7 @@ export async function rebaseAccountMembership(
 
       const afterData = await loadBudget(userId, null, tx);
       const after = snapshotOf(afterData);
-      if (afterData.configured) assertPoolIdentity(after);
+      if (afterData.configured) assertLedgerIdentity(after);
 
       const afterCheckpoint = await captureFinanceMoneyCheckpoint(
         userId,
@@ -325,7 +340,7 @@ export async function includeNewOnBudgetAccount(
     await writeOpeningCents(tx, userId, startMonth, nextOpeningCents);
     const afterData = await loadBudget(userId, null, tx);
     const after = snapshotOf(afterData);
-    if (afterData.configured) assertPoolIdentity(after);
+    if (afterData.configured) assertLedgerIdentity(after);
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, auditScope, tx);
     await writeFinanceAuditEvent(tx, userId, {
       kind: "account_membership",
@@ -391,7 +406,7 @@ export async function applySinglePoolCutover(
 
       const targets = coreOffBudget.filter((row) => isCoreBudgetKind(row.kind));
       if (targets.length === 0) {
-        if (beforeData.configured) assertPoolIdentity(before);
+        if (beforeData.configured) assertLedgerIdentity(before);
         const receipt = { transitions: [], before, after: before };
         if (options.dryRun) throw new DryRunRollback(receipt);
         return receipt;
@@ -425,7 +440,7 @@ export async function applySinglePoolCutover(
 
       const afterData = await loadBudget(userId, null, tx);
       const after = snapshotOf(afterData);
-      if (afterData.configured) assertPoolIdentity(after);
+      if (afterData.configured) assertLedgerIdentity(after);
 
       const receipt = { transitions, before, after };
       if (options.dryRun) throw new DryRunRollback(receipt);
