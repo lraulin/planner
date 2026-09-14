@@ -1,6 +1,6 @@
 database:
   migrations:
-    description: Generate migrations, never hand-write one without its snapshot; direct connection not the pooler; production migrates during the build; db:push and db:seed are destructive
+    description: Generate migrations, never hand-write one without its snapshot; direct connection not the pooler; production migrates during the build gated on VERCEL_ENV; a destructive/data-transforming migration needs a fresh verified backup and a Neon recovery point first; db:push and db:seed are destructive
 
 components:
   ux-principles:
@@ -18,7 +18,7 @@ components:
 
 development:
   clean-code:
-    description: How code should read here — the app→components→lib→db dependency direction (lib never imports app, components never touch the db, actions.ts stays thin, every mutation takes userId), naming for the concept, small single-purpose lib modules, one shared implementation per concern (DataGrid, ModalShell, Drawer, run()), explicit over clever, no speculative generality, DRY only for business rules, and reviewing agent-written diffs
+    description: How code should read here — the app→components→lib→db dependency direction (lib never imports app, components never touch the db, actions.ts stays thin, every mutation takes userId), naming for the concept, small single-purpose lib modules, one shared implementation per concern (DataGrid, ModalShell, Drawer, run()), explicit over clever, no speculative generality, DRY only for business rules, when the model is wrong change the model (two workarounds for one missing concept is the signal, not "would touch a lot of files"), and reviewing agent-written diffs
   security:
     description: Why every mutation takes userId and proves ownership before writing, why the proxy is not the auth gate, why session/dev/agent identities stay separate, what an error is allowed to say, the CSP nonce rules (no nonce in style-src, unsafe-eval only in dev), why HSTS is not ours to set, and when in-memory rate limiting stops being enough
   testing:
