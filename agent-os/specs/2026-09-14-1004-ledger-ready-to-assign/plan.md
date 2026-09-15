@@ -265,12 +265,22 @@ uncategorized (that is what makes it an RTA term) but is excluded from `uncatego
 so it does not nag to be filed. The command is disabled with a reason when the account is
 off-budget, unseeded, or already matches.
 
-## Task 7: Chase sign fix and duplicate report
+## Task 7: Chase sign fix and duplicate report **partial**
 
-D6 fix in `scripts/chase-pending.user.js` / `bankSnapshot.ts` parse with a test on the raw text.
+D6 fix in `scripts/chase-pending.user.js` / `bankSnapshot.ts` parse with a test on the raw text —
+**not done overnight 2026-09-15.** D6 says to read the stored raw `amount` for `PAYMENT THANK
+YOU - WEB` from the Sep 14 event's source evidence before writing the fix; that event is not in
+the local dev database (production/Neon only, no credentials in the overnight environment), so
+the exact non-ASCII character was not confirmed and no fix was guessed at. See the night's report
+(`agent-os/overnight/2026-09-15.md`) for the recommendation.
+
 Read-only script `scripts/scrape-duplicate-report.ts` listing `scrape:*` posted rows on
 feed-covered accounts with an amount+date feed twin (Sep 13 Walmart, Capital One payment pairs) for
-Lee to delete by hand.
+Lee to delete by hand — **done**. Pure matcher + tests in
+`src/lib/finances/scrapeDuplicateReport.ts`; deliberately not description-gated the way
+`feedPairing.ts`'s `pairRows` is, since the duplicates it exists to find are exactly the ones
+whose page/feed descriptions share nothing. Zero matches on local dev data (expected — the
+production incident data isn't in the dev seed).
 
 ## Task 8: Cutover
 
