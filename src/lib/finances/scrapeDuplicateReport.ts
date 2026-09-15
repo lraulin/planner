@@ -19,7 +19,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { bankAccountLinks, financeAccounts, financeTransactions } from "@/db/schema";
 import { dateDistance, DATE_TOLERANCE_DAYS, type DatedRow } from "./liveFeedMatch";
-import { numericStringToCents } from "./money";
+import { formatUsd, numericStringToCents } from "./money";
 
 export type DuplicateCandidateRow = DatedRow & {
   id: string;
@@ -179,12 +179,6 @@ export async function scrapeDuplicateReport(
   }));
 }
 
-function centsToDollars(cents: number): string {
-  const negative = cents < 0;
-  const dollars = (Math.abs(cents) / 100).toFixed(2);
-  return `${negative ? "-" : ""}$${dollars}`;
-}
-
 /** The report itself. Pure, so what the script prints is what the tests read. */
 export function formatScrapeDuplicateReport(
   matches: readonly (ScrapeDuplicateMatch & { accountName: string })[],
@@ -197,7 +191,7 @@ export function formatScrapeDuplicateReport(
 
   for (const match of matches) {
     lines.push(
-      `  ${match.transactionDate}  ${centsToDollars(match.amountCents)}  ${match.accountName}`,
+      `  ${match.transactionDate}  ${formatUsd(match.amountCents)}  ${match.accountName}`,
       `      scrape (${match.scrapeSource}): "${match.scrapeDescription}"  [${match.scrapeId}]`,
       `      feed:                    "${match.feedDescription}"  [${match.feedId}]`,
     );
