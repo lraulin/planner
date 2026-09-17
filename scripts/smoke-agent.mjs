@@ -128,36 +128,54 @@ const checks = [
     },
   },
   {
-    name: "MCP tools/list is the 50-tool chat catalog",
+    name: "MCP tools/list is the 55-tool chat catalog",
     run: async () => {
       const result = await mcp(2, "tools/list");
       const names = result.payload?.result?.tools?.map((tool) => tool.name) ?? [];
       return (
         result.status === 200 &&
-        names.length === 50 &&
+        names.length === 55 &&
         names.includes("get_context") &&
         names.includes("get_finance_overview") &&
         names.includes("search_transactions") &&
         names.includes("list_jobs") &&
         names.includes("create_life_event") &&
         names.includes("update_weekly_plan_entries") &&
+        names.includes("create_house") &&
         !names.includes("list_tools") &&
         !names.includes("capture")
       );
     },
   },
   {
-    name: "finance domain lists the six read tools",
+    name: "finance domain lists its tools",
     run: async () => {
       const result = await call("list_tools", { domain: "finances" });
       const names = result.payload?.data?.tools?.map((tool) => tool.name) ?? [];
       return (
         result.status === 200 &&
         result.payload?.ok === true &&
-        names.length === 6 &&
+        names.length === 12 &&
         names.includes("get_finance_overview") &&
         names.includes("get_cash_flow") &&
         names.includes("search_transactions")
+      );
+    },
+  },
+  {
+    name: "houses domain lists its five tools",
+    run: async () => {
+      const result = await call("list_tools", { domain: "houses" });
+      const names = result.payload?.data?.tools?.map((tool) => tool.name) ?? [];
+      return (
+        result.status === 200 &&
+        result.payload?.ok === true &&
+        names.length === 5 &&
+        names.includes("list_houses") &&
+        names.includes("get_house") &&
+        names.includes("create_house") &&
+        names.includes("update_house") &&
+        names.includes("delete_house")
       );
     },
   },

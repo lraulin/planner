@@ -74,6 +74,13 @@ import {
   updateLifeEventTool,
   updateResidenceTool,
 } from "./historyTools";
+import {
+  createHouseTool,
+  deleteHouseTool,
+  getHouseTool,
+  listHousesTool,
+  updateHouseTool,
+} from "./houseTools";
 
 export const AGENT_CONTRACT_VERSION = 2 as const;
 const SYSTEM_TOOL_USER_ID = "00000000-0000-4000-8000-000000000000";
@@ -86,7 +93,8 @@ export type AgentToolDomain =
   | "planning"
   | "metrics"
   | "finances"
-  | "history";
+  | "history"
+  | "houses";
 export type AgentToolExposure = "core" | "domain" | "legacy";
 export type AgentToolEffects = {
   kind: "read" | "write";
@@ -820,6 +828,65 @@ const definitions: AgentToolDefinition[] = [
     exposure: "domain",
     handler: updateLifeEventTool,
   }),
+  defineTool("list_houses", {
+    domain: "houses",
+    summary: "Find house listings being compared, with price, size, and drive time.",
+    useWhen:
+      "Use to scan or filter the comparison catalog before reading or changing one.",
+    avoidWhen: "Use get_house for notes or a route failure's detail.",
+    returns: "A compact house page plus total and next offset.",
+    effects: read,
+    exposure: "domain",
+    examples: [
+      { title: "Still-available listings", arguments: { status: "available" } },
+    ],
+    handler: listHousesTool,
+  }),
+  defineTool("get_house", {
+    domain: "houses",
+    summary: "Read one house listing's full comparison record.",
+    useWhen: "Use after list_houses resolves the intended listing.",
+    avoidWhen: "Do not use to scan the whole catalog.",
+    returns:
+      "Full house detail including address, price, size, features, drive time, and any routeError.",
+    effects: read,
+    exposure: "domain",
+    handler: getHouseTool,
+  }),
+  defineTool("create_house", {
+    domain: "houses",
+    summary: "Add one house listing to the comparison catalog.",
+    useWhen:
+      "Use when filling in a listing from a real-estate site or a description of one.",
+    avoidWhen: "Do not create a second listing for a natural-key retry.",
+    returns:
+      "Full created or replayed house and whether this call created it. Drive time is computed automatically once an address is set; check routeError if it is missing.",
+    effects: keyedWrite,
+    exposure: "domain",
+    handler: createHouseTool,
+  }),
+  defineTool("update_house", {
+    domain: "houses",
+    summary: "Apply a strict partial update to one house listing.",
+    useWhen:
+      "Use after resolving the house id, including to change status or priority.",
+    avoidWhen: "Do not guess an id or use it to create a listing.",
+    returns:
+      "The full house after the update. Changing the address re-routes it automatically.",
+    effects: safeWrite,
+    exposure: "domain",
+    handler: updateHouseTool,
+  }),
+  defineTool("delete_house", {
+    domain: "houses",
+    summary: "Permanently remove one house listing from the catalog.",
+    useWhen: "Use only after the user explicitly intends that listing to be dropped.",
+    avoidWhen: "Do not use to mark a listing not interested; set status instead.",
+    returns: "The deleted house id and confirmation flag.",
+    effects: destructiveWrite,
+    exposure: "domain",
+    handler: deleteHouseTool,
+  }),
 ];
 
 export const TOOL_REGISTRY = new Map(definitions.map((tool) => [tool.name, tool]));
@@ -935,6 +1002,30 @@ const fieldDescriptions: Record<string, string> = {
   spendCents: "Integer cents of reported spend, as a positive cost.",
   netCents:
     "Integer cents. incomeCents minus spendCents; the only figure that may be negative.",
+  nickname: "Optional short name for the listing, such as The Blue House.",
+  listingUrl: "The listing's page on a real-estate site, if any.",
+  streetAddress: "Street number and name, e.g. 123 Main St.",
+  postalCode: "US ZIP code.",
+  askingPriceCents: "Asking price in integer cents (100 = $1.00). Null while unknown.",
+  hoaFeeCents: "Monthly HOA fee in integer cents. Null means none or unknown.",
+  propertyTaxCents: "Annual property tax in integer cents. Null while unknown.",
+  squareFeet: "Interior square footage. Null while unknown.",
+  beds: "Number of bedrooms. Null while unknown.",
+  baths:
+    "Number of bathrooms, half baths counting as .5 (e.g. 2.5). Null while unknown.",
+  pricePerSqft:
+    "askingPriceCents divided by squareFeet, in dollars. Computed, not stored.",
+  yearBuilt: "Year the house was built. Null while unknown.",
+  lotAcres: "Lot size in acres. Null while unknown.",
+  hasFence: "Whether the property has a fence. Null means not listed either way.",
+  hasBasement: "Whether the property has a basement. Null means not listed either way.",
+  hasGarage: "Whether the property has a garage. Null means not listed either way.",
+  driveMeters: "Driving distance to the reference address, in meters.",
+  driveMinutes: "Driving duration to the reference address, in whole minutes.",
+  driveMiles: "Driving distance to the reference address, in miles.",
+  driveSeconds: "Driving duration to the reference address, in seconds.",
+  routeError:
+    "Short reason the last geocode/route attempt failed, or null on success or before one has run. Cleared automatically once a route succeeds.",
 };
 
 function humanizeField(name: string): string {
@@ -1001,6 +1092,7 @@ function listTools(_userId: string, args: Record<string, unknown>) {
     | "metrics"
     | "finances"
     | "history"
+    | "houses"
     | "all";
   const includeLegacy = args.includeLegacy === true;
   return {
@@ -1070,6 +1162,7 @@ export async function dispatchAgentTool(
         "create_job",
         "create_residence",
         "create_life_event",
+        "create_house",
       ].includes(toolName) &&
       "externalSource" in args !== "externalId" in args
     ) {

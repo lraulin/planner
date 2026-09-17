@@ -965,3 +965,80 @@ Apply a strict partial update to one typed Timeline event.
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
+
+## Houses
+
+### `list_houses`
+
+Find house listings being compared, with price, size, and drive time.
+
+- Use when: Use to scan or filter the comparison catalog before reading or changing one.
+- Avoid when: Use get_house for notes or a route failure's detail.
+- Returns: A compact house page plus total and next offset.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ status?, query?, offset*, limit* }`
+- Output: `{ houses*, pageInfo* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `get_house`
+
+Read one house listing's full comparison record.
+
+- Use when: Use after list_houses resolves the intended listing.
+- Avoid when: Do not use to scan the whole catalog.
+- Returns: Full house detail including address, price, size, features, drive time, and any routeError.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ id* }`
+- Output: `{ house* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `create_house`
+
+Add one house listing to the comparison catalog.
+
+- Use when: Use when filling in a listing from a real-estate site or a description of one.
+- Avoid when: Do not create a second listing for a natural-key retry.
+- Returns: Full created or replayed house and whether this call created it. Drive time is computed automatically once an address is set; check routeError if it is missing.
+- Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ nickname?, listingUrl?, streetAddress?, city?, state?, postalCode?, askingPriceCents?, hoaFeeCents?, propertyTaxCents?, squareFeet?, beds?, baths?, yearBuilt?, lotAcres?, hasFence?, hasBasement?, hasGarage?, status?, priorityLetter?, priorityRank?, notes? } or { nickname?, listingUrl?, streetAddress?, city?, state?, postalCode?, askingPriceCents?, hoaFeeCents?, propertyTaxCents?, squareFeet?, beds?, baths?, yearBuilt?, lotAcres?, hasFence?, hasBasement?, hasGarage?, status?, priorityLetter?, priorityRank?, notes?, externalSource*, externalId* }`
+- Output: `{ house*, created* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `update_house`
+
+Apply a strict partial update to one house listing.
+
+- Use when: Use after resolving the house id, including to change status or priority.
+- Avoid when: Do not guess an id or use it to create a listing.
+- Returns: The full house after the update. Changing the address re-routes it automatically.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ id*, nickname?, listingUrl?, streetAddress?, city?, state?, postalCode?, askingPriceCents?, hoaFeeCents?, propertyTaxCents?, squareFeet?, beds?, baths?, yearBuilt?, lotAcres?, hasFence?, hasBasement?, hasGarage?, status?, priorityLetter?, priorityRank?, notes? }`
+- Output: `{ house* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `delete_house`
+
+Permanently remove one house listing from the catalog.
+
+- Use when: Use only after the user explicitly intends that listing to be dropped.
+- Avoid when: Do not use to mark a listing not interested; set status instead.
+- Returns: The deleted house id and confirmation flag.
+- Effects: write; destructive=true; retry=unsafe; confirmation=explicit
+- Exposure: domain
+- Arguments: `{ id* }`
+- Output: `{ deleted*, id* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.

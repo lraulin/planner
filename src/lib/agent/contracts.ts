@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   financeAccountKindEnum,
   financeFlowKindEnum,
+  HOUSE_STATUSES,
   nodeStateEnum,
   nodeTypeEnum,
   noteFlagEnum,
@@ -26,6 +27,17 @@ const nullableId = id.nullable();
 const nodeType = z.enum(nodeTypeEnum.enumValues);
 const nodeState = z.enum(nodeStateEnum.enumValues);
 const priorityLetter = z.enum(priorityLetterEnum.enumValues).nullable();
+// Both fields are named the same as an existing global one with a different meaning
+// (outline `state`, subscription `status`) — `fieldDescriptions` in tools.ts is a flat
+// map keyed by field name, so these need their own `.describe()` to not inherit it.
+const houseStatus = z
+  .enum(HOUSE_STATUSES)
+  .describe(
+    "House triage status: available, not_interested, no_longer_available, or offer_made.",
+  );
+const houseState = z
+  .string()
+  .describe("US state abbreviation, e.g. MD — not a lifecycle state.");
 const strings = z.array(z.string());
 
 const MONEY_KEYS = new Set([
@@ -413,6 +425,76 @@ const historyListInputFields = {
   ...pageInputFields,
 };
 
+const houseInputFields = {
+  nickname: z.string().optional(),
+  listingUrl: z.string().optional(),
+  streetAddress: z.string().optional(),
+  city: z.string().optional(),
+  state: houseState.optional(),
+  postalCode: z.string().optional(),
+  askingPriceCents: z.number().int().nullable().optional(),
+  hoaFeeCents: z.number().int().nullable().optional(),
+  propertyTaxCents: z.number().int().nullable().optional(),
+  squareFeet: z.number().int().nullable().optional(),
+  beds: z.number().int().nullable().optional(),
+  baths: z.number().nullable().optional(),
+  yearBuilt: z.number().int().nullable().optional(),
+  lotAcres: z.number().nullable().optional(),
+  hasFence: z.boolean().nullable().optional(),
+  hasBasement: z.boolean().nullable().optional(),
+  hasGarage: z.boolean().nullable().optional(),
+  status: houseStatus.optional(),
+  priorityLetter: priorityLetter.optional(),
+  priorityRank: z.number().int().nullable().optional(),
+  notes: z.string().optional(),
+};
+
+const houseSummarySchema = z.strictObject({
+  id,
+  nickname: z.string(),
+  status: houseStatus,
+  priorityLetter,
+  priorityRank: z.number().int().nullable(),
+  streetAddress: z.string(),
+  city: z.string(),
+  state: houseState,
+  askingPriceCents: z.number().int().nullable(),
+  squareFeet: z.number().int().nullable(),
+  beds: z.number().int().nullable(),
+  baths: z.string().nullable(),
+  pricePerSqft: z.number().nullable(),
+  driveMinutes: z.number().int().nullable(),
+  driveMiles: z.number().nullable(),
+});
+
+const houseDetailSchema = z.strictObject({
+  id,
+  nickname: z.string(),
+  listingUrl: z.string(),
+  streetAddress: z.string(),
+  city: z.string(),
+  state: houseState,
+  postalCode: z.string(),
+  askingPriceCents: z.number().int().nullable(),
+  hoaFeeCents: z.number().int().nullable(),
+  propertyTaxCents: z.number().int().nullable(),
+  squareFeet: z.number().int().nullable(),
+  beds: z.number().int().nullable(),
+  baths: z.string().nullable(),
+  yearBuilt: z.number().int().nullable(),
+  lotAcres: z.string().nullable(),
+  hasFence: z.boolean().nullable(),
+  hasBasement: z.boolean().nullable(),
+  hasGarage: z.boolean().nullable(),
+  status: houseStatus,
+  priorityLetter,
+  priorityRank: z.number().int().nullable(),
+  notes: z.string(),
+  driveMeters: z.number().int().nullable(),
+  driveSeconds: z.number().int().nullable(),
+  routeError: z.string().nullable(),
+});
+
 const jobSummarySchema = z.strictObject({
   id,
   employer: z.string(),
@@ -637,6 +719,7 @@ export const inputSchemas = {
         "metrics",
         "finances",
         "history",
+        "houses",
         "all",
       ])
       .default("core"),
@@ -894,6 +977,15 @@ export const inputSchemas = {
     eventDate: dateKey,
   }),
   update_life_event: z.strictObject({ id, ...lifeEventInputFields }),
+  list_houses: z.strictObject({
+    status: houseStatus.optional(),
+    query: z.string().optional(),
+    ...pageInputFields,
+  }),
+  get_house: z.strictObject({ id }),
+  create_house: retryableObject(houseInputFields),
+  update_house: z.strictObject({ id, ...houseInputFields }),
+  delete_house: z.strictObject({ id }),
 } as const;
 
 const healthOutput = z.strictObject({
@@ -1351,4 +1443,12 @@ export const outputSchemas = {
     created: z.boolean(),
   }),
   update_life_event: z.strictObject({ event: lifeEventDetailSchema }),
+  list_houses: z.strictObject({
+    houses: z.array(houseSummarySchema),
+    pageInfo: pageInfoSchema,
+  }),
+  get_house: z.strictObject({ house: houseDetailSchema }),
+  create_house: z.strictObject({ house: houseDetailSchema, created: z.boolean() }),
+  update_house: z.strictObject({ house: houseDetailSchema }),
+  delete_house: z.strictObject({ deleted: z.literal(true), id }),
 } as const;

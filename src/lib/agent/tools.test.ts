@@ -162,6 +162,20 @@ describe("agent tool registry", () => {
       "update_life_event",
     ]);
     expect(history.tools.every((tool) => tool.domain === "history")).toBe(true);
+
+    const houses = (await dispatchAgentTool(
+      "list_tools",
+      { domain: "houses" },
+      UNUSED_USER_ID,
+    )) as { tools: { name: string; domain: string }[] };
+    expect(houses.tools.map((tool) => tool.name)).toEqual([
+      "list_houses",
+      "get_house",
+      "create_house",
+      "update_house",
+      "delete_house",
+    ]);
+    expect(houses.tools.every((tool) => tool.domain === "houses")).toBe(true);
   });
 
   it("keeps health compatible while pointing to contract discovery", async () => {
