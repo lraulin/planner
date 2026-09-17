@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { seedBudget, reconcileAccount } from "./mutations";
 import { loadBudget, loadBudgetMismatch } from "./queries";
@@ -118,7 +119,9 @@ describeDb("reconcileAccount", () => {
       .from(financeTransactions)
       .where(eq(financeTransactions.id, receipt.transactionId!));
     expect(row).toMatchObject({
-      transactionDate: TODAY,
+      // reconcileAccount stamps real wall-clock today, not the seeded TODAY — see
+      // src/lib/finances/budget/mutations.ts's `localDateKey(new Date())`.
+      transactionDate: localDateKey(new Date()),
       amount: "12.34",
       externalSource: "reconcile",
       flowOverride: "income",
