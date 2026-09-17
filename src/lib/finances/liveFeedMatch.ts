@@ -19,10 +19,10 @@
  * `PIZZA HUT 036874`, `WAL-MART #1981`, `CVS/PHARMACY #01522`, `GODADDY.COM` that SimpleFIN
  * and the CSV download carry for the same charge.
  *
- * So `descriptionsOverlap` runs four rules, in order: fold-equality, containment above an
- * eleven-character floor, a **payment-posting** match, and a **brand stem** — the shorter
- * side, reduced to its alphanumerics, prefixing the longer. Each rule is a different shape
- * of disagreement and each carries its own defence:
+ * So `descriptionsOverlap` runs five rules, in order: fold-equality, containment above an
+ * eleven-character floor, a **payment-posting** match, a **known merchant alias**, and a
+ * **brand stem** — the shorter side, reduced to its alphanumerics, prefixing the longer. Each
+ * rule is a different shape of disagreement and each carries its own defence:
  *
  * - The containment floor keeps a bare processor stamp (`PAYPAL`, `SQ *`) from matching
  *   every row that mentions it.
@@ -35,6 +35,10 @@
  *   hold: `sameEvent`'s exact amount and tight date window are doing the identity work, so
  *   two distinct real payments to the same card, of the same amount, days apart, is not a
  *   realistic coincidence.
+ * - A handful of merchants (`Walmart`, `Domino's Pizza`, `Spotify`) diverge from their feed
+ *   descriptor by more than punctuation — a different storefront name, an extra category
+ *   word, or a processor's second star ahead of a per-charge reference. `MERCHANT_ALIASES`
+ *   lists exactly the confirmed cases, anchored so it cannot widen into a general rule.
  * - The brand stem has to reach below that floor (`CVS` is three characters), so it is
  *   **prefix-anchored** instead — `CVS` matches `CVS/PHARMACY` but not `MYCVSSTORE` — and
  *   it **refuses a `*` boundary**: the text after the stem beginning with `*` means the
@@ -104,6 +108,42 @@ const PAYMENT_POSTING_PATTERNS: readonly RegExp[] = [
 /** Does this folded description read as an account-payment posting, on either feed? */
 function looksLikePaymentPosting(folded: string): boolean {
   return PAYMENT_POSTING_PATTERNS.some((pattern) => pattern.test(folded));
+}
+
+/**
+ * Merchants whose Capital One display name and feed descriptor diverge past what containment
+ * or the brand stem can bridge — verified against Lee's own account, not guessed.
+ *
+ * `WALMART` → `WM SUPERCENTER #1981` shares no prefix at all (Capital One posts the *same*
+ * store, on different charges, as both `WAL-MART #1981` — which the brand stem already
+ * reaches — and `WM SUPERCENTER #1981`, which it cannot). `DOMINO'S PIZZA` → `DOMINO'S 4690`
+ * fails because the page's own name carries a category word the descriptor drops, so the
+ * shorter side's alphanumerics run past what the longer side shares. `SPOTIFY` →
+ * `PP*SPOTIFY*P46D197980` reaches the brand stem's `*`-boundary refusal — which exists to
+ * stop `TST*BAKERY` from matching a bare `TST*` — because Spotify's processor appends a
+ * second star before its own per-charge reference, a shape indistinguishable by punctuation
+ * alone from a processor handing off to a different counterparty.
+ *
+ * `short` must match one side exactly (after `alnum`); `longPrefixes` only need to prefix the
+ * other side, the same anchoring `brandStemPrefixes` uses elsewhere. Add an entry here — never
+ * loosen the general rules above — when a *specific*, confirmed merchant repeats this
+ * disagreement; see `liveFeedMatch.test.ts` for how each entry was verified against real data.
+ */
+const MERCHANT_ALIASES: readonly { short: string; longPrefixes: readonly string[] }[] =
+  [
+    { short: "WALMART", longPrefixes: ["WMSUPERCENTER"] },
+    { short: "DOMINOSPIZZA", longPrefixes: ["DOMINOS"] },
+    { short: "SPOTIFY", longPrefixes: ["SPOTIFY"] },
+  ];
+
+/** Does one side exactly name a known merchant whose feed descriptor the other side carries? */
+function matchesMerchantAlias(a: string, b: string): boolean {
+  const [x, y] = [alnum(a), alnum(b)];
+  return MERCHANT_ALIASES.some(
+    ({ short, longPrefixes }) =>
+      (x === short && longPrefixes.some((prefix) => y.startsWith(prefix))) ||
+      (y === short && longPrefixes.some((prefix) => x.startsWith(prefix))),
+  );
 }
 
 function fold(description: string): string {
@@ -176,10 +216,11 @@ function brandStemPrefixes(left: string, right: string): boolean {
  *
  * Equality first; then containment either way round — the wrapper can be on either side,
  * since a statement may pad what the feed reports or the reverse; then a payment-posting
- * match, for the one case where neither side's wording appears in the other at all; then the
- * brand stem, which is what recognises a bank page's display name in a full descriptor. The
- * stem rule is tried against each side with a leading processor stamp stripped as well, so
- * `Apple` reaches `PP*APPLE.COM/BILL`.
+ * match, for the one case where neither side's wording appears in the other at all; then a
+ * known merchant alias; then the brand stem, which is what recognises a bank page's display
+ * name in a full descriptor. Both the alias and stem rules are tried against each side with a
+ * leading processor stamp stripped as well, so `Apple` reaches `PP*APPLE.COM/BILL` and
+ * `Spotify` reaches `PP*SPOTIFY*P46D197980`.
  */
 export function descriptionsOverlap(a: string, b: string): boolean {
   const left = fold(a);
@@ -196,7 +237,10 @@ export function descriptionsOverlap(a: string, b: string): boolean {
   const rightForms = [right, right.replace(PROCESSOR_STAMP, "")];
   return leftForms.some((one) =>
     rightForms.some(
-      (other) => one !== "" && other !== "" && brandStemPrefixes(one, other),
+      (other) =>
+        one !== "" &&
+        other !== "" &&
+        (matchesMerchantAlias(one, other) || brandStemPrefixes(one, other)),
     ),
   );
 }

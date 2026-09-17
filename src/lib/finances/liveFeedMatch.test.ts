@@ -111,6 +111,27 @@ describe("descriptionsOverlap", () => {
     ).toBe(true);
   });
 
+  it("bridges known merchants whose Capital One name and feed descriptor diverge", () => {
+    // Production case, 2026-09: Capital One's own posted list names these "Walmart",
+    // "Domino's Pizza", and "Spotify"; SimpleFIN posts them under a different storefront
+    // name, an extra category word dropped, and a processor's second star respectively.
+    // None of the general rules above bridge them, so the browser-sourced row never
+    // retired and double-counted the purchase.
+    expect(descriptionsOverlap("Walmart", "WM SUPERCENTER #1981")).toBe(true);
+    expect(descriptionsOverlap("Domino's Pizza", "DOMINO'S 4690")).toBe(true);
+    expect(descriptionsOverlap("Spotify", "PP*SPOTIFY*P46D197980")).toBe(true);
+  });
+
+  it("does not widen a merchant alias into a general rule", () => {
+    // The alias is anchored on an exact match for the short side and a prefix for the long
+    // side — it must not start matching unrelated charges just because they share a word.
+    expect(descriptionsOverlap("Walmart Supercenter", "WM SUPERCENTER #1981")).toBe(
+      false,
+    );
+    expect(descriptionsOverlap("Domino's Pizza", "PIZZA HUT 036874")).toBe(false);
+    expect(descriptionsOverlap("Spotify", "SPORT CLIPS #1981")).toBe(false);
+  });
+
   it("still refuses a same-amount unrelated charge just because it names a payment", () => {
     // Payment wording is a signal only when *both* sides carry it — a payment on one side
     // must never bridge to an ordinary purchase on the other just because it says "payment".
