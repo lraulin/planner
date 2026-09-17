@@ -90,13 +90,15 @@ describe("the consolidated modules", () => {
 
   it("gives Library the reference lists and the life-history pages", () => {
     // Contacts stays first and stays the default; the three life-history pages were appended
-    // rather than interleaved, so nobody's remembered `lastPage` moves under them.
+    // rather than interleaved, so nobody's remembered `lastPage` moves under them. Houses is
+    // the disposable house-shopping catalog, appended last for the same reason.
     expect(builtPagesForModule("library").map((page) => page.id)).toEqual([
       "contacts",
       "resources",
       "timeline",
       "jobs",
       "residences",
+      "houses",
     ]);
   });
 

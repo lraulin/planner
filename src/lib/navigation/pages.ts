@@ -363,6 +363,14 @@ const PAGES = {
       keywords:
         "address moved home lived apartment house landlord rent where did i live",
     },
+    {
+      id: "houses",
+      label: "Houses",
+      segment: "houses",
+      status: "built",
+      keywords:
+        "house hunting home buying real estate listing for sale price beds baths",
+    },
   ],
 } as const satisfies Record<string, readonly PageEntry[]>;
 
