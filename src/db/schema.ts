@@ -4077,6 +4077,87 @@ export const residences = pgTable(
   ],
 );
 
+/**
+ * Disposable house-shopping comparison table — see
+ * `agent-os/specs/2026-09-17-0853-houses-library-page/`. Deletes in one commit once the
+ * house hunt ends; nothing else in the app reads it.
+ */
+export const HOUSE_STATUSES = [
+  "available",
+  "not_interested",
+  "no_longer_available",
+  "offer_made",
+] as const;
+export type HouseStatus = (typeof HOUSE_STATUSES)[number];
+
+export const houses = pgTable(
+  "houses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    nickname: text("nickname").notNull().default(""),
+    listingUrl: text("listing_url").notNull().default(""),
+    /** US-only shorthand, not the full international shape: this table is disposable. */
+    streetAddress: text("street_address").notNull().default(""),
+    city: text("city").notNull().default(""),
+    state: text("state").notNull().default(""),
+    postalCode: text("postal_code").notNull().default(""),
+
+    askingPriceCents: integer("asking_price_cents"),
+    hoaFeeCents: integer("hoa_fee_cents"),
+    propertyTaxCents: integer("property_tax_cents"),
+
+    squareFeet: integer("square_feet"),
+    beds: smallint("beds"),
+    baths: numeric("baths", { precision: 3, scale: 1 }),
+    yearBuilt: smallint("year_built"),
+    lotAcres: numeric("lot_acres", { precision: 6, scale: 3 }),
+
+    /** Yes / no / unknown. Null rather than false — "not listed" is common and real. */
+    hasFence: boolean("has_fence"),
+    hasBasement: boolean("has_basement"),
+    hasGarage: boolean("has_garage"),
+
+    status: text("status").notNull().default("available"),
+    priorityLetter: priorityLetterEnum("priority_letter"),
+    priorityRank: smallint("priority_rank"),
+    notes: text("notes").notNull().default(""),
+
+    // Route cache — `routedAddress` is the whole invalidation mechanism: a route is stale
+    // exactly when `addressKey(row) !== routedAddress`. See `src/lib/houses/route.ts`.
+    latitude: numeric("latitude", { precision: 9, scale: 6 }),
+    longitude: numeric("longitude", { precision: 9, scale: 6 }),
+    driveMeters: integer("drive_meters"),
+    driveSeconds: integer("drive_seconds"),
+    routedAddress: text("routed_address"),
+    routeError: text("route_error"),
+
+    externalSource: text("external_source"),
+    externalId: text("external_id"),
+
+    sortKey: text("sort_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "houses_priority_letter_ranked",
+      sql`(${table.priorityLetter} is null) = (${table.priorityRank} is null)`,
+    ),
+    check(
+      "houses_status",
+      sql`${table.status} in ('available', 'not_interested', 'no_longer_available', 'offer_made')`,
+    ),
+    index("houses_user_sort_idx").on(table.userId, table.sortKey),
+    uniqueIndex("houses_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
+  ],
+);
+
 export type DailyItem = typeof dailyItems.$inferSelect;
 export type NewDailyItem = typeof dailyItems.$inferInsert;
 export type WorkoutSet = typeof workoutSets.$inferSelect;
@@ -4135,3 +4216,5 @@ export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
 export type Residence = typeof residences.$inferSelect;
 export type NewResidence = typeof residences.$inferInsert;
+export type House = typeof houses.$inferSelect;
+export type NewHouse = typeof houses.$inferInsert;

@@ -1,0 +1,42 @@
+CREATE TABLE "houses" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" uuid NOT NULL,
+	"nickname" text DEFAULT '' NOT NULL,
+	"listing_url" text DEFAULT '' NOT NULL,
+	"street_address" text DEFAULT '' NOT NULL,
+	"city" text DEFAULT '' NOT NULL,
+	"state" text DEFAULT '' NOT NULL,
+	"postal_code" text DEFAULT '' NOT NULL,
+	"asking_price_cents" integer,
+	"hoa_fee_cents" integer,
+	"property_tax_cents" integer,
+	"square_feet" integer,
+	"beds" smallint,
+	"baths" numeric(3, 1),
+	"year_built" smallint,
+	"lot_acres" numeric(6, 3),
+	"has_fence" boolean,
+	"has_basement" boolean,
+	"has_garage" boolean,
+	"status" text DEFAULT 'available' NOT NULL,
+	"priority_letter" "priority_letter",
+	"priority_rank" smallint,
+	"notes" text DEFAULT '' NOT NULL,
+	"latitude" numeric(9, 6),
+	"longitude" numeric(9, 6),
+	"drive_meters" integer,
+	"drive_seconds" integer,
+	"routed_address" text,
+	"route_error" text,
+	"external_source" text,
+	"external_id" text,
+	"sort_key" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "houses_priority_letter_ranked" CHECK (("houses"."priority_letter" is null) = ("houses"."priority_rank" is null)),
+	CONSTRAINT "houses_status" CHECK ("houses"."status" in ('available', 'not_interested', 'no_longer_available', 'offer_made'))
+);
+--> statement-breakpoint
+ALTER TABLE "houses" ADD CONSTRAINT "houses_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "houses_user_sort_idx" ON "houses" USING btree ("user_id","sort_key");--> statement-breakpoint
+CREATE UNIQUE INDEX "houses_external_ref_uq" ON "houses" USING btree ("user_id","external_source","external_id") WHERE "houses"."external_id" is not null;
