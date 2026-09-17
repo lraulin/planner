@@ -708,6 +708,79 @@ export function MoneyField({
   );
 }
 
+/**
+ * A `numeric` column edited as plain decimal text — baths (`2.5`), a lot's acreage
+ * (`0.125`). Same validate-on-blur/revert-on-junk shape as `MoneyField`, minus the
+ * currency stripping, with the decimal place count the column actually allows.
+ */
+export function DecimalField({
+  label,
+  value,
+  onChange,
+  decimals,
+  hint,
+  className,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (value: string | null) => void;
+  /** How many digits after the point the column accepts — `numeric(p, decimals)`. */
+  decimals: number;
+  hint?: string;
+  className?: string;
+}) {
+  const id = useId();
+  const stored = value ?? "";
+  const [text, setText] = useState(stored);
+  const [invalid, setInvalid] = useState(false);
+  const pattern = new RegExp(`^\\d+(\\.\\d{1,${decimals}})?$`);
+
+  function commit() {
+    const trimmed = text.trim();
+
+    if (trimmed === "") {
+      setInvalid(false);
+      onChange(null);
+      return;
+    }
+
+    if (!pattern.test(trimmed)) {
+      setInvalid(true);
+      setText(stored);
+      return;
+    }
+
+    setInvalid(false);
+    onChange(trimmed);
+  }
+
+  return (
+    <Field
+      label={label}
+      htmlFor={id}
+      hint={
+        invalid
+          ? `Must be a number with up to ${decimals} decimal place${decimals === 1 ? "" : "s"}.`
+          : hint
+      }
+      className={className}
+    >
+      <input
+        id={id}
+        value={text}
+        onChange={(event) => {
+          setInvalid(false);
+          setText(event.target.value);
+        }}
+        onBlur={commit}
+        inputMode="decimal"
+        aria-invalid={invalid}
+        className={`tabular ${INPUT_CLASS} ${invalid ? INVALID_CLASS : ""}`}
+      />
+    </Field>
+  );
+}
+
 /** Effort in Achieve's notation, reusing the grid's own parser. */
 export function EffortField({
   label,

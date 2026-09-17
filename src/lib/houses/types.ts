@@ -2,6 +2,13 @@ import type { ExternalRef, HouseStatus, PriorityLetter } from "@/db/schema";
 
 export type { HouseStatus };
 
+export const HOUSE_STATUS_LABELS: Record<HouseStatus, string> = {
+  available: "Available",
+  not_interested: "Not Interested",
+  no_longer_available: "No Longer Available",
+  offer_made: "Offer Made",
+};
+
 /** The complete House record — everything the drawer edits and the grid summarises. */
 export type HouseDetail = {
   id: string;
