@@ -1,6 +1,6 @@
 # Houses — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-17)
 
 ## Scope
 

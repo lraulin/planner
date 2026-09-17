@@ -752,6 +752,13 @@ flavor; optional palette thinning).
   list/get/create/update each, no delete. Optional `externalSource`/`externalId` on
   create so a retry does not insert a second copy. Compact lists; full form on get.
   Derived Work/Home chronology rows stay read-time only.
+- **✅ Houses.** `specs/2026-09-17-0853-houses-library-page`. A sixth Library page for
+  comparing houses for sale while Lee is house shopping: standard grid + drawer, priority,
+  a 4-value status, and drive time/distance to a hardcoded reference address computed
+  server-side via Nominatim + OSRM and cached on the row. `domain: houses` MCP tools
+  (list/get/create/update/delete) so Grok can fill it in from listings. **Deliberately
+  disposable** — one table, one page, one MCP domain, expected to be deleted in one
+  commit once the house hunt ends; not a durable product feature.
 
 ### AI integration
 
