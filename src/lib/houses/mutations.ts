@@ -1,6 +1,12 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { HOUSE_STATUSES, houses, type HouseStatus } from "@/db/schema";
+import {
+  HOUSE_STATUSES,
+  houses,
+  type HouseStatus,
+  type PriorityLetter,
+} from "@/db/schema";
+import { letterRankEngine } from "@/lib/priority/letterRank";
 import { between } from "@/lib/tree/sortKey";
 import { DRIVE_DESTINATION } from "./destination";
 import { driveRoute, geocode } from "./geo";
@@ -79,6 +85,52 @@ function patchOptionalFields(patch: Record<string, unknown>, input: HouseInput) 
   if (input.notes !== undefined) patch.notes = input.notes;
 }
 
+/**
+ * Houses is a flat, hand-maintained pool like the Task Chooser or Day list — not the
+ * Outline, where a bare letter is meaningful on its own. `assertRankedLetterPriorities`'s
+ * rule applies: once a letter is assigned it must carry a real numeric position, so a
+ * bare "A" is resolved to a rank (the end of A) here rather than stored as-is, which is
+ * what `houses_priority_letter_ranked` requires anyway.
+ */
+const priorityEngine = letterRankEngine<{
+  id: string;
+  priorityLetter: PriorityLetter | null;
+  priorityRank: number | null;
+}>((row) => ({ letter: row.priorityLetter, rank: row.priorityRank }));
+
+/**
+ * Resolve `letter`/`rank` against every other house's priority and write every row the
+ * resolution touches — the target plus, when it displaces siblings, their renumbering.
+ * Must run after `houseId` already exists as a row, and inside the caller's transaction.
+ */
+async function assignHousePriority(
+  tx: Executor,
+  userId: string,
+  houseId: string,
+  letter: PriorityLetter | null,
+  rank: number | null,
+): Promise<void> {
+  const pool = await tx
+    .select({
+      id: houses.id,
+      priorityLetter: houses.priorityLetter,
+      priorityRank: houses.priorityRank,
+    })
+    .from(houses)
+    .where(eq(houses.userId, userId));
+
+  for (const assignment of priorityEngine.planAssign(pool, houseId, letter, rank)) {
+    await tx
+      .update(houses)
+      .set({
+        priorityLetter: assignment.letter,
+        priorityRank: assignment.rank,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(houses.id, assignment.id), eq(houses.userId, userId)));
+  }
+}
+
 function inputAddress(input: HouseInput) {
   return {
     streetAddress: input.streetAddress ?? "",
@@ -120,11 +172,9 @@ export async function createHouseOnce(
     const patch: Record<string, unknown> = {};
     patchOptionalFields(patch, input);
 
-    // `?? null` folds "omitted" and "explicitly null" together before the rank check, so
-    // a rank without a letter (either way of not having one) never reaches the insert —
-    // the alternative, checking `input.priorityLetter === null`, misses the omitted case
-    // and can violate `houses_priority_letter_ranked`.
-    const priorityLetter = input.priorityLetter ?? null;
+    // Priority is never written here — a letter without a rank resolved against the
+    // pool would violate houses_priority_letter_ranked. assignHousePriority runs once
+    // the row exists, below.
     const [row] = await tx
       .insert(houses)
       .values({
@@ -136,8 +186,6 @@ export async function createHouseOnce(
         state: input.state ?? "",
         postalCode: input.postalCode ?? "",
         status: requireStatus(input.status, "available"),
-        priorityLetter,
-        priorityRank: priorityLetter === null ? null : (input.priorityRank ?? null),
         sortKey,
         externalSource: input.external?.source ?? null,
         externalId: input.external?.id ?? null,
@@ -146,7 +194,18 @@ export async function createHouseOnce(
       .onConflictDoNothing()
       .returning({ id: houses.id });
 
-    if (row) return { id: row.id, created: true };
+    if (row) {
+      if (input.priorityLetter !== undefined) {
+        await assignHousePriority(
+          tx,
+          userId,
+          row.id,
+          input.priorityLetter,
+          input.priorityRank ?? null,
+        );
+      }
+      return { id: row.id, created: true };
+    }
     if (!input.external) throw new Error("House could not be created.");
     const [existing] = await tx
       .select({ id: houses.id })
@@ -187,26 +246,25 @@ export async function updateHouse(
     if (input.status !== undefined) {
       patch.status = requireStatus(input.status, existing.status as HouseStatus);
     }
-    if (input.priorityLetter !== undefined) {
-      patch.priorityLetter = input.priorityLetter;
-      if (input.priorityLetter === null) patch.priorityRank = null;
-    }
-    // The letter this row will have once the patch applies — from the input when it set
-    // one, otherwise whatever is already stored — not just `input.priorityLetter`, which
-    // is `undefined` (not `null`) when the caller left it alone.
-    const resultingLetter =
-      input.priorityLetter !== undefined
-        ? input.priorityLetter
-        : existing.priorityLetter;
-    if (input.priorityRank !== undefined && resultingLetter !== null) {
-      patch.priorityRank = input.priorityRank;
-    }
     patchOptionalFields(patch, input);
 
     await tx
       .update(houses)
       .set(patch)
       .where(and(eq(houses.id, houseId), eq(houses.userId, userId)));
+
+    // Priority goes through the shared ranking engine, not a raw column write — see
+    // assignHousePriority. Touch it whenever the caller set either half: a rank alone
+    // moves this row within its current letter, a letter alone (bare, or explicitly
+    // null) resolves against the pool the same way the drawer's PriorityField does.
+    if (input.priorityLetter !== undefined || input.priorityRank !== undefined) {
+      const letter =
+        input.priorityLetter !== undefined
+          ? input.priorityLetter
+          : existing.priorityLetter;
+      const rank = input.priorityRank !== undefined ? input.priorityRank : null;
+      await assignHousePriority(tx, userId, houseId, letter, rank);
+    }
 
     return {
       streetAddress: input.streetAddress ?? existing.streetAddress,

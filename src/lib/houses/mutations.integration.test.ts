@@ -155,6 +155,36 @@ describeDb("houses mutations", () => {
     });
   });
 
+  it("resolves a bare letter against the pool instead of writing it verbatim", async () => {
+    // The regression this guards: a raw column write of {priorityLetter: "A"} with no
+    // rank violates houses_priority_letter_ranked. Houses is a flat pool like the Task
+    // Chooser, so a bare letter must resolve to a real position via the shared engine.
+    const first = await createHouse(userId, { nickname: "First" });
+    const second = await createHouse(userId, { nickname: "Second" });
+
+    await updateHouse(userId, first, { priorityLetter: "A" });
+    await updateHouse(userId, second, { priorityLetter: "A" });
+    expect(await getHouseDetail(userId, first)).toMatchObject({
+      priorityLetter: "A",
+      priorityRank: 1,
+    });
+    expect(await getHouseDetail(userId, second)).toMatchObject({
+      priorityLetter: "A",
+      priorityRank: 2,
+    });
+
+    // Inserting "second" at rank 1 pushes "first" down to 2.
+    await updateHouse(userId, second, { priorityLetter: "A", priorityRank: 1 });
+    expect(await getHouseDetail(userId, second)).toMatchObject({
+      priorityLetter: "A",
+      priorityRank: 1,
+    });
+    expect(await getHouseDetail(userId, first)).toMatchObject({
+      priorityLetter: "A",
+      priorityRank: 2,
+    });
+  });
+
   it("replays a keyed create instead of duplicating", async () => {
     const first = await createHouseOnce(userId, {
       nickname: "Zillow house",
