@@ -86,6 +86,39 @@ describe("descriptionsOverlap", () => {
     expect(descriptionsOverlap("AMAZON MKTPL*5H1YV8C82", "STEAMGAMES.COM")).toBe(false);
   });
 
+  it("recognises an account payment named by source on one side and by channel on the other", () => {
+    // Production case: a Capital One card payment survived as two rows because its pending
+    // page names it by where the money came from and SimpleFIN names it by the channel that
+    // moved it — opening words share nothing, so neither containment nor a brand stem ever
+    // bridged them, and the browser row never retired.
+    expect(
+      descriptionsOverlap(
+        "Payment from CAPITAL ONE N.A. ...2322",
+        "CAPITAL ONE ONLINE PYMT",
+      ),
+    ).toBe(true);
+    expect(
+      descriptionsOverlap(
+        "Payment from PENTAGON FEDERAL CREDIT UNION ...2021",
+        "CAPITAL ONE ONLINE PYMT",
+      ),
+    ).toBe(true);
+    expect(
+      descriptionsOverlap(
+        "Payment from CAPITAL ONE N.A. ...2322",
+        "CHASE CREDIT CRD AUTOPAY",
+      ),
+    ).toBe(true);
+  });
+
+  it("still refuses a same-amount unrelated charge just because it names a payment", () => {
+    // Payment wording is a signal only when *both* sides carry it — a payment on one side
+    // must never bridge to an ordinary purchase on the other just because it says "payment".
+    expect(
+      descriptionsOverlap("Payment from CAPITAL ONE N.A. ...2322", "PIZZA HUT 036874"),
+    ).toBe(false);
+  });
+
   it("refuses an empty description rather than matching everything", () => {
     expect(descriptionsOverlap("", "Withdrawal from RENT:RAULIN")).toBe(false);
   });

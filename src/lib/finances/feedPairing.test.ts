@@ -123,6 +123,31 @@ describe("pairRows", () => {
     );
     expect(pairings).toHaveLength(1);
   });
+
+  it("retires a card-payment hold whose pending page names it by source, not channel", () => {
+    // Production case: this pair never retired. "Payment from CAPITAL ONE N.A. ...2322"
+    // and "CAPITAL ONE ONLINE PYMT" share no opening words, so the browser row survived
+    // as a permanent duplicate leg counted in the unmatched-transfer total.
+    const pairings = pairRows(
+      [
+        row({
+          id: "browser-payment",
+          amountCents: 172195,
+          description: "Payment from CAPITAL ONE N.A. ...2322",
+        }),
+      ],
+      [
+        row({
+          id: "feed-payment",
+          amountCents: 172195,
+          description: "CAPITAL ONE ONLINE PYMT",
+        }),
+      ],
+    );
+    expect(pairings).toEqual([
+      { browserId: "browser-payment", feedId: "feed-payment" },
+    ]);
+  });
 });
 
 describe("resolveLostHold", () => {

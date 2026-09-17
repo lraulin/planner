@@ -19,13 +19,22 @@
  * `PIZZA HUT 036874`, `WAL-MART #1981`, `CVS/PHARMACY #01522`, `GODADDY.COM` that SimpleFIN
  * and the CSV download carry for the same charge.
  *
- * So `descriptionsOverlap` runs three rules, in order: fold-equality, containment above an
- * eleven-character floor, and a **brand stem** — the shorter side, reduced to its
- * alphanumerics, prefixing the longer. Each rule is a different shape of disagreement and
- * each carries its own defence:
+ * So `descriptionsOverlap` runs four rules, in order: fold-equality, containment above an
+ * eleven-character floor, a **payment-posting** match, and a **brand stem** — the shorter
+ * side, reduced to its alphanumerics, prefixing the longer. Each rule is a different shape
+ * of disagreement and each carries its own defence:
  *
  * - The containment floor keeps a bare processor stamp (`PAYPAL`, `SQ *`) from matching
  *   every row that mentions it.
+ * - A card's own pending list names an account payment by its *source* (`Payment from
+ *   CAPITAL ONE N.A. ...2322`) where SimpleFIN names it by the *channel*
+ *   (`CAPITAL ONE ONLINE PYMT`) — opening words that share nothing, so containment and the
+ *   brand stem both refuse it and the browser-sourced row never retires, permanently
+ *   double-counting the payment as an unmatched transfer. Both sides matching a known
+ *   payment-wording pattern is treated as the same signal D4 already accepts for a lost
+ *   hold: `sameEvent`'s exact amount and tight date window are doing the identity work, so
+ *   two distinct real payments to the same card, of the same amount, days apart, is not a
+ *   realistic coincidence.
  * - The brand stem has to reach below that floor (`CVS` is three characters), so it is
  *   **prefix-anchored** instead — `CVS` matches `CVS/PHARMACY` but not `MYCVSSTORE` — and
  *   it **refuses a `*` boundary**: the text after the stem beginning with `*` means the
@@ -76,6 +85,26 @@ const MIN_BRAND_STEM = 3;
 
 /** A leading payment-processor stamp: `PP*`, `SQ *`, `TST*`, `PAYPAL *`. */
 const PROCESSOR_STAMP = /^[A-Z]{2,6}\s*\*\s*/;
+
+/**
+ * Known wordings for one side or the other of an account-payment posting.
+ *
+ * A card's own pending page names the payment by where the money came from; a history feed
+ * names it by the channel that moved it. Neither is a substring or a prefix of the other, so
+ * this is a separate rule rather than a wider containment or brand-stem floor.
+ */
+const PAYMENT_POSTING_PATTERNS: readonly RegExp[] = [
+  /^PAYMENT FROM /,
+  /(MOBILE|ONLINE) (PMT|PYMT)/,
+  /CREDIT CRD (EPAY|AUTOPAY)/,
+  /PAYMENT THANK YOU/,
+  /AUTOMATIC PAYMENT/,
+];
+
+/** Does this folded description read as an account-payment posting, on either feed? */
+function looksLikePaymentPosting(folded: string): boolean {
+  return PAYMENT_POSTING_PATTERNS.some((pattern) => pattern.test(folded));
+}
 
 function fold(description: string): string {
   return description.replace(/\s+/g, " ").trim().toUpperCase();
@@ -146,10 +175,11 @@ function brandStemPrefixes(left: string, right: string): boolean {
  * Do these two descriptions name the same counterparty?
  *
  * Equality first; then containment either way round — the wrapper can be on either side,
- * since a statement may pad what the feed reports or the reverse; then the brand stem,
- * which is what recognises a bank page's display name in a full descriptor. The stem rule
- * is tried against each side with a leading processor stamp stripped as well, so `Apple`
- * reaches `PP*APPLE.COM/BILL`.
+ * since a statement may pad what the feed reports or the reverse; then a payment-posting
+ * match, for the one case where neither side's wording appears in the other at all; then the
+ * brand stem, which is what recognises a bank page's display name in a full descriptor. The
+ * stem rule is tried against each side with a leading processor stamp stripped as well, so
+ * `Apple` reaches `PP*APPLE.COM/BILL`.
  */
 export function descriptionsOverlap(a: string, b: string): boolean {
   const left = fold(a);
@@ -159,6 +189,8 @@ export function descriptionsOverlap(a: string, b: string): boolean {
 
   const [shorter, longer] = left.length <= right.length ? [left, right] : [right, left];
   if (shorter.length >= MIN_CONTAINMENT_LENGTH && longer.includes(shorter)) return true;
+
+  if (looksLikePaymentPosting(left) && looksLikePaymentPosting(right)) return true;
 
   const leftForms = [left, left.replace(PROCESSOR_STAMP, "")];
   const rightForms = [right, right.replace(PROCESSOR_STAMP, "")];
