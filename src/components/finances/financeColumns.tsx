@@ -300,7 +300,16 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     ...accessors("posted"),
     compact: "meta",
     render: (row) =>
-      row.node.pending ? (
+      row.node.pending && row.node.unlistedAt ? (
+        // Kept, not deleted, when the bank page stopped listing it: nothing on the page
+        // says where it went, so it waits here for you to confirm it gone and delete it.
+        <span
+          title="The bank page stopped listing this hold and no posted charge matches it. Delete it if it is gone."
+          className="rounded border border-priority-a px-1 py-px text-[0.625rem] uppercase tracking-wide text-priority-a"
+        >
+          Unlisted
+        </span>
+      ) : row.node.pending ? (
         // This column is empty precisely *because* the row has not posted, so the caveat
         // belongs here rather than beside the date: the bank has authorised the charge but
         // not settled it, and the amount can still change or the row vanish.

@@ -67,6 +67,7 @@ const TRANSACTION_LIST_COLUMNS = {
   transactionDate: financeTransactions.transactionDate,
   postedDate: financeTransactions.postedDate,
   pending: financeTransactions.pending,
+  unlistedAt: financeTransactions.unlistedAt,
   description: financeTransactions.description,
   amount: financeTransactions.amount,
   sourceCategory: financeTransactions.sourceCategory,
@@ -302,6 +303,7 @@ function toTransactionListRow(row: {
   transactionDate: string;
   postedDate: string | null;
   pending: boolean;
+  unlistedAt: Date | null;
   description: string;
   amount: string;
   sourceCategory: string;
@@ -327,6 +329,7 @@ function toTransactionListRow(row: {
     transactionDate: row.transactionDate,
     postedDate: row.postedDate,
     pending: row.pending,
+    unlistedAt: row.unlistedAt,
     description: row.description,
     amountCents: numericStringToCents(row.amount) ?? 0,
     sourceCategory: row.sourceCategory,

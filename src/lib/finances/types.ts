@@ -239,6 +239,11 @@ export type TransactionListRow = {
    * row can vanish. Only a live feed sets it; every file export is posted-only.
    */
   pending: boolean;
+  /**
+   * When a complete bank-page capture first stopped listing this hold with no successor
+   * anywhere. The row is kept for the user to resolve; null when listed or never flagged.
+   */
+  unlistedAt?: Date | null;
   description: string;
   amountCents: number;
   sourceCategory: string;
