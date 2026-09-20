@@ -43,6 +43,8 @@ function existing(
     externalSource: "scrape:chase",
     externalId: id,
     isParent: false,
+    postedAtBank: null,
+    unlistedAt: null,
     budgetCategoryId: null,
     notes: "",
     flowOverride: null,
@@ -275,7 +277,7 @@ describe("planBankSnapshotReconciliation", () => {
     expect(plan.postedInserts).toHaveLength(1);
   });
 
-  it("replaces only browser pending and leaves SimpleFIN stored for expiry fallback", () => {
+  it("only ever considers browser pending for removal, leaving SimpleFIN stored for expiry fallback", () => {
     const plan = planBankSnapshotReconciliation(
       [
         existing("old-browser", "OLD", -100),
@@ -287,7 +289,9 @@ describe("planBankSnapshotReconciliation", () => {
       [incoming("NEW", -300)],
       false,
     );
-    expect(plan.pendingDeletes).toEqual(["old-browser"]);
+    // The old browser hold is unlisted with nothing to succeed it: flagged, not deleted.
+    expect(plan.pendingDeletes).toEqual([]);
+    expect(plan.unlistedMarks).toEqual(["old-browser"]);
     expect(plan.pendingInserts).toHaveLength(1);
   });
 
@@ -348,16 +352,108 @@ describe("planBankSnapshotReconciliation", () => {
     expect(plan.warnings).toEqual([]);
   });
 
-  it("D3b: removes a vanished duplicate hold with a warning when there is no successor", () => {
+  it("D3: keeps and flags a vanished hold when there is no successor, deleting nothing", () => {
+    // 2026-09-20: a complete-looking capture no longer listed Chewy.com and the hold was
+    // hard-deleted, returning $51.29 to Ready to Assign. Absence alone is not evidence.
     const plan = planBankSnapshotReconciliation(
-      [existing("hold-xfinity", "XFINITY", -8900)],
+      [existing("hold-chewy", "Chewy.com", -5129, { budgetCategoryId: "pets" })],
       [],
       [],
-      false,
+      true,
     );
-    expect(plan.pendingDeletes).toEqual(["hold-xfinity"]);
+    expect(plan.pendingDeletes).toEqual([]);
     expect(plan.pendingCarries).toEqual([]);
-    expect(plan.warnings[0]).toContain("XFINITY");
+    expect(plan.unlistedMarks).toEqual(["hold-chewy"]);
+    expect(plan.warnings[0]).toContain("Chewy.com");
+    expect(plan.warnings[0]).toContain("flagged");
+  });
+
+  it("D3: an already-flagged hold stays flagged without warning again", () => {
+    const plan = planBankSnapshotReconciliation(
+      [existing("hold", "Chewy.com", -5129, { unlistedAt: new Date("2026-09-20") })],
+      [],
+      [],
+      true,
+    );
+    expect(plan.unlistedMarks).toEqual(["hold"]);
+    expect(plan.warnings).toEqual([]);
+  });
+
+  it("D3: a hold already marked posted at the bank is not also flagged unlisted", () => {
+    const plan = planBankSnapshotReconciliation(
+      [existing("hold", "Chewy.com", -5129, { postedAtBank: new Date("2026-09-20") })],
+      [],
+      [],
+      true,
+    );
+    expect(plan.unlistedMarks).toEqual([]);
+    expect(plan.pendingDeletes).toEqual([]);
+  });
+
+  describe("D2: the closed statement is successor evidence, never history", () => {
+    const chewyRow = () => incoming("Chewy.com", -5129, "2026-09-19");
+
+    it("Sep 20 replay: a hold that posted into the closed statement is marked, not lost", () => {
+      const plan = planBankSnapshotReconciliation(
+        [existing("hold-chewy", "Chewy.com", -5129, { transactionDate: "2026-09-18" })],
+        [],
+        [],
+        true,
+        [chewyRow()],
+      );
+      expect(plan.postedAtBankMarks).toEqual(["hold-chewy"]);
+      expect(plan.pendingDeletes).toEqual([]);
+      expect(plan.unlistedMarks).toEqual([]);
+      // Evidence only: nothing about the statement row is written.
+      expect(plan.postedInserts).toEqual([]);
+    });
+
+    it("does not let one statement row account for two holds", () => {
+      const plan = planBankSnapshotReconciliation(
+        [
+          existing("hold-a", "Chewy.com", -5129, { transactionDate: "2026-09-18" }),
+          existing("hold-b", "Chewy.com", -5129, { transactionDate: "2026-09-18" }),
+        ],
+        [],
+        [],
+        true,
+        [chewyRow()],
+      );
+      expect(plan.postedAtBankMarks).toHaveLength(1);
+      expect(plan.unlistedMarks).toHaveLength(1);
+    });
+
+    it("counts a charge once when a stored posted row already holds it", () => {
+      // SimpleFIN delivered it and the statement lists it too: carrying onto the stored
+      // row must win, not stall as an ambiguity between two rows for one charge.
+      const plan = planBankSnapshotReconciliation(
+        [
+          existing("hold-chewy", "Chewy.com", -5129, {
+            transactionDate: "2026-09-18",
+            budgetCategoryId: "pets",
+          }),
+          existing("posted-chewy", "CHEWY.COM", -5129, {
+            pending: false,
+            transactionDate: "2026-09-19",
+            postedDate: "2026-09-19",
+            externalSource: "api:simplefin",
+          }),
+        ],
+        [],
+        [],
+        true,
+        [chewyRow()],
+      );
+      expect(plan.pendingCarries).toEqual([
+        {
+          pendingId: "hold-chewy",
+          targetId: "posted-chewy",
+          carry: { budgetCategoryId: "pets" },
+        },
+      ]);
+      expect(plan.pendingDeletes).toEqual(["hold-chewy"]);
+      expect(plan.warnings).toEqual([]);
+    });
   });
 
   describe("D4: feed-covered accounts never write posted history", () => {

@@ -1,0 +1,1 @@
+ALTER TABLE "finance_transactions" ADD COLUMN "unlisted_at" timestamp with time zone;

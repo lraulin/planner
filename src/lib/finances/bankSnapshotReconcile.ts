@@ -17,6 +17,10 @@ export type ExistingBankSnapshotRow = CarriedState & {
   externalSource: string | null;
   externalId: string | null;
   isParent: boolean;
+  /** Set when a capture already reported this hold posted at the bank. */
+  postedAtBank: Date | null;
+  /** Set when a complete capture stopped listing this hold and nothing accounts for it. */
+  unlistedAt: Date | null;
 };
 
 export type BankSnapshotPostedTransition = {
@@ -59,6 +63,12 @@ export type BankSnapshotReconciliationPlan = {
    * envelope intact, flagged rather than turned into page-authored posted history.
    */
   postedAtBankMarks: string[];
+  /**
+   * D3: holds the complete page no longer lists, with no successor anywhere. Kept with their
+   * envelope and flagged for the user — absence alone never authorizes a delete. The apply
+   * stamps only rows not already flagged.
+   */
+  unlistedMarks: string[];
   /** Incoming posted rows a stored history-feed row already pairs with. */
   postedCoveredByFeed: number;
   warnings: string[];
@@ -191,19 +201,24 @@ function closestMatch(
  * (`sameEvent`/`sameDateAndDescription`); anything left is a genuinely new posted row —
  * unless `feedCovered`, where it is simply not inserted.
  *
- * The browser's pending list is complete for its own prior holds (D3a): one it no longer
- * lists is removed. Before removing it, D3b tries to carry its state onto a posted row within
- * Actual's approximate-amount band and a wider date tolerance — a hold that posted with a tip
- * added, or a page-side name a feed's descriptor never matched. `resolveLostHold` ranks
- * candidates by description rather than requiring it to match (D4): exactly one qualifying
- * row retires the hold outright; several retire it only with one clear description winner;
- * several with none keeps the hold and warns instead of guessing.
+ * **A hold is never deleted by absence** (`agent-os/specs/2026-09-20-1216-holds-are-never-
+ * deleted-by-absence/` D3, superseding D3a of ingest-by-identity). A hold the page no longer
+ * lists is looked for in the closed statement the capture carried (`recentPosted`, D2 — evidence
+ * only, never inserted): a match there marks it `postedAtBankMarks`. Otherwise D3b tries to
+ * carry its state onto a posted row within Actual's approximate-amount band and a wider date
+ * tolerance — a hold that posted with a tip added, or a page-side name a feed's descriptor
+ * never matched. `resolveLostHold` ranks candidates by description rather than requiring it to
+ * match (D4): exactly one qualifying row retires the hold outright; several retire it only with
+ * one clear description winner; several with none keeps the hold and warns instead of guessing.
+ * With no candidate at all the hold is kept and flagged `unlistedMarks` — the page cannot see
+ * everything a hold might have become, so its silence is not proof the hold is gone.
  */
 export function planBankSnapshotReconciliation(
   existing: readonly ExistingBankSnapshotRow[],
   posted: readonly ParsedBankSnapshotRow[],
   pending: readonly ParsedBankSnapshotRow[],
   feedCovered: boolean,
+  recentPosted: readonly ParsedBankSnapshotRow[] = [],
 ): BankSnapshotReconciliationPlan {
   const postedHistory = existing.filter((row) => !row.pending);
   const postedHistoryById = new Map(postedHistory.map((row) => [row.id, row]));
@@ -225,6 +240,7 @@ export function planBankSnapshotReconciliation(
   const pendingCarries: BankSnapshotPendingCarry[] = [];
   const pendingDeletes = new Set<string>();
   const postedAtBankMarks = new Set<string>();
+  const unlistedMarks: string[] = [];
   const warnings: string[] = [];
   const unresolvedPosted: ParsedBankSnapshotRow[] = [];
 
@@ -375,8 +391,18 @@ export function planBankSnapshotReconciliation(
     }
   }
 
-  // The browser set is complete. Only its own prior pending rows are replaceable; SimpleFIN
-  // remains stored so it can resume after the 36-hour browser authority window.
+  // The closed statement's rows minus any a stored posted row already holds: a charge in
+  // both places must count once, or `resolveLostHold` would see two candidates for one.
+  const recentAll = recentPosted.map(incomingPairable);
+  const heldByStored = new Set(
+    pairRows(recentAll, postedHistory.map(toPairable)).map((pair) => pair.browserId),
+  );
+  const unheldRecent = recentAll.filter((row) => !heldByStored.has(row.id));
+  const recentRows = recentPosted.filter((row) => !heldByStored.has(row.externalId));
+  const usedRecent = new Set<string>();
+
+  // The browser set is complete for what it lists, and no more. SimpleFIN remains stored so
+  // it can resume after the 36-hour browser authority window.
   for (const row of browserPending) {
     if (usedPending.has(row.id) || usedBrowserForCurrent.has(row.id)) continue;
     if (row.isParent) {
@@ -386,7 +412,20 @@ export function planBankSnapshotReconciliation(
       );
       continue;
     }
-    const resolution = resolveLostHold(row, postedHistory);
+    // The closed statement is evidence, not history: a hold that posted just before the
+    // cycle rolled over is on it, so it is marked rather than lost.
+    const closed = recentRows
+      .filter((recent) => !usedRecent.has(recent.externalId) && sameEvent(row, recent))
+      .sort((left, right) => dateDistance(row, left) - dateDistance(row, right))[0];
+    if (closed) {
+      usedRecent.add(closed.externalId);
+      postedAtBankMarks.add(row.id);
+      continue;
+    }
+    const resolution = resolveLostHold(row, [
+      ...postedHistory,
+      ...unheldRecent.filter((recent) => !usedRecent.has(recent.id)),
+    ]);
     if (resolution.outcome === "carry") {
       const target = postedHistoryById.get(resolution.postedId);
       if (target) {
@@ -396,6 +435,10 @@ export function planBankSnapshotReconciliation(
           targetId: target.id,
           carry: carryableFields(row, target),
         });
+      } else {
+        // The only qualifying row is on the closed statement — nowhere to carry to yet.
+        usedRecent.add(resolution.postedId);
+        postedAtBankMarks.add(row.id);
       }
     } else if (resolution.outcome === "ambiguous") {
       // D4: several posted rows qualify and none is a clear description winner — kept
@@ -404,11 +447,15 @@ export function planBankSnapshotReconciliation(
       warnings.push(
         `Kept pending transaction "${row.description}" because more than one posted row could be its successor and none was a clear match by description; resolve it by hand.`,
       );
-    } else {
-      pendingDeletes.add(row.id);
-      warnings.push(
-        `Removed pending transaction "${row.description}" because the complete bank snapshot no longer listed it and no posted row could be confirmed as its successor.`,
-      );
+    } else if (row.postedAtBank === null) {
+      // D3: nothing accounts for it, and the page cannot see everything a hold might have
+      // become — kept with its envelope and flagged, never deleted for being absent.
+      unlistedMarks.push(row.id);
+      if (row.unlistedAt === null) {
+        warnings.push(
+          `Kept pending transaction "${row.description}" although the complete bank snapshot no longer lists it and no posted row could be confirmed as its successor; it is flagged for you to resolve.`,
+        );
+      }
     }
   }
 
@@ -422,6 +469,7 @@ export function planBankSnapshotReconciliation(
     pendingCarries,
     pendingDeletes: [...pendingDeletes],
     postedAtBankMarks: [...postedAtBankMarks],
+    unlistedMarks,
     postedCoveredByFeed: pairings.length,
     warnings,
   };

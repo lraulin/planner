@@ -2214,6 +2214,17 @@ export const financeTransactions = pgTable(
      * reported it posted.
      */
     postedAtBank: timestamp("posted_at_bank", { withTimezone: true }),
+    /**
+     * When a complete bank-page capture first stopped listing this hold with nothing to
+     * account for it — no posted row, on the page or stored, it could have become.
+     *
+     * The row is **kept**, envelope and notes intact: a page that cannot see every place a
+     * hold might have gone must not authorize deleting it
+     * (`agent-os/specs/2026-09-20-1216-holds-are-never-deleted-by-absence/` D3). It waits for
+     * the user to confirm it gone. Cleared when the hold is listed again; the row disappears
+     * with the usual retirement when a successor pairs. Null means listed, or never flagged.
+     */
+    unlistedAt: timestamp("unlisted_at", { withTimezone: true }),
     description: text("description").notNull(),
     /** Signed; positive is money into the account. */
     amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),

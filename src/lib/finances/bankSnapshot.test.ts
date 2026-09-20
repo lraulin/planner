@@ -176,6 +176,63 @@ describe("parseBankBrowserSnapshot", () => {
   });
 });
 
+describe("closed-statement evidence (recentPosted)", () => {
+  const withRecent = {
+    ...chase,
+    completeness: { ...complete, recentPosted: true },
+    recentStatementClosedOn: "Sep 20, 2026",
+    recentPosted: [
+      {
+        transactionDate: "Sat, Sep 19, 2026",
+        postedDate: "Sat, Sep 19, 2026",
+        description: "Chewy.com",
+        category: "Shopping",
+        amount: "$51.29",
+      },
+    ],
+  } as BankBrowserSnapshotV1;
+
+  it("parses the optional closed statement as evidence, apart from posted history", () => {
+    const result = parseBankBrowserSnapshot(text(withRecent));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.snapshot.recentStatementClosedOn).toBe("2026-09-20");
+    expect(result.snapshot.recentPosted).toHaveLength(1);
+    expect(result.snapshot.recentPosted[0].amountCents).toBe(-5129);
+    expect(result.snapshot.posted).toHaveLength(8);
+    // Same charge on a different list must not share an identity with a posted row.
+    const ids = new Set(result.snapshot.posted.map((row) => row.externalId));
+    expect(ids.has(result.snapshot.recentPosted[0].externalId)).toBe(false);
+  });
+
+  it("still parses a capture that carries none, as Chase and older pastes do", () => {
+    const result = parseBankBrowserSnapshot(text(chase));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.snapshot.recentPosted).toEqual([]);
+    expect(result.snapshot.recentStatementClosedOn).toBeNull();
+  });
+
+  it("refuses closed-statement rows the capture did not vouch for as complete", () => {
+    const result = parseBankBrowserSnapshot(
+      text({ ...withRecent, completeness: complete }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("refuses closed-statement rows without a readable close date", () => {
+    const { recentStatementClosedOn: _dropped, ...rest } = withRecent;
+    expect(parseBankBrowserSnapshot(text(rest as BankBrowserSnapshotV1)).ok).toBe(
+      false,
+    );
+    expect(
+      parseBankBrowserSnapshot(
+        text({ ...withRecent, recentStatementClosedOn: "last Tuesday" }),
+      ).ok,
+    ).toBe(false);
+  });
+});
+
 describe("parseBankDate", () => {
   it.each([
     ["2026-08-29", "2026-08-29"],

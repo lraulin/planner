@@ -627,6 +627,145 @@ describeDb("applyBankBrowserSnapshot", () => {
     expect(result.pending.removed).toBe(1);
   });
 
+  describe("holds are never deleted by absence (2026-09-20)", () => {
+    const chewyHold = (owner: string, account: string, category: string) => ({
+      userId: owner,
+      accountId: account,
+      transactionDate: "2026-08-28",
+      postedDate: null,
+      pending: true,
+      description: "Chewy.com",
+      amount: "-51.29",
+      sourceCategory: "",
+      budgetCategoryId: category,
+      notes: "dog food",
+      externalSource: "scrape:chase",
+      externalId: `chewy-hold-${crypto.randomUUID()}`,
+    });
+    const chewyRow = {
+      transactionDate: "Aug 28, 2026",
+      postedDate: "Aug 28, 2026",
+      description: "Chewy.com",
+      category: "Shopping",
+      amount: "$51.29",
+    };
+    const holdOf = async (owner: string) =>
+      (
+        await db
+          .select()
+          .from(financeTransactions)
+          .where(
+            sql`${financeTransactions.userId} = ${owner} and ${financeTransactions.description} = 'Chewy.com'`,
+          )
+      )[0];
+
+    it("keeps and flags a hold the complete page no longer lists, and clears the flag when it returns", async () => {
+      const [hold] = await db
+        .insert(financeTransactions)
+        .values(chewyHold(userId, accountId, envelopeId))
+        .returning({ id: financeTransactions.id });
+
+      const first = await applyBankBrowserSnapshot(userId, snapshot());
+      expect(first.pending.removed).toBe(0);
+      expect(first.warnings.join(" ")).toContain("flagged");
+      const flagged = await holdOf(userId);
+      expect(flagged.id).toBe(hold.id);
+      expect(flagged.budgetCategoryId).toBe(envelopeId);
+      expect(flagged.notes).toBe("dog food");
+      expect(flagged.unlistedAt).not.toBeNull();
+
+      // A later paste that still does not list it leaves the first-noticed stamp alone.
+      await applyBankBrowserSnapshot(userId, snapshot());
+      expect((await holdOf(userId)).unlistedAt?.getTime()).toBe(
+        flagged.unlistedAt?.getTime(),
+      );
+
+      // The page lists it again: the flag clears, the row is still the same row.
+      await applyBankBrowserSnapshot(
+        userId,
+        snapshot({
+          pending: [
+            ...pending.map(([date, description, amount]) => ({
+              transactionDate: date,
+              postedDate: null,
+              description,
+              category: "",
+              amount,
+            })),
+            { ...chewyRow, postedDate: null },
+          ],
+        }),
+      );
+      const relisted = await holdOf(userId);
+      expect(relisted.id).toBe(hold.id);
+      expect(relisted.unlistedAt).toBeNull();
+    });
+
+    it("marks a hold posted at the bank when the closed statement lists it, inserting nothing", async () => {
+      await db
+        .insert(financeTransactions)
+        .values(chewyHold(userId, accountId, envelopeId));
+
+      const result = await applyBankBrowserSnapshot(
+        userId,
+        snapshot({
+          completeness: {
+            currentCycle: true,
+            posted: true,
+            pending: true,
+            filtered: false,
+            searched: false,
+            recentPosted: true,
+          },
+          recentStatementClosedOn: "Aug 29, 2026",
+          recentPosted: [chewyRow],
+        }),
+      );
+
+      expect(result.pending.removed).toBe(0);
+      const hold = await holdOf(userId);
+      expect(hold.pending).toBe(true);
+      expect(hold.postedAtBank).not.toBeNull();
+      expect(hold.unlistedAt).toBeNull();
+      expect(hold.budgetCategoryId).toBe(envelopeId);
+      const chewyRows = await db
+        .select({ id: financeTransactions.id })
+        .from(financeTransactions)
+        .where(
+          sql`${financeTransactions.userId} = ${userId} and ${financeTransactions.description} = 'Chewy.com'`,
+        );
+      expect(chewyRows).toHaveLength(1);
+    });
+
+    it("never touches another user's identical hold", async () => {
+      const other = await makeUser("Other Holder");
+      const [otherAccount] = await db
+        .insert(financeAccounts)
+        .values({
+          userId: other,
+          name: "Chase Prime Visa",
+          kind: "credit_card",
+          institution: "Chase",
+          externalSource: "csv:chase-credit",
+          externalKey: "9910",
+        })
+        .returning({ id: financeAccounts.id });
+      await db
+        .insert(financeTransactions)
+        .values(chewyHold(userId, accountId, envelopeId));
+      await db
+        .insert(financeTransactions)
+        .values(chewyHold(other, otherAccount.id, envelopeId));
+
+      await applyBankBrowserSnapshot(userId, snapshot());
+
+      expect((await holdOf(userId)).unlistedAt).not.toBeNull();
+      const untouched = await holdOf(other);
+      expect(untouched.unlistedAt).toBeNull();
+      expect(untouched.notes).toBe("dog food");
+    });
+  });
+
   it("Sep 14 replay: posted rows SimpleFIN already holds under a different descriptor insert nothing and leave RTA unchanged", async () => {
     // The actual incident: 12 Amazon charges Chase's page reported as newly posted, all
     // already delivered by SimpleFIN under its own fuller descriptor

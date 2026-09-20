@@ -37,9 +37,16 @@ export type BankBrowserSnapshotV1 = {
     pending: true;
     filtered: false;
     searched: false;
+    recentPosted?: true;
   };
   posted: BankBrowserSnapshotRowV1[];
   pending: BankBrowserSnapshotRowV1[];
+  /**
+   * Optional: the most recently closed statement's rows. Evidence for where a hold went —
+   * never inserted, never counted as posted history. Sent with `recentStatementClosedOn`.
+   */
+  recentStatementClosedOn?: string;
+  recentPosted?: BankBrowserSnapshotRowV1[];
 };
 
 export type ParsedBankSnapshotRow = {
@@ -61,6 +68,10 @@ export type ParsedBankBrowserSnapshot = {
   currentBalanceCents: number;
   posted: ParsedBankSnapshotRow[];
   pending: ParsedBankSnapshotRow[];
+  /** Closed-statement rows, successor evidence only. Empty when the capture carried none. */
+  recentPosted: ParsedBankSnapshotRow[];
+  /** Calendar day the `recentPosted` statement closed; null when none was sent. */
+  recentStatementClosedOn: string | null;
   /** Preserved byte-for-byte in the audit evidence. */
   rawText: string;
 };
@@ -93,6 +104,8 @@ const TOP_LEVEL_KEYS = new Set([
   "completeness",
   "posted",
   "pending",
+  "recentPosted",
+  "recentStatementClosedOn",
 ]);
 const ROW_KEYS = new Set([
   "transactionDate",
@@ -107,6 +120,7 @@ const COMPLETENESS_KEYS = new Set([
   "pending",
   "filtered",
   "searched",
+  "recentPosted",
 ]);
 
 export function isScrapeFeed(source: string): boolean {
@@ -185,12 +199,14 @@ function parseRows(
   rawRows: unknown,
   source: BankSnapshotSource,
   accountLast4: string,
-  pending: boolean,
+  kind: "posted" | "pending" | "recent",
 ): { ok: true; rows: ParsedBankSnapshotRow[] } | { ok: false; error: string } {
+  const pending = kind === "pending";
+  const label = kind === "recent" ? "closed statement" : kind;
   if (!Array.isArray(rawRows)) {
     return {
       ok: false,
-      error: `The ${pending ? "pending" : "posted"} section is missing.`,
+      error: `The ${label} section is missing.`,
     };
   }
 
@@ -200,7 +216,7 @@ function parseRows(
     if (!isObject(value) || !hasOnlyKeys(value, ROW_KEYS)) {
       return {
         ok: false,
-        error: `The ${pending ? "pending" : "posted"} row ${index + 1} contains unsupported page data.`,
+        error: `The ${label} row ${index + 1} contains unsupported page data.`,
       };
     }
     const transactionDateRaw = value.transactionDate;
@@ -217,14 +233,14 @@ function parseRows(
     ) {
       return {
         ok: false,
-        error: `The ${pending ? "pending" : "posted"} row ${index + 1} has the wrong shape.`,
+        error: `The ${label} row ${index + 1} has the wrong shape.`,
       };
     }
     const cleanDescription = description.replace(/\s+/g, " ").trim();
     if (cleanDescription === "") {
       return {
         ok: false,
-        error: `The ${pending ? "pending" : "posted"} row ${index + 1} is missing its description.`,
+        error: `The ${label} row ${index + 1} is missing its description.`,
       };
     }
     const transactionDate = parseBankDate(transactionDateRaw);
@@ -275,7 +291,7 @@ function parseRows(
       const stem = [
         source,
         accountLast4,
-        pending ? "pending" : "posted",
+        kind,
         row.transactionDate,
         row.postedDate ?? "",
         fold(row.description),
@@ -374,10 +390,40 @@ export function parseBankBrowserSnapshot(text: string): ParseBankBrowserSnapshot
     return { ok: false, error: "Could not read the current balance." };
   }
 
-  const posted = parseRows(unknown.posted, source, unknown.accountLast4, false);
+  const posted = parseRows(unknown.posted, source, unknown.accountLast4, "posted");
   if (!posted.ok) return posted;
-  const pending = parseRows(unknown.pending, source, unknown.accountLast4, true);
+  const pending = parseRows(unknown.pending, source, unknown.accountLast4, "pending");
   if (!pending.ok) return pending;
+
+  let recentPosted: ParsedBankSnapshotRow[] = [];
+  let recentStatementClosedOn: string | null = null;
+  const hasRecent =
+    unknown.recentPosted !== undefined || unknown.recentStatementClosedOn !== undefined;
+  if (hasRecent) {
+    if (typeof unknown.recentStatementClosedOn !== "string") {
+      return { ok: false, error: "The closed statement has no close date." };
+    }
+    recentStatementClosedOn = parseBankDate(unknown.recentStatementClosedOn);
+    if (recentStatementClosedOn === null) {
+      return { ok: false, error: "Could not read the closed statement's date." };
+    }
+    if (complete.recentPosted !== true) {
+      return {
+        ok: false,
+        error: "The bank page did not expose a complete closed statement.",
+      };
+    }
+    const recent = parseRows(
+      unknown.recentPosted,
+      source,
+      unknown.accountLast4,
+      "recent",
+    );
+    if (!recent.ok) return recent;
+    recentPosted = recent.rows;
+  } else if (complete.recentPosted !== undefined) {
+    return { ok: false, error: "The bank snapshot has invalid completeness markers." };
+  }
 
   return {
     ok: true,
@@ -389,6 +435,8 @@ export function parseBankBrowserSnapshot(text: string): ParseBankBrowserSnapshot
       currentBalanceCents: -displayedBalanceCents,
       posted: posted.rows,
       pending: pending.rows,
+      recentPosted,
+      recentStatementClosedOn,
       rawText: text,
     },
   };

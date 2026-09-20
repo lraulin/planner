@@ -78,6 +78,14 @@ type NormalizedTransactionState = {
   postedDate: string | null;
   pending: boolean;
   postedAtBank: Date | null;
+  unlistedAt: Date | null;
+  /**
+   * With `description`, `notes` and `payeeId`, what makes `before` a whole row rather than
+   * a diff — the audit restore (D4 of holds-are-never-deleted-by-absence) re-inserts from it.
+   */
+  description: string;
+  notes: string;
+  payeeId: string | null;
   amountCents: number;
   sourceCategory: string;
   derivedFlow: string | null;
@@ -149,6 +157,8 @@ function bankOwnedValues(
     balanceAfter: null,
     externalSource: snapshot.feed,
     externalId: row.externalId,
+    // A hold the page lists is listed; the page speaking again clears the flag.
+    unlistedAt: null,
     updatedAt: snapshot.capturedAt,
   };
 }
@@ -337,6 +347,10 @@ async function loadNormalizedTransactionState(
       postedDate: financeTransactions.postedDate,
       pending: financeTransactions.pending,
       postedAtBank: financeTransactions.postedAtBank,
+      unlistedAt: financeTransactions.unlistedAt,
+      description: financeTransactions.description,
+      notes: financeTransactions.notes,
+      payeeId: financeTransactions.payeeId,
       amount: financeTransactions.amount,
       sourceCategory: financeTransactions.sourceCategory,
       derivedFlow: financeTransactions.derivedFlow,
@@ -359,6 +373,10 @@ async function loadNormalizedTransactionState(
         postedDate: row.postedDate,
         pending: row.pending,
         postedAtBank: row.postedAtBank,
+        unlistedAt: row.unlistedAt,
+        description: row.description,
+        notes: row.notes,
+        payeeId: row.payeeId,
         amountCents: numericStringToCents(row.amount) ?? 0,
         sourceCategory: row.sourceCategory,
         derivedFlow: row.derivedFlow,
@@ -454,6 +472,8 @@ export async function applyBankBrowserSnapshot(
         externalSource: financeTransactions.externalSource,
         externalId: financeTransactions.externalId,
         isParent: financeTransactions.isParent,
+        postedAtBank: financeTransactions.postedAtBank,
+        unlistedAt: financeTransactions.unlistedAt,
         budgetCategoryId: financeTransactions.budgetCategoryId,
         notes: financeTransactions.notes,
         flowOverride: financeTransactions.flowOverride,
@@ -475,6 +495,7 @@ export async function applyBankBrowserSnapshot(
       snapshot.posted,
       snapshot.pending,
       feedCovered,
+      snapshot.recentPosted,
     );
     const newIds: string[] = [];
 
@@ -552,6 +573,22 @@ export async function applyBankBrowserSnapshot(
           ),
         );
     }
+    // D3: kept and flagged, never deleted for being absent. Only the first capture to notice
+    // stamps it, so the flag says when the page first went quiet, not when it last did.
+    if (plan.unlistedMarks.length > 0) {
+      await tx
+        .update(financeTransactions)
+        .set({ unlistedAt: snapshot.capturedAt, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            eq(financeTransactions.accountId, account.id),
+            eq(financeTransactions.pending, true),
+            isNull(financeTransactions.unlistedAt),
+            inArray(financeTransactions.id, plan.unlistedMarks),
+          ),
+        );
+    }
     // Carry a retiring pending row's envelope, notes and flow onto its posted successor
     // before that pending row is deleted below.
     for (const carry of plan.pendingCarries) {
@@ -611,6 +648,9 @@ export async function applyBankBrowserSnapshot(
         : "") +
       (plan.postedAtBankMarks.length > 0
         ? `; ${plan.postedAtBankMarks.length} marked posted at the bank, awaiting the feed`
+        : "") +
+      (plan.unlistedMarks.length > 0
+        ? `; ${plan.unlistedMarks.length} hold${plan.unlistedMarks.length === 1 ? "" : "s"} no longer listed, kept for review`
         : "") +
       "." +
       (authority.headlineMoved
