@@ -131,8 +131,10 @@ describe("planSync — updates", () => {
 });
 
 describe("planSync — pending resolution", () => {
-  it("deletes a stored pending row the provider has stopped reporting", () => {
-    // There is no pending->posted link in this protocol: the pending id simply vanishes.
+  it("keeps and flags a stored pending row the provider stopped reporting when nothing succeeds it", () => {
+    // There is no pending->posted link in this protocol: the pending id simply vanishes,
+    // which is as true of a dropped authorization as of a posting. Silence alone deletes
+    // nothing (holds-are-never-deleted-by-absence D5).
     const plan = planSync(
       input({
         accounts: [account(EXT_CHECKING, [])],
@@ -141,7 +143,73 @@ describe("planSync — pending resolution", () => {
         ]),
       }),
     );
-    expect(plan.deletes).toEqual(["p1"]);
+    expect(plan.deletes).toEqual([]);
+    expect(plan.unlisted).toEqual(["p1"]);
+  });
+
+  it("carries a vanished hold's envelope onto the posted row this sync inserts, then deletes it", () => {
+    // Before D5 the delete dropped category, notes and flow whenever a SimpleFIN hold posted.
+    const plan = planSync(
+      input({
+        accounts: [account(EXT_CHECKING, [txn({ id: "posted-1", amount: "-4.33" })])],
+        existingByAccount: new Map([
+          [
+            ACCT_CHECKING,
+            [
+              existing({
+                externalId: "pending-1",
+                pending: true,
+                budgetCategoryId: "coffee",
+                notes: "with Sam",
+              }),
+            ],
+          ],
+        ]),
+      }),
+    );
+    expect(plan.deletes).toEqual(["pending-1"]);
+    expect(plan.unlisted).toEqual([]);
+    expect(plan.carries).toEqual([
+      {
+        fromExternalId: "pending-1",
+        to: { externalId: "posted-1" },
+        carry: { budgetCategoryId: "coffee", notes: "with Sam" },
+      },
+    ]);
+  });
+
+  it("carries onto a posted row that is already stored, never overwriting the user's later word", () => {
+    const plan = planSync(
+      input({
+        accounts: [account(EXT_CHECKING, [])],
+        existingByAccount: new Map([
+          [
+            ACCT_CHECKING,
+            [
+              existing({
+                externalId: "pending-1",
+                pending: true,
+                budgetCategoryId: "coffee",
+                notes: "old note",
+              }),
+              existing({
+                id: "posted-row",
+                externalId: "posted-1",
+                notes: "kept note",
+              }),
+            ],
+          ],
+        ]),
+      }),
+    );
+    expect(plan.deletes).toEqual(["pending-1"]);
+    expect(plan.carries).toEqual([
+      {
+        fromExternalId: "pending-1",
+        to: { rowId: "posted-row" },
+        carry: { budgetCategoryId: "coffee" },
+      },
+    ]);
   });
 
   it("keeps a pending row the provider still reports", () => {

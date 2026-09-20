@@ -148,6 +148,8 @@ async function syncOne(
       inserts: plan.inserts,
       updates: plan.updates,
       deletes: plan.deletes,
+      carries: plan.carries,
+      unlisted: plan.unlisted,
       syncedThrough: nextSyncedThrough(
         set.accounts ?? [],
         connection.syncedThrough,

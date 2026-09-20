@@ -11,7 +11,7 @@
  * statement-imported row can be reached from here.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bankAccountLinks,
@@ -26,7 +26,7 @@ import { recordSourceState } from "@/lib/finances/sourceStateWrite";
 import { writeFinanceAuditEvent } from "@/lib/finances/audit/writes";
 import { monthKeyOf } from "@/lib/finances/budget/envelope";
 import { retireCoveredScrapeRowsForAccounts } from "@/lib/finances/feedHandoverWrite";
-import type { BankInsert, BankUpdate } from "./syncPlan";
+import type { BankInsert, BankUpdate, SyncCarry } from "./syncPlan";
 
 async function requireConnection(userId: string, connectionId: string): Promise<void> {
   const [row] = await db
@@ -299,6 +299,10 @@ export async function applySync(
     inserts: readonly BankInsert[];
     updates: readonly BankUpdate[];
     deletes: readonly string[];
+    /** State moving from a retiring hold onto its successor; applied before `deletes`. */
+    carries?: readonly SyncCarry[];
+    /** Vanished holds with no successor: kept, flagged for the user, never deleted. */
+    unlisted?: readonly string[];
     syncedThrough: string;
     unmatchedAccountCount: number;
     providerErrors?: readonly string[];
@@ -431,6 +435,8 @@ export async function applySync(
           description: update.description,
           amount: centsToNumericString(update.amountCents),
           pending: update.pending,
+          // The provider is reporting it again, so it is no longer unlisted.
+          unlistedAt: null,
           updatedAt: new Date(),
         })
         .where(
@@ -518,6 +524,73 @@ export async function applySync(
           },
         })),
       );
+    }
+
+    // A retiring hold's envelope, notes and flow move onto the row that succeeded it. The
+    // hold itself was deleted above, but what to carry was decided from the plan's own read
+    // of it, so nothing here depends on the hold still existing.
+    for (const carry of input.carries ?? []) {
+      const targetId =
+        "rowId" in carry.to
+          ? carry.to.rowId
+          : (
+              await tx
+                .select({ id: financeTransactions.id })
+                .from(financeTransactions)
+                .where(
+                  and(
+                    eq(financeTransactions.userId, userId),
+                    eq(financeTransactions.externalSource, "api:simplefin"),
+                    eq(financeTransactions.externalId, carry.to.externalId),
+                  ),
+                )
+                .limit(1)
+            )[0]?.id;
+      if (!targetId) continue;
+      const rows = await tx
+        .update(financeTransactions)
+        .set({ ...carry.carry, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            eq(financeTransactions.id, targetId),
+          ),
+        )
+        .returning({ id: financeTransactions.id });
+      for (const row of rows) {
+        changes.push({
+          entityType: "transaction",
+          entityIdentity: row.id,
+          before: null,
+          after: { carriedFromRetiredHold: carry.carry },
+        });
+      }
+    }
+
+    // Kept, not deleted, when the provider stops reporting a hold and nothing succeeds it.
+    // Only the first sync to notice stamps it.
+    if ((input.unlisted ?? []).length > 0) {
+      const rows = await tx
+        .update(financeTransactions)
+        .set({ unlistedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            eq(financeTransactions.externalSource, "api:simplefin"),
+            eq(financeTransactions.pending, true),
+            isNull(financeTransactions.unlistedAt),
+            inArray(financeTransactions.externalId, [...(input.unlisted ?? [])]),
+          ),
+        )
+        .returning({ id: financeTransactions.id });
+      for (const row of rows) {
+        changes.push({
+          entityType: "transaction",
+          entityIdentity: row.id,
+          before: { unlisted: false },
+          after: { unlisted: true },
+        });
+      }
     }
 
     // The handover, in the same commit as the rows that caused it: SimpleFIN has now

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import {
   bankAccountLinks,
   financeAccounts,
+  financeBudgetCategories,
   financeTransactions,
   users,
 } from "@/db/schema";
@@ -419,6 +420,113 @@ describeDb("applySync", () => {
   });
 });
 
+describeDb("a vanished hold is carried or kept, never dropped (D5)", () => {
+  async function holdFor(userId: string, accountId: string, envelopeNotes = "gift") {
+    const [category] = await db
+      .insert(financeBudgetCategories)
+      .values({ userId, name: `Coffee ${crypto.randomUUID()}`, sortKey: "a0" })
+      .returning({ id: financeBudgetCategories.id });
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId,
+      transactionDate: "2026-08-12",
+      pending: true,
+      description: "STARBUCKS",
+      amount: "-4.33",
+      notes: envelopeNotes,
+      budgetCategoryId: category.id,
+      externalSource: "api:simplefin",
+      externalId: "hold-1",
+    });
+    return category.id;
+  }
+
+  const account = (accountId: string, transactions: SimpleFinTransaction[]) =>
+    ({ id: "sfin-1", name: "Card", balance: "0.00", transactions }) as SimpleFinAccount;
+
+  async function syncWith(
+    userId: string,
+    connectionId: string,
+    accountId: string,
+    transactions: SimpleFinTransaction[],
+  ) {
+    const plan = planSync({
+      accounts: [account(accountId, transactions)],
+      accountIdByExternal: new Map([["sfin-1", accountId]]),
+      existingByAccount: await existingRowsInWindow(
+        userId,
+        [accountId],
+        "2026-08-01",
+        "2026-08-31",
+      ),
+      windowStart: "2026-08-01",
+    });
+    await applySync(userId, {
+      connectionId,
+      inserts: plan.inserts,
+      updates: plan.updates,
+      deletes: plan.deletes,
+      carries: plan.carries,
+      unlisted: plan.unlisted,
+      syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
+    });
+    return plan;
+  }
+
+  it("moves the hold's envelope and notes onto the posted row that replaced it", async () => {
+    const userId = await makeUser();
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const accountId = await makeAccount(userId);
+    const categoryId = await holdFor(userId, accountId);
+
+    await syncWith(userId, connectionId, accountId, [
+      { id: "posted-1", posted: 1786492800, amount: "-4.33", description: "STARBUCKS" },
+    ]);
+
+    const rows = await db
+      .select()
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      externalId: "posted-1",
+      pending: false,
+      budgetCategoryId: categoryId,
+      notes: "gift",
+    });
+  });
+
+  it("keeps a hold nothing replaced and flags it, leaving another user's alone", async () => {
+    const userId = await makeUser();
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const accountId = await makeAccount(userId);
+    await holdFor(userId, accountId);
+    const other = await makeUser();
+    const otherAccount = await makeAccount(other);
+    await holdFor(other, otherAccount);
+
+    await syncWith(userId, connectionId, accountId, []);
+
+    const mine = await db
+      .select()
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId));
+    expect(mine).toHaveLength(1);
+    expect(mine[0].unlistedAt).not.toBeNull();
+    const theirs = await db
+      .select()
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, other));
+    expect(theirs).toHaveLength(1);
+    expect(theirs[0].unlistedAt).toBeNull();
+  });
+});
+
 describeDb("queries for the sync window", () => {
   it("returns sync-feed external ids only", async () => {
     const userId = await makeUser();
@@ -469,7 +577,7 @@ describeDb("queries for the sync window", () => {
     );
     // A statement id must read as null here, or reconciliation could delete a row this
     // feed never wrote.
-    expect(window.get(accountId)).toEqual([
+    expect(window.get(accountId)).toMatchObject([
       {
         transactionDate: "2026-08-12",
         postedDate: null,

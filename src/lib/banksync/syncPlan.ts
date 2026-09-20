@@ -8,10 +8,15 @@
  * 1. **A `modified` row must not clobber user-owned columns.** `category` and `notes`
  *    belong to the user after import; the provider has no opinion about them and must not
  *    blank them when it revises a description.
- * 2. **A stored pending row that has vanished from the window is deleted.** There is no
- *    `pending_transaction_id` here, so a charge that posts simply appears under a new id
- *    while the pending id stops being reported. Without the delete the two coexist and the
- *    account double-counts.
+ * 2. **A stored pending row that has vanished from the window is deleted — once its posted
+ *    successor is identified, and never before.** There is no `pending_transaction_id` here,
+ *    so a charge that posts simply appears under a new id while the pending id stops being
+ *    reported. Without the delete the two coexist and the account double-counts. But the
+ *    provider's silence is not proof of a successor, so absence alone authorizes nothing
+ *    (`agent-os/specs/2026-09-20-1216-holds-are-never-deleted-by-absence/` D5): a hold with
+ *    no identifiable successor is kept and flagged, and one that has a successor hands its
+ *    envelope, notes and flow onto it before it goes — which the old blanket delete never
+ *    did, dropping the user's categorisation whenever a SimpleFIN hold posted.
  * 3. **A row already covered by a statement import is not inserted twice.** The first sync
  *    on an account whose history came from CSVs overlaps them completely.
  *
@@ -30,6 +35,8 @@
  * duplicates of posted browser rows, then retired with nothing to replace them.
  */
 
+import { carryableFields, type CarriedState } from "@/lib/finances/feedHandover";
+import { resolveLostHold, type PairableRow } from "@/lib/finances/feedPairing";
 import { selectUnmatched } from "@/lib/finances/liveFeedMatch";
 import type { ParsedTransaction } from "@/lib/finances/types";
 import { toParsedTransaction, type SimpleFinAccount } from "./mapping";
@@ -75,13 +82,37 @@ export type ExistingRow = {
   fromBrowser: boolean;
   /** Browser pending on an account whose 36-hour bank-page authority is still live. */
   authoritativeBrowserPending?: boolean;
+  /** The row's own id — what a carry onto an existing posted row targets. */
+  id?: string;
+  /** The user's half of the row: what a hold hands its successor when it retires. */
+  budgetCategoryId?: string | null;
+  notes?: string;
+  flowOverride?: CarriedState["flowOverride"];
+  /** Already flagged as kept-but-unlisted by an earlier sync. */
+  unlistedAt?: Date | null;
+};
+
+/** A vanished hold's user state, moving onto the row that succeeded it. */
+export type SyncCarry = {
+  /** The retiring hold, by provider id. */
+  fromExternalId: string;
+  /** The successor: a row already stored, or one this same sync is inserting. */
+  to: { rowId: string } | { externalId: string };
+  carry: Partial<CarriedState>;
 };
 
 export type SyncPlan = {
   inserts: BankInsert[];
   updates: BankUpdate[];
-  /** External ids to delete: stored pending rows the provider no longer reports. */
+  /** External ids to delete: vanished stored holds whose posted successor is identified. */
   deletes: string[];
+  /** Applied before `deletes`, so a retiring hold's envelope is never lost with it. */
+  carries: SyncCarry[];
+  /**
+   * External ids of vanished holds with no identifiable successor: kept and flagged for the
+   * user, not deleted. The provider stopping its report is not evidence the money is gone.
+   */
+  unlisted: string[];
   /** Provider accounts carrying data that no register account is linked to. */
   unlinkedAccountIds: string[];
   skippedUnparseable: number;
@@ -102,6 +133,14 @@ export type SyncPlanInput = {
    */
   windowStart: string;
 };
+
+function stateOf(row: ExistingRow): CarriedState {
+  return {
+    budgetCategoryId: row.budgetCategoryId ?? null,
+    notes: row.notes ?? "",
+    flowOverride: row.flowOverride ?? null,
+  };
+}
 
 export function planSync(input: SyncPlanInput): SyncPlan {
   const { accounts, accountIdByExternal, existingByAccount, windowStart } = input;
@@ -174,18 +213,18 @@ export function planSync(input: SyncPlanInput): SyncPlan {
   }
 
   // Stored pending rows inside the window that the provider stopped reporting. Either they
-  // posted under a new id, or the bank dropped them; both mean the row must go.
-  const deletes: string[] = [];
-  const deleted = new Set<string>();
+  // posted under a new id, or the bank dropped them — and the feed cannot say which, so what
+  // happens to each is decided below, once the posted candidates are known.
+  const vanished: { accountId: string; row: ExistingRow }[] = [];
   for (const [accountId, seen] of seenByAccount) {
     for (const row of existingByAccount.get(accountId) ?? []) {
       if (!row.pending || !row.externalId) continue;
       if (row.transactionDate < windowStart) continue;
       if (seen.has(row.externalId)) continue;
-      deletes.push(row.externalId);
-      deleted.add(row.externalId);
+      vanished.push({ accountId, row });
     }
   }
+  const deleted = new Set(vanished.map(({ row }) => row.externalId));
 
   // Cross-source dedup, per account, using `crossSource.ts` rather than the CSV importer's
   // matcher — a live feed and a statement disagree on dates and wrap descriptions in ways
@@ -234,10 +273,63 @@ export function planSync(input: SyncPlanInput): SyncPlan {
     }
   }
 
+  // Every vanished hold looks for its successor among posted rows already stored and posted
+  // rows this sync is about to insert (`resolveLostHold`: amount band, seven days, description
+  // to rank). A found successor takes its state and the hold goes; anything else stays.
+  const deletes: string[] = [];
+  const carries: SyncCarry[] = [];
+  const unlisted: string[] = [];
+  for (const { accountId, row } of vanished) {
+    const externalId = row.externalId!;
+    const candidates: {
+      pairable: PairableRow;
+      target: SyncCarry["to"];
+      state: CarriedState;
+    }[] = [];
+    for (const stored of existingByAccount.get(accountId) ?? []) {
+      if (stored.pending || stored.fromBrowser || !stored.id) continue;
+      candidates.push({
+        pairable: { ...stored, id: stored.id },
+        target: { rowId: stored.id },
+        state: stateOf(stored),
+      });
+    }
+    for (const insert of inserts) {
+      if (insert.accountId !== accountId || insert.pending) continue;
+      candidates.push({
+        pairable: { ...insert.transaction, id: insert.externalId },
+        target: { externalId: insert.externalId },
+        state: {
+          budgetCategoryId: null,
+          notes: insert.transaction.memo,
+          flowOverride: null,
+        },
+      });
+    }
+    const resolution = resolveLostHold(
+      { ...row, id: externalId },
+      candidates.map((candidate) => candidate.pairable),
+    );
+    if (resolution.outcome !== "carry") {
+      unlisted.push(externalId);
+      continue;
+    }
+    const successor = candidates.find(
+      (candidate) => candidate.pairable.id === resolution.postedId,
+    )!;
+    deletes.push(externalId);
+    const carry = carryableFields(stateOf(row), successor.state);
+    if (Object.keys(carry).length > 0) {
+      carries.push({ fromExternalId: externalId, to: successor.target, carry });
+    }
+  }
+
   return {
     inserts,
     updates,
     deletes,
+    carries,
+    unlisted,
     unlinkedAccountIds: unlinked,
     skippedUnparseable,
     skippedDuplicate,

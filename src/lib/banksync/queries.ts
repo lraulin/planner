@@ -177,11 +177,16 @@ export async function existingRowsInWindow(
 
   const rows = await db
     .select({
+      id: financeTransactions.id,
       accountId: financeTransactions.accountId,
       transactionDate: financeTransactions.transactionDate,
       postedDate: financeTransactions.postedDate,
       amount: financeTransactions.amount,
       description: financeTransactions.description,
+      budgetCategoryId: financeTransactions.budgetCategoryId,
+      notes: financeTransactions.notes,
+      flowOverride: financeTransactions.flowOverride,
+      unlistedAt: financeTransactions.unlistedAt,
       externalId: financeTransactions.externalId,
       externalSource: financeTransactions.externalSource,
       pending: financeTransactions.pending,
@@ -215,6 +220,11 @@ export async function existingRowsInWindow(
   for (const row of rows) {
     const bucket = out.get(row.accountId) ?? [];
     bucket.push({
+      id: row.id,
+      budgetCategoryId: row.budgetCategoryId,
+      notes: row.notes,
+      flowOverride: row.flowOverride,
+      unlistedAt: row.unlistedAt,
       transactionDate: row.transactionDate,
       postedDate: row.postedDate,
       amountCents: numericStringToCents(row.amount) ?? 0,
