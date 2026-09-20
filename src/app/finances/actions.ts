@@ -53,6 +53,7 @@ import {
   applyBankBrowserSnapshot,
   type BankSnapshotApplyResult,
 } from "@/lib/finances/bankSnapshotApply";
+import { restoreDeletedHold } from "@/lib/finances/auditRestoreWrite";
 import {
   deleteTransactions,
   reclassifyTransactions,
@@ -174,6 +175,13 @@ export async function deleteTransactionsAction(
   transactionIds: readonly string[],
 ): Promise<ActionResult> {
   return run((userId) => deleteTransactions(userId, transactionIds));
+}
+
+/** Put back a pending hold an ingestion deleted, from the audit record of its deletion. */
+export async function restoreDeletedHoldAction(
+  transactionId: string,
+): Promise<ActionResult> {
+  return run((userId) => restoreDeletedHold(userId, transactionId));
 }
 
 export async function updateAccountAction(

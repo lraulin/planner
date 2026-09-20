@@ -1,6 +1,7 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState, useTransition } from "react";
+import { restoreDeletedHoldAction } from "@/app/finances/actions";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { Section } from "@/components/detail/fields";
 import type {
@@ -162,7 +163,64 @@ function CheckpointRail({
   );
 }
 
-function Changes({ changes }: { changes: FinanceAuditChange[] }) {
+/** A deleted pending hold can be put back from its own audit record (D4). */
+function RestoreHold({
+  change,
+  onRestored,
+}: {
+  change: FinanceAuditChange;
+  onRestored: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  if (
+    change.entityType !== "transaction" ||
+    change.after !== null ||
+    change.before?.pending !== true
+  ) {
+    return null;
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      <button
+        type="button"
+        disabled={pending || message?.ok === true}
+        className="min-h-tap self-start rounded border border-rule px-3 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+        onClick={() =>
+          startTransition(async () => {
+            const result = await restoreDeletedHoldAction(change.entityIdentity);
+            if (result.ok) {
+              setMessage({ ok: true, text: "Restored." });
+              onRestored();
+            } else setMessage({ ok: false, text: result.error });
+          })
+        }
+      >
+        {pending ? "Restoring…" : "Restore this hold"}
+      </button>
+      {message && (
+        <p
+          role={message.ok ? "status" : "alert"}
+          className={
+            message.ok
+              ? "text-[0.8125rem] text-ink-muted"
+              : "text-[0.8125rem] text-priority-a"
+          }
+        >
+          {message.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Changes({
+  changes,
+  onRestored,
+}: {
+  changes: FinanceAuditChange[];
+  onRestored: () => void;
+}) {
   if (changes.length === 0) {
     return <p className="text-[0.8125rem] text-ink-muted">Successful no-op.</p>;
   }
@@ -181,6 +239,7 @@ function Changes({ changes }: { changes: FinanceAuditChange[] }) {
               {JSON.stringify(change.after, null, 2)}
             </pre>
           </div>
+          <RestoreHold change={change} onRestored={onRestored} />
         </li>
       ))}
     </ol>
@@ -211,11 +270,13 @@ export function ActivityDrawer({
   loading,
   error,
   onClose,
+  onRestored,
 }: {
   event: FinanceAuditEvent | null;
   loading: boolean;
   error: string | null;
   onClose: () => void;
+  onRestored: () => void;
 }) {
   const titleId = useId();
   if (!loading && !event && !error) return null;
@@ -256,7 +317,7 @@ export function ActivityDrawer({
               />
             </Section>
             <Section title="Normalized changes">
-              <Changes changes={event.changes} />
+              <Changes changes={event.changes} onRestored={onRestored} />
             </Section>
             <Section
               title="Source evidence"

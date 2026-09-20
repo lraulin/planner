@@ -224,6 +224,7 @@ export function ActivityView({
         loading={loading && openId !== null}
         error={openId ? error : null}
         onClose={close}
+        onRestored={refresh}
       />
     </div>
   );

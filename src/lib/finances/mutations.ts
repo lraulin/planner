@@ -92,13 +92,21 @@ const TRANSACTION_AUDIT_COLUMNS = {
   id: financeTransactions.id,
   accountId: financeTransactions.accountId,
   transactionDate: financeTransactions.transactionDate,
+  postedDate: financeTransactions.postedDate,
+  description: financeTransactions.description,
+  notes: financeTransactions.notes,
+  sourceCategory: financeTransactions.sourceCategory,
   amount: financeTransactions.amount,
   pending: financeTransactions.pending,
   budgetCategoryId: financeTransactions.budgetCategoryId,
+  payeeId: financeTransactions.payeeId,
+  transferGroupId: financeTransactions.transferGroupId,
   derivedFlow: financeTransactions.derivedFlow,
   flowOverride: financeTransactions.flowOverride,
   isParent: financeTransactions.isParent,
   parentId: financeTransactions.parentId,
+  externalSource: financeTransactions.externalSource,
+  externalId: financeTransactions.externalId,
 } as const;
 
 type TransactionAuditRow = {
@@ -111,13 +119,22 @@ function transactionAuditFields(row: TransactionAuditRow) {
   return {
     accountId: row.accountId,
     transactionDate: row.transactionDate,
+    // The whole row, so a deletion is restorable from its audit record (`auditRestore.ts`).
+    postedDate: row.postedDate,
+    description: row.description,
+    notes: row.notes,
+    sourceCategory: row.sourceCategory,
     amount: row.amount,
     pending: row.pending,
     budgetCategoryId: row.budgetCategoryId,
+    payeeId: row.payeeId,
+    transferGroupId: row.transferGroupId,
     derivedFlow: row.derivedFlow,
     flowOverride: row.flowOverride,
     isParent: row.isParent,
     parentId: row.parentId,
+    externalSource: row.externalSource,
+    externalId: row.externalId,
   };
 }
 
