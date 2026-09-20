@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Planner: copy Chase bank snapshot
 // @namespace    planner
-// @version      2.4
+// @version      2.5
 // @description  Copy Chase current-cycle posted and pending activity for Planner.
 // @match        https://secure.chase.com/*
 // @match        https://*.chase.com/*
@@ -169,6 +169,11 @@
     return nearby?.[1] ?? "";
   }
 
+  /** The text of one section's own container; empty when the section is not on the page. */
+  function containerText(testId) {
+    return clean(document.querySelector(`[data-testid='${testId}']`)?.innerText);
+  }
+
   function postedTable() {
     return (
       document.querySelector('[id^="ACTIVITY-dataTableId"][id$="data-table"]') ||
@@ -281,10 +286,14 @@
    * reader had already done.
    */
   function assess(postedTable, pendingTable, postedRows, pendingRows, period) {
-    const text = pageText();
+    // Each assertion is read from the section it is about. A sentence elsewhere on the page
+    // ("no activity" in a sidebar, another section's empty state) says nothing about this
+    // one, and a whole-page match once turned an unread section into a verified-empty one.
+    const activityText = containerText("activity-container");
+    const pendingText = containerText("pending-container");
     // Chase says the activity list is whole, and the table it is talking about is rendered.
     const activityListComplete =
-      Boolean(postedTable) && ACTIVITY_LIST_COMPLETE.test(text);
+      Boolean(postedTable) && ACTIVITY_LIST_COMPLETE.test(activityText);
     return {
       period: period.label,
       periodValue: period.value,
@@ -294,10 +303,10 @@
         REQUIRED_PERIOD.test(period.label ?? ""),
       postedKnown:
         Boolean(postedTable) ||
-        /no (?:recent |current )?(?:activity|transactions)/i.test(text),
+        /no (?:recent |current )?(?:activity|transactions)/i.test(activityText),
       pendingKnown:
         Boolean(pendingTable) ||
-        /no pending (?:charges|transactions)/i.test(text) ||
+        /no pending (?:charges|transactions)/i.test(pendingText) ||
         activityListComplete,
       postedFailed: postedRows.failed,
       pendingFailed: pendingRows.failed,

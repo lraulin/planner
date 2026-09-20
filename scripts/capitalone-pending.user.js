@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Planner: copy Capital One bank snapshot
 // @namespace    planner
-// @version      2.2
+// @version      2.3
 // @description  Copy Capital One current-cycle posted and pending activity for Planner.
 // @match        https://myaccounts.capitalone.com/*
 // @match        https://*.capitalone.com/*
@@ -123,20 +123,77 @@
     return [...document.querySelectorAll("c1-ease-row[id]")];
   }
 
-  function isCurrentCycleRow(row) {
-    const table = row.closest("c1-ease-table");
-    const heading = clean(table?.parentElement?.previousElementSibling?.textContent);
-    return /Pending Transactions|Posted Transactions Since Your Last Statement/i.test(
-      heading,
+  const PENDING_HEADING = /^Pending Transactions/i;
+  const POSTED_HEADING = /^Posted Transactions Since Your Last Statement/i;
+  const STATEMENT_HEADING = /^Statement Ending (.+)$/i;
+
+  function headingOf(table) {
+    return table?.parentElement?.previousElementSibling ?? null;
+  }
+
+  /**
+   * Which region of the page a row sits in: "pending", "posted" (the current cycle), or
+   * "statement" (a closed cycle). Anything else is not activity Planner reads.
+   */
+  function regionOf(row) {
+    const heading = clean(headingOf(row.closest("c1-ease-table"))?.textContent);
+    if (PENDING_HEADING.test(heading)) return { kind: "pending" };
+    if (POSTED_HEADING.test(heading)) return { kind: "posted" };
+    const statement = STATEMENT_HEADING.exec(heading);
+    if (statement) return { kind: "statement", closedOn: clean(statement[1]) };
+    return null;
+  }
+
+  function regionHeadings() {
+    return [...document.querySelectorAll("c1-ease-table")].flatMap((table) => {
+      const heading = headingOf(table);
+      return heading ? [{ table, heading, text: clean(heading.textContent) }] : [];
+    });
+  }
+
+  /**
+   * The text of one region, and only that region: its heading's own container. When the
+   * container is shared with another region's heading it cannot be told apart, so the
+   * region is unreadable rather than guessed. The whole-page sentence "There are no
+   * transactions since your last statement" once counted as a verified-empty cycle for a
+   * page whose posted table had simply not been read.
+   */
+  function regionTextOf(pattern) {
+    const found = regionHeadings().filter((entry) => pattern.test(entry.text));
+    if (found.length !== 1) return null;
+    const container = found[0].heading.parentElement;
+    if (!container) return null;
+    const others = regionHeadings().filter(
+      (entry) => entry !== found[0] && container.contains(entry.heading),
     );
+    return others.length === 0 ? clean(container.innerText) : null;
+  }
+
+  function regionKnown(pattern, rowCount, emptyMessage) {
+    if (rowCount > 0) return true;
+    const text = regionTextOf(pattern);
+    return text !== null && emptyMessage.test(text);
+  }
+
+  function mostRecentStatement(rows) {
+    let latest = null;
+    for (const row of rows) {
+      if (row.region.kind !== "statement") continue;
+      const at = Date.parse(row.region.closedOn);
+      if (Number.isNaN(at)) continue;
+      if (!latest || at > latest.at) latest = { at, closedOn: row.region.closedOn };
+    }
+    return latest?.closedOn ?? null;
   }
 
   async function readRows(rows) {
     const posted = [];
     const pending = [];
+    const statements = [];
     let failed = 0;
     for (const original of rows) {
-      if (!isCurrentCycleRow(original)) continue;
+      const region = regionOf(original);
+      if (!region) continue;
       const row = await expand(original.id);
       if (!row) {
         failed += 1;
@@ -166,10 +223,24 @@
         category,
         amount,
       };
+      if (region.kind === "statement") {
+        if (postedDate) statements.push({ region, value });
+        else failed += 1;
+        continue;
+      }
       if (row.id.startsWith("Pending-") || !postedDate) pending.push(value);
       else posted.push(value);
     }
-    return { posted, pending, failed };
+    const closedOn = mostRecentStatement(statements);
+    return {
+      posted,
+      pending,
+      failed,
+      recentClosedOn: closedOn,
+      recent: statements
+        .filter((entry) => entry.region.closedOn === closedOn)
+        .map((entry) => entry.value),
+    };
   }
 
   function searched() {
@@ -212,11 +283,16 @@
     const accountLast4 = last4FromPage(rows);
     const balance = currentBalance();
     const captured = await readRows(rows);
-    const text = pageText();
-    const postedKnown =
-      captured.posted.length > 0 || /no (?:posted |recent )?transactions/i.test(text);
-    const pendingKnown =
-      captured.pending.length > 0 || /no pending transactions/i.test(text);
+    const postedKnown = regionKnown(
+      POSTED_HEADING,
+      captured.posted.length,
+      /no (?:posted |recent )?transactions/i,
+    );
+    const pendingKnown = regionKnown(
+      PENDING_HEADING,
+      captured.pending.length,
+      /no pending transactions/i,
+    );
     const completeCycle = !incompletePagination() && captured.failed === 0;
     const body = {
       version: 1,
@@ -235,6 +311,13 @@
       posted: captured.posted,
       pending: captured.pending.map((row) => ({ ...row, postedDate: null })),
     };
+    // The closed statement is evidence for where a hold went, never history: Planner reads
+    // it only to recognise a hold that posted just before the cycle rolled over.
+    if (captured.recentClosedOn) {
+      body.recentStatementClosedOn = captured.recentClosedOn;
+      body.recentPosted = captured.recent;
+      body.completeness.recentPosted = captured.failed === 0;
+    }
     const snapshot = `# planner-bank-snapshot v1\n${JSON.stringify(body, null, 2)}\n`;
     await writeClipboard(snapshot);
     const reasons = refusals(
