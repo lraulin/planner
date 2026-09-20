@@ -29,7 +29,7 @@ const wholeRow = {
 
 describe("restorableHold", () => {
   it("rebuilds the hold, envelope and notes included, from a whole audit row", () => {
-    const verdict = restorableHold(deleted(wholeRow), {});
+    const verdict = restorableHold(deleted(wholeRow), []);
     expect(verdict).toMatchObject({
       ok: true,
       hold: {
@@ -43,20 +43,20 @@ describe("restorableHold", () => {
   });
 
   it("refuses a posted row: history belongs to its feed, and a copy would double-count", () => {
-    expect(restorableHold(deleted({ ...wholeRow, pending: false }), {}).ok).toBe(false);
+    expect(restorableHold(deleted({ ...wholeRow, pending: false }), []).ok).toBe(false);
   });
 
   it("refuses a change that did not delete anything", () => {
     expect(
       restorableHold(
         { entityType: "transaction", before: wholeRow, after: wholeRow },
-        {},
+        [],
       ).ok,
     ).toBe(false);
-    expect(restorableHold(deleted(null), {}).ok).toBe(false);
+    expect(restorableHold(deleted(null), []).ok).toBe(false);
   });
 
-  it("names a hold from the pasted page when the audit predates descriptions", () => {
+  it("names a hold from an earlier paste that listed it, not the one that deleted it", () => {
     // The 2026-09-20 event: normalized state without description, evidence with the page.
     const { description: _description, notes: _notes, ...legacy } = wholeRow;
     const rawText = `${PLANNER_BANK_SNAPSHOT_HEADER}\n${JSON.stringify({
@@ -84,12 +84,12 @@ describe("restorableHold", () => {
         },
       ],
     })}\n`;
-    const verdict = restorableHold(deleted(legacy), { rawText });
+    const verdict = restorableHold(deleted(legacy), [{}, { rawText }]);
     expect(verdict).toMatchObject({ ok: true, hold: { description: "Chewy.com" } });
   });
 
   it("refuses rather than guess when the evidence cannot single the hold out", () => {
     const { description: _description, ...legacy } = wholeRow;
-    expect(restorableHold(deleted(legacy), {}).ok).toBe(false);
+    expect(restorableHold(deleted(legacy), []).ok).toBe(false);
   });
 });

@@ -56,7 +56,27 @@ export async function restoreDeletedHold(
       .limit(1);
     if (!record) throw new Error("No deletion of that transaction was recorded.");
 
-    const verdict = restorableHold(record, record.evidence);
+    // Every event that touched this row, newest first: an audit that predates whole-row
+    // records can still be named from a paste that listed the hold while it lived.
+    const touching = await tx
+      .select({ evidence: financeAuditEvents.sourceEvidence })
+      .from(financeAuditChanges)
+      .innerJoin(
+        financeAuditEvents,
+        eq(financeAuditEvents.id, financeAuditChanges.eventId),
+      )
+      .where(
+        and(
+          eq(financeAuditChanges.userId, userId),
+          eq(financeAuditEvents.userId, userId),
+          eq(financeAuditChanges.entityIdentity, transactionId),
+        ),
+      )
+      .orderBy(desc(financeAuditEvents.occurredAt));
+    const verdict = restorableHold(
+      record,
+      touching.map((row) => row.evidence),
+    );
     if (!verdict.ok) throw new Error(verdict.reason);
     const { hold } = verdict;
 

@@ -43,23 +43,28 @@ function flow(value: unknown): FinanceFlowKind | null {
 
 /**
  * A snapshot audit written before the restore existed recorded no description or notes.
- * Its own evidence still names the hold: the pasted page lists it, and the amount and day
- * pick it out — but only when exactly one row does, never a guess between two.
+ * The pastes that listed the hold while it was alive still name it — the deleting paste
+ * usually does not, since a hold is deleted precisely when the page stops listing it. The
+ * amount and day pick it out, and only when exactly one row does in a paste: never a guess
+ * between two.
  */
 function descriptionFromEvidence(
   before: Record<string, unknown>,
-  evidence: Record<string, unknown>,
+  evidence: readonly Record<string, unknown>[],
 ): string | null {
-  const raw = evidence.rawText;
-  if (typeof raw !== "string") return null;
-  const parsed = parseBankBrowserSnapshot(raw);
-  if (!parsed.ok) return null;
-  const matches = parsed.snapshot.pending.filter(
-    (row) =>
-      row.amountCents === before.amountCents &&
-      row.transactionDate === before.transactionDate,
-  );
-  return matches.length === 1 ? matches[0].description : null;
+  for (const item of evidence) {
+    const raw = item.rawText;
+    if (typeof raw !== "string") continue;
+    const parsed = parseBankBrowserSnapshot(raw);
+    if (!parsed.ok) continue;
+    const matches = parsed.snapshot.pending.filter(
+      (row) =>
+        row.amountCents === before.amountCents &&
+        row.transactionDate === before.transactionDate,
+    );
+    if (matches.length === 1) return matches[0].description;
+  }
+  return null;
 }
 
 /** Decide whether a deleted transaction's audit `before` can be re-inserted, and as what. */
@@ -69,7 +74,8 @@ export function restorableHold(
     before: Record<string, unknown> | null;
     after: Record<string, unknown> | null;
   },
-  evidence: Record<string, unknown>,
+  /** Source evidence of every audit event that touched this row, newest first. */
+  evidence: readonly Record<string, unknown>[],
 ): RestoreVerdict {
   const { before } = change;
   if (change.entityType !== "transaction" || !before || change.after !== null) {
