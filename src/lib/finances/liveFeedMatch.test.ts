@@ -122,6 +122,17 @@ describe("descriptionsOverlap", () => {
     expect(descriptionsOverlap("Spotify", "PP*SPOTIFY*P46D197980")).toBe(true);
   });
 
+  it("sees through digits SimpleFIN masked out of a descriptor", () => {
+    // Production case, 2026-09-14: SimpleFIN delivered Capital One's Starbucks charge as
+    // STARBUCKSXXXXXXXXXXX; the card CSV named it STARBUCKS 8007827282. Nothing matched,
+    // so the CSV import added the same $5.57 a second time.
+    expect(descriptionsOverlap("STARBUCKSXXXXXXXXXXX", "STARBUCKS 8007827282")).toBe(
+      true,
+    );
+    expect(descriptionsOverlap("Starbucks", "STARBUCKSXXXXXXXXXXX")).toBe(true);
+    expect(descriptionsOverlap("STARBUCKSXXXXXXXXXXX", "STAPLES 00123456")).toBe(false);
+  });
+
   it("does not widen a merchant alias into a general rule", () => {
     // The alias is anchored on an exact match for the short side and a prefix for the long
     // side — it must not start matching unrelated charges just because they share a word.

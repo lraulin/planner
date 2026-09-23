@@ -91,6 +91,24 @@ const MIN_BRAND_STEM = 3;
 const PROCESSOR_STAMP = /^[A-Z]{2,6}\s*\*\s*/;
 
 /**
+ * A run of digits SimpleFIN masked out. It overwrites them — and the space before them —
+ * with `X`s glued to the name: Capital One's `STARBUCKS 8007827282` arrives as
+ * `STARBUCKSXXXXXXXXXXX`, which no stem or containment rule can see into. Four is the
+ * shortest run observed (account masks are `XXXXXXX2603`), and no merchant spells one.
+ */
+const MASKED_DIGITS = /X{4,}/g;
+
+/** Every spelling of one folded description the alias and stem rules should try. */
+function comparableForms(folded: string): string[] {
+  const unstamped = folded.replace(PROCESSOR_STAMP, "");
+  return [folded, unstamped, ...[folded, unstamped].map(unmasked)];
+}
+
+function unmasked(folded: string): string {
+  return folded.replace(MASKED_DIGITS, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
  * Known wordings for one side or the other of an account-payment posting.
  *
  * A card's own pending page names the payment by where the money came from; a history feed
@@ -220,7 +238,8 @@ function brandStemPrefixes(left: string, right: string): boolean {
  * known merchant alias; then the brand stem, which is what recognises a bank page's display
  * name in a full descriptor. Both the alias and stem rules are tried against each side with a
  * leading processor stamp stripped as well, so `Apple` reaches `PP*APPLE.COM/BILL` and
- * `Spotify` reaches `PP*SPOTIFY*P46D197980`.
+ * `Spotify` reaches `PP*SPOTIFY*P46D197980`, and with SimpleFIN's masked digits stripped, so
+ * `STARBUCKSXXXXXXXXXXX` reaches `STARBUCKS 8007827282`.
  */
 export function descriptionsOverlap(a: string, b: string): boolean {
   const left = fold(a);
@@ -233,8 +252,8 @@ export function descriptionsOverlap(a: string, b: string): boolean {
 
   if (looksLikePaymentPosting(left) && looksLikePaymentPosting(right)) return true;
 
-  const leftForms = [left, left.replace(PROCESSOR_STAMP, "")];
-  const rightForms = [right, right.replace(PROCESSOR_STAMP, "")];
+  const leftForms = comparableForms(left);
+  const rightForms = comparableForms(right);
   return leftForms.some((one) =>
     rightForms.some(
       (other) =>
