@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { pasteBankSnapshotAction } from "@/app/finances/actions";
 import { syncAction } from "@/app/settings/bankSyncActions";
 import type { BankSnapshotApplyResult } from "@/lib/finances/bankSnapshotApply";
+import { awaitingFeedPhrase } from "@/lib/finances/bankSnapshotReconcile";
 import { formatUsd } from "@/lib/finances/money";
 import { Panel } from "../insights/Panel";
 export function RefreshBanksButton() {
@@ -175,6 +176,9 @@ function describeBankSnapshotWrite(data: BankSnapshotApplyResult): string {
     (data.posted.duplicates > 0 ? ` · ${data.posted.duplicates} already present` : "") +
     (data.posted.coveredByFeed > 0
       ? ` · ${data.posted.coveredByFeed} already covered by the bank feed`
+      : "") +
+    (data.posted.awaitingFeed.length > 0
+      ? ` · ${awaitingFeedPhrase(data.posted.awaitingFeed)}`
       : "") +
     "."
   );

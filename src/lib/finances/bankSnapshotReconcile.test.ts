@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ParsedBankSnapshotRow } from "./bankSnapshot";
 import {
+  awaitingFeedPhrase,
   planBankSnapshotReconciliation,
   type ExistingBankSnapshotRow,
 } from "./bankSnapshotReconcile";
@@ -470,6 +471,47 @@ describe("planBankSnapshotReconciliation", () => {
       expect(plan.postedTransitions).toEqual([]);
       expect(plan.postedAtBankMarks).toEqual([]);
       expect(plan.warnings).toEqual([]);
+    });
+
+    it("names a posted row it left for the feed, and only that one", () => {
+      // 2026-09-23 Capital One paste: nine posted rows, eight held by SimpleFIN, and
+      // YouTube $16.95 (posted Sep 22) not delivered yet. The summary counted eight and said
+      // nothing of the ninth, so it looked lost.
+      const plan = planBankSnapshotReconciliation(
+        [
+          existing("feed-pizza", "PIZZA HUT 036874", -2500, {
+            pending: false,
+            postedDate: "2026-09-21",
+            transactionDate: "2026-09-21",
+            externalSource: "api:simplefin",
+          }),
+        ],
+        [
+          incoming("Pizza Hut", -2500, "2026-09-21"),
+          incoming("YouTube", -1695, "2026-09-22"),
+        ],
+        [],
+        true,
+      );
+      expect(plan.postedInserts).toEqual([]);
+      expect(plan.postedAwaitingFeed.map((row) => row.description)).toEqual([
+        "YouTube",
+      ]);
+      expect(awaitingFeedPhrase(plan.postedAwaitingFeed)).toBe(
+        "1 posted not in the bank feed yet: YouTube $16.95",
+      );
+    });
+
+    it("leaves nothing awaiting the feed on an account with no feed", () => {
+      const plan = planBankSnapshotReconciliation(
+        [],
+        [incoming("YouTube", -1695, "2026-09-22")],
+        [],
+        false,
+      );
+      expect(plan.postedInserts.map((row) => row.description)).toEqual(["YouTube"]);
+      expect(plan.postedAwaitingFeed).toEqual([]);
+      expect(awaitingFeedPhrase(plan.postedAwaitingFeed)).toBe("");
     });
 
     it("marks a matching hold posted-at-bank instead of transitioning it", () => {

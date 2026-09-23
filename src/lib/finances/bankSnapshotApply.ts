@@ -20,6 +20,7 @@ import {
   type ParsedBankSnapshotRow,
 } from "./bankSnapshot";
 import {
+  awaitingFeedPhrase,
   planBankSnapshotReconciliation,
   type ExistingBankSnapshotRow,
 } from "./bankSnapshotReconcile";
@@ -53,6 +54,8 @@ export type BankSnapshotApplyResult = {
      * turned into page-authored posted history. Always 0 for an account with no history feed.
      */
     markedPostedAtBank: number;
+    /** D4: posted rows seen on the page and left for the feed; `awaitingFeedPhrase` names them. */
+    awaitingFeed: Pick<ParsedBankSnapshotRow, "description" | "amountCents">[];
   };
   pending: {
     received: number;
@@ -649,6 +652,9 @@ export async function applyBankBrowserSnapshot(
       (plan.postedAtBankMarks.length > 0
         ? `; ${plan.postedAtBankMarks.length} marked posted at the bank, awaiting the feed`
         : "") +
+      (plan.postedAwaitingFeed.length > 0
+        ? `; ${awaitingFeedPhrase(plan.postedAwaitingFeed)}`
+        : "") +
       (plan.unlistedMarks.length > 0
         ? `; ${plan.unlistedMarks.length} hold${plan.unlistedMarks.length === 1 ? "" : "s"} no longer listed, kept for review`
         : "") +
@@ -691,6 +697,10 @@ export async function applyBankBrowserSnapshot(
         duplicates: plan.postedDuplicates.length,
         coveredByFeed: plan.postedCoveredByFeed,
         markedPostedAtBank: plan.postedAtBankMarks.length,
+        awaitingFeed: plan.postedAwaitingFeed.map(({ description, amountCents }) => ({
+          description,
+          amountCents,
+        })),
       },
       pending: {
         received: snapshot.pending.length,

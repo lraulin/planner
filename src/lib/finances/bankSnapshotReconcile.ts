@@ -6,6 +6,7 @@ import {
 import { pairRows, resolveLostHold, type PairableRow } from "./feedPairing";
 import { carryableFields, type CarriedState } from "./feedHandover";
 import { isScrapeFeed, type ParsedBankSnapshotRow } from "./bankSnapshot";
+import { formatUsd } from "./money";
 
 export type ExistingBankSnapshotRow = CarriedState & {
   id: string;
@@ -52,6 +53,12 @@ export type BankSnapshotReconciliationPlan = {
   postedTransitions: BankSnapshotPostedTransition[];
   postedReplacements: BankSnapshotPostedReplacement[];
   postedInserts: ParsedBankSnapshotRow[];
+  /**
+   * D4: posted rows on a feed-covered account that nothing stored holds yet — not inserted,
+   * because the feed will bring them. Named so the paste can say which charges it saw but
+   * left for the feed, instead of counting them nowhere.
+   */
+  postedAwaitingFeed: ParsedBankSnapshotRow[];
   pendingUpdates: BankSnapshotPendingUpdate[];
   pendingInserts: ParsedBankSnapshotRow[];
   /** Before a delete, move a pending row's user state onto the posted row that replaced it. */
@@ -73,6 +80,23 @@ export type BankSnapshotReconciliationPlan = {
   postedCoveredByFeed: number;
   warnings: string[];
 };
+
+/**
+ * `1 posted not in the bank feed yet: YouTube $16.95`, or "" when there are none.
+ *
+ * A feed-covered paste leaves these for SimpleFIN to deliver (D4), so they are in neither
+ * the register nor any other count. Without naming them, a paste that read nine posted rows
+ * and accounted for eight looks like it lost one (YouTube, 2026-09-22).
+ */
+export function awaitingFeedPhrase(
+  rows: readonly Pick<ParsedBankSnapshotRow, "description" | "amountCents">[],
+): string {
+  if (rows.length === 0) return "";
+  const named = rows
+    .map((row) => `${row.description} ${formatUsd(Math.abs(row.amountCents))}`)
+    .join(", ");
+  return `${rows.length} posted not in the bank feed yet: ${named}`;
+}
 
 /** True for the feeds that own history: SimpleFIN and every file download. */
 function isHistoryFeed(externalSource: string | null): boolean {
@@ -237,6 +261,7 @@ export function planBankSnapshotReconciliation(
   const postedTransitions: BankSnapshotPostedTransition[] = [];
   const postedReplacements: BankSnapshotPostedReplacement[] = [];
   const postedInserts: ParsedBankSnapshotRow[] = [];
+  const postedAwaitingFeed: ParsedBankSnapshotRow[] = [];
   const pendingCarries: BankSnapshotPendingCarry[] = [];
   const pendingDeletes = new Set<string>();
   const postedAtBankMarks = new Set<string>();
@@ -339,7 +364,11 @@ export function planBankSnapshotReconciliation(
       ? 1
       : browserCandidates.length + simpleFinCandidates.length;
     if (occurrenceCount !== 1 || incomingOccurrences !== 1) {
-      if (feedCovered) continue; // D4: the feed will bring it; nothing here to attach or lose.
+      if (feedCovered) {
+        // D4: the feed will bring it; nothing here to attach or lose.
+        postedAwaitingFeed.push(incoming);
+        continue;
+      }
       postedInserts.push(incoming);
       if (candidates.some((candidate) => candidate.isParent)) {
         const warning = `Could not attach the ambiguous split pending transaction to posted "${incoming.description}"; the complete pending set decides whether that split is retained or discarded.`;
@@ -464,6 +493,7 @@ export function planBankSnapshotReconciliation(
     postedTransitions,
     postedReplacements,
     postedInserts,
+    postedAwaitingFeed,
     pendingUpdates,
     pendingInserts,
     pendingCarries,
