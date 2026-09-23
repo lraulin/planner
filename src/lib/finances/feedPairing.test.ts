@@ -230,6 +230,50 @@ describe("resolveLostHold", () => {
     });
   });
 
+  it("retires a hold that posted with a 20% tip onto the same merchant's row", () => {
+    // Production case, 2026-09-21: Capital One held Kim's Nails III at $50 on Sep 19 and
+    // posted $60 on Sep 21. The $10 tip is outside Actual's 7.5% band, so the hold was kept
+    // and flagged beside its own posting — the same money twice in the register.
+    const nails = row({
+      id: "hold",
+      transactionDate: "2026-09-19",
+      postedDate: null,
+      amountCents: -5000,
+      description: "Kim's Nails III",
+    });
+    const posted = row({
+      id: "posted",
+      transactionDate: "2026-09-21",
+      postedDate: "2026-09-21",
+      amountCents: -6000,
+      description: "KIMS NAILS III",
+    });
+    expect(resolveLostHold(nails, [posted])).toEqual({
+      outcome: "carry",
+      postedId: "posted",
+    });
+  });
+
+  it("does not take a larger charge from a different merchant as a tip", () => {
+    const posted = row({ id: "posted", amountCents: -2600, description: "Pizza Hut" });
+    expect(resolveLostHold(hold, [posted])).toEqual({ outcome: "none" });
+  });
+
+  it("does not take a smaller charge, or one past the tip ceiling, as a tip", () => {
+    const smaller = row({
+      id: "smaller",
+      amountCents: -1500,
+      description: "DOMINOS 1",
+    });
+    const doubled = row({
+      id: "doubled",
+      amountCents: -3100,
+      description: "DOMINOS 2",
+    });
+    expect(resolveLostHold(hold, [smaller])).toEqual({ outcome: "none" });
+    expect(resolveLostHold(hold, [doubled])).toEqual({ outcome: "none" });
+  });
+
   it("accepts a posted row right at the tolerance boundary", () => {
     const posted = row({
       id: "posted",

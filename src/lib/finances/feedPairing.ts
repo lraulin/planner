@@ -99,6 +99,27 @@ export function pairRows(
  */
 export const LOST_HOLD_TOLERANCE_DAYS = 7;
 
+/**
+ * The largest tip, as a fraction of the hold, that still reads as the same charge.
+ *
+ * Actual's 7.5% band (`amountMatch.ts`) is a rule-matching tolerance, not a tip: a 20% tip
+ * on a $50 nail salon hold posts at $60, a full $6.25 outside it. That is how Kim's Nails
+ * III (2026-09-19, $50 hold → $60 posted) was kept and flagged instead of retired, leaving
+ * both in the register. Half the hold covers a $1 tip on a $2 coffee.
+ */
+export const LOST_HOLD_TIP_CEILING = 0.5;
+
+/**
+ * Whether `posted` is `hold` with a tip added: same direction, larger, and not by more than
+ * `LOST_HOLD_TIP_CEILING`. Only ever trusted together with a description overlap — a larger
+ * amount alone says nothing about which merchant it came from.
+ */
+function tippedFrom(postedCents: number, holdCents: number): boolean {
+  if (Math.sign(postedCents) !== Math.sign(holdCents)) return false;
+  const tip = Math.abs(postedCents) - Math.abs(holdCents);
+  return tip > 0 && tip <= Math.abs(holdCents) * LOST_HOLD_TIP_CEILING;
+}
+
 export type LostHoldResolution =
   | { outcome: "carry"; postedId: string }
   | { outcome: "none" }
@@ -109,8 +130,10 @@ export type LostHoldResolution =
  *
  * Bank-page pending sets omit a hold once it clears, one way or another: it posted, or it
  * never did (a duplicate the page dropped). Only the first case has anywhere to carry state
- * to. A posted row qualifies as a candidate successor when its amount is within Actual's
- * 7.5% band (a tip added at settlement) and it is dated within `LOST_HOLD_TOLERANCE_DAYS`.
+ * to. A posted row qualifies as a candidate successor when it is dated within
+ * `LOST_HOLD_TOLERANCE_DAYS` and either its amount is within Actual's 7.5% band, or it names
+ * the same merchant and is the hold with a tip added (`tippedFrom`). The tip case needs the
+ * description because a bigger amount, unlike a near-equal one, is not itself evidence.
  *
  * **Description ranks candidates; it does not gate them**
  * (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D4). A page's own display name
@@ -128,8 +151,10 @@ export function resolveLostHold(
 ): LostHoldResolution {
   const qualifying = postedCandidates.filter(
     (candidate) =>
-      amountMatches(candidate.amountCents, hold.amountCents) &&
-      dateDistance(hold, candidate) <= LOST_HOLD_TOLERANCE_DAYS,
+      dateDistance(hold, candidate) <= LOST_HOLD_TOLERANCE_DAYS &&
+      (amountMatches(candidate.amountCents, hold.amountCents) ||
+        (tippedFrom(candidate.amountCents, hold.amountCents) &&
+          descriptionsOverlap(hold.description, candidate.description))),
   );
 
   if (qualifying.length === 0) return { outcome: "none" };
