@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { and, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  bankAccountLinks,
   financeAccounts,
   financeStatementRates,
   financeStatements,
@@ -81,7 +80,7 @@ import {
  *    merge policy — an overlapping export simply cannot touch a row that already exists.
  *    Account-adjacent exceptions: `closedAt` on a 360 CD close-out (set when still null,
  *    never un-closed), and the live posted headline on a SimpleFIN-linked account — a file
- *    ahead of the aggregator writes `bankAccountLinks.balanceCents` under the same 36-hour
+ *    ahead of the aggregator writes `financeAccounts.balanceCents` under the same 36-hour
  *    scrape hold a browser snapshot uses, so income does not land without cash.
  * 2. **The database decides what is a duplicate**, via the partial unique index on
  *    `(user_id, external_source, external_id)`. `onConflictDoNothing` plus a count of what
@@ -201,25 +200,20 @@ async function recordImportedPostedHeadline(
   fileRows: readonly ParsedTransaction[],
   inserted: readonly PostedActivityRow[],
 ): Promise<{ changes: FinanceAuditChange[]; withheld: boolean }> {
-  const [link] = await tx
+  const [account] = await tx
     .select({
-      balanceCents: bankAccountLinks.balanceCents,
-      balanceAsOf: bankAccountLinks.balanceAsOf,
+      balanceCents: financeAccounts.balanceCents,
+      balanceAsOf: financeAccounts.balanceAsOf,
     })
-    .from(bankAccountLinks)
-    .where(
-      and(
-        eq(bankAccountLinks.userId, userId),
-        eq(bankAccountLinks.accountId, accountId),
-      ),
-    )
+    .from(financeAccounts)
+    .where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, accountId)))
     .limit(1);
 
   const headline = importedPostedHeadline({
-    linked: link
+    linked: account
       ? {
-          balanceCents: link.balanceCents,
-          asOfDate: link.balanceAsOf ? toDateKey(link.balanceAsOf) : null,
+          balanceCents: account.balanceCents,
+          asOfDate: account.balanceAsOf ? toDateKey(account.balanceAsOf) : null,
         }
       : null,
     running: latestRunningBalance(fileRows),
@@ -237,7 +231,8 @@ async function recordImportedPostedHeadline(
   });
   return {
     changes: authority.changes,
-    // No link means no headline to move, which is not something a receipt should report.
+    // No source holding the headline means nothing was withheld, which is not something a
+    // receipt should report.
     withheld: !authority.headlineMoved && authority.headlineSource !== null,
   };
 }

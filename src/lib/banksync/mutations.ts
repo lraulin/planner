@@ -134,26 +134,40 @@ export async function linkAccount(
     );
   }
 
-  const [row] = await db
-    .insert(bankAccountLinks)
-    .values({
-      userId,
-      connectionId: input.connectionId,
-      externalAccountId: input.externalAccountId,
-      accountId: input.accountId,
-      institution: input.institution ?? "",
-    })
-    .onConflictDoUpdate({
-      target: [bankAccountLinks.userId, bankAccountLinks.externalAccountId],
-      set: {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(bankAccountLinks)
+      .values({
+        userId,
         connectionId: input.connectionId,
+        externalAccountId: input.externalAccountId,
         accountId: input.accountId,
         institution: input.institution ?? "",
-        updatedAt: new Date(),
-      },
-    })
-    .returning({ id: bankAccountLinks.id });
-  return row.id;
+      })
+      .onConflictDoUpdate({
+        target: [bankAccountLinks.userId, bankAccountLinks.externalAccountId],
+        set: {
+          connectionId: input.connectionId,
+          accountId: input.accountId,
+          institution: input.institution ?? "",
+          updatedAt: new Date(),
+        },
+      })
+      .returning({ id: bankAccountLinks.id });
+    // Linking a file-only account makes the feed its history source. An account already
+    // chosen as `bank_page` stays that way: the choice is the user's, a link is not a vote.
+    await tx
+      .update(financeAccounts)
+      .set({ historySource: "simplefin", updatedAt: new Date() })
+      .where(
+        and(
+          eq(financeAccounts.userId, userId),
+          eq(financeAccounts.id, input.accountId),
+          eq(financeAccounts.historySource, "files"),
+        ),
+      );
+    return row.id;
+  });
 }
 
 /** Drop a link. The register account and its rows stay; only the live feed stops. */

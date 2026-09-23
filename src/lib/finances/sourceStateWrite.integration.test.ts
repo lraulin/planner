@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { toDateKey } from "@/lib/schedule/geometry";
+import { linkAccount } from "@/lib/banksync/mutations";
 import {
   loadAccountSourceStamps,
   recordSourceState,
@@ -50,6 +51,7 @@ async function makeLinkedAccount(userId: string): Promise<string> {
       kind: "checking",
       externalSource: "csv:capitalone-bank",
       externalKey: `k-${crypto.randomUUID()}`,
+      historySource: "simplefin",
     })
     .returning({ id: financeAccounts.id });
   const [connection] = await db
@@ -66,20 +68,15 @@ async function makeLinkedAccount(userId: string): Promise<string> {
 }
 
 async function headline(userId: string, accountId: string) {
-  const [link] = await db
+  const [row] = await db
     .select({
-      balanceCents: bankAccountLinks.balanceCents,
-      balanceAsOf: bankAccountLinks.balanceAsOf,
-      balanceSource: bankAccountLinks.balanceSource,
+      balanceCents: financeAccounts.balanceCents,
+      balanceAsOf: financeAccounts.balanceAsOf,
+      balanceSource: financeAccounts.balanceSource,
     })
-    .from(bankAccountLinks)
-    .where(
-      and(
-        eq(bankAccountLinks.userId, userId),
-        eq(bankAccountLinks.accountId, accountId),
-      ),
-    );
-  return link;
+    .from(financeAccounts)
+    .where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, accountId)));
+  return row;
 }
 
 const FEED: SourceReport = {
@@ -194,7 +191,7 @@ describeDb("recordSourceState", () => {
     expect(link.balanceAsOf).toEqual(BROWSER.asOf);
   });
 
-  it("records what a file saw for an account with no bank link at all", async () => {
+  it("records what a file saw for a files-sourced account without deriving a headline", async () => {
     const userId = await makeUser();
     const [account] = await db
       .insert(financeAccounts)
@@ -211,6 +208,106 @@ describeDb("recordSourceState", () => {
     expect(result).toEqual({ headlineMoved: false, headlineSource: null, changes: [] });
     const stamps = await loadAccountSourceStamps(db, userId, [account.id]);
     expect(stamps.get(account.id)?.file?.asOfDay).toBe("2026-08-31");
+  });
+});
+
+describeDb("the headline lives on the account", () => {
+  it("derives a headline for a bank-page account that has no link at all", async () => {
+    const userId = await makeUser();
+    const [account] = await db
+      .insert(financeAccounts)
+      .values({
+        userId,
+        name: "Card",
+        kind: "credit_card",
+        externalSource: "csv:capitalone-card",
+        externalKey: `k-${crypto.randomUUID()}`,
+        historySource: "bank_page",
+      })
+      .returning({ id: financeAccounts.id });
+
+    const result = await recordSourceState(db, userId, account.id, BROWSER);
+
+    expect(result.headlineMoved).toBe(true);
+    expect(await headline(userId, account.id)).toMatchObject({
+      balanceCents: 1_600_000,
+      balanceSource: "browser",
+    });
+  });
+
+  it("never lets another user's write reach the headline", async () => {
+    const owner = await makeUser();
+    const intruder = await makeUser();
+    const accountId = await makeLinkedAccount(owner);
+    await recordSourceState(db, owner, accountId, FEED);
+
+    const result = await recordSourceState(db, intruder, accountId, FILE);
+
+    expect(result).toEqual({ headlineMoved: false, headlineSource: null, changes: [] });
+    expect(await headline(owner, accountId)).toMatchObject({
+      balanceCents: FEED.balanceCents,
+      balanceSource: "feed",
+    });
+    expect(await headline(intruder, accountId)).toBeUndefined();
+    const stamps = await loadAccountSourceStamps(db, owner, [accountId]);
+    expect(stamps.get(accountId)?.file).toBeUndefined();
+  });
+});
+
+describeDb("linking an account", () => {
+  async function makeAccount(userId: string, historySource: "files" | "bank_page") {
+    const [account] = await db
+      .insert(financeAccounts)
+      .values({
+        userId,
+        name: "Account",
+        kind: "checking",
+        externalSource: "csv:capitalone-bank",
+        externalKey: `k-${crypto.randomUUID()}`,
+        historySource,
+      })
+      .returning({ id: financeAccounts.id });
+    return account.id;
+  }
+
+  async function sourceOf(userId: string, accountId: string) {
+    const [row] = await db
+      .select({ historySource: financeAccounts.historySource })
+      .from(financeAccounts)
+      .where(
+        and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, accountId)),
+      );
+    return row.historySource;
+  }
+
+  async function connect(userId: string) {
+    const [connection] = await db
+      .insert(bankConnections)
+      .values({
+        userId,
+        accessUrl: "https://a:b@example.test/sfin",
+        label: "SimpleFIN",
+      })
+      .returning({ id: bankConnections.id });
+    return connection.id;
+  }
+
+  it("makes the feed a file-only account's history source, and leaves a bank-page one alone", async () => {
+    const userId = await makeUser();
+    const connectionId = await connect(userId);
+    const fileAccount = await makeAccount(userId, "files");
+    const pageAccount = await makeAccount(userId, "bank_page");
+
+    for (const accountId of [fileAccount, pageAccount]) {
+      await linkAccount(userId, {
+        connectionId,
+        externalAccountId: `x-${crypto.randomUUID()}`,
+        accountId,
+      });
+    }
+
+    expect(await sourceOf(userId, fileAccount)).toBe("simplefin");
+    expect(await sourceOf(userId, pageAccount)).toBe("bank_page");
   });
 });
 

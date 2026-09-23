@@ -10,7 +10,6 @@ import {
   financeBudgetCategories,
   financeTransactions,
   users,
-  bankAccountLinks,
 } from "@/db/schema";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
@@ -331,11 +330,11 @@ describeDb("applyBankBrowserSnapshot", () => {
 
     const [link] = await db
       .select({
-        balanceAsOf: bankAccountLinks.balanceAsOf,
-        balanceSource: bankAccountLinks.balanceSource,
+        balanceAsOf: financeAccounts.balanceAsOf,
+        balanceSource: financeAccounts.balanceSource,
       })
-      .from(bankAccountLinks)
-      .where(eq(bankAccountLinks.accountId, accountId));
+      .from(financeAccounts)
+      .where(eq(financeAccounts.id, accountId));
     expect(link.balanceAsOf).toEqual(CAPTURED_AT);
     expect(link.balanceSource).toBe("browser");
     const event = await loadFinanceAuditEvent(userId, second.auditEventId);

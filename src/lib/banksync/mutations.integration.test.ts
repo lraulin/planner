@@ -2,7 +2,6 @@ import { afterAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  bankAccountLinks,
   financeAccounts,
   financeBudgetCategories,
   financeTransactions,
@@ -717,12 +716,14 @@ describeDb("balance precedence in the register", () => {
 
     const [link] = await db
       .select({
-        balanceCents: bankAccountLinks.balanceCents,
-        balanceAsOf: bankAccountLinks.balanceAsOf,
-        balanceSource: bankAccountLinks.balanceSource,
+        balanceCents: financeAccounts.balanceCents,
+        balanceAsOf: financeAccounts.balanceAsOf,
+        balanceSource: financeAccounts.balanceSource,
       })
-      .from(bankAccountLinks)
-      .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)));
+      .from(financeAccounts)
+      .where(
+        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
+      );
     expect(link.balanceCents).toBe(-24_030);
     expect(link.balanceAsOf).toEqual(capturedAt);
     expect(link.balanceSource).toBe("browser");
@@ -767,12 +768,14 @@ describeDb("balance precedence in the register", () => {
 
     const [link] = await db
       .select({
-        balanceCents: bankAccountLinks.balanceCents,
-        balanceAsOf: bankAccountLinks.balanceAsOf,
-        balanceSource: bankAccountLinks.balanceSource,
+        balanceCents: financeAccounts.balanceCents,
+        balanceAsOf: financeAccounts.balanceAsOf,
+        balanceSource: financeAccounts.balanceSource,
       })
-      .from(bankAccountLinks)
-      .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)));
+      .from(financeAccounts)
+      .where(
+        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
+      );
     expect(link.balanceCents).toBe(-25_000);
     expect(link.balanceAsOf).toEqual(syncedAt);
     expect(link.balanceSource).toBe("feed");
@@ -809,12 +812,14 @@ describeDb("balance precedence in the register", () => {
 
     const [link] = await db
       .select({
-        balanceCents: bankAccountLinks.balanceCents,
-        balanceAsOf: bankAccountLinks.balanceAsOf,
-        balanceSource: bankAccountLinks.balanceSource,
+        balanceCents: financeAccounts.balanceCents,
+        balanceAsOf: financeAccounts.balanceAsOf,
+        balanceSource: financeAccounts.balanceSource,
       })
-      .from(bankAccountLinks)
-      .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)));
+      .from(financeAccounts)
+      .where(
+        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
+      );
     expect(link.balanceCents).toBe(-24_030);
     expect(link.balanceAsOf).toEqual(capturedAt);
     expect(link.balanceSource).toBe("browser");

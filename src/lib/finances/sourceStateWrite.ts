@@ -4,7 +4,7 @@
  *
  * Every path that learns an account's balance calls `recordSourceState` from inside its own
  * transaction. Each source writes **only its own row**, and the headline on
- * `bank_account_links` is recomputed from all of them. That is what makes a stale write
+ * `finance_accounts` is recomputed from all of them. That is what makes a stale write
  * unable to regress the headline rather than merely guarded against doing so: an old
  * snapshot updates the browser stamp and the derived figure simply does not move — no
  * writer needs a "do not regress" check of its own.
@@ -19,7 +19,7 @@
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import {
-  bankAccountLinks,
+  financeAccounts,
   financeAccountSourceState,
   financeTransactions,
 } from "@/db/schema";
@@ -53,12 +53,12 @@ export type AccountSourceStamps = Partial<Record<SourceKind, SourceStamp>>;
 export type AuthorityResult = {
   /** Did the recorded source end up holding the headline? */
   headlineMoved: boolean;
-  /** Which source holds it now, or null when the account has no bank link. */
+  /** Which source holds it now, or null when no source has reported a balance. */
   headlineSource: SourceKind | null;
   changes: FinanceAuditChange[];
 };
 
-type LinkHeadline = {
+type AccountHeadline = {
   id: string;
   balanceCents: number | null;
   availableCents: number | null;
@@ -66,7 +66,7 @@ type LinkHeadline = {
   balanceSource: string | null;
 };
 
-function auditShape(headline: LinkHeadline) {
+function auditShape(headline: AccountHeadline) {
   return {
     balanceCents: headline.balanceCents,
     availableCents: headline.availableCents,
@@ -240,7 +240,7 @@ export async function recordSourceState(
 /**
  * Re-derive one account's headline from its source rows.
  *
- * The single writer of `bank_account_links.balanceCents`, `availableCents`, `balanceAsOf`
+ * The single writer of `finance_accounts.balanceCents`, `availableCents`, `balanceAsOf`
  * and `balanceSource`. `expectedSource` is only used to report whether that source ended up
  * holding the headline, which is what a receipt needs to say when a stale import is
  * deliberately not applied (D4).
@@ -251,25 +251,23 @@ export async function recomputeAccountBalanceAuthority(
   accountId: string,
   expectedSource?: SourceKind,
 ): Promise<AuthorityResult> {
-  const [link] = await executor
+  const [account] = await executor
     .select({
-      id: bankAccountLinks.id,
-      balanceCents: bankAccountLinks.balanceCents,
-      availableCents: bankAccountLinks.availableCents,
-      balanceAsOf: bankAccountLinks.balanceAsOf,
-      balanceSource: bankAccountLinks.balanceSource,
+      id: financeAccounts.id,
+      historySource: financeAccounts.historySource,
+      balanceCents: financeAccounts.balanceCents,
+      availableCents: financeAccounts.availableCents,
+      balanceAsOf: financeAccounts.balanceAsOf,
+      balanceSource: financeAccounts.balanceSource,
     })
-    .from(bankAccountLinks)
-    .where(
-      and(
-        eq(bankAccountLinks.userId, userId),
-        eq(bankAccountLinks.accountId, accountId),
-      ),
-    )
+    .from(financeAccounts)
+    .where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, accountId)))
     .limit(1);
-  // A file import may record what it saw for an account with no bank link at all — that is
-  // why the source rows are keyed on the account. There is simply no headline to derive.
-  if (!link) return { headlineMoved: false, headlineSource: null, changes: [] };
+  // A file import may record what it saw for an account whose history comes only from files
+  // — that is why the source rows are keyed on the account. Such an account has no live
+  // headline to derive; its statement close anchors it instead, as it always has.
+  if (!account || account.historySource === "files")
+    return { headlineMoved: false, headlineSource: null, changes: [] };
 
   const rows = await executor
     .select({
@@ -310,13 +308,13 @@ export async function recomputeAccountBalanceAuthority(
     ...entry,
     postedOnStampDay: postedOnStampDay.get(entry.source) ?? false,
   }));
-  const incumbent = isSourceKind(link.balanceSource) ? link.balanceSource : null;
+  const incumbent = isSourceKind(account.balanceSource) ? account.balanceSource : null;
   const winner = pickAuthoritative(candidates, incumbent);
   if (winner === null)
     return { headlineMoved: false, headlineSource: null, changes: [] };
 
-  const after: LinkHeadline = {
-    id: link.id,
+  const after: AccountHeadline = {
+    id: account.id,
     balanceCents: winner.value.balanceCents,
     availableCents: winner.value.availableCents,
     // A day-only source materializes as UTC noon of that day, the encoding `dates.md`
@@ -327,11 +325,11 @@ export async function recomputeAccountBalanceAuthority(
       (winner.value.asOfDay === null ? null : fromDateKey(winner.value.asOfDay)),
     balanceSource: winner.source,
   };
-  const before = auditShape(link);
+  const before = auditShape(account);
   const changed = JSON.stringify(before) !== JSON.stringify(auditShape(after));
   if (changed) {
     await executor
-      .update(bankAccountLinks)
+      .update(financeAccounts)
       .set({
         balanceCents: after.balanceCents,
         availableCents: after.availableCents,
@@ -340,7 +338,7 @@ export async function recomputeAccountBalanceAuthority(
         updatedAt: new Date(),
       })
       .where(
-        and(eq(bankAccountLinks.userId, userId), eq(bankAccountLinks.id, link.id)),
+        and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, account.id)),
       );
   }
 
@@ -351,7 +349,7 @@ export async function recomputeAccountBalanceAuthority(
       ? [
           {
             entityType: "bank_balance",
-            entityIdentity: link.id,
+            entityIdentity: account.id,
             before,
             after: auditShape(after),
           },

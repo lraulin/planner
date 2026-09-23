@@ -3,7 +3,7 @@ import { toDateKey } from "@/lib/schedule/geometry";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  bankAccountLinks,
+  financeAccounts,
   financeBudgetCategories,
   financeTransactions,
   users,
@@ -1235,7 +1235,7 @@ describeDb("CSV import onto a lagged SimpleFIN headline", () => {
     const userId = await makeUser();
     await importFinanceCsvFiles({ userId, files: [giftFile] });
     const [account] = await listAccounts(userId);
-    const linkId = await linkWithBalance(userId, account.id, 1_125_746, "2026-08-25");
+    await linkWithBalance(userId, account.id, 1_125_746, "2026-08-25");
     // The first import already recorded 08/31 for the file, so the 08/25 sync never takes
     // the headline in the first place — the lag this test was written for cannot open.
     expect((await listAccounts(userId))[0].balanceCents).toBe(1_625_746);
@@ -1247,11 +1247,11 @@ describeDb("CSV import onto a lagged SimpleFIN headline", () => {
     expect(after.balanceCents).toBe(1_625_746);
     const [link] = await db
       .select({
-        balanceAsOf: bankAccountLinks.balanceAsOf,
-        balanceSource: bankAccountLinks.balanceSource,
+        balanceAsOf: financeAccounts.balanceAsOf,
+        balanceSource: financeAccounts.balanceSource,
       })
-      .from(bankAccountLinks)
-      .where(eq(bankAccountLinks.id, linkId));
+      .from(financeAccounts)
+      .where(eq(financeAccounts.id, account.id));
     // The file's own newest data day, not the import instant: 08/31 in this CSV.
     expect(link.balanceSource).toBe("file");
     expect(toDateKey(link.balanceAsOf!)).toBe("2026-08-31");

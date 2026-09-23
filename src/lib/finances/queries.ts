@@ -9,7 +9,6 @@ import {
   financeStatementRates,
   financeStatements,
   financeTransactions,
-  bankAccountLinks,
 } from "@/db/schema";
 import type { FinanceExecutor } from "./dbExecutor";
 import { numericStringToCents } from "./money";
@@ -187,13 +186,13 @@ export async function listAccounts(
   // feed, which is every account until one is linked.
   const syncedRows = await executor
     .select({
-      accountId: bankAccountLinks.accountId,
-      balanceCents: bankAccountLinks.balanceCents,
-      balanceAsOf: bankAccountLinks.balanceAsOf,
-      source: bankAccountLinks.balanceSource,
+      accountId: financeAccounts.id,
+      balanceCents: financeAccounts.balanceCents,
+      balanceAsOf: financeAccounts.balanceAsOf,
+      source: financeAccounts.balanceSource,
     })
-    .from(bankAccountLinks)
-    .where(eq(bankAccountLinks.userId, userId));
+    .from(financeAccounts)
+    .where(eq(financeAccounts.userId, userId));
 
   const syncedByAccount = new Map(
     syncedRows

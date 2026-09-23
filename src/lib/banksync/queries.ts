@@ -108,11 +108,18 @@ export async function listLinks(
       externalAccountId: bankAccountLinks.externalAccountId,
       accountId: bankAccountLinks.accountId,
       institution: bankAccountLinks.institution,
-      balanceCents: bankAccountLinks.balanceCents,
-      availableCents: bankAccountLinks.availableCents,
-      balanceAsOf: bankAccountLinks.balanceAsOf,
+      balanceCents: financeAccounts.balanceCents,
+      availableCents: financeAccounts.availableCents,
+      balanceAsOf: financeAccounts.balanceAsOf,
     })
     .from(bankAccountLinks)
+    .innerJoin(
+      financeAccounts,
+      and(
+        eq(financeAccounts.id, bankAccountLinks.accountId),
+        eq(financeAccounts.userId, userId),
+      ),
+    )
     .where(
       connectionId
         ? and(

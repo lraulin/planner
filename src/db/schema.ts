@@ -2135,6 +2135,36 @@ export const financeAccounts = pgTable(
      * (joining on-budget) sets it, and it is otherwise left alone when an account leaves.
      */
     budgetOpeningCents: integer("budget_opening_cents"),
+    /**
+     * The one source that authors this account's posted history: `simplefin` (the feed),
+     * `bank_page` (a paste from the bank's own page) or `files` (CSV/PDF imports). Every
+     * charge arriving from two sources with different wording was matched up by guesswork;
+     * one source per account removes the guess
+     * (`agent-os/specs/2026-09-23-1316-one-history-source-per-account/` D1). Text with a
+     * check, not an enum — see the pooler note on `finance_account_kind`.
+     */
+    historySource: text("history_source").notNull().default("files"),
+    /**
+     * Calendar day the current source took over. A source-`bank_page` account never inserts a
+     * row posted on or before it — the previous source already holds that history. Null when
+     * the source has never changed.
+     */
+    historySourceSince: date("history_source_since", { mode: "string" }),
+    /**
+     * The headline balance, derived. **Exactly one writer:**
+     * `recomputeAccountBalanceAuthority`. Every source writes its own
+     * `finance_account_source_state` row and the headline is re-derived from all of them, so a
+     * stale write cannot regress it. It lives on the account, not on the SimpleFIN link,
+     * because a bank-page account has no link
+     * (`agent-os/specs/2026-09-23-1316-one-history-source-per-account/` D2). Module sign.
+     */
+    balanceCents: integer("balance_cents"),
+    /** Balance net pending, where the winning source supplies one. */
+    availableCents: integer("available_cents"),
+    /** When the headline was true according to the source that produced it. */
+    balanceAsOf: timestamp("balance_as_of", { withTimezone: true }),
+    /** Which source (`feed` | `browser` | `file`) the three columns above came from. */
+    balanceSource: text("balance_source"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -2145,6 +2175,10 @@ export const financeAccounts = pgTable(
       table.externalKey,
     ),
     index("finance_accounts_user_name_idx").on(table.userId, table.name),
+    check(
+      "finance_accounts_history_source_valid",
+      sql`${table.historySource} in ('simplefin', 'bank_page', 'files')`,
+    ),
     check(
       "finance_accounts_core_on_budget",
       sql`${table.kind}::text not in ('checking', 'savings', 'cash', 'credit_card')
@@ -2226,6 +2260,12 @@ export const financeTransactions = pgTable(
      */
     unlistedAt: timestamp("unlisted_at", { withTimezone: true }),
     description: text("description").notNull(),
+    /**
+     * The bank page's cleaned display name ("YouTube") when `description` carries the
+     * statement descriptor ("GOOGLE *YOUTUBEPREMIUM"). Null for every row that never came from
+     * a bank-page paste. Display only; never matched on.
+     */
+    bankDisplayName: text("bank_display_name"),
     /** Signed; positive is money into the account. */
     amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
     /** What the bank called it. Never overwritten by a later import, never user-edited. */
@@ -3276,11 +3316,8 @@ export const bankConnections = pgTable(
  * Balances are stored in module sign — positive is money you have — which is already
  * SimpleFIN's own convention, so no conversion happens on the way in.
  *
- * `balanceCents`, `availableCents`, `balanceAsOf` and `balanceSource` are a **derived cache
- * with exactly one writer** — `recomputeAccountBalanceAuthority`. Every source writes its
- * own `finance_account_source_state` row and the headline is recomputed from all of them,
- * which is what makes a stale write unable to regress the headline rather than merely
- * guarded against doing so. Nothing else may set these four columns.
+ * The headline balance is not here: it lives on `finance_accounts`, because an account with no
+ * link still has one (`agent-os/specs/2026-09-23-1316-one-history-source-per-account/` D2).
  */
 export const bankAccountLinks = pgTable(
   "bank_account_links",
@@ -3299,22 +3336,6 @@ export const bankAccountLinks = pgTable(
       .references(() => financeAccounts.id, { onDelete: "cascade" }),
     /** Institution name as the provider reports it. Display only. */
     institution: text("institution").notNull().default(""),
-    /** Last balance read, module sign. Null before the first refresh. */
-    balanceCents: integer("balance_cents"),
-    /** Balance net pending, where the provider supplies one. */
-    availableCents: integer("available_cents"),
-    /**
-     * When the headline was true according to whichever source produced it. Derived from
-     * `finance_account_source_state`; a stale figure stamped "now" is worse than no figure.
-     */
-    balanceAsOf: timestamp("balance_as_of", { withTimezone: true }),
-    /**
-     * Which source the three derived columns above came from (`feed` | `browser` | `file`),
-     * or null before anything has reported. This is what makes "a tie keeps the incumbent"
-     * a decidable rule rather than a preference — without it, a same-day file and a capture
-     * would swap the headline back and forth depending on row order.
-     */
-    balanceSource: text("balance_source"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -3375,6 +3396,46 @@ export const financeAccountSourceState = pgTable(
       table.source,
     ),
     index("finance_account_source_state_account_idx").on(table.userId, table.accountId),
+  ],
+);
+
+/**
+ * Day ranges a bank-page paste read completely for one account
+ * (`agent-os/specs/2026-09-23-1316-one-history-source-per-account/` D7): the current cycle,
+ * plus a closed statement when the paste listed it whole. A statement file inserts a row
+ * only when its date is outside every covered range, so a paste and a file never both author
+ * the same charge. Inclusive calendar days, never instants.
+ */
+export const financeCaptureCoverage = pgTable(
+  "finance_capture_coverage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => financeAccounts.id, { onDelete: "cascade" }),
+    fromDay: date("from_day", { mode: "string" }).notNull(),
+    throughDay: date("through_day", { mode: "string" }).notNull(),
+    /** The paste that read this range. Nulled if the event is ever pruned. */
+    auditEventId: uuid("audit_event_id").references(() => financeAuditEvents.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_capture_coverage_range_uq").on(
+      table.userId,
+      table.accountId,
+      table.fromDay,
+      table.throughDay,
+    ),
+    index("finance_capture_coverage_account_idx").on(table.userId, table.accountId),
+    check(
+      "finance_capture_coverage_ordered",
+      sql`${table.fromDay} <= ${table.throughDay}`,
+    ),
   ],
 );
 

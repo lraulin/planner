@@ -141,9 +141,11 @@ than duplicated.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                     | Why                                                                                                                                                                                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `history_source` defaults to `files`; the migration backfills `simplefin` for every linked account, and `linkAccount` promotes a `files` account to `simplefin` (never a `bank_page` one). | The plan named the column but not its default. An unlinked account has no feed, and a link must not silently override Lee's `bank_page` choice.                                                                                                       |
+| 2   | `recomputeAccountBalanceAuthority` derives no headline for a `files` account (it still records the file's source row).                                                                     | Moving the headline to the account made "no link, no headline" false. Deriving one for file-only accounts would replace the statement anchor with a partial file's running balance and light up mismatches on accounts that never had a live balance. |
+| 3   | Coverage-table isolation tests move to Task 3.                                                                                                                                             | Nothing reads or writes `finance_capture_coverage` until the paste apply does; a test now would only exercise raw SQL.                                                                                                                                |
 
 > While this spec is **active**, when we make a material change to requirements, design, or scope
 > (including from feedback on what was implemented), update the relevant sections and append to
@@ -156,7 +158,7 @@ One; keep SimpleFIN history with a cutover date; statement descriptor + display 
 for uncovered periods), standards.md pinned at `30a9c769`, references.md, `visuals/` (four
 session screenshots: Kim's Nails detail, YouTube detail, the userscript toast, the paste summary).
 
-## Task 2: History source and account-level headline (schema)
+## Task 2: History source and account-level headline (schema) **done**
 
 Migration adding `history_source`/`history_source_since`, moving the headline cache onto
 `finance_accounts` with a backfill from links, and adding `bank_display_name` and
