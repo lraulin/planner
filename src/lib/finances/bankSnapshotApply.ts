@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  bankAccountLinks,
   financeAccounts,
+  financeCaptureCoverage,
+  financeStatements,
   financePaymentResolutions,
   financePayeeAliases,
   financePayees,
@@ -24,6 +25,7 @@ import {
   planBankSnapshotReconciliation,
   type ExistingBankSnapshotRow,
 } from "./bankSnapshotReconcile";
+import { capturedRanges, planCoverage } from "./captureCoverage";
 import { recordSourceState } from "./sourceStateWrite";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import type { FinanceExecutor } from "./dbExecutor";
@@ -54,6 +56,11 @@ export type BankSnapshotApplyResult = {
      * turned into page-authored posted history. Always 0 for an account with no history feed.
      */
     markedPostedAtBank: number;
+    /**
+     * Posted rows the page listed that fall on or before the account's `history_source_since`:
+     * the previous source already holds that history, so nothing was inserted (D3, D5).
+     */
+    beforeSourceStart: number;
     /** D4: posted rows seen on the page and left for the feed; `awaitingFeedPhrase` names them. */
     awaitingFeed: Pick<ParsedBankSnapshotRow, "description" | "amountCents">[];
   };
@@ -73,7 +80,17 @@ export type BankSnapshotApplyResult = {
   auditBatchId: string;
 };
 
-type AccountTarget = { id: string; name: string };
+type AccountTarget = {
+  id: string;
+  name: string;
+  historySource: string;
+  historySourceSince: string | null;
+};
+
+const HISTORY_SOURCE_LABEL: Record<string, string> = {
+  simplefin: "SimpleFIN",
+  files: "file imports",
+};
 
 type NormalizedTransactionState = {
   accountId: string;
@@ -129,6 +146,8 @@ async function resolveCardByLast4(
       kind: financeAccounts.kind,
       externalKey: financeAccounts.externalKey,
       closedAt: financeAccounts.closedAt,
+      historySource: financeAccounts.historySource,
+      historySourceSince: financeAccounts.historySourceSince,
     })
     .from(financeAccounts)
     .where(eq(financeAccounts.userId, userId));
@@ -142,7 +161,12 @@ async function resolveCardByLast4(
   if (matches.length > 1) {
     throw new Error(`More than one open credit card ends in ${last4}.`);
   }
-  return { id: matches[0].id, name: matches[0].name };
+  return {
+    id: matches[0].id,
+    name: matches[0].name,
+    historySource: matches[0].historySource,
+    historySourceSince: matches[0].historySourceSince,
+  };
 }
 
 function bankOwnedValues(
@@ -426,6 +450,66 @@ function readyToAssign(checkpoint: FinanceMoneyCheckpoint): number {
   return checkpoint.budgets[0]?.readyToAssignCents ?? 0;
 }
 
+/**
+ * Record the days this paste read completely (D7), extending a cycle a previous paste already
+ * covered rather than adding a row per paste.
+ */
+async function recordCoverage(
+  executor: FinanceExecutor,
+  userId: string,
+  accountId: string,
+  snapshot: ParsedBankBrowserSnapshot,
+  auditEventId: string,
+): Promise<void> {
+  let storedClosedStart: string | null = null;
+  if (snapshot.recentStatementClosedOn !== null) {
+    const [statement] = await executor
+      .select({ periodStart: financeStatements.periodStart })
+      .from(financeStatements)
+      .where(
+        and(
+          eq(financeStatements.userId, userId),
+          eq(financeStatements.accountId, accountId),
+          eq(financeStatements.periodEnd, snapshot.recentStatementClosedOn),
+        ),
+      )
+      .limit(1);
+    storedClosedStart = statement?.periodStart ?? null;
+  }
+  const stored = await executor
+    .select({
+      id: financeCaptureCoverage.id,
+      fromDay: financeCaptureCoverage.fromDay,
+      throughDay: financeCaptureCoverage.throughDay,
+    })
+    .from(financeCaptureCoverage)
+    .where(
+      and(
+        eq(financeCaptureCoverage.userId, userId),
+        eq(financeCaptureCoverage.accountId, accountId),
+      ),
+    );
+  const plan = planCoverage(stored, capturedRanges(snapshot, storedClosedStart));
+  if (plan.removeIds.length > 0) {
+    await executor
+      .delete(financeCaptureCoverage)
+      .where(
+        and(
+          eq(financeCaptureCoverage.userId, userId),
+          eq(financeCaptureCoverage.accountId, accountId),
+          inArray(financeCaptureCoverage.id, plan.removeIds),
+        ),
+      );
+  }
+  if (plan.insert.length > 0) {
+    await executor
+      .insert(financeCaptureCoverage)
+      .values(
+        plan.insert.map((range) => ({ userId, accountId, auditEventId, ...range })),
+      );
+  }
+}
+
 /** Apply a complete browser snapshot and its explanatory evidence as one database commit. */
 export async function applyBankBrowserSnapshot(
   userId: string,
@@ -438,23 +522,18 @@ export async function applyBankBrowserSnapshot(
 
   return db.transaction(async (tx) => {
     const account = await resolveCardByLast4(tx, userId, snapshot.accountLast4);
-    const [link] = await tx
-      .select({ id: bankAccountLinks.id })
-      .from(bankAccountLinks)
-      .where(
-        and(
-          eq(bankAccountLinks.userId, userId),
-          eq(bankAccountLinks.accountId, account.id),
-        ),
-      )
-      .limit(1);
-    if (!link) {
-      throw new Error(`${account.name} has no bank balance link to update.`);
+    // One source authors each account's history (D1). A paste writes rows only for an
+    // account that has chosen the bank page; for any other it would be a second author.
+    if (account.historySource !== "bank_page") {
+      throw new Error(
+        `${account.name} takes its history from ${
+          HISTORY_SOURCE_LABEL[account.historySource] ?? account.historySource
+        }, so a paste from the bank page is not accepted.`,
+      );
     }
-    // Every account this function accepts already has a SimpleFIN link (the guard above),
-    // so this is always true today — kept explicit rather than assumed, since D4's rule is
-    // about accounts with a history feed, not about this one caller.
-    const feedCovered = link !== undefined;
+    // Always false past the refusal above: the feed-covered branches of the planner belong to
+    // accounts whose history another source writes, which a paste no longer reaches.
+    const feedCovered = false;
 
     const scope = snapshotScope(snapshot, account);
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(
@@ -499,6 +578,7 @@ export async function applyBankBrowserSnapshot(
       snapshot.pending,
       feedCovered,
       snapshot.recentPosted,
+      account.historySourceSince,
     );
     const newIds: string[] = [];
 
@@ -655,6 +735,9 @@ export async function applyBankBrowserSnapshot(
       (plan.postedAwaitingFeed.length > 0
         ? `; ${awaitingFeedPhrase(plan.postedAwaitingFeed)}`
         : "") +
+      (plan.postedBeforeSourceStart.length > 0
+        ? `; ${plan.postedBeforeSourceStart.length} posted on or before ${account.historySourceSince}, already held by the previous source`
+        : "") +
       (plan.unlistedMarks.length > 0
         ? `; ${plan.unlistedMarks.length} hold${plan.unlistedMarks.length === 1 ? "" : "s"} no longer listed, kept for review`
         : "") +
@@ -684,6 +767,8 @@ export async function applyBankBrowserSnapshot(
       batchId: options.auditBatchId,
     });
 
+    await recordCoverage(tx, userId, account.id, snapshot, audit.eventId);
+
     return {
       accountId: account.id,
       accountName: account.name,
@@ -697,6 +782,7 @@ export async function applyBankBrowserSnapshot(
         duplicates: plan.postedDuplicates.length,
         coveredByFeed: plan.postedCoveredByFeed,
         markedPostedAtBank: plan.postedAtBankMarks.length,
+        beforeSourceStart: plan.postedBeforeSourceStart.length,
         awaitingFeed: plan.postedAwaitingFeed.map(({ description, amountCents }) => ({
           description,
           amountCents,

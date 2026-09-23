@@ -8,6 +8,7 @@ import {
   financeAuditEvents,
   financeBudgetAllocations,
   financeBudgetCategories,
+  financeCaptureCoverage,
   financeTransactions,
   users,
 } from "@/db/schema";
@@ -122,6 +123,9 @@ describeDb("applyBankBrowserSnapshot", () => {
         institution: "Chase",
         externalSource: "csv:chase-credit",
         externalKey: "9910",
+        // A paste is accepted only from an account that has chosen the bank page. The
+        // SimpleFIN link below is kept: the cutover unlinks it as a later, separate step.
+        historySource: "bank_page",
       })
       .returning({ id: financeAccounts.id });
     accountId = account.id;
@@ -192,10 +196,10 @@ describeDb("applyBankBrowserSnapshot", () => {
     });
   });
 
-  it("marks posted-at-bank instead of transitioning, and keeps every checkpoint unchanged", async () => {
-    // D4: this account has a SimpleFIN link (feed-covered), so the page's own posted list
-    // never turns a stored hold into posted history — it stays pending, flagged, and every
-    // total that does not care about pending-vs-posted (money, RTA) is untouched.
+  it("posts a page-sourced account's holds in place, and keeps every checkpoint unchanged", async () => {
+    // The account's history source is the bank page, so the page's posted list turns a
+    // stored hold into posted history in place: same row, same envelope, notes and flow —
+    // and every total that does not care about pending-vs-posted (money, RTA) is untouched.
     const raw = snapshot();
     const beforeBudget = await loadBudget(userId, MONTH);
     const beforeMonth = findMonth(beforeBudget.months, MONTH)!;
@@ -207,11 +211,11 @@ describeDb("applyBankBrowserSnapshot", () => {
 
     expect(result.posted).toMatchObject({
       received: 8,
-      transitioned: 0,
+      transitioned: 8,
       replaced: 0,
       inserted: 0,
       duplicates: 0,
-      markedPostedAtBank: 8,
+      markedPostedAtBank: 0,
     });
     expect(result.pending.received).toBe(2);
     expect(result.currentBalanceCents).toBe(-37_080);
@@ -225,7 +229,7 @@ describeDb("applyBankBrowserSnapshot", () => {
     expect(account.balanceCents).toBe(-37_080);
     const rows = await listTransactions(userId);
     expect(rows).toHaveLength(10);
-    expect(rows.every((row) => row.pending)).toBe(true);
+    expect(rows.filter((row) => row.pending)).toHaveLength(2);
     expect(rows.reduce((sum, row) => sum + row.amountCents, 0)).toBe(-27_663);
 
     const afterBudget = await loadBudget(userId, MONTH);
@@ -238,13 +242,13 @@ describeDb("applyBankBrowserSnapshot", () => {
       notes: "Keep this note",
       flowOverride: "spend",
       budgetCategoryId: envelopeId,
-      pending: true,
+      pending: false,
     });
     const [preservedRow] = await db
       .select({ postedAtBank: financeTransactions.postedAtBank })
       .from(financeTransactions)
       .where(eq(financeTransactions.id, preserved.id));
-    expect(preservedRow.postedAtBank).not.toBeNull();
+    expect(preservedRow.postedAtBank).toBeNull();
 
     const untouched = rows.find((row) => row.description === "SHEETZ")!;
     const [untouchedRow] = await db
@@ -274,13 +278,11 @@ describeDb("applyBankBrowserSnapshot", () => {
 
     expect(second.posted).toMatchObject({
       inserted: 0,
-      transitioned: 0,
       replaced: 0,
-      duplicates: 0,
-      // Recognised again (the plan still finds the match); nothing is written the second
-      // time, since the stamp from the first capture already answers "when was this
-      // noticed" and a later paste noticing the same hold again is not new information.
-      markedPostedAtBank: 8,
+      transitioned: 0,
+      // The first paste posted every hold; the second finds them by identity.
+      duplicates: 8,
+      markedPostedAtBank: 0,
     });
     expect(second.pending).toMatchObject({ inserted: 0, updated: 2, removed: 0 });
     const event = await loadFinanceAuditEvent(userId, second.auditEventId);
@@ -700,7 +702,7 @@ describeDb("applyBankBrowserSnapshot", () => {
       expect(relisted.unlistedAt).toBeNull();
     });
 
-    it("marks a hold posted at the bank when the closed statement lists it, inserting nothing", async () => {
+    it("posts a hold when the closed statement lists it, inserting nothing beside it", async () => {
       await db
         .insert(financeTransactions)
         .values(chewyHold(userId, accountId, envelopeId));
@@ -723,8 +725,8 @@ describeDb("applyBankBrowserSnapshot", () => {
 
       expect(result.pending.removed).toBe(0);
       const hold = await holdOf(userId);
-      expect(hold.pending).toBe(true);
-      expect(hold.postedAtBank).not.toBeNull();
+      expect(hold.pending).toBe(false);
+      expect(hold.postedAtBank).toBeNull();
       expect(hold.unlistedAt).toBeNull();
       expect(hold.budgetCategoryId).toBe(envelopeId);
       const chewyRows = await db
@@ -769,8 +771,10 @@ describeDb("applyBankBrowserSnapshot", () => {
     // The actual incident: 12 Amazon charges Chase's page reported as newly posted, all
     // already delivered by SimpleFIN under its own fuller descriptor
     // (`AMAZON MKTPL*537NK9DZ2` vs the page's `Amazon.com`) — never seen pending on this
-    // page at all, so there is no hold to mark either. Before D4, `descriptionsOverlap`
-    // failing on that mismatch sent all 12 straight into postedInserts.
+    // page at all, so there is no hold to mark either. `descriptionsOverlap` fails on that
+    // mismatch, which used to send all 12 straight into postedInserts. Now the account's
+    // `history_source_since` is the last day SimpleFIN delivered, and the page never inserts
+    // a row on or before it.
     const amazonCharges = [
       { day: "13", cents: -1377, feedName: "AMAZON MKTPL*537NK9DZ2" },
       { day: "12", cents: -2450, feedName: "AMAZON MKTPL*7Q2FH8XN3" },
@@ -801,6 +805,11 @@ describeDb("applyBankBrowserSnapshot", () => {
       })),
     );
 
+    await db
+      .update(financeAccounts)
+      .set({ historySourceSince: "2026-08-13" })
+      .where(eq(financeAccounts.id, accountId));
+
     const beforeBudget = await loadBudget(userId, MONTH);
     const beforeMonth = findMonth(beforeBudget.months, MONTH)!;
 
@@ -826,10 +835,11 @@ describeDb("applyBankBrowserSnapshot", () => {
 
     const result = await applyBankBrowserSnapshot(userId, raw);
 
-    // Nothing inserted for the Amazon rows — the 8 marks are the unrelated fixture holds
-    // from beforeEach, included in `posted` here only so this capture reads as complete.
+    // Nothing inserted for the Amazon rows — the 8 transitions are the unrelated fixture
+    // holds from beforeEach, included in `posted` here only so this capture reads as complete.
     expect(result.posted.inserted).toBe(0);
-    expect(result.posted.markedPostedAtBank).toBe(8);
+    expect(result.posted.beforeSourceStart).toBe(amazonCharges.length);
+    expect(result.posted.transitioned).toBe(8);
     expect(result.checkpointDelta.readyToAssignCents).toBe(0);
 
     const afterBudget = await loadBudget(userId, MONTH);
@@ -842,5 +852,271 @@ describeDb("applyBankBrowserSnapshot", () => {
     );
     // Nothing scraped landed beside the SimpleFIN copies under the page's own display name.
     expect(rows.filter((row) => row.description === "Amazon.com")).toEqual([]);
+  });
+});
+
+describeDb("a bank-page account with no SimpleFIN link", () => {
+  const CAPTURED = new Date("2026-09-23T15:00:00Z");
+
+  type Row = [
+    transactionDate: string,
+    postedDate: string | null,
+    name: string,
+    amount: string,
+  ];
+
+  function capitalOneSnapshot(input: {
+    posted?: Row[];
+    pending?: Row[];
+    recent?: Row[];
+    closedOn?: string;
+    capturedAt?: Date;
+  }): string {
+    const toRow = ([transactionDate, postedDate, description, amount]: Row) => ({
+      transactionDate,
+      postedDate,
+      description,
+      category: "Merchandise",
+      amount,
+    });
+    const body: BankBrowserSnapshotV1 = {
+      version: 1,
+      source: "capitalone",
+      capturedAt: (input.capturedAt ?? CAPTURED).toISOString(),
+      accountLast4: "3448",
+      balanceKind: "posted_only",
+      currentBalance: "$500.00",
+      completeness: {
+        currentCycle: true,
+        posted: true,
+        pending: true,
+        filtered: false,
+        searched: false,
+        ...(input.recent ? { recentPosted: true as const } : {}),
+      },
+      posted: (input.posted ?? []).map(toRow),
+      pending: (input.pending ?? []).map(toRow),
+      ...(input.recent
+        ? {
+            recentStatementClosedOn: input.closedOn ?? "Sep 14, 2026",
+            recentPosted: input.recent.map(toRow),
+          }
+        : {}),
+    };
+    return `${PLANNER_BANK_SNAPSHOT_HEADER}\n${JSON.stringify(body, null, 2)}\n`;
+  }
+
+  async function makeCard(
+    owner: string,
+    historySource: "bank_page" | "simplefin" | "files",
+  ): Promise<string> {
+    const [account] = await db
+      .insert(financeAccounts)
+      .values({
+        userId: owner,
+        name: "Capital One Card",
+        kind: "credit_card",
+        institution: "Capital One",
+        externalSource: "csv:capitalone-card",
+        externalKey: "3448",
+        historySource,
+      })
+      .returning({ id: financeAccounts.id });
+    return account.id;
+  }
+
+  async function rowsOf(owner: string) {
+    return db
+      .select({
+        id: financeTransactions.id,
+        description: financeTransactions.description,
+        transactionDate: financeTransactions.transactionDate,
+        postedDate: financeTransactions.postedDate,
+        pending: financeTransactions.pending,
+        amount: financeTransactions.amount,
+        budgetCategoryId: financeTransactions.budgetCategoryId,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, owner));
+  }
+
+  async function coverageOf(owner: string) {
+    return db
+      .select({
+        fromDay: financeCaptureCoverage.fromDay,
+        throughDay: financeCaptureCoverage.throughDay,
+        accountId: financeCaptureCoverage.accountId,
+      })
+      .from(financeCaptureCoverage)
+      .where(eq(financeCaptureCoverage.userId, owner));
+  }
+
+  it("inserts a posted charge with its purchase and posted dates, and sets the headline", async () => {
+    const owner = await makeUser();
+    const accountId = await makeCard(owner, "bank_page");
+
+    const result = await applyBankBrowserSnapshot(
+      owner,
+      capitalOneSnapshot({
+        posted: [["Sep 22, 2026", "Sep 22, 2026", "YouTube", "$16.95"]],
+      }),
+    );
+
+    expect(result.posted.inserted).toBe(1);
+    expect(await rowsOf(owner)).toEqual([
+      expect.objectContaining({
+        description: "YouTube",
+        transactionDate: "2026-09-22",
+        postedDate: "2026-09-22",
+        pending: false,
+        amount: "-16.95",
+      }),
+    ]);
+    expect((await listAccounts(owner))[0]).toMatchObject({
+      id: accountId,
+      balanceCents: -50_000,
+      balanceSource: "browser",
+    });
+  });
+
+  it("posts a tipped hold in place: purchase date kept, envelope kept, one row", async () => {
+    const owner = await makeUser();
+    const accountId = await makeCard(owner, "bank_page");
+    await applyBankBrowserSnapshot(
+      owner,
+      capitalOneSnapshot({
+        capturedAt: new Date("2026-09-19T15:00:00Z"),
+        pending: [["Sep 19, 2026", null, "Kim's Nails III", "$50.00"]],
+      }),
+    );
+    const [hold] = await rowsOf(owner);
+    expect(hold.pending).toBe(true);
+    await db
+      .update(financeTransactions)
+      .set({ notes: "nails" })
+      .where(eq(financeTransactions.id, hold.id));
+
+    await applyBankBrowserSnapshot(
+      owner,
+      capitalOneSnapshot({
+        posted: [["Sep 19, 2026", "Sep 21, 2026", "Kim's Nails III", "$60.00"]],
+      }),
+    );
+
+    const rows = await rowsOf(owner);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: hold.id,
+      transactionDate: "2026-09-19",
+      postedDate: "2026-09-21",
+      pending: false,
+      amount: "-60.00",
+    });
+    const [kept] = await db
+      .select({ notes: financeTransactions.notes })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, hold.id));
+    expect(kept.notes).toBe("nails");
+    expect(accountId).toBeTruthy();
+  });
+
+  it("inserts nothing on a re-paste, and a closed statement's unheld rows exactly once", async () => {
+    const owner = await makeUser();
+    await makeCard(owner, "bank_page");
+    const current: Row[] = [["Sep 20, 2026", "Sep 21, 2026", "Pizza Hut", "$18.00"]];
+    const closed: Row[] = [
+      ["Sep 01, 2026", "Sep 02, 2026", "Shell", "$40.00"],
+      ["Sep 10, 2026", "Sep 11, 2026", "Netflix", "$15.49"],
+    ];
+    const raw = capitalOneSnapshot({ posted: current, recent: closed });
+
+    const first = await applyBankBrowserSnapshot(owner, raw);
+    const second = await applyBankBrowserSnapshot(owner, raw);
+
+    expect(first.posted.inserted).toBe(3);
+    expect(second.posted.inserted).toBe(0);
+    expect(await rowsOf(owner)).toHaveLength(3);
+  });
+
+  it("never inserts a row posted on or before history_source_since", async () => {
+    const owner = await makeUser();
+    const accountId = await makeCard(owner, "bank_page");
+    await db
+      .update(financeAccounts)
+      .set({ historySourceSince: "2026-09-21" })
+      .where(eq(financeAccounts.id, accountId));
+
+    const result = await applyBankBrowserSnapshot(
+      owner,
+      capitalOneSnapshot({
+        posted: [
+          ["Sep 21, 2026", "Sep 21, 2026", "Old", "$5.00"],
+          ["Sep 22, 2026", "Sep 22, 2026", "New", "$6.00"],
+        ],
+      }),
+    );
+
+    expect(result.posted).toMatchObject({ inserted: 1, beforeSourceStart: 1 });
+    expect((await rowsOf(owner)).map((row) => row.description)).toEqual(["New"]);
+  });
+
+  it("refuses a paste for an account whose history comes from anywhere else", async () => {
+    const owner = await makeUser();
+    await makeCard(owner, "simplefin");
+
+    await expect(
+      applyBankBrowserSnapshot(
+        owner,
+        capitalOneSnapshot({
+          posted: [["Sep 22, 2026", "Sep 22, 2026", "YouTube", "$16.95"]],
+        }),
+      ),
+    ).rejects.toThrow(/takes its history from SimpleFIN/);
+    expect(await rowsOf(owner)).toEqual([]);
+    expect(await coverageOf(owner)).toEqual([]);
+
+    const other = await makeUser();
+    await makeCard(other, "files");
+    await expect(
+      applyBankBrowserSnapshot(other, capitalOneSnapshot({})),
+    ).rejects.toThrow(/takes its history from file imports/);
+  });
+
+  it("records the days it read, extends them on the next paste, and keeps them per user", async () => {
+    const owner = await makeUser();
+    const accountId = await makeCard(owner, "bank_page");
+    const intruder = await makeUser();
+    const intruderAccount = await makeCard(intruder, "bank_page");
+
+    await applyBankBrowserSnapshot(
+      owner,
+      capitalOneSnapshot({
+        posted: [["Sep 16, 2026", "Sep 16, 2026", "A", "$1.00"]],
+        recent: [["Sep 01, 2026", "Sep 02, 2026", "B", "$2.00"]],
+      }),
+    );
+    expect(await coverageOf(owner)).toEqual(
+      expect.arrayContaining([
+        { accountId, fromDay: "2026-08-15", throughDay: "2026-09-14" },
+        { accountId, fromDay: "2026-09-15", throughDay: "2026-09-23" },
+      ]),
+    );
+
+    await applyBankBrowserSnapshot(
+      owner,
+      capitalOneSnapshot({
+        capturedAt: new Date("2026-09-25T15:00:00Z"),
+        posted: [["Sep 16, 2026", "Sep 16, 2026", "A", "$1.00"]],
+        recent: [["Sep 01, 2026", "Sep 02, 2026", "B", "$2.00"]],
+      }),
+    );
+    expect(await coverageOf(owner)).toHaveLength(2);
+
+    // The intruder's own paste writes under the intruder and never reaches the owner's ranges.
+    await applyBankBrowserSnapshot(intruder, capitalOneSnapshot({}));
+    expect(await coverageOf(owner)).toHaveLength(2);
+    expect(
+      (await coverageOf(intruder)).every((r) => r.accountId === intruderAccount),
+    ).toBe(true);
   });
 });

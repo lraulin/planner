@@ -78,6 +78,11 @@ export type BankSnapshotReconciliationPlan = {
   unlistedMarks: string[];
   /** Incoming posted rows a stored history-feed row already pairs with. */
   postedCoveredByFeed: number;
+  /**
+   * Posted rows a page-sourced account would have inserted but did not, because they posted
+   * on or before `history_source_since` — the previous source already holds that history.
+   */
+  postedBeforeSourceStart: ParsedBankSnapshotRow[];
   warnings: string[];
 };
 
@@ -243,6 +248,8 @@ export function planBankSnapshotReconciliation(
   pending: readonly ParsedBankSnapshotRow[],
   feedCovered: boolean,
   recentPosted: readonly ParsedBankSnapshotRow[] = [],
+  /** A page-sourced account never inserts a row posted on or before this day (D3). */
+  postedAfter: string | null = null,
 ): BankSnapshotReconciliationPlan {
   const postedHistory = existing.filter((row) => !row.pending);
   const postedHistoryById = new Map(postedHistory.map((row) => [row.id, row]));
@@ -268,6 +275,19 @@ export function planBankSnapshotReconciliation(
   const unlistedMarks: string[] = [];
   const warnings: string[] = [];
   const unresolvedPosted: ParsedBankSnapshotRow[] = [];
+  const postedBeforeSourceStart: ParsedBankSnapshotRow[] = [];
+
+  /** Insert a page-authored posted row, unless the previous source already holds its day. */
+  const insertPosted = (row: ParsedBankSnapshotRow) => {
+    if (
+      postedAfter !== null &&
+      (row.postedDate ?? row.transactionDate) <= postedAfter
+    ) {
+      postedBeforeSourceStart.push(row);
+      return;
+    }
+    postedInserts.push(row);
+  };
 
   const pairings = pairRows(posted.map(incomingPairable), feedHistory.map(toPairable));
   const incomingByExternalId = new Map(posted.map((row) => [row.externalId, row]));
@@ -369,7 +389,7 @@ export function planBankSnapshotReconciliation(
         postedAwaitingFeed.push(incoming);
         continue;
       }
-      postedInserts.push(incoming);
+      insertPosted(incoming);
       if (candidates.some((candidate) => candidate.isParent)) {
         const warning = `Could not attach the ambiguous split pending transaction to posted "${incoming.description}"; the complete pending set decides whether that split is retained or discarded.`;
         warnings.push(warning);
@@ -423,9 +443,13 @@ export function planBankSnapshotReconciliation(
   // The closed statement's rows minus any a stored posted row already holds: a charge in
   // both places must count once, or `resolveLostHold` would see two candidates for one.
   const recentAll = recentPosted.map(incomingPairable);
-  const heldByStored = new Set(
-    pairRows(recentAll, postedHistory.map(toPairable)).map((pair) => pair.browserId),
+  const storedExternalIds = new Set(
+    postedHistory.flatMap((row) => (row.externalId === null ? [] : [row.externalId])),
   );
+  const heldByStored = new Set([
+    ...recentAll.filter((row) => storedExternalIds.has(row.id)).map((row) => row.id),
+    ...pairRows(recentAll, postedHistory.map(toPairable)).map((pair) => pair.browserId),
+  ]);
   const unheldRecent = recentAll.filter((row) => !heldByStored.has(row.id));
   const recentRows = recentPosted.filter((row) => !heldByStored.has(row.externalId));
   const usedRecent = new Set<string>();
@@ -448,7 +472,14 @@ export function planBankSnapshotReconciliation(
       .sort((left, right) => dateDistance(row, left) - dateDistance(row, right))[0];
     if (closed) {
       usedRecent.add(closed.externalId);
-      postedAtBankMarks.add(row.id);
+      if (feedCovered) postedAtBankMarks.add(row.id);
+      else
+        // D6: a page-sourced account's closed statement is history, so the hold posts.
+        postedTransitions.push({
+          existingId: row.id,
+          incoming: closed,
+          amountChanged: closed.amountCents !== row.amountCents,
+        });
       continue;
     }
     const resolution = resolveLostHold(row, [
@@ -467,7 +498,16 @@ export function planBankSnapshotReconciliation(
       } else {
         // The only qualifying row is on the closed statement — nowhere to carry to yet.
         usedRecent.add(resolution.postedId);
-        postedAtBankMarks.add(row.id);
+        const closedRow = recentRows.find(
+          (recent) => recent.externalId === resolution.postedId,
+        );
+        if (feedCovered || !closedRow) postedAtBankMarks.add(row.id);
+        else
+          postedTransitions.push({
+            existingId: row.id,
+            incoming: closedRow,
+            amountChanged: closedRow.amountCents !== row.amountCents,
+          });
       }
     } else if (resolution.outcome === "ambiguous") {
       // D4: several posted rows qualify and none is a clear description winner — kept
@@ -488,6 +528,14 @@ export function planBankSnapshotReconciliation(
     }
   }
 
+  // D6: for a page-sourced account, a closed statement's rows that nothing stored holds and no
+  // hold just posted into are history. A feed-covered account leaves them to its feed.
+  if (!feedCovered) {
+    for (const row of recentRows) {
+      if (!usedRecent.has(row.externalId)) insertPosted(row);
+    }
+  }
+
   return {
     postedDuplicates,
     postedTransitions,
@@ -501,6 +549,7 @@ export function planBankSnapshotReconciliation(
     postedAtBankMarks: [...postedAtBankMarks],
     unlistedMarks,
     postedCoveredByFeed: pairings.length,
+    postedBeforeSourceStart,
     warnings,
   };
 }

@@ -640,3 +640,95 @@ describe("planBankSnapshotReconciliation", () => {
     });
   });
 });
+
+describe("planBankSnapshotReconciliation for a page-sourced account", () => {
+  it("inserts a posted charge nothing stored holds (YouTube, 2026-09-22)", () => {
+    const plan = planBankSnapshotReconciliation(
+      [],
+      [incoming("YouTube", -1695, "2026-09-22")],
+      [],
+      false,
+    );
+    expect(plan.postedInserts.map((row) => row.description)).toEqual(["YouTube"]);
+  });
+
+  it("posts a tipped hold in place, keeping the purchase day (Kim's Nails)", () => {
+    const hold = existing("hold", "Kim's Nails III", -5000, {
+      transactionDate: "2026-09-19",
+    });
+    const posted = {
+      ...incoming("Kim's Nails III", -6000, "2026-09-19"),
+      postedDate: "2026-09-21",
+    };
+    const plan = planBankSnapshotReconciliation([hold], [posted], [], false);
+    expect(plan.postedTransitions).toEqual([
+      { existingId: "hold", incoming: posted, amountChanged: true },
+    ]);
+    expect(plan.postedInserts).toEqual([]);
+  });
+
+  it("holds a re-pasted page by identity and inserts nothing", () => {
+    const row = incoming("YouTube", -1695, "2026-09-22");
+    const stored = existing("stored", "YouTube", -1695, {
+      pending: false,
+      transactionDate: "2026-09-22",
+      postedDate: "2026-09-22",
+      externalId: row.externalId,
+    });
+    const plan = planBankSnapshotReconciliation([stored], [row], [], false);
+    expect(plan.postedInserts).toEqual([]);
+    expect(plan.postedDuplicates).toHaveLength(1);
+  });
+
+  it("inserts a closed statement's rows once, then holds them by identity", () => {
+    const closed = [incoming("Shell", -4000, "2026-09-02")];
+    const first = planBankSnapshotReconciliation([], [], [], false, closed);
+    expect(first.postedInserts).toEqual(closed);
+
+    const stored = existing("stored", "Shell", -4000, {
+      pending: false,
+      transactionDate: "2026-09-02",
+      postedDate: "2026-09-02",
+      externalId: closed[0].externalId,
+    });
+    const again = planBankSnapshotReconciliation([stored], [], [], false, closed);
+    expect(again.postedInserts).toEqual([]);
+  });
+
+  it("leaves a closed statement as evidence only for a feed-covered account", () => {
+    const closed = [incoming("Shell", -4000, "2026-09-02")];
+    const plan = planBankSnapshotReconciliation([], [], [], true, closed);
+    expect(plan.postedInserts).toEqual([]);
+  });
+
+  it("posts a hold the closed statement lists instead of marking it", () => {
+    const hold = existing("hold", "Chewy.com", -2000, {
+      transactionDate: "2026-09-13",
+    });
+    const closed = incoming("Chewy.com", -2000, "2026-09-13");
+    const plan = planBankSnapshotReconciliation([hold], [], [], false, [closed]);
+    expect(plan.postedTransitions).toEqual([
+      { existingId: "hold", incoming: closed, amountChanged: false },
+    ]);
+    expect(plan.postedAtBankMarks).toEqual([]);
+    expect(plan.postedInserts).toEqual([]);
+  });
+
+  it("never inserts a row posted on or before the source start, and names it", () => {
+    const old = incoming("Old", -500, "2026-09-21");
+    const fresh = incoming("Fresh", -600, "2026-09-22");
+    const plan = planBankSnapshotReconciliation(
+      [],
+      [old, fresh],
+      [],
+      false,
+      [incoming("Older", -700, "2026-09-10")],
+      "2026-09-21",
+    );
+    expect(plan.postedInserts).toEqual([fresh]);
+    expect(plan.postedBeforeSourceStart.map((row) => row.description)).toEqual([
+      "Old",
+      "Older",
+    ]);
+  });
+});
