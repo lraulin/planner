@@ -1425,7 +1425,11 @@ period)` so money already spent stops being held twice and only going over bites
   Capital One and Chase scrapes were superseded 2026-08-29 by complete, fail-closed
   current-cycle bank snapshots with audit receipts —
   `specs/2026-08-29-0845-bank-snapshots-finance-audit` — whose 36-hour authority window
-  was itself replaced by per-source as-of stamps on 2026-09-01.
+  was itself replaced by per-source as-of stamps on 2026-09-01. On 2026-09-24 each account got
+  one history source — `specs/2026-09-23-1316-one-history-source-per-account` — Chase and the
+  360 accounts on SimpleFIN, the Capital One card on bank-page pastes only (statement
+  descriptor kept), statement files filling only days no paste covered, and pending holds
+  counted by the account's source rather than by comparing timestamps.
 
 ---
 

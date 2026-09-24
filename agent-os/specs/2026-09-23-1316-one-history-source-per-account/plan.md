@@ -1,6 +1,6 @@
 # One history source per account
 
-**Status: active**  
+**Status: frozen / complete** (2026-09-24)  
 Spec folder: `agent-os/specs/2026-09-23-1316-one-history-source-per-account/`
 
 ## Spec relationships
@@ -127,21 +127,30 @@ than duplicated.
 
 ## Acceptance criteria
 
-- [ ] A Capital One paste with SimpleFIN unlinked succeeds, sets the headline, and inserts
-      YouTube $16.95 dated purchase Sep 22 / posted Sep 22.
-- [ ] Replaying a Kim's-style capture turns the $50 hold into the $60 posted row: transaction
-      date 9/19, posted date 9/21, envelope kept, one row.
-- [ ] Re-pasting the same page inserts nothing. A paste after the statement closes inserts the
-      closed statement's unheld rows once.
-- [ ] A Chase paste is refused, and so is a paste for any account not `bank_page`. A sync never
-      writes rows to a `bank_page` account.
-- [ ] A Capital One CSV covering a pasted cycle inserts 0 rows; covering an uncovered month it
-      inserts that month.
-- [ ] The cutover dry run lists overlap misses, SimpleFIN holds and the link; apply is audited;
-      Ready to Assign unchanged by the cutover itself.
-- [ ] Integration tests: a second user fails to read, change or delete the first user's history
+- [x] A Capital One paste with SimpleFIN unlinked succeeds, sets the headline, and inserts
+      YouTube $16.95 dated purchase Sep 22 / posted Sep 22. _Test: "inserts a posted charge
+      with its purchase and posted dates, and sets the headline". In production the YouTube row
+      itself came from the cutover's `--insert-missed` (Changes row 11); Lee's pastes succeed
+      since 2026-09-24._
+- [x] Replaying a Kim's-style capture turns the $50 hold into the $60 posted row: transaction
+      date 9/19, posted date 9/21, envelope kept, one row. _Test: "posts a tipped hold in place"._
+- [x] Re-pasting the same page inserts nothing. A paste after the statement closes inserts the
+      closed statement's unheld rows once. _Tests: "inserts nothing on a re-paste…", and "stores
+      the statement descriptor… still knows the row once its cycle closes"._
+- [x] A Chase paste is refused, and so is a paste for any account not `bank_page`. A sync never
+      writes rows to a `bank_page` account. _Tests: "refuses a paste for an account whose history
+      comes from anywhere else"; syncPlan "writes nothing for a linked account whose history comes
+      from the bank page". Capital One's link is also removed._
+- [x] A Capital One CSV covering a pasted cycle inserts 0 rows; covering an uncovered month it
+      inserts that month. _Tests in `import.integration.test.ts`; the paste day itself is never
+      covered (Changes row 8)._
+- [x] The cutover dry run lists overlap misses, SimpleFIN holds and the link; apply is audited;
+      Ready to Assign unchanged by the cutover itself, except that unpaired holds of the losing
+      source stop counting (they are listed). _Test: "leaves every envelope where it was and moves
+      Ready to Assign only by the unpaired holds". Production had none unpaired._
+- [x] Integration tests: a second user fails to read, change or delete the first user's history
       source, coverage rows, and headline. No React component tests. `npm test` with no database
-      skip warning. `npm run smoke` after touching `src/app/**`.
+      skip warning. `npm run smoke` passed 2026-09-24 (all 63 routes) after the Accounts page change.
 
 ## Changes from original plan
 
@@ -207,7 +216,21 @@ Capital One applied on production 2026-09-24 with `--insert-missed`: since 2026-
 removed, no holds to retire, YouTube −$16.95 (posted Sep 22) inserted as a page row. Chase's dry run the same day found no leftover page holds (0 retired, 0
 unpaired), so it was not applied: there was nothing to write.
 
-## Task 7: Verify, freeze, update roadmap
+## Task 7: Verify, freeze, update roadmap **done**
 
 Acceptance criteria above. Update memory `bank-feed-workflow`. Freeze with the standards SHA. Log
 on the roadmap's finance section.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Capture day on the server's clock.** `capturedRanges` takes the paste day with
+  `localDateKey(capturedAt)`, which is the server's timezone. On a UTC host an evening paste in
+  Eastern time lands on the next day and covers the real paste day. Verify the deployed `TZ`, or
+  carry the browser's local day in the capture.
+- **A reminder for a stale page source.** The removed "Paste fresh snapshot" warning answered the
+  old timestamp rule. A bank-page account that has not been pasted in some days has no nudge now.
+- **`loadAccountSourceStamps`** has no production reader left; only source-state tests use it.
+- **Page-to-feed pairing could use the descriptor.** Page rows now carry the statement wording, which
+  would match CSV/SimpleFIN rows far better than the display name does.
+- **Chase to the page**, if SimpleFIN's Chase holds prove too slow for Amazon orders:
+  `history-source-cutover.ts --to bank_page` (Changes row 12).

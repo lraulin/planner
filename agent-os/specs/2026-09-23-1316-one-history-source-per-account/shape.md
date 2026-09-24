@@ -1,6 +1,6 @@
 # One history source per account — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-24)
 
 ## Scope
 
