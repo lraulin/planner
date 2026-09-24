@@ -46,8 +46,9 @@ New `finance_accounts.history_source` (`simplefin` | `bank_page` | `files`) with
 `history_source_since date`. It replaces the implicit "has a SimpleFIN link" test at
 `bankSnapshotApply.ts:440-457`, so `feedCovered` becomes `history_source !== 'bank_page'`. A paste
 is accepted only when the account's source is `bank_page`; otherwise it refuses with a message
-naming the source. That includes Chase: the Chase paste path stops writing anything, and
-`scripts/chase-pending.user.js` is removed (Lee uninstalls it from Tampermonkey). A sync skips
+naming the source. That includes Chase: while it is `simplefin` its paste is refused. The Chase
+userscript and parser path **stay** (see Changes row 12), so moving Chase to the page later is a
+cutover run, not a code change. A sync skips
 accounts whose source is not `simplefin`, even if a link remains.
 
 ### D2: The headline balance belongs to the account, not the SimpleFIN link
@@ -154,6 +155,7 @@ than duplicated.
 | 9   | A sync ignores the provider account behind any link whose account is not `simplefin`: no rows, no balance, not counted as unlinked.                                                                                                                                                                       | Task 3 shipped before the cutover, so Capital One pastes were refused in production while its link still made it `simplefin`. Flipping it by hand before sync obeyed the source would have let SimpleFIN keep writing beside the page.                |
 | 10  | The cutover's dry run is the apply transaction rolled back, and "page rows SimpleFIN missed" comes from the latest stored capture (audit evidence) run through the snapshot planner's `postedBeforeSourceStart`. Unpaired losing-source holds are kept and listed, not deleted.                           | The receipt must be exactly what `--apply` does; the capture is the only record of what the page showed; an unpaired hold may carry an envelope Lee wants to move by hand.                                                                            |
 | 11  | `--insert-missed` lets the apply insert the listed page rows as page-authored rows, in the cutover's transaction and audit event (amends D5's "nothing is inserted automatically": still never automatic, but one flag after Lee reads the receipt).                                                      | The production dry run (2026-09-24) listed YouTube −$16.95 posted Sep 22: SimpleFIN's last posting day was one it had not finished delivering, so nothing would ever author that row.                                                                 |
+| 12  | The Chase userscript and paste path are kept, not removed (supersedes D1's removal and Task 4's "retire the Chase script"). Chase's paste is still refused while it is `simplefin`.                                                                                                                       | Lee (2026-09-24): the Chase card is mostly Amazon, and he wants its pending charges in the budget; if SimpleFIN's Chase holds prove inadequate, `history-source-cutover.ts --to bank_page` moves Chase to the page with no code change.               |
 
 > While this spec is **active**, when we make a material change to requirements, design, or scope
 > (including from feedback on what was implemented), update the relevant sections and append to
@@ -183,8 +185,8 @@ statement once); integration in `bankSnapshotApply.integration.test.ts`.
 ## Task 4: Userscript and parser: statement descriptor
 
 `capitalone-pending.user.js` captures "Appears on statement as"; `bankSnapshot.ts` accepts an
-optional row field; apply writes `description`/`bank_display_name` per D4. Retire the Chase script
-and its paste UI.
+optional row field; apply writes `description`/`bank_display_name` per D4. The Chase script and
+paste path stay (Changes row 12).
 
 ## Task 5: Sync and file imports obey the source **done**
 
