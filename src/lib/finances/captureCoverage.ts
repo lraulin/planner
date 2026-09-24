@@ -33,7 +33,11 @@ export function statementStart(closedOn: string, storedStart: string | null): st
 
 /**
  * The ranges one complete paste read: the closed statement when the capture carried it, and
- * the current cycle up to the capture day.
+ * the current cycle up to the day **before** the capture.
+ *
+ * The capture day itself is never covered: a charge can still post later that day, and a
+ * statement file is the backstop for it when no later paste comes. A closed statement is
+ * covered whole, since nothing more can post to it.
  *
  * The current cycle starts the day after the closed statement ended. Without one, the
  * earliest posted row stands in: the page is complete, so no charge can sit before it.
@@ -61,8 +65,9 @@ export function capturedRanges(
     const days = snapshot.posted.map(postingDay).sort();
     cycleStart = days[0] ?? capturedDay;
   }
-  if (cycleStart <= capturedDay)
-    ranges.push({ fromDay: cycleStart, throughDay: capturedDay });
+  const lastCompleteDay = shiftDateKey(capturedDay, -1);
+  if (cycleStart <= lastCompleteDay)
+    ranges.push({ fromDay: cycleStart, throughDay: lastCompleteDay });
   return ranges;
 }
 

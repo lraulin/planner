@@ -1098,7 +1098,7 @@ describeDb("a bank-page account with no SimpleFIN link", () => {
     expect(await coverageOf(owner)).toEqual(
       expect.arrayContaining([
         { accountId, fromDay: "2026-08-15", throughDay: "2026-09-14" },
-        { accountId, fromDay: "2026-09-15", throughDay: "2026-09-23" },
+        { accountId, fromDay: "2026-09-15", throughDay: "2026-09-22" },
       ]),
     );
 

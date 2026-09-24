@@ -37,7 +37,7 @@ describe("capturedRanges", () => {
       ),
     ).toEqual([
       { fromDay: "2026-08-15", throughDay: "2026-09-14" },
-      { fromDay: "2026-09-15", throughDay: "2026-09-23" },
+      { fromDay: "2026-09-15", throughDay: "2026-09-22" },
     ]);
   });
 
@@ -51,7 +51,29 @@ describe("capturedRanges", () => {
         },
         null,
       ),
-    ).toEqual([{ fromDay: "2026-09-16", throughDay: "2026-09-23" }]);
+    ).toEqual([{ fromDay: "2026-09-16", throughDay: "2026-09-22" }]);
+  });
+
+  it("leaves the capture day open, since more can post to it after the paste", () => {
+    const morning = new Date(2026, 8, 23, 8);
+    const ranges = capturedRanges(
+      {
+        capturedAt: morning,
+        posted: [row("2026-09-23")],
+        recentStatementClosedOn: null,
+      },
+      null,
+    );
+    expect(isCovered("2026-09-23", ranges)).toBe(false);
+  });
+
+  it("covers a closed statement whole even when it closed yesterday", () => {
+    expect(
+      capturedRanges(
+        { capturedAt, posted: [], recentStatementClosedOn: "2026-09-22" },
+        null,
+      ),
+    ).toEqual([{ fromDay: "2026-08-23", throughDay: "2026-09-22" }]);
   });
 });
 
