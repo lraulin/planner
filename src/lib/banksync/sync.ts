@@ -106,10 +106,18 @@ async function syncOne(
       return { state: "not_linked", connectionId: connection.id, label };
     }
 
-    const accountIdByExternal = new Map(
-      links.map((link) => [link.externalAccountId, link.accountId]),
+    // A link can outlive its account's switch to another history source; the feed then
+    // writes neither rows nor a balance for it (one-history-source-per-account D1).
+    const fed = links.filter((link) => link.historySource === "simplefin");
+    const otherSourceExternalIds = new Set(
+      links
+        .filter((link) => link.historySource !== "simplefin")
+        .map((link) => link.externalAccountId),
     );
-    const accountIds = links.map((link) => link.accountId);
+    const accountIdByExternal = new Map(
+      fed.map((link) => [link.externalAccountId, link.accountId]),
+    );
+    const accountIds = fed.map((link) => link.accountId);
 
     // Where to resume, and what to weigh the result against. The relationship between the
     // three dates is subtle enough to live in a tested function rather than here.
@@ -134,6 +142,7 @@ async function syncOne(
     const plan = planSync({
       accounts: set.accounts ?? [],
       accountIdByExternal,
+      otherSourceExternalIds,
       existingByAccount: await existingRowsInWindow(
         userId,
         accountIds,
@@ -163,7 +172,7 @@ async function syncOne(
 
     // Balances come from the same response — no second call, and nothing metered.
     let balancesUpdated = 0;
-    const linkByExternal = new Map(links.map((link) => [link.externalAccountId, link]));
+    const linkByExternal = new Map(fed.map((link) => [link.externalAccountId, link]));
     for (const account of set.accounts ?? []) {
       const link = linkByExternal.get(account.id);
       if (!link) continue;

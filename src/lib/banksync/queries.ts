@@ -91,6 +91,8 @@ export type BankLinkRow = {
   externalAccountId: string;
   accountId: string;
   institution: string;
+  /** The linked account's history source; the feed writes only to `simplefin` ones. */
+  historySource: string;
   balanceCents: number | null;
   availableCents: number | null;
   balanceAsOf: Date | null;
@@ -108,6 +110,7 @@ export async function listLinks(
       externalAccountId: bankAccountLinks.externalAccountId,
       accountId: bankAccountLinks.accountId,
       institution: bankAccountLinks.institution,
+      historySource: financeAccounts.historySource,
       balanceCents: financeAccounts.balanceCents,
       availableCents: financeAccounts.availableCents,
       balanceAsOf: financeAccounts.balanceAsOf,

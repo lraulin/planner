@@ -452,6 +452,7 @@ describeDb("a vanished hold is carried or kept, never dropped (D5)", () => {
     const plan = planSync({
       accounts: [account(accountId, transactions)],
       accountIdByExternal: new Map([["sfin-1", accountId]]),
+      otherSourceExternalIds: new Set(),
       existingByAccount: await existingRowsInWindow(
         userId,
         [accountId],
@@ -969,6 +970,7 @@ describeDb("a sync catching up to the bank page's posted rows", () => {
     const plan = planSync({
       accounts: [{ id: "sfin-card", name: "Capital One", balance: "0", transactions }],
       accountIdByExternal: new Map([["sfin-card", accountId]]),
+      otherSourceExternalIds: new Set(),
       existingByAccount: await existingRowsInWindow(
         userId,
         [accountId],

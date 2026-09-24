@@ -67,6 +67,7 @@ it("puts a connection failure only beside its linked account, and stale captures
       externalAccountId: "remote",
       accountId: "a",
       institution: "Bank",
+      historySource: "simplefin",
       balanceCents: 10000,
       availableCents: null,
       balanceAsOf: new Date("2026-09-05T12:00:00Z"),

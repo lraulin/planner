@@ -123,6 +123,12 @@ export type SyncPlanInput = {
   accounts: readonly SimpleFinAccount[];
   /** Provider account id → `finance_accounts.id`, for confirmed links only. */
   accountIdByExternal: ReadonlyMap<string, string>;
+  /**
+   * Provider accounts linked to a register account that takes its history from somewhere
+   * else (the bank page, or files). Their rows are ignored, and they are not "unlinked":
+   * the link is there, the feed is just not the author (one-history-source-per-account D1).
+   */
+  otherSourceExternalIds: ReadonlySet<string>;
   /** Existing rows per register account, covering at least the fetched window. */
   existingByAccount: ReadonlyMap<string, readonly ExistingRow[]>;
   /**
@@ -143,7 +149,13 @@ function stateOf(row: ExistingRow): CarriedState {
 }
 
 export function planSync(input: SyncPlanInput): SyncPlan {
-  const { accounts, accountIdByExternal, existingByAccount, windowStart } = input;
+  const {
+    accounts,
+    accountIdByExternal,
+    otherSourceExternalIds,
+    existingByAccount,
+    windowStart,
+  } = input;
 
   const inserts: BankInsert[] = [];
   const updates: BankUpdate[] = [];
@@ -155,6 +167,7 @@ export function planSync(input: SyncPlanInput): SyncPlan {
   const seenByAccount = new Map<string, Set<string>>();
 
   for (const account of accounts) {
+    if (otherSourceExternalIds.has(account.id)) continue;
     const accountId = accountIdByExternal.get(account.id);
     if (!accountId) {
       // The provider returns every account on the connection, including ones the user never

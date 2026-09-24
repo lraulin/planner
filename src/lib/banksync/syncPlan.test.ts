@@ -45,6 +45,7 @@ function input(over: Partial<SyncPlanInput> = {}): SyncPlanInput {
       [EXT_CHECKING, ACCT_CHECKING],
       [EXT_CARD, ACCT_CARD],
     ]),
+    otherSourceExternalIds: new Set(),
     existingByAccount: new Map(),
     windowStart: "2026-08-01",
     ...over,
@@ -82,6 +83,27 @@ describe("planSync — unlinked accounts", () => {
     );
     expect(plan.inserts).toHaveLength(0);
     expect(plan.unlinkedAccountIds).toEqual(["sfin-savings"]);
+  });
+});
+
+describe("planSync — accounts sourced elsewhere", () => {
+  it("writes nothing for a linked account whose history comes from the bank page", () => {
+    const plan = planSync(
+      input({
+        accounts: [
+          account(EXT_CARD, [txn({ id: "t1" }), txn({ id: "t2", pending: true })]),
+        ],
+        existingByAccount: new Map([
+          [ACCT_CARD, [existing({ externalId: "hold-1", pending: true })]],
+        ]),
+        otherSourceExternalIds: new Set([EXT_CARD]),
+      }),
+    );
+    expect(plan.inserts).toEqual([]);
+    expect(plan.updates).toEqual([]);
+    expect(plan.unlisted).toEqual([]);
+    expect(plan.deletes).toEqual([]);
+    expect(plan.unlinkedAccountIds).toEqual([]);
   });
 });
 
