@@ -5,6 +5,7 @@ import { db } from "@/db";
 import {
   financeAccounts,
   financeBudgetCategories,
+  financeCaptureCoverage,
   financeTransactions,
   users,
 } from "@/db/schema";
@@ -1345,5 +1346,71 @@ describeDb("CSV import onto a lagged SimpleFIN headline", () => {
 
     expect((await listAccounts(owner))[0].balanceCents).toBe(1_625_746);
     expect((await listAccounts(intruder))[0].id).not.toBe(account.id);
+  });
+});
+
+describeDb("statement files for a bank-page account", () => {
+  function caponeCsv(rows: string[]): ImportFile {
+    return {
+      name: `${crypto.randomUUID()}_transaction_download.csv`,
+      text: [CAPONE_CARD_HEADER, ...rows, ""].join("\n"),
+    };
+  }
+  const seedRow = "2026-06-01,2026-06-02,3448,SEED,Dining,1.00,";
+
+  /** Creates the card from a file, then hands it to the bank page as the cutover would. */
+  async function pageCard(userId: string, covered: boolean): Promise<string> {
+    await importFinanceCsvFiles({ userId, files: [caponeCsv([seedRow])] });
+    const [card] = (await listAccounts(userId)).filter((a) => a.kind === "credit_card");
+    await db
+      .update(financeAccounts)
+      .set({ historySource: "bank_page", historySourceSince: "2026-07-31" })
+      .where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, card.id)));
+    if (covered) {
+      await db.insert(financeCaptureCoverage).values({
+        userId,
+        accountId: card.id,
+        fromDay: "2026-08-15",
+        throughDay: "2026-09-14",
+      });
+    }
+    return card.id;
+  }
+
+  const file = caponeCsv([
+    "2026-07-20,2026-07-21,3448,BEFORE CUTOVER,Dining,2.00,",
+    "2026-08-05,2026-08-05,3448,UNPASTED,Dining,3.00,",
+    "2026-08-20,2026-08-20,3448,PASTED,Dining,4.00,",
+  ]);
+
+  it("inserts only rows after the cutover on days no paste read", async () => {
+    const owner = await makeUser();
+    await pageCard(owner, true);
+
+    const result = await importFinanceCsvFiles({ userId: owner, files: [file] });
+
+    expect(result).toMatchObject({ created: 1, skipped: 2 });
+    const descriptions = (await listTransactions(owner)).map((t) => t.description);
+    expect(descriptions).toContain("UNPASTED");
+    expect(descriptions).not.toContain("PASTED");
+    expect(descriptions).not.toContain("BEFORE CUTOVER");
+  });
+
+  it("gates each user by their own pastes, never another user's", async () => {
+    const owner = await makeUser();
+    const intruder = await makeUser();
+    await pageCard(owner, true);
+    await pageCard(intruder, false);
+
+    const result = await importFinanceCsvFiles({ userId: intruder, files: [file] });
+
+    // Only the cutover withholds for the intruder; the owner's pasted range does not.
+    expect(result).toMatchObject({ created: 2, skipped: 1 });
+    expect((await listTransactions(intruder)).map((t) => t.description)).toContain(
+      "PASTED",
+    );
+    expect((await listTransactions(owner)).map((t) => t.description)).not.toContain(
+      "PASTED",
+    );
   });
 });

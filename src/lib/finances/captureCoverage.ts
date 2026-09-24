@@ -101,3 +101,26 @@ export function planCoverage(
 export function isCovered(day: string, ranges: readonly CoverageRange[]): boolean {
   return ranges.some((range) => range.fromDay <= day && day <= range.throughDay);
 }
+
+/**
+ * The statement-file rows that may be inserted into an account, given who authors its history
+ * (D7). A bank-page account takes a file row only for a day no paste read completely and after
+ * its cutover — before that the previous source already holds the day. Any other account takes
+ * every row, and the ordinary duplicate matching decides.
+ */
+export function rowsAFileMayAuthor<
+  T extends { postedDate: string | null; transactionDate: string },
+>(
+  rows: readonly T[],
+  account: { historySource: string; historySourceSince: string | null },
+  covered: readonly CoverageRange[],
+): { keep: T[]; withheld: number } {
+  if (account.historySource !== "bank_page") return { keep: [...rows], withheld: 0 };
+  const keep = rows.filter((row) => {
+    const day = postingDay(row);
+    if (account.historySourceSince !== null && day <= account.historySourceSince)
+      return false;
+    return !isCovered(day, covered);
+  });
+  return { keep, withheld: rows.length - keep.length };
+}

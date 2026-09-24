@@ -3,6 +3,7 @@ import { and, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
+  financeCaptureCoverage,
   financeStatementRates,
   financeStatements,
   financeTransactions,
@@ -32,6 +33,7 @@ import {
   looksLikeLegacyPlannerPending,
 } from "./bankSnapshot";
 import { applyBankBrowserSnapshot } from "./bankSnapshotApply";
+import { rowsAFileMayAuthor } from "./captureCoverage";
 import {
   looksLikePaypalStatement,
   parsePaypalStatement,
@@ -424,6 +426,42 @@ async function existingOnAccount(
   );
 }
 
+/**
+ * The file rows this account accepts from a statement file, given its history source (D7). A
+ * bank-page account's pasted days and pre-cutover days are withheld.
+ */
+async function authorableFileRows<
+  T extends { postedDate: string | null; transactionDate: string },
+>(
+  tx: Executor,
+  userId: string,
+  accountId: string,
+  rows: readonly T[],
+): Promise<{ keep: T[]; withheld: number }> {
+  const [account] = await tx
+    .select({
+      historySource: financeAccounts.historySource,
+      historySourceSince: financeAccounts.historySourceSince,
+    })
+    .from(financeAccounts)
+    .where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, accountId)));
+  if (!account) throw new Error("Could not read the account for this import.");
+  if (account.historySource !== "bank_page") return { keep: [...rows], withheld: 0 };
+  const covered = await tx
+    .select({
+      fromDay: financeCaptureCoverage.fromDay,
+      throughDay: financeCaptureCoverage.throughDay,
+    })
+    .from(financeCaptureCoverage)
+    .where(
+      and(
+        eq(financeCaptureCoverage.userId, userId),
+        eq(financeCaptureCoverage.accountId, accountId),
+      ),
+    );
+  return rowsAFileMayAuthor(rows, account, covered);
+}
+
 async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
   let text = file.text ?? "";
   if (
@@ -604,16 +642,23 @@ export async function importFinanceCsvFiles({
           snapshots,
         );
 
-        const already = await existingOnAccount(
+        const authorable = await authorableFileRows(
           tx,
           userId,
           resolved.id,
           account.transactions,
         );
-        const { keep, skipCount } = selectNewAgainstMixed(
-          already,
-          account.transactions,
+        const already = await existingOnAccount(
+          tx,
+          userId,
+          resolved.id,
+          authorable.keep,
         );
+        const { keep, skipCount: duplicateCount } = selectNewAgainstMixed(
+          already,
+          authorable.keep,
+        );
+        const skipCount = duplicateCount + authorable.withheld;
         const ids = fingerprintAll(resolved.id, keep);
 
         const values = keep.map((transaction, i) => ({
@@ -730,6 +775,9 @@ export async function importFinanceCsvFiles({
             `${file.name}: imported ${inserted} transaction${inserted === 1 ? "" : "s"}, ` +
             `${snapshotCounts.created} statement${snapshotCounts.created === 1 ? "" : "s"}; ` +
             `skipped ${skipCount + (values.length - inserted) + snapshotCounts.skipped}` +
+            (authorable.withheld > 0
+              ? `; withheld ${authorable.withheld} on days the bank page or the source before it already holds`
+              : "") +
             (handover.retired > 0
               ? `; retired ${handover.retired} browser row${handover.retired === 1 ? "" : "s"} this file now covers.`
               : "."),

@@ -3,6 +3,7 @@ import {
   capturedRanges,
   isCovered,
   planCoverage,
+  rowsAFileMayAuthor,
   statementStart,
 } from "./captureCoverage";
 
@@ -105,5 +106,42 @@ describe("isCovered", () => {
     expect(isCovered("2026-09-15", ranges)).toBe(true);
     expect(isCovered("2026-09-23", ranges)).toBe(true);
     expect(isCovered("2026-09-14", ranges)).toBe(false);
+  });
+});
+
+describe("rowsAFileMayAuthor", () => {
+  const pasted = [{ fromDay: "2026-08-15", throughDay: "2026-09-14" }];
+  const page = { historySource: "bank_page", historySourceSince: "2026-07-31" };
+
+  it("takes only the days no paste read and that fall after the cutover", () => {
+    const rows = [
+      row("2026-07-20"),
+      row("2026-08-05"),
+      row("2026-08-20"),
+      row("2026-09-16"),
+    ];
+    expect(rowsAFileMayAuthor(rows, page, pasted)).toEqual({
+      keep: [row("2026-08-05"), row("2026-09-16")],
+      withheld: 2,
+    });
+  });
+
+  it("judges a row by the day it posted, which is what a paste's range is measured in", () => {
+    const madeBeforePostedInside = {
+      transactionDate: "2026-08-13",
+      postedDate: "2026-08-15",
+    };
+    expect(rowsAFileMayAuthor([madeBeforePostedInside], page, pasted).withheld).toBe(1);
+  });
+
+  it("leaves an account the feed or files author untouched", () => {
+    const rows = [row("2026-08-20")];
+    expect(
+      rowsAFileMayAuthor(
+        rows,
+        { historySource: "simplefin", historySourceSince: null },
+        pasted,
+      ),
+    ).toEqual({ keep: rows, withheld: 0 });
   });
 });

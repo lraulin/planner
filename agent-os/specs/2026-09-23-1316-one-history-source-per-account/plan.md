@@ -102,7 +102,7 @@ pasting at least once per statement cycle is complete on its own.
 ### D7: Statement files fill only periods no paste covered
 
 Each paste records the day ranges it read completely in a new `finance_capture_coverage` table
-(user, account, from, through, audit event): the current cycle, plus the closed statement when
+(user, account, from, through, audit event): the current cycle through the day before the paste, plus the closed statement when
 `completeness.recentPosted` holds. Derive a statement's start from Capital One's fixed monthly
 close day, checked against stored statements. For a `bank_page` account, a CSV/PDF import inserts
 a row only when its date is outside every covered range and after `history_source_since`. A PDF
@@ -150,6 +150,8 @@ than duplicated.
 | 5   | The planner takes `postedAfter` (from `history_source_since`) and reports `postedBeforeSourceStart`; a paste says how many rows it left to the previous source.                                                                                                                                           | D3/D5 needed the cutoff to be visible in the receipt, or a missed row looks like a lost one.                                                                                                                                                          |
 | 6   | A hold the closed statement lists (or that carries to a closed-statement row) is posted in place on a page-sourced account, instead of marked posted-at-bank.                                                                                                                                             | D6: for this account the closed statement is history, so the hold posts and keeps its envelope.                                                                                                                                                       |
 | 7   | Coverage ranges: the current cycle starts the day after the closed statement (else the earliest posted row) and runs to the capture day; a closed statement starts at the stored statement's start, else one month before its close day plus a day. A later paste extends a range rather than adding one. | D7 left the derivation open.                                                                                                                                                                                                                          |
+| 8   | The current cycle's coverage ends the day **before** the capture, not on it (supersedes row 7's "runs to the capture day").                                                                                                                                                                               | Lee (2026-09-24): an 8 am paste cannot vouch for a charge that posts at 3 pm, and a covered day refuses the statement row that is the backstop when no later paste comes.                                                                             |
+| 9   | A sync ignores the provider account behind any link whose account is not `simplefin`: no rows, no balance, not counted as unlinked.                                                                                                                                                                       | Task 3 shipped before the cutover, so Capital One pastes were refused in production while its link still made it `simplefin`. Flipping it by hand before sync obeyed the source would have let SimpleFIN keep writing beside the page.                |
 
 > While this spec is **active**, when we make a material change to requirements, design, or scope
 > (including from feedback on what was implemented), update the relevant sections and append to
@@ -182,7 +184,7 @@ statement once); integration in `bankSnapshotApply.integration.test.ts`.
 optional row field; apply writes `description`/`bank_display_name` per D4. Retire the Chase script
 and its paste UI.
 
-## Task 5: Sync and file imports obey the source
+## Task 5: Sync and file imports obey the source **done**
 
 `syncPlan`/`sync.ts` skip non-`simplefin` accounts. `import.ts` applies the D7 coverage gate for
 `bank_page` accounts. Tests for both.
