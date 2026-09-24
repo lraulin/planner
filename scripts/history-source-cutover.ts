@@ -2,9 +2,9 @@
  * Hand an account's history to one source
  * (`agent-os/specs/2026-09-23-1316-one-history-source-per-account/` D5).
  *
- *   npx tsx --env-file=.env.local scripts/history-source-cutover.ts --user <uuid>                                 # list accounts
- *   npx tsx --env-file=.env.local scripts/history-source-cutover.ts --user <uuid> --account <uuid> --to bank_page  # dry run
- *   npx tsx --env-file=.env.local scripts/history-source-cutover.ts --user <uuid> --account <uuid> --to bank_page --apply
+ *   npx tsx --env-file=.env.local scripts/history-source-cutover.ts --user <uuid|email>                                 # list accounts
+ *   npx tsx --env-file=.env.local scripts/history-source-cutover.ts --user <uuid|email> --account <uuid> --to bank_page  # dry run
+ *   npx tsx --env-file=.env.local scripts/history-source-cutover.ts --user <uuid|email> --account <uuid> --to bank_page --apply
  *
  * `--to bank_page` is Capital One: the page authors history after SimpleFIN's last posted day,
  * SimpleFIN's holds retire onto the page's, and the link is removed. `--to simplefin` is
@@ -16,7 +16,7 @@
 
 import { and, eq } from "drizzle-orm";
 import { db } from "../src/db";
-import { bankAccountLinks, financeAccounts } from "../src/db/schema";
+import { bankAccountLinks, financeAccounts, users } from "../src/db/schema";
 import { describeDatabaseUrl } from "../src/lib/db/target";
 import { applyHistorySourceCutover } from "../src/lib/finances/historySourceCutover";
 
@@ -54,12 +54,21 @@ async function listAccounts(userId: string): Promise<void> {
   }
 }
 
+async function userIdByEmail(email: string): Promise<string | null> {
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, email));
+  return user?.id ?? null;
+}
+
 async function main(): Promise<number> {
   console.log(`Database: ${describeDatabaseUrl(process.env.DATABASE_URL ?? "")}`);
-  const userId = argValue("--user");
+  const userArg = argValue("--user");
+  const userId = userArg?.includes("@") ? await userIdByEmail(userArg) : userArg;
   if (!userId) {
     console.error(
-      "Usage: tsx scripts/history-source-cutover.ts --user <uuid> [--account <uuid> --to bank_page|simplefin] [--apply]",
+      "Usage: tsx scripts/history-source-cutover.ts --user <uuid|email> [--account <uuid> --to bank_page|simplefin] [--apply]",
     );
     return 2;
   }
