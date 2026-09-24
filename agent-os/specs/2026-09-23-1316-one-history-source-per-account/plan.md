@@ -191,13 +191,14 @@ and its paste UI.
 `syncPlan`/`sync.ts` skip non-`simplefin` accounts. `import.ts` applies the D7 coverage gate for
 `bank_page` accounts. Tests for both.
 
-## Task 6: Cutover script **Capital One applied 2026-09-24; Chase pending**
+## Task 6: Cutover script **done**
 
 `scripts/history-source-cutover.ts`: dry-run receipt, then `--apply` (audited) for Capital One
 and Chase per D5. Run the dry run against production with Lee, then apply.
 
 Capital One applied on production 2026-09-24 with `--insert-missed`: since 2026-09-22, one link
-removed, no holds to retire, YouTube −$16.95 (posted Sep 22) inserted as a page row.
+removed, no holds to retire, YouTube −$16.95 (posted Sep 22) inserted as a page row. Chase's dry run the same day found no leftover page holds (0 retired, 0
+unpaired), so it was not applied: there was nothing to write.
 
 ## Task 7: Verify, freeze, update roadmap
 
