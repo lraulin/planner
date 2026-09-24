@@ -10,7 +10,7 @@
  * cutover day and that nothing stores, as the page would have written them.
  *
  * `--to bank_page` is Capital One: the page authors history after SimpleFIN's last posted day,
- * SimpleFIN's holds retire onto the page's, and the link is removed. `--to simplefin` is
+ * SimpleFIN's holds retire onto the page's, and the link stays (the sync ignores it). `--to simplefin` is
  * Chase: it stays on the feed and sheds the page's leftover holds.
  *
  * Prefix `DATABASE_URL="$NEON_URL"` for production (it wins over `.env.local`); the banner names
@@ -97,7 +97,6 @@ async function main(): Promise<number> {
     console.log(
       `  Page authors history posted after: ${receipt.since ?? "(everything)"}`,
     );
-    console.log(`  SimpleFIN links removed: ${receipt.unlinked}`);
   }
   console.log(
     `  Holds retired onto the kept source: ${receipt.retired} (${receipt.carried} carried an envelope, note or split)`,

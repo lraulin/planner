@@ -9,12 +9,7 @@
 
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  bankAccountLinks,
-  financeAccounts,
-  financeAuditEvents,
-  financeTransactions,
-} from "@/db/schema";
+import { financeAccounts, financeAuditEvents, financeTransactions } from "@/db/schema";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import type { FinanceAuditChange } from "./audit/types";
 import { writeFinanceAuditEvent } from "./audit/writes";
@@ -68,7 +63,6 @@ export type HistorySourceCutoverReceipt = {
   latestCaptureAt: Date | null;
   /** How many of those were inserted as page rows (`insertMissed`). */
   insertedMissed: number;
-  unlinked: number;
   warnings: string[];
 };
 
@@ -204,7 +198,6 @@ async function cutover(
   let latestCaptureAt: Date | null = null;
   let insertedMissed = 0;
   const insertedChanges: FinanceAuditChange[] = [];
-  let unlinked = 0;
   if (to === "bank_page" && account.historySource !== "bank_page") {
     since = await lastSimpleFinPostingDay(tx, userId, account.id);
     if (since === null)
@@ -255,16 +248,9 @@ async function cutover(
       .where(
         and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, account.id)),
       );
-    const links = await tx
-      .delete(bankAccountLinks)
-      .where(
-        and(
-          eq(bankAccountLinks.userId, userId),
-          eq(bankAccountLinks.accountId, account.id),
-        ),
-      )
-      .returning({ id: bankAccountLinks.id });
-    unlinked = links.length;
+    // The link stays. The sync ignores a linked account whose source is not SimpleFIN, and
+    // counts a provider account with no link as unmatched: deleting it left a red "Match
+    // accounts" line on Accounts that only re-linking cleared.
   } else if (to === "simplefin" && account.historySource !== "simplefin") {
     throw new Error(
       `${account.name} takes its history from ${account.historySource}; link it to SimpleFIN instead.`,
@@ -309,8 +295,7 @@ async function cutover(
       `${account.name}: ${account.historySource} → ${to}` +
       (since ? ` from ${since}` : "") +
       `; retired ${handover.retired} hold${handover.retired === 1 ? "" : "s"}, ` +
-      `${unpaired.length} unpaired, ${missed.length} page row${missed.length === 1 ? "" : "s"} the previous source missed (${insertedMissed} inserted), ` +
-      `${unlinked} link${unlinked === 1 ? "" : "s"} removed.`,
+      `${unpaired.length} unpaired, ${missed.length} page row${missed.length === 1 ? "" : "s"} the previous source missed (${insertedMissed} inserted).`,
     scope,
     warnings,
     beforeCheckpoint,
@@ -347,7 +332,6 @@ async function cutover(
     missedByPreviousSource: missed,
     latestCaptureAt,
     insertedMissed,
-    unlinked,
     warnings,
   };
 }

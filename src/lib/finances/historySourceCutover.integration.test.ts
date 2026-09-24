@@ -176,13 +176,14 @@ describeDb("history source cutover", () => {
       since: "2026-09-20",
       retired: 1,
       carried: 1,
-      unlinked: 1,
     });
     expect(receipt.unpaired.map((row) => row.description)).toEqual(["MYSTERY HOLD"]);
     expect(await accountOf(accountId)).toEqual({
       historySource: "bank_page",
       since: "2026-09-20",
-      links: 0,
+      // Kept: a linked account off SimpleFIN is ignored by the sync; an unlinked provider
+      // account is reported as unmatched forever.
+      links: 1,
     });
 
     const rows = await rowsOf(owner, accountId);
@@ -252,7 +253,7 @@ describeDb("history source cutover", () => {
       dryRun: true,
     });
 
-    expect(receipt).toMatchObject({ since: "2026-09-20", retired: 1, unlinked: 1 });
+    expect(receipt).toMatchObject({ since: "2026-09-20", retired: 1 });
     expect(await accountOf(accountId)).toEqual({
       historySource: "simplefin",
       since: null,
@@ -382,7 +383,6 @@ describeDb("history source cutover", () => {
     expect(receipt).toMatchObject({
       retired: 1,
       carried: 1,
-      unlinked: 0,
       unpaired: [],
     });
     expect(await accountOf(accountId)).toMatchObject({
