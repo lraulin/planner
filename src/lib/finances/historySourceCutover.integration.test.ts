@@ -289,6 +289,23 @@ describeDb("history source cutover", () => {
     expect(receipt.missedByPreviousSource.map((r) => r.description)).toEqual([
       "Missed By SimpleFIN",
     ]);
+    expect(receipt.insertedMissed).toBe(0);
+
+    const applied = await applyHistorySourceCutover(owner, accountId, "bank_page", {
+      dryRun: false,
+      insertMissed: true,
+    });
+    expect(applied.insertedMissed).toBe(1);
+    const inserted = (await rowsOf(owner, accountId)).filter(
+      (r) => r.description === "Missed By SimpleFIN",
+    );
+    expect(inserted).toEqual([
+      {
+        description: "Missed By SimpleFIN",
+        externalSource: "scrape:capitalone",
+        notes: "",
+      },
+    ]);
   });
 
   it("keeps a feed account on SimpleFIN and retires the page's leftover holds onto it", async () => {

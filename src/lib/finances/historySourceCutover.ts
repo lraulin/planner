@@ -16,17 +16,20 @@ import {
   financeTransactions,
 } from "@/db/schema";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
+import type { FinanceAuditChange } from "./audit/types";
 import { writeFinanceAuditEvent } from "./audit/writes";
 import {
   CAPITAL_ONE_SCRAPE_FEED,
   CHASE_SCRAPE_FEED,
   parseBankBrowserSnapshot,
+  type ParsedBankBrowserSnapshot,
   type ParsedBankSnapshotRow,
 } from "./bankSnapshot";
 import {
   planBankSnapshotReconciliation,
   type ExistingBankSnapshotRow,
 } from "./bankSnapshotReconcile";
+import { insertSnapshotRow, reclassifyInsideTransaction } from "./bankSnapshotApply";
 import type { FinanceExecutor } from "./dbExecutor";
 import { retireRowsOntoOtherSources } from "./feedHandoverWrite";
 import { numericStringToCents } from "./money";
@@ -60,6 +63,8 @@ export type HistorySourceCutoverReceipt = {
   missedByPreviousSource: ParsedBankSnapshotRow[];
   /** When the capture those came from was taken, or null when there is none. */
   latestCaptureAt: Date | null;
+  /** How many of those were inserted as page rows (`insertMissed`). */
+  insertedMissed: number;
   unlinked: number;
   warnings: string[];
 };
@@ -139,7 +144,10 @@ async function missedByPreviousSource(
   userId: string,
   accountId: string,
   since: string,
-): Promise<{ rows: ParsedBankSnapshotRow[]; capturedAt: Date | null }> {
+): Promise<{
+  rows: ParsedBankSnapshotRow[];
+  snapshot: ParsedBankBrowserSnapshot | null;
+}> {
   const [event] = await tx
     .select({ evidence: financeAuditEvents.sourceEvidence })
     .from(financeAuditEvents)
@@ -153,9 +161,9 @@ async function missedByPreviousSource(
     .orderBy(desc(financeAuditEvents.occurredAt))
     .limit(1);
   const rawText = event?.evidence.rawText;
-  if (typeof rawText !== "string") return { rows: [], capturedAt: null };
+  if (typeof rawText !== "string") return { rows: [], snapshot: null };
   const parsed = parseBankBrowserSnapshot(rawText);
-  if (!parsed.ok) return { rows: [], capturedAt: null };
+  if (!parsed.ok) return { rows: [], snapshot: null };
   const snapshot = parsed.snapshot;
   const plan = planBankSnapshotReconciliation(
     await storedRows(tx, userId, accountId),
@@ -165,7 +173,7 @@ async function missedByPreviousSource(
     snapshot.recentPosted,
     since,
   );
-  return { rows: plan.postedBeforeSourceStart, capturedAt: snapshot.capturedAt };
+  return { rows: plan.postedBeforeSourceStart, snapshot };
 }
 
 async function cutover(
@@ -173,6 +181,7 @@ async function cutover(
   userId: string,
   accountId: string,
   to: CutoverTarget,
+  insertMissed: boolean,
 ): Promise<HistorySourceCutoverReceipt> {
   const [account] = await tx
     .select({
@@ -192,6 +201,8 @@ async function cutover(
   let since = account.historySourceSince;
   let missed: ParsedBankSnapshotRow[] = [];
   let latestCaptureAt: Date | null = null;
+  let insertedMissed = 0;
+  const insertedChanges: FinanceAuditChange[] = [];
   let unlinked = 0;
   if (to === "bank_page" && account.historySource !== "bank_page") {
     since = await lastSimpleFinPostingDay(tx, userId, account.id);
@@ -200,7 +211,38 @@ async function cutover(
     else {
       const found = await missedByPreviousSource(tx, userId, account.id, since);
       missed = found.rows;
-      latestCaptureAt = found.capturedAt;
+      latestCaptureAt = found.snapshot?.capturedAt ?? null;
+      // The last day SimpleFIN posted is often a day it had not finished delivering (the
+      // YouTube case). Lee reads the receipt, then these become page rows exactly as a paste
+      // would write them.
+      if (insertMissed && found.snapshot) {
+        for (const row of missed) {
+          const id = await insertSnapshotRow(
+            tx,
+            userId,
+            account.id,
+            found.snapshot,
+            row,
+            false,
+          );
+          insertedChanges.push({
+            entityType: "transaction",
+            entityIdentity: id,
+            before: null,
+            after: {
+              accountId: account.id,
+              transactionDate: row.transactionDate,
+              postedDate: row.postedDate,
+              amountCents: row.amountCents,
+              pending: false,
+              externalSource: found.snapshot.feed,
+              externalId: row.externalId,
+            },
+          });
+        }
+        insertedMissed = insertedChanges.length;
+        if (insertedMissed > 0) await reclassifyInsideTransaction(tx, userId);
+      }
     }
     await tx
       .update(financeAccounts)
@@ -266,7 +308,7 @@ async function cutover(
       `${account.name}: ${account.historySource} → ${to}` +
       (since ? ` from ${since}` : "") +
       `; retired ${handover.retired} hold${handover.retired === 1 ? "" : "s"}, ` +
-      `${unpaired.length} unpaired, ${missed.length} page row${missed.length === 1 ? "" : "s"} the previous source missed, ` +
+      `${unpaired.length} unpaired, ${missed.length} page row${missed.length === 1 ? "" : "s"} the previous source missed (${insertedMissed} inserted), ` +
       `${unlinked} link${unlinked === 1 ? "" : "s"} removed.`,
     scope,
     warnings,
@@ -286,6 +328,7 @@ async function cutover(
           headline: authority.headlineSource,
         },
       },
+      ...insertedChanges,
       ...handover.changes,
       ...authority.changes,
     ],
@@ -302,6 +345,7 @@ async function cutover(
     unpaired,
     missedByPreviousSource: missed,
     latestCaptureAt,
+    insertedMissed,
     unlinked,
     warnings,
   };
@@ -312,11 +356,17 @@ export async function applyHistorySourceCutover(
   userId: string,
   accountId: string,
   to: CutoverTarget,
-  options: { dryRun: boolean },
+  options: { dryRun: boolean; insertMissed?: boolean },
 ): Promise<HistorySourceCutoverReceipt> {
   try {
     return await db.transaction(async (tx) => {
-      const receipt = await cutover(tx, userId, accountId, to);
+      const receipt = await cutover(
+        tx,
+        userId,
+        accountId,
+        to,
+        options.insertMissed ?? false,
+      );
       if (options.dryRun) throw new DryRunRollback(receipt);
       return receipt;
     });

@@ -6,6 +6,9 @@
  *   npx tsx --env-file=.env.local scripts/history-source-cutover.ts --user <uuid|email> --account <uuid> --to bank_page  # dry run
  *   npx tsx --env-file=.env.local scripts/history-source-cutover.ts --user <uuid|email> --account <uuid> --to bank_page --apply
  *
+ * `--insert-missed` also inserts the latest capture's posted rows that fall on or before the
+ * cutover day and that nothing stores, as the page would have written them.
+ *
  * `--to bank_page` is Capital One: the page authors history after SimpleFIN's last posted day,
  * SimpleFIN's holds retire onto the page's, and the link is removed. `--to simplefin` is
  * Chase: it stays on the feed and sheds the page's leftover holds.
@@ -72,7 +75,7 @@ async function main(): Promise<number> {
   }
   if (!userId) {
     console.error(
-      "Usage: tsx scripts/history-source-cutover.ts --user <uuid|email> [--account <uuid> --to bank_page|simplefin] [--apply]",
+      "Usage: tsx scripts/history-source-cutover.ts --user <uuid|email> [--account <uuid> --to bank_page|simplefin] [--insert-missed] [--apply]",
     );
     return 2;
   }
@@ -86,6 +89,7 @@ async function main(): Promise<number> {
   const apply = process.argv.includes("--apply");
   const receipt = await applyHistorySourceCutover(userId, accountId, to, {
     dryRun: !apply,
+    insertMissed: process.argv.includes("--insert-missed"),
   });
 
   console.log(`\n${receipt.accountName}: ${receipt.from} → ${receipt.to}`);
@@ -108,7 +112,7 @@ async function main(): Promise<number> {
 
   if (receipt.to === "bank_page") {
     console.log(
-      `\nOn the latest capture${receipt.latestCaptureAt ? ` (${receipt.latestCaptureAt.toISOString()})` : " (none found)"}, posted on or before the cutover and stored nowhere (${receipt.missedByPreviousSource.length}). Nothing is inserted for these:`,
+      `\nOn the latest capture${receipt.latestCaptureAt ? ` (${receipt.latestCaptureAt.toISOString()})` : " (none found)"}, posted on or before the cutover and stored nowhere (${receipt.missedByPreviousSource.length}). ${receipt.insertedMissed > 0 ? `Inserted as page rows: ${receipt.insertedMissed}` : "Not inserted; pass --insert-missed to add them as page rows"}:`,
     );
     for (const row of receipt.missedByPreviousSource) {
       console.log(

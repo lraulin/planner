@@ -190,7 +190,7 @@ function bankOwnedValues(
   };
 }
 
-async function insertSnapshotRow(
+export async function insertSnapshotRow(
   executor: FinanceExecutor,
   userId: string,
   accountId: string,
@@ -209,7 +209,7 @@ async function insertSnapshotRow(
   return inserted.id;
 }
 
-async function reclassifyInsideTransaction(
+export async function reclassifyInsideTransaction(
   executor: FinanceExecutor,
   userId: string,
 ): Promise<void> {
