@@ -359,7 +359,8 @@ export async function recomputeAccountBalanceAuthority(
 }
 
 /**
- * Every source's stamp for a set of accounts, for the readers that decide pending authority.
+ * Every source's stamp for a set of accounts: what `recordSourceState` has recorded. No
+ * longer decides pending, which follows the account's history source.
  *
  * Accounts with no rows are absent from the map; a caller reads that as "no source has
  * reported", which the comparison already handles.

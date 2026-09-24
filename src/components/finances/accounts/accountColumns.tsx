@@ -12,8 +12,6 @@ import { toDateKey } from "@/lib/schedule/geometry";
 import { type PendingRow } from "@/lib/finances/workingBalance";
 export type AccountColumnCtx = {
   pending: readonly PendingRow[];
-  staleIds: ReadonlySet<string>;
-  onSnapshot: () => void;
 };
 
 export const ACCOUNT_COLUMN_IDS = [
@@ -230,19 +228,11 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     filterKind: "enum",
     filterValue: (row) => row.node.freshness,
     sortValue: (row) => row.node.freshness,
-    render: (row, ctx) =>
+    render: (row) =>
       row.node.needsConnection ? (
         <Link href="/settings" className="text-xs text-priority-a underline">
           Reconnect bank
         </Link>
-      ) : ctx.staleIds.has(row.id) ? (
-        <button
-          type="button"
-          onClick={ctx.onSnapshot}
-          className="text-xs text-priority-a underline"
-        >
-          Paste fresh snapshot
-        </button>
       ) : (
         <Text value={row.node.freshness} />
       ),

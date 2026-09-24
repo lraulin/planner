@@ -4,6 +4,7 @@ import { db } from "@/db";
 import {
   bankAccountLinks,
   financeAccounts,
+  financeBudgetCategories,
   financeTransactions,
   users,
 } from "@/db/schema";
@@ -15,6 +16,8 @@ import {
   type BankBrowserSnapshotV1,
 } from "./bankSnapshot";
 import { applyHistorySourceCutover } from "./historySourceCutover";
+import { seedBudget } from "./budget/mutations";
+import { loadBudget } from "./budget/queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -46,6 +49,7 @@ type Row = {
   amount: string;
   pending?: boolean;
   notes?: string;
+  budgetCategoryId?: string;
 };
 
 /** A Capital One card fed by SimpleFIN, with the page's rows beside it — the state before cutover. */
@@ -79,6 +83,7 @@ async function linkedCard(userId: string, rows: Row[]): Promise<string> {
       amount: row.amount,
       pending: row.pending ?? false,
       notes: row.notes ?? "",
+      budgetCategoryId: row.budgetCategoryId ?? null,
       externalSource: row.source,
       externalId: crypto.randomUUID(),
     })),
@@ -193,6 +198,49 @@ describeDb("history source cutover", () => {
     expect(rows.filter((row) => row.externalSource === "api:simplefin")).toHaveLength(
       3,
     );
+  });
+
+  it("leaves every envelope where it was and moves Ready to Assign only by the unpaired holds", async () => {
+    const owner = await makeUser();
+    await seedBudget(owner, {
+      preset: "minimal",
+      startMonth: "2026-09-01",
+      todayKey: "2026-09-23",
+    });
+    const [envelope] = (
+      await db
+        .select({ id: financeBudgetCategories.id, kind: financeBudgetCategories.kind })
+        .from(financeBudgetCategories)
+        .where(eq(financeBudgetCategories.userId, owner))
+    ).filter((category) => category.kind !== "income");
+    // Lee's envelope is on SimpleFIN's copy of the hold, the copy the cutover deletes.
+    const accountId = await linkedCard(
+      owner,
+      history.map((row) =>
+        row.source === "api:simplefin" &&
+        row.pending &&
+        row.description === "KIMS NAILS III"
+          ? { ...row, budgetCategoryId: envelope.id }
+          : row,
+      ),
+    );
+    const month = async () => {
+      const budget = await loadBudget(owner, "2026-09-01");
+      const found = budget.months.find((m) => m.month === "2026-09-01")!;
+      return { rta: found.readyToAssignCents, envelope: found.categories[envelope.id] };
+    };
+    const before = await month();
+
+    const receipt = await applyHistorySourceCutover(owner, accountId, "bank_page", {
+      dryRun: false,
+    });
+
+    expect(receipt.retired).toBe(1);
+    // The envelope moved with the hold. The one change is the unpaired SimpleFIN hold
+    // (MYSTERY HOLD, -$7.00, uncategorized): it is no longer this card's source, so it stops
+    // counting, and the receipt lists it for exactly that reason.
+    expect(receipt.unpaired.map((row) => row.amountCents)).toEqual([-700]);
+    expect(await month()).toEqual({ ...before, rta: before.rta + 700 });
   });
 
   it("changes nothing on a dry run, while reporting what the apply would do", async () => {

@@ -16,7 +16,6 @@ export type OperationalAccount = FinanceAccountRow &
 export function operationalAccountRows(
   accounts: readonly FinanceAccountRow[],
   pending: readonly PendingRow[],
-  staleIds: ReadonlySet<string>,
   links: readonly BankLinkRow[],
   connections: readonly BankConnectionRow[],
   today: string,
@@ -41,13 +40,11 @@ export function operationalAccountRows(
       : account.statementPeriodEnd;
     const freshness = needsConnection
       ? "Reconnect bank"
-      : staleIds.has(account.id)
-        ? "Paste fresh snapshot"
-        : asOf === today
-          ? "As of today"
-          : asOf
-            ? `As of ${formatDate(asOf)} · refresh or import`
-            : "Import or connect bank";
+      : asOf === today
+        ? "As of today"
+        : asOf
+          ? `As of ${formatDate(asOf)} · refresh or import`
+          : "Import or connect bank";
     const balanceSourceLabel = account.syncedBalanceAsOf
       ? account.balanceSource === "browser"
         ? "Bank snapshot"

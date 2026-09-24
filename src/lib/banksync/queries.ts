@@ -20,8 +20,6 @@ import { numericStringToCents } from "@/lib/finances/money";
 import type { ExistingRow } from "./syncPlan";
 import { bankRows } from "@/lib/finances/splitRows";
 import { isScrapeFeed } from "@/lib/finances/bankSnapshot";
-import { browserOwnsPending } from "@/lib/finances/sourceAuthority";
-import { loadAccountSourceStamps } from "@/lib/finances/sourceStateWrite";
 
 /** A connection as the settings page shows it. Deliberately without the access URL. */
 export type BankConnectionRow = {
@@ -225,8 +223,6 @@ export async function existingRowsInWindow(
       ),
     );
 
-  const stamps = await loadAccountSourceStamps(db, userId, accountIds);
-
   for (const row of rows) {
     const bucket = out.get(row.accountId) ?? [];
     bucket.push({
@@ -245,13 +241,6 @@ export async function existingRowsInWindow(
         row.externalSource === "api:simplefin" ? (row.externalId ?? null) : null,
       pending: row.pending,
       fromBrowser: isScrapeFeed(row.externalSource ?? ""),
-      authoritativeBrowserPending:
-        row.pending &&
-        isScrapeFeed(row.externalSource ?? "") &&
-        browserOwnsPending(
-          stamps.get(row.accountId)?.browser ?? null,
-          stamps.get(row.accountId)?.feed ?? null,
-        ),
     });
     out.set(row.accountId, bucket);
   }

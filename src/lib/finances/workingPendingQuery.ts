@@ -11,11 +11,7 @@ import type { FinanceExecutor } from "./dbExecutor";
 import { financeTransactions } from "@/db/schema";
 import { numericStringToCents } from "./money";
 import type { PendingRow } from "./workingBalance";
-import {
-  selectWorkingPending,
-  withheldBrowserPendingAccountIds,
-  type WorkingPendingAccount,
-} from "./workingPending";
+import { selectWorkingPending, type WorkingPendingAccount } from "./workingPending";
 
 export async function loadSelectedWorkingPending(
   userId: string,
@@ -28,17 +24,15 @@ export async function loadSelectedWorkingPending(
 export type WorkingPendingSelection = {
   /** Pending money that belongs in current financial totals. */
   rows: PendingRow[];
-  /** Stale feed rows kept in the Register for sync reconciliation, not Budget money. */
+  /** The other source's holds, kept in the Register but not Budget money. */
   supersededTransactionIds: string[];
-  /** Accounts whose expired browser capture still holds pending rows out of the money. */
-  withheldBrowserPendingAccountIds: string[];
 };
 
 /**
  * Load both halves of the pending decision once.
  *
- * The Register intentionally retains stale SimpleFIN pending while a bank scrape is
- * authoritative. Money readers must exclude those retained rows or the same purchase lands in
+ * The Register can still hold the other source's holds (SimpleFIN's on a card now sourced
+ * from the bank page, say). Money readers must exclude them or the same purchase lands in
  * both envelope activity and the live account position. Returning the rejected transaction ids
  * alongside the selected money lets aggregate SQL use exactly the same decision as the account
  * pool instead of reimplementing the source preference.
@@ -86,9 +80,5 @@ export async function loadWorkingPendingSelection(
     supersededTransactionIds: candidates
       .filter((row) => !selectedIds.has(row.id))
       .map((row) => row.id),
-    withheldBrowserPendingAccountIds: withheldBrowserPendingAccountIds(
-      candidates,
-      accounts,
-    ),
   };
 }

@@ -355,11 +355,6 @@ export type DashboardData = {
   accounts: FinanceAccountRow[];
   /** Rows the bank has not yet posted. Signed in module convention. */
   pending: PendingRow[];
-  /**
-   * Accounts whose expired browser capture still holds pending rows out of the money — the
-   * only case where a fresh bank snapshot changes what the dashboard can show.
-   */
-  withheldBrowserPendingAccountIds: string[];
   bills: StoredBillRow[];
   paydays: Payday[];
   /**
@@ -421,7 +416,6 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
     loadedAtMs,
     accounts,
     pending: pendingSelection.rows,
-    withheldBrowserPendingAccountIds: pendingSelection.withheldBrowserPendingAccountIds,
     bills,
     paydays: paydaysFrom(rows),
     billCharges,

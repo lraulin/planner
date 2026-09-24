@@ -142,19 +142,3 @@ export function pickAuthoritative<T>(
   }
   return best;
 }
-
-/**
- * Does the browser hold this account's pending set?
- *
- * The same comparison, applied to pending. **Recorded limitation:** SimpleFIN dates the
- * _balance_, not the pending set, so its `balance-date` stands in for how current its
- * pending view is. Accepted during shaping — it is the only signal the provider gives.
- */
-export function browserOwnsPending(
-  browser: SourceStamp | null,
-  feed: SourceStamp | null,
-): boolean {
-  if (!isDated(browser)) return false;
-  if (!isDated(feed)) return true;
-  return isStrictlyNewer(browser, feed);
-}

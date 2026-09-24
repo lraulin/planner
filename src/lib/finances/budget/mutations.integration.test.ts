@@ -1,6 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { loadInsightsRows } from "../dashboardQueries";
-import { recordSourceState } from "../sourceStateWrite";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -601,26 +600,18 @@ describeDb("budget mutations", () => {
       externalAccountId: `pending-${crypto.randomUUID()}`,
       accountId: cardId,
     });
-    await recordSourceState(db, userId, cardId, {
-      source: "feed",
-      balanceCents: 0,
-      availableCents: null,
-      asOf: new Date(Date.now() - 60_000),
-      asOfDay: null,
-    });
-    await recordSourceState(db, userId, cardId, {
-      source: "browser",
-      balanceCents: 0,
-      availableCents: null,
-      asOf: new Date(),
-      asOfDay: null,
-    });
+    // The card authors its history from the bank page, so the page's holds are its pending
+    // set whatever SimpleFIN left behind (one-history-source-per-account D1).
+    await db
+      .update(financeAccounts)
+      .set({ historySource: "bank_page" })
+      .where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, cardId)));
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
     const ids = await envelopes(userId);
     const discretionaryId = ids.get("Discretionary")!;
 
-    // The Register deliberately retains both feeds. The $166.70 SimpleFIN set is stale once
-    // the $276.63 Chase scrape lands, and must not become a second copy of the same spending.
+    // The Register retains both feeds. The $166.70 SimpleFIN set is not this card's source and
+    // must not become a second copy of the $276.63 the page reports.
     await db.insert(financeTransactions).values([
       {
         userId,

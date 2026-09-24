@@ -80,8 +80,6 @@ export type ExistingRow = {
    * handover retires it once the feed covers its day, so matching against it drops money.
    */
   fromBrowser: boolean;
-  /** Browser pending on an account whose 36-hour bank-page authority is still live. */
-  authoritativeBrowserPending?: boolean;
   /** The row's own id — what a carry onto an existing posted row targets. */
   id?: string;
   /** The user's half of the row: what a hold hands its successor when it retires. */
@@ -247,23 +245,8 @@ export function planSync(input: SyncPlanInput): SyncPlan {
   let skippedDuplicate = 0;
   for (const [accountId, candidates] of candidatesByAccount) {
     const accountExisting = existingByAccount.get(accountId) ?? [];
-    // The browser's fresh pending set outranks SimpleFIN's holds, and nothing more. A posted
-    // candidate is history: the handover retires the browser hold it settles, in the same
-    // commit that inserts it, so suppressing it here would lose the charge.
-    const authoritativePending = accountExisting.filter(
-      (row) => row.pending && row.authoritativeBrowserPending,
-    );
-    const pageAuthority = selectUnmatched(
-      authoritativePending,
-      candidates
-        .filter((candidate) => candidate.pending)
-        .map((candidate) => candidate.transaction),
-    );
-    const allowedHolds = new Set(pageAuthority.keep);
-    const allowedCandidates = candidates.filter(
-      (candidate) => !candidate.pending || allowedHolds.has(candidate.transaction),
-    );
-    skippedDuplicate += candidates.length - allowedCandidates.length;
+    // Sync writes only to SimpleFIN-sourced accounts, whose holds are SimpleFIN's alone
+    // (one-history-source-per-account D1): no page pending set to defer to.
 
     const existing = accountExisting.filter(
       (row) =>
@@ -272,15 +255,15 @@ export function planSync(input: SyncPlanInput): SyncPlan {
         !(row.externalId && deleted.has(row.externalId)),
     );
     if (existing.length === 0) {
-      inserts.push(...allowedCandidates);
+      inserts.push(...candidates);
       continue;
     }
     const { keep } = selectUnmatched(
       existing,
-      allowedCandidates.map((candidate) => candidate.transaction),
+      candidates.map((candidate) => candidate.transaction),
     );
     const kept = new Set(keep);
-    for (const candidate of allowedCandidates) {
+    for (const candidate of candidates) {
       if (kept.has(candidate.transaction)) inserts.push(candidate);
       else skippedDuplicate++;
     }

@@ -58,11 +58,7 @@ export function RefreshBanksButton() {
  * The Tampermonkey scripts copy the complete current-cycle card view. This paste reconciles
  * posted transitions and selects pending using the existing per-source as-of precedence.
  */
-export function BankSnapshotPaste({
-  staleAccountNames,
-}: {
-  staleAccountNames: string[];
-}) {
+export function BankSnapshotPaste() {
   const router = useRouter();
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const [pending, startTransition] = useTransition();
@@ -92,12 +88,6 @@ export function BankSnapshotPaste({
       title="Bank snapshot"
       subtitle="Copy a complete current-cycle snapshot on the Chase or Capital One card page, then paste it here. Planner reconciles posted and pending together."
     >
-      {staleAccountNames.length > 0 && (
-        <p role="status" className="mb-2 text-[0.8125rem] text-[var(--chart-spend)]">
-          Capture a fresh snapshot for {staleAccountNames.join(", ")}. Its browser
-          pending is stale, so SimpleFIN pending is active until you refresh it.
-        </p>
-      )}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"

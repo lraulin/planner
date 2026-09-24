@@ -586,7 +586,6 @@ describeDb("queries for the sync window", () => {
         externalId: null,
         pending: true,
         fromBrowser: false,
-        authoritativeBrowserPending: false,
       },
     ]);
   });
@@ -730,11 +729,7 @@ describeDb("balance precedence in the register", () => {
     expect(link.balanceSource).toBe("browser");
 
     const selected = await loadSelectedWorkingPending(userId, [
-      {
-        id: accountId,
-        browserAsOf: { asOf: capturedAt, asOfDay: null },
-        feedAsOf: { asOf: new Date("2026-08-29T09:00:00Z"), asOfDay: null },
-      },
+      { id: accountId, historySource: "bank_page" },
     ]);
     expect(selected.map((row) => row.amountCents)).toEqual([-1271, -1948, -20811]);
     expect(selected.reduce((sum, row) => sum + row.amountCents, 0)).toBe(-24030);

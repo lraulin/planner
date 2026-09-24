@@ -1,5 +1,4 @@
 import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from "drizzle-orm";
-import { loadAccountSourceStamps } from "./sourceStateWrite";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -109,6 +108,7 @@ export async function listAccounts(
       externalKey: financeAccounts.externalKey,
       closedAt: financeAccounts.closedAt,
       offBudget: financeAccounts.offBudget,
+      historySource: financeAccounts.historySource,
       // The two answers of D2 in one scan, which is where noticing they differ started:
       // the balance is money and wants leaves, the count is bank rows and wants parents.
       balance: sql<string>`coalesce(sum(${financeTransactions.amount}) filter (where ${moneyRows}), 0)`,
@@ -206,10 +206,6 @@ export async function listAccounts(
         },
       ]),
   );
-  // Per-source currency, not the derived headline: pending authority is decided by ranking
-  // the browser's stamp against the feed's, and the headline may be either of them.
-  const stampsByAccount = await loadAccountSourceStamps(executor, userId);
-
   return rows.map((row) => {
     const ledgerBalanceCents = numericStringToCents(row.balance) ?? 0;
     const latest = latestByAccount.get(row.id);
@@ -231,6 +227,7 @@ export async function listAccounts(
       externalKey: row.externalKey,
       closedAt: row.closedAt,
       offBudget: row.offBudget,
+      historySource: row.historySource,
       balanceCents,
       ledgerBalanceCents,
       statementClosingCents: latest?.closingCents ?? null,
@@ -241,8 +238,6 @@ export async function listAccounts(
       balanceMismatchCents: synced || latest ? ledgerBalanceCents - balanceCents : 0,
       syncedBalanceAsOf: synced?.asOf ?? null,
       balanceSource: synced?.source ?? null,
-      browserAsOf: stampsByAccount.get(row.id)?.browser ?? null,
-      feedAsOf: stampsByAccount.get(row.id)?.feed ?? null,
       transactionCount: row.transactionCount,
     };
   });

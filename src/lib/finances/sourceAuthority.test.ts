@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  browserOwnsPending,
   isDated,
   isStrictlyNewer,
   pickAuthoritative,
@@ -238,39 +237,5 @@ describe("pickAuthoritative", () => {
         "feed",
       )?.source,
     ).toBe("feed");
-  });
-});
-
-describe("browserOwnsPending", () => {
-  it("hands pending over immediately once the feed reports later", () => {
-    expect(
-      browserOwnsPending(at("2026-09-01T08:00:00Z"), at("2026-09-01T09:00:00Z")),
-    ).toBe(false);
-  });
-
-  it("keeps a capture authoritative indefinitely while the feed lags", () => {
-    // 40 hours old, which the old flat window would have expired.
-    expect(
-      browserOwnsPending(at("2026-09-01T08:00:00Z"), at("2026-08-30T09:00:00Z")),
-    ).toBe(true);
-  });
-
-  it("gives pending to the feed when the browser has never captured", () => {
-    expect(browserOwnsPending(null, at("2026-09-01T09:00:00Z"))).toBe(false);
-    expect(browserOwnsPending(undated, at("2026-09-01T09:00:00Z"))).toBe(false);
-  });
-
-  it("gives pending to the browser when the account has never synced", () => {
-    expect(browserOwnsPending(at("2026-09-01T08:00:00Z"), null)).toBe(true);
-    expect(browserOwnsPending(at("2026-09-01T08:00:00Z"), undated)).toBe(true);
-  });
-
-  it("gives pending to the feed on a tie", () => {
-    const stamp = at("2026-09-01T08:00:00Z");
-    expect(browserOwnsPending(stamp, stamp)).toBe(false);
-  });
-
-  it("gives pending to nobody's browser when neither side is dated", () => {
-    expect(browserOwnsPending(null, null)).toBe(false);
   });
 });

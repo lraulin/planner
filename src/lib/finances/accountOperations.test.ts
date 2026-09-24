@@ -21,15 +21,13 @@ const account: FinanceAccountRow = {
   balanceMismatchCents: 0,
   syncedBalanceAsOf: new Date("2026-09-05T12:00:00Z"),
   balanceSource: "browser",
-  browserAsOf: null,
-  feedAsOf: null,
+  historySource: "bank_page",
   transactionCount: 2,
 };
 it("keeps working, posted and pending separate and identifies the selected headline source", () => {
   const [row] = operationalAccountRows(
     [account],
     [{ accountId: "a", amountCents: -3000 }],
-    new Set(),
     [],
     [],
     "2026-09-05",
@@ -46,7 +44,6 @@ it("keeps working, posted and pending separate and identifies the selected headl
   const [ledger] = operationalAccountRows(
     [{ ...account, syncedBalanceAsOf: null }],
     [{ accountId: "a", amountCents: -3000 }],
-    new Set(),
     [],
     [],
     "2026-09-05",
@@ -87,17 +84,13 @@ it("puts a connection failure only beside its linked account, and stale captures
   const rows = operationalAccountRows(
     [account, { ...account, id: "b" }],
     [],
-    new Set(["b"]),
     links,
     connections,
     "2026-09-05",
     identity,
     new Map(),
   );
-  expect(rows.map((row) => row.freshness)).toEqual([
-    "Reconnect bank",
-    "Paste fresh snapshot",
-  ]);
+  expect(rows.map((row) => row.freshness)).toEqual(["Reconnect bank", "As of today"]);
 });
 
 it("prints a stale balance's date in the workspace format, not as a raw key", () => {
@@ -106,7 +99,6 @@ it("prints a stale balance's date in the workspace format, not as a raw key", ()
   const [row] = operationalAccountRows(
     [account],
     [],
-    new Set(),
     [],
     [],
     "2026-09-06",
@@ -120,7 +112,6 @@ it("looks up the mismatch by account id and leaves it null when absent", () => {
   const [withMismatch, withoutMismatch] = operationalAccountRows(
     [account, { ...account, id: "b" }],
     [],
-    new Set(),
     [],
     [],
     "2026-09-05",

@@ -161,7 +161,6 @@ export function AccountsView({
       operationalAccountRows(
         rows,
         operations.pending,
-        new Set(operations.withheldBrowserPendingAccountIds),
         links,
         operations.connections,
         todayKey,
@@ -359,13 +358,7 @@ export function AccountsView({
       </div>
       {snapshotOpen && (
         <div className="max-h-[45dvh] shrink-0 overflow-auto p-3">
-          <BankSnapshotPaste
-            staleAccountNames={rows
-              .filter((row) =>
-                operations.withheldBrowserPendingAccountIds.includes(row.id),
-              )
-              .map((row) => row.name)}
-          />
+          <BankSnapshotPaste />
         </div>
       )}
       <div className="tabular flex shrink-0 flex-wrap gap-x-5 gap-y-1 border-b border-rule px-3 py-2 text-xs text-ink-muted">
@@ -416,8 +409,6 @@ export function AccountsView({
         allColumns={accountColumns}
         columnCtx={{
           pending: operations.pending,
-          staleIds: new Set(operations.withheldBrowserPendingAccountIds),
-          onSnapshot: () => setSnapshotOpen(true),
         }}
         selectedId={selectedId}
         selectedIds={selectedIds}
