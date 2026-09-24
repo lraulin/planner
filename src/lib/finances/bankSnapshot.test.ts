@@ -176,6 +176,48 @@ describe("parseBankBrowserSnapshot", () => {
   });
 });
 
+describe("statement descriptor", () => {
+  const withDescriptor = (statementDescriptor: unknown) =>
+    ({
+      ...chase,
+      source: "capitalone",
+      accountLast4: "3448",
+      posted: [
+        {
+          transactionDate: "Sat, Sep 19, 2026",
+          postedDate: "Mon, Sep 21, 2026",
+          description: "Kim's Nails III",
+          category: "Other Services",
+          amount: "$60.00",
+          statementDescriptor,
+        },
+      ],
+      pending: [],
+    }) as BankBrowserSnapshotV1;
+
+  it("carries the descriptor beside the display name without changing the row's identity", () => {
+    const plain = parseBankBrowserSnapshot(text(withDescriptor(undefined)));
+    const described = parseBankBrowserSnapshot(
+      text(withDescriptor("KIMS NAILS III\n  CALIFORNIA MD 20619 US")),
+    );
+    if (!plain.ok || !described.ok) throw new Error("expected both to parse");
+    expect(described.snapshot.posted[0]).toMatchObject({
+      description: "Kim's Nails III",
+      statementDescriptor: "KIMS NAILS III CALIFORNIA MD 20619 US",
+    });
+    expect(plain.snapshot.posted[0].statementDescriptor).toBeNull();
+    expect(described.snapshot.posted[0].externalId).toBe(
+      plain.snapshot.posted[0].externalId,
+    );
+  });
+
+  it("treats a blank descriptor as none and refuses one that is not text", () => {
+    const blank = parseBankBrowserSnapshot(text(withDescriptor("  ")));
+    expect(blank.ok && blank.snapshot.posted[0].statementDescriptor).toBeNull();
+    expect(parseBankBrowserSnapshot(text(withDescriptor(42))).ok).toBe(false);
+  });
+});
+
 describe("closed-statement evidence (recentPosted)", () => {
   const withRecent = {
     ...chase,

@@ -29,10 +29,13 @@ import {
   planBankSnapshotReconciliation,
   type ExistingBankSnapshotRow,
 } from "./bankSnapshotReconcile";
-import { insertSnapshotRow, reclassifyInsideTransaction } from "./bankSnapshotApply";
+import {
+  insertSnapshotRow,
+  pageComparable,
+  reclassifyInsideTransaction,
+} from "./bankSnapshotApply";
 import type { FinanceExecutor } from "./dbExecutor";
 import { retireRowsOntoOtherSources } from "./feedHandoverWrite";
-import { numericStringToCents } from "./money";
 import { recomputeAccountBalanceAuthority } from "./sourceStateWrite";
 
 export type CutoverTarget = "bank_page" | "simplefin";
@@ -110,6 +113,7 @@ async function storedRows(
       transactionDate: financeTransactions.transactionDate,
       postedDate: financeTransactions.postedDate,
       description: financeTransactions.description,
+      bankDisplayName: financeTransactions.bankDisplayName,
       amount: financeTransactions.amount,
       pending: financeTransactions.pending,
       externalSource: financeTransactions.externalSource,
@@ -129,10 +133,7 @@ async function storedRows(
         sql`${financeTransactions.parentId} is null`,
       ),
     );
-  return rows.map((row) => ({
-    ...row,
-    amountCents: numericStringToCents(row.amount) ?? 0,
-  }));
+  return rows.map(pageComparable);
 }
 
 /**

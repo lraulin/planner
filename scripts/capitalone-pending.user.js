@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Planner: copy Capital One bank snapshot
 // @namespace    planner
-// @version      2.3
+// @version      2.4
 // @description  Copy Capital One current-cycle posted and pending activity for Planner.
 // @match        https://myaccounts.capitalone.com/*
 // @match        https://*.capitalone.com/*
@@ -58,6 +58,27 @@
       if (row && hasExpandedDates(row)) return row;
     }
     return rowById(id);
+  }
+
+  const DESCRIPTOR_LABEL = /^Appears on statement as:\s*/i;
+
+  /**
+   * The expanded row's "Appears on statement as" text: the wording a CSV or PDF statement
+   * uses. Read from the smallest element that starts with the label, so the map and links
+   * beside it never run on into it; the text wraps, which `clean` folds back to one line.
+   * Pending rows may not show one yet.
+   */
+  function statementDescriptorOf(row) {
+    // A bare label element (value in a sibling) has nothing after the label; its parent,
+    // which holds both, is then the smallest that does.
+    let value = "";
+    for (const node of row.querySelectorAll("*")) {
+      const text = clean(node.textContent);
+      if (!DESCRIPTOR_LABEL.test(text)) continue;
+      const candidate = text.replace(DESCRIPTOR_LABEL, "");
+      if (candidate && (!value || candidate.length < value.length)) value = candidate;
+    }
+    return value.length <= 200 ? value : "";
   }
 
   function textOf(row, selector) {
@@ -216,12 +237,14 @@
         failed += 1;
         continue;
       }
+      const statementDescriptor = statementDescriptorOf(row);
       const value = {
         transactionDate,
         postedDate: postedDate || null,
         description,
         category,
         amount,
+        ...(statementDescriptor ? { statementDescriptor } : {}),
       };
       if (region.kind === "statement") {
         if (postedDate) statements.push({ region, value });

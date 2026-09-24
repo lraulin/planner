@@ -15,6 +15,7 @@ function incoming(
     transactionDate: date,
     postedDate: date,
     description,
+    statementDescriptor: null,
     sourceCategory: "",
     amountCents,
     externalId: `${date}|${description}|${amountCents}`,

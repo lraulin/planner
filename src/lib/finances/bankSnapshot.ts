@@ -20,6 +20,11 @@ export type BankBrowserSnapshotRowV1 = {
   category: string;
   /** Raw displayed card amount. Planner always negates it at parse time. */
   amount: string;
+  /**
+   * Optional: the row's "Appears on statement as" text, the wording a CSV or PDF uses. A
+   * pending row may not have one yet.
+   */
+  statementDescriptor?: string;
 };
 
 export type BankBrowserSnapshotV1 = {
@@ -52,7 +57,13 @@ export type BankBrowserSnapshotV1 = {
 export type ParsedBankSnapshotRow = {
   transactionDate: string;
   postedDate: string | null;
+  /**
+   * The page's display name ("Kim's Nails III"). Identity and page-to-page matching use it;
+   * the stored `description` is the statement descriptor when there is one (D4).
+   */
   description: string;
+  /** "Appears on statement as", or null when the page did not show one. */
+  statementDescriptor: string | null;
   sourceCategory: string;
   /** Register convention: purchases negative, displayed negative payments positive. */
   amountCents: number;
@@ -113,6 +124,7 @@ const ROW_KEYS = new Set([
   "description",
   "category",
   "amount",
+  "statementDescriptor",
 ]);
 const COMPLETENESS_KEYS = new Set([
   "currentCycle",
@@ -224,7 +236,9 @@ function parseRows(
     const description = value.description;
     const category = value.category;
     const amountRaw = value.amount;
+    const descriptorRaw = value.statementDescriptor;
     if (
+      (descriptorRaw !== undefined && typeof descriptorRaw !== "string") ||
       typeof transactionDateRaw !== "string" ||
       (postedDateRaw !== null && typeof postedDateRaw !== "string") ||
       typeof description !== "string" ||
@@ -267,10 +281,12 @@ function parseRows(
         error: `Could not read the amount for ${cleanDescription}.`,
       };
     }
+    const cleanDescriptor = (descriptorRaw ?? "").replace(/\s+/g, " ").trim();
     provisional.push({
       transactionDate,
       postedDate,
       description: cleanDescription,
+      statementDescriptor: cleanDescriptor === "" ? null : cleanDescriptor,
       sourceCategory: category.trim(),
       // Card pages display purchases as positive and payments/refunds as negative.
       amountCents: -displayedCents,
@@ -280,6 +296,7 @@ function parseRows(
         description,
         category,
         amount: amountRaw,
+        ...(descriptorRaw === undefined ? {} : { statementDescriptor: descriptorRaw }),
       },
     });
   }

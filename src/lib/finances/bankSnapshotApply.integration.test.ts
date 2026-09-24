@@ -863,6 +863,7 @@ describeDb("a bank-page account with no SimpleFIN link", () => {
     postedDate: string | null,
     name: string,
     amount: string,
+    statementDescriptor?: string,
   ];
 
   function capitalOneSnapshot(input: {
@@ -872,12 +873,19 @@ describeDb("a bank-page account with no SimpleFIN link", () => {
     closedOn?: string;
     capturedAt?: Date;
   }): string {
-    const toRow = ([transactionDate, postedDate, description, amount]: Row) => ({
+    const toRow = ([
+      transactionDate,
+      postedDate,
+      description,
+      amount,
+      descriptor,
+    ]: Row) => ({
       transactionDate,
       postedDate,
       description,
       category: "Merchandise",
       amount,
+      ...(descriptor ? { statementDescriptor: descriptor } : {}),
     });
     const body: BankBrowserSnapshotV1 = {
       version: 1,
@@ -1018,6 +1026,41 @@ describeDb("a bank-page account with no SimpleFIN link", () => {
       .where(eq(financeTransactions.id, hold.id));
     expect(kept.notes).toBe("nails");
     expect(accountId).toBeTruthy();
+  });
+
+  it("stores the statement descriptor, keeps the page's name, and still knows the row once its cycle closes", async () => {
+    const owner = await makeUser();
+    await makeCard(owner, "bank_page");
+    // Nothing in common with the page's name, so only the name can pair the two copies.
+    const descriptor = "GOOGLE *GOOGLE PLAY G.CO/HELPPAY# CA";
+    await applyBankBrowserSnapshot(
+      owner,
+      capitalOneSnapshot({
+        posted: [["Sep 22, 2026", "Sep 22, 2026", "YouTube", "$16.95", descriptor]],
+      }),
+    );
+    // The cycle closes: the same charge now appears on the closed statement, whose rows get a
+    // different external id.
+    await applyBankBrowserSnapshot(
+      owner,
+      capitalOneSnapshot({
+        capturedAt: new Date("2026-10-16T15:00:00Z"),
+        recent: [["Sep 22, 2026", "Sep 22, 2026", "YouTube", "$16.95", descriptor]],
+        closedOn: "Oct 14, 2026",
+      }),
+    );
+
+    const rows = await db
+      .select({
+        description: financeTransactions.description,
+        bankDisplayName: financeTransactions.bankDisplayName,
+        pending: financeTransactions.pending,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, owner));
+    expect(rows).toEqual([
+      { description: descriptor, bankDisplayName: "YouTube", pending: false },
+    ]);
   });
 
   it("inserts nothing on a re-paste, and a closed statement's unheld rows exactly once", async () => {

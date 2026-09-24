@@ -169,6 +169,22 @@ async function resolveCardByLast4(
   };
 }
 
+/**
+ * A stored row as the paste planner compares it. A page row stores its statement descriptor
+ * as `description` and the page's name as `bankDisplayName`; incoming page rows carry the
+ * page's name, so page-to-page matching must see that name on both sides (D4).
+ */
+export function pageComparable<
+  T extends { description: string; bankDisplayName: string | null; amount: string },
+>(row: T): Omit<T, "bankDisplayName" | "amount"> & { amountCents: number } {
+  const { bankDisplayName, amount, ...rest } = row;
+  return {
+    ...rest,
+    description: bankDisplayName ?? row.description,
+    amountCents: numericStringToCents(amount) ?? 0,
+  };
+}
+
 function bankOwnedValues(
   snapshot: ParsedBankBrowserSnapshot,
   row: ParsedBankSnapshotRow,
@@ -178,7 +194,10 @@ function bankOwnedValues(
     transactionDate: row.transactionDate,
     postedDate: pending ? null : row.postedDate,
     pending,
-    description: row.description,
+    // The statement's wording once the page shows it, so payee rules and statement files see
+    // the same text; the page's name is kept beside it (D4).
+    description: row.statementDescriptor ?? row.description,
+    bankDisplayName: row.description,
     amount: centsToNumericString(row.amountCents),
     sourceCategory: row.sourceCategory,
     balanceAfter: null,
@@ -549,6 +568,7 @@ export async function applyBankBrowserSnapshot(
         transactionDate: financeTransactions.transactionDate,
         postedDate: financeTransactions.postedDate,
         description: financeTransactions.description,
+        bankDisplayName: financeTransactions.bankDisplayName,
         amount: financeTransactions.amount,
         pending: financeTransactions.pending,
         externalSource: financeTransactions.externalSource,
@@ -568,10 +588,7 @@ export async function applyBankBrowserSnapshot(
           isNull(financeTransactions.parentId),
         ),
       );
-    const existing: ExistingBankSnapshotRow[] = stored.map((row) => ({
-      ...row,
-      amountCents: numericStringToCents(row.amount) ?? 0,
-    }));
+    const existing: ExistingBankSnapshotRow[] = stored.map(pageComparable);
     const plan = planBankSnapshotReconciliation(
       existing,
       snapshot.posted,
