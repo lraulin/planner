@@ -66,6 +66,10 @@ async function main(): Promise<number> {
   console.log(`Database: ${describeDatabaseUrl(process.env.DATABASE_URL ?? "")}`);
   const userArg = argValue("--user");
   const userId = userArg?.includes("@") ? await userIdByEmail(userArg) : userArg;
+  if (userArg && !userId) {
+    console.error(`No user ${userArg} in this database.`);
+    return 2;
+  }
   if (!userId) {
     console.error(
       "Usage: tsx scripts/history-source-cutover.ts --user <uuid|email> [--account <uuid> --to bank_page|simplefin] [--apply]",
