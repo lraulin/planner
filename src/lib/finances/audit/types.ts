@@ -16,7 +16,8 @@ export type FinanceAuditKind =
   | "budget_bulk_funding"
   | "budget_delete"
   | "legacy_budget_movement"
-  | "reconciliation_adjustment";
+  | "reconciliation_adjustment"
+  | "history_source_cutover";
 
 export type FinanceAuditScope = {
   accountIds?: string[];

@@ -54,6 +54,25 @@ export async function retireCoveredScrapeRows(
   userId: string,
   accountId: string,
 ): Promise<FeedHandoverResult> {
+  return retireRowsOntoOtherSources(executor, userId, accountId, SCRAPE_FEEDS, {
+    pendingOnly: false,
+  });
+}
+
+/**
+ * Retire this account's rows from `retiring` sources that pair with a stored row from any
+ * other source, carrying their state across. The general form of the handover: the browser
+ * tail yielding to a history feed is one case, and an account's cutover to the bank page —
+ * SimpleFIN's holds yielding to the page's — is another
+ * (`agent-os/specs/2026-09-23-1316-one-history-source-per-account/` D5).
+ */
+export async function retireRowsOntoOtherSources(
+  executor: FinanceExecutor,
+  userId: string,
+  accountId: string,
+  retiringSources: readonly string[],
+  options: { pendingOnly: boolean },
+): Promise<FeedHandoverResult> {
   const stored = await executor
     .select({
       id: financeTransactions.id,
@@ -75,7 +94,8 @@ export async function retireCoveredScrapeRows(
         eq(financeTransactions.userId, userId),
         eq(financeTransactions.accountId, accountId),
         bankRows,
-        inArray(financeTransactions.externalSource, [...SCRAPE_FEEDS]),
+        inArray(financeTransactions.externalSource, [...retiringSources]),
+        ...(options.pendingOnly ? [eq(financeTransactions.pending, true)] : []),
       ),
     );
   if (stored.length === 0) return EMPTY;
@@ -124,7 +144,7 @@ export async function retireCoveredScrapeRows(
         eq(financeTransactions.accountId, accountId),
         bankRows,
         sql`${financeTransactions.externalSource} is not null`,
-        notInArray(financeTransactions.externalSource, [...SCRAPE_FEEDS]),
+        notInArray(financeTransactions.externalSource, [...retiringSources]),
         // Either axis may fall in the window: the two feeds date one charge differently,
         // which is exactly why the browser copy has to be retired rather than matched.
         or(

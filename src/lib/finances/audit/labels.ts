@@ -18,6 +18,7 @@ const ACTION_LABELS: Record<FinanceAuditKind, string> = {
   budget_delete: "Budget deletion",
   legacy_budget_movement: "Legacy movement log",
   reconciliation_adjustment: "Reconcile adjustment",
+  history_source_cutover: "History source cutover",
 };
 
 export function financeAuditActionLabel(kind: FinanceAuditKind): string {

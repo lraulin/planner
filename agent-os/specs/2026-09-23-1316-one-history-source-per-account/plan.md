@@ -152,6 +152,7 @@ than duplicated.
 | 7   | Coverage ranges: the current cycle starts the day after the closed statement (else the earliest posted row) and runs to the capture day; a closed statement starts at the stored statement's start, else one month before its close day plus a day. A later paste extends a range rather than adding one. | D7 left the derivation open.                                                                                                                                                                                                                          |
 | 8   | The current cycle's coverage ends the day **before** the capture, not on it (supersedes row 7's "runs to the capture day").                                                                                                                                                                               | Lee (2026-09-24): an 8 am paste cannot vouch for a charge that posts at 3 pm, and a covered day refuses the statement row that is the backstop when no later paste comes.                                                                             |
 | 9   | A sync ignores the provider account behind any link whose account is not `simplefin`: no rows, no balance, not counted as unlinked.                                                                                                                                                                       | Task 3 shipped before the cutover, so Capital One pastes were refused in production while its link still made it `simplefin`. Flipping it by hand before sync obeyed the source would have let SimpleFIN keep writing beside the page.                |
+| 10  | The cutover's dry run is the apply transaction rolled back, and "page rows SimpleFIN missed" comes from the latest stored capture (audit evidence) run through the snapshot planner's `postedBeforeSourceStart`. Unpaired losing-source holds are kept and listed, not deleted.                           | The receipt must be exactly what `--apply` does; the capture is the only record of what the page showed; an unpaired hold may carry an envelope Lee wants to move by hand.                                                                            |
 
 > While this spec is **active**, when we make a material change to requirements, design, or scope
 > (including from feedback on what was implemented), update the relevant sections and append to
@@ -189,7 +190,7 @@ and its paste UI.
 `syncPlan`/`sync.ts` skip non-`simplefin` accounts. `import.ts` applies the D7 coverage gate for
 `bank_page` accounts. Tests for both.
 
-## Task 6: Cutover script
+## Task 6: Cutover script **script done; production run pending Lee's read of the dry run**
 
 `scripts/history-source-cutover.ts`: dry-run receipt, then `--apply` (audited) for Capital One
 and Chase per D5. Run the dry run against production with Lee, then apply.
