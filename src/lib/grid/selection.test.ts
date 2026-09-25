@@ -128,16 +128,16 @@ describe("moveSelection", () => {
 });
 
 describe("neighborAfterRemoval", () => {
-  it("prefers the still-visible neighbour above the vanished row", () => {
-    expect(neighborAfterRemoval(ORDER, ["a", "b", "d", "e"], "c")).toBe("b");
+  it("prefers the still-visible neighbour below the vanished row", () => {
+    expect(neighborAfterRemoval(ORDER, ["a", "b", "d", "e"], "c")).toBe("d");
   });
 
-  it("takes the neighbour below when nothing above survived", () => {
-    expect(neighborAfterRemoval(ORDER, ["b", "c", "d", "e"], "a")).toBe("b");
+  it("takes the neighbour above when nothing below survived", () => {
+    expect(neighborAfterRemoval(ORDER, ["a", "b", "c", "d"], "e")).toBe("d");
   });
 
-  it("skips a hole of vanished rows to the last still-visible above it", () => {
-    expect(neighborAfterRemoval(ORDER, ["a", "e"], "d")).toBe("a");
+  it("skips a hole of vanished rows to the first still-visible below it", () => {
+    expect(neighborAfterRemoval(ORDER, ["a", "e"], "b")).toBe("e");
   });
 
   it("returns null when the vanished id was never on the previous list", () => {
@@ -157,7 +157,7 @@ describe("pruneSelection", () => {
     expect([...result.selectedIds]).toEqual(["a"]);
   });
 
-  it("moves focus to the row above a completed or filtered-out item", () => {
+  it("moves focus to the row below a completed or filtered-out item", () => {
     // The plausible mistake: looking up the vanished id in the *new* list, missing
     // it, and selecting the first row — which then scrollIntoView-jumps to the top.
     const result = pruneSelection(
@@ -167,8 +167,8 @@ describe("pruneSelection", () => {
       "c",
       ORDER,
     );
-    expect(result.focusId).toBe("b");
-    expect([...result.selectedIds]).toEqual(["b"]);
+    expect(result.focusId).toBe("d");
+    expect([...result.selectedIds]).toEqual(["d"]);
   });
 
   it("moves focus to the next row when the first item disappears", () => {
@@ -200,7 +200,7 @@ describe("pruneSelection", () => {
   });
 
   it("does not recruit the neighbour into a leftover multi-selection", () => {
-    // The plausible mistake: focus vanished, pick the row above it, and add that
+    // The plausible mistake: focus vanished, pick the row below it, and add that
     // row to the set so focus is always selected. Correct for a single-row
     // vanish (the tests above). Wrong when b and d are still selected — deleting
     // c then highlighted a, which the user never picked.
@@ -212,8 +212,8 @@ describe("pruneSelection", () => {
       ORDER,
     );
     expect([...result.selectedIds]).toEqual(["b", "d"]);
-    expect(result.focusId).toBe("b");
-    expect(result.anchorId).toBe("b");
+    expect(result.focusId).toBe("d");
+    expect(result.anchorId).toBe("d");
   });
 });
 

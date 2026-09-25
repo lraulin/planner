@@ -38,7 +38,7 @@ export function useMultiSelect(
 
   // Prune during render when the ordered list changes under us (filter, delete, collapse).
   // Same "adjust state while rendering" idiom the detail URL sync uses. Keep the
-  // previous order so a vanished focus can land on the neighbour above it rather
+  // previous order so a vanished focus can land on the neighbour below it rather
   // than the first visible row (which scrolls the viewport to the top).
   const [seenIds, setSeenIds] = useState<readonly string[]>(orderedIds);
   const orderedKey = orderedIds.join("\0");

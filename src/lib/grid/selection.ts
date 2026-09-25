@@ -273,11 +273,12 @@ export function selectionMoveRoots(
 /**
  * Row that should keep keyboard focus after `vanishedId` leaves the list.
  *
- * Prefer the nearest still-visible neighbour above it — that is the user's
- * place. If nothing above survived (the vanished row was first, or everything
- * above left too), take the nearest still-visible neighbour below. Returns
- * null when the vanished id was never in the previous list, or when nothing
- * remains.
+ * Prefer the nearest still-visible neighbour below it: completing or deleting
+ * rows is usually done top to bottom, so the next row to act on is the one that
+ * slides into the vanished row's place. If nothing below survived (the vanished
+ * row was last, or everything below left too), take the nearest still-visible
+ * neighbour above. Returns null when the vanished id was never in the previous
+ * list, or when nothing remains.
  */
 export function neighborAfterRemoval(
   previousIds: readonly string[],
@@ -289,11 +290,11 @@ export function neighborAfterRemoval(
   if (prevIndex === -1) return null;
 
   const visible = new Set(nextIds);
-  for (let i = prevIndex - 1; i >= 0; i--) {
+  for (let i = prevIndex + 1; i < previousIds.length; i++) {
     const id = previousIds[i];
     if (visible.has(id)) return id;
   }
-  for (let i = prevIndex + 1; i < previousIds.length; i++) {
+  for (let i = prevIndex - 1; i >= 0; i--) {
     const id = previousIds[i];
     if (visible.has(id)) return id;
   }
@@ -323,7 +324,7 @@ export function pruneSelection(
   const next = new Set([...selectedIds].filter((id) => visible.has(id)));
 
   if (next.size === 0) {
-    // Whole selection vanished: land on the neighbour above (or below) the old
+    // Whole selection vanished: land on the neighbour below (or above) the old
     // focus. Unknown vanished id (never on the previous list): first visible,
     // same as the `?select=` landing before ancestors have expanded.
     const neighbour = neighborAfterRemoval(previousOrderedIds, orderedIds, focusId);
