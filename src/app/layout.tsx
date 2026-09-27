@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { Archivo, IBM_Plex_Mono } from "next/font/google";
 import { SettingsProvider } from "@/components/settings/SettingsProvider";
 import { DocumentTitle } from "@/components/shell/DocumentTitle";
+import { ToastProvider } from "@/components/shell/ToastProvider";
 import { documentTitle } from "@/components/shell/modules";
 import { loadSettingsForSession } from "@/lib/settings/session";
 import "./globals.css";
@@ -81,7 +82,9 @@ export default async function RootLayout({
     >
       <body className="flex h-full flex-col">
         <DocumentTitle />
-        <SettingsProvider initial={settings}>{children}</SettingsProvider>
+        <SettingsProvider initial={settings}>
+          <ToastProvider>{children}</ToastProvider>
+        </SettingsProvider>
       </body>
     </html>
   );

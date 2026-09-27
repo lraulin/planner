@@ -1,159 +1,177 @@
 "use client";
-import { useRef, useState, useTransition } from "react";
-import Link from "next/link";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { pasteBankSnapshotAction } from "@/app/finances/actions";
 import { syncAction } from "@/app/settings/bankSyncActions";
+import { useToast } from "@/components/shell/ToastProvider";
+import { looksLikeBankBrowserSnapshot } from "@/lib/finances/bankSnapshot";
 import type { BankSnapshotApplyResult } from "@/lib/finances/bankSnapshotApply";
 import { awaitingFeedPhrase } from "@/lib/finances/bankSnapshotReconcile";
 import { formatUsd } from "@/lib/finances/money";
 import { Panel } from "../insights/Panel";
+
 export function RefreshBanksButton() {
   const router = useRouter();
+  const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const [notice, setNotice] = useState<string | null>(null);
-  const [auditBatchId, setAuditBatchId] = useState<string | null>(null);
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        type="button"
-        disabled={pending}
-        title="Re-read what SimpleFIN currently holds. It cannot make a bank hand over something newer."
-        onClick={() => {
-          setNotice(null);
-          setAuditBatchId(null);
-          startTransition(async () => {
-            const result = await syncAction();
-            setNotice(result.ok ? "Re-read the bank feed." : result.error);
-            if (result.ok) setAuditBatchId(result.data?.auditBatchId ?? null);
-            router.refresh();
-          });
-        }}
-        className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
-      >
-        {pending ? "Working…" : "Refresh accounts"}
-      </button>
-      {notice && (
-        <span className="text-[0.75rem] text-ink-muted">
-          {notice}
-          {auditBatchId && (
-            <>
-              {" · "}
-              <Link
-                href={`/finances/activity?batch=${auditBatchId}`}
-                className="underline decoration-rule underline-offset-2 hover:text-ink"
-              >
-                Activity
-              </Link>
-            </>
-          )}
-        </span>
-      )}
-    </div>
+    <button
+      type="button"
+      disabled={pending}
+      title="Re-read what SimpleFIN currently holds. It cannot make a bank hand over something newer."
+      onClick={() => {
+        startTransition(async () => {
+          const result = await syncAction();
+          if (result.ok) {
+            const batch = result.data?.auditBatchId;
+            toast.success("Re-read the bank feed.", {
+              action: batch
+                ? { label: "Activity", href: `/finances/activity?batch=${batch}` }
+                : undefined,
+            });
+          } else {
+            toast.error("Could not refresh accounts", { body: result.error });
+          }
+          router.refresh();
+        });
+      }}
+      className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+    >
+      {pending ? "Working…" : "Refresh accounts"}
+    </button>
   );
 }
 
 /**
- * The Tampermonkey scripts copy the complete current-cycle card view. This paste reconciles
- * posted transitions and selects pending using the existing per-source as-of precedence.
+ * The Tampermonkey scripts copy the complete current-cycle card view. Applying one reconciles
+ * posted transitions and selects pending using the existing per-source as-of precedence. The
+ * receipt is a toast; the fallback textarea opens only when the clipboard cannot be used.
  */
-export function BankSnapshotPaste() {
+export function useBankSnapshotPaste() {
   const router = useRouter();
-  const areaRef = useRef<HTMLTextAreaElement>(null);
+  const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const [receipt, setReceipt] = useState<BankSnapshotApplyResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [fallbackReason, setFallbackReason] = useState<string | null>(null);
 
-  function apply(value: string) {
-    const payload = value.trim() === "" ? (areaRef.current?.value ?? "") : value;
-    if (payload.trim() === "") return;
-    setError(null);
-    setReceipt(null);
-    startTransition(async () => {
-      const outcome = await pasteBankSnapshotAction(payload);
-      if (!outcome.ok) {
-        setError(outcome.error);
-        return;
-      }
-      const data = outcome.data;
-      if (data) setReceipt(data);
-      if (areaRef.current) areaRef.current.value = "";
-      router.refresh();
-    });
-  }
+  const apply = useCallback(
+    (text: string) => {
+      setFallbackReason(null);
+      startTransition(async () => {
+        const outcome = await pasteBankSnapshotAction(text);
+        if (!outcome.ok) {
+          toast.error("Bank snapshot not applied", { body: outcome.error });
+          return;
+        }
+        const data = outcome.data;
+        if (data) toastReceipt(toast, data);
+        router.refresh();
+      });
+    },
+    [router, toast],
+  );
 
-  return (
-    <Panel
-      title="Bank snapshot"
-      subtitle="Copy a complete current-cycle snapshot on the Chase or Capital One card page, then paste it here. Planner reconciles posted and pending together."
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => {
-            void navigator.clipboard.readText().then(
-              (value) => {
-                if (areaRef.current) areaRef.current.value = value;
-                apply(value);
-              },
-              () => {
-                setError("Could not read the clipboard. Paste into the box instead.");
-              },
-            );
-          }}
-          className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
-        >
-          Paste from clipboard
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => apply(areaRef.current?.value ?? "")}
-          className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
-        >
-          Apply text
-        </button>
-      </div>
-      {receipt && (
-        <div className="mt-2 text-[0.8125rem] text-ink">
-          <p>{describeBankSnapshotWrite(receipt)}</p>
-          <p className="mt-1 text-ink-muted">
-            Working {formatSignedDelta(receipt.checkpointDelta.workingBalanceCents)} ·
-            Budget pool {formatSignedDelta(receipt.checkpointDelta.accountPoolCents)} ·
-            Ready to Assign{" "}
-            {formatSignedDelta(receipt.checkpointDelta.readyToAssignCents)}
-            {" · "}
-            <Link
-              href={`/finances/activity?event=${receipt.auditEventId}`}
-              className="text-ink-muted underline decoration-rule underline-offset-2 hover:text-ink"
-            >
-              View Activity
-            </Link>
-          </p>
-          {receipt.warnings.length > 0 && (
-            <ul className="mt-1 list-disc pl-5 text-[var(--chart-spend)]">
-              {receipt.warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-      {error && (
-        <p role="alert" className="mt-2 text-[0.8125rem] text-[var(--chart-spend)]">
-          {error}
+  /** Reads the clipboard; anything that is not a snapshot is shown, not applied. */
+  const pasteFromClipboard = useCallback(async () => {
+    let text: string;
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      setFallbackReason("Could not read the clipboard. Paste into the box instead.");
+      return;
+    }
+    if (!looksLikeBankBrowserSnapshot(text)) {
+      setFallbackReason(
+        "The clipboard does not hold a bank snapshot. Copy one on the bank's card page, or paste text here.",
+      );
+      return;
+    }
+    apply(text);
+  }, [apply]);
+
+  const closeFallback = useCallback(() => setFallbackReason(null), []);
+
+  return {
+    pending,
+    apply,
+    pasteFromClipboard,
+    fallbackReason,
+    closeFallback,
+  };
+}
+
+function toastReceipt(
+  toast: ReturnType<typeof useToast>,
+  data: BankSnapshotApplyResult,
+) {
+  const show = data.warnings.length > 0 ? toast.warning : toast.success;
+  show(data.accountName, {
+    body: describeBankSnapshotWrite(data),
+    action: {
+      label: "View Activity",
+      href: `/finances/activity?event=${data.auditEventId}`,
+    },
+    details: (
+      <>
+        <p>
+          Working {formatSignedDelta(data.checkpointDelta.workingBalanceCents)} · Budget
+          pool {formatSignedDelta(data.checkpointDelta.accountPoolCents)} · Ready to
+          Assign {formatSignedDelta(data.checkpointDelta.readyToAssignCents)}
         </p>
-      )}
+        {data.warnings.length > 0 && (
+          <ul className="mt-1 list-disc pl-5 text-[var(--chart-spend)]">
+            {data.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        )}
+      </>
+    ),
+  });
+}
+
+export function BankSnapshotFallback({
+  reason,
+  pending,
+  onApply,
+  onClose,
+}: {
+  reason: string;
+  pending: boolean;
+  onApply: (text: string) => void;
+  onClose: () => void;
+}) {
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  return (
+    <Panel title="Bank snapshot" subtitle={reason}>
       <textarea
         ref={areaRef}
         spellCheck={false}
         rows={3}
         aria-label="Bank snapshot paste"
         placeholder="# planner-bank-snapshot v1"
-        className="mt-2 w-full rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.75rem] text-ink"
+        className="w-full rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.75rem] text-ink"
       />
+      <div className="mt-2 flex gap-2">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            const text = areaRef.current?.value ?? "";
+            if (text.trim() !== "") onApply(text);
+          }}
+          className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+        >
+          Apply text
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink md:min-h-0 md:py-1"
+        >
+          Close
+        </button>
+      </div>
     </Panel>
   );
 }

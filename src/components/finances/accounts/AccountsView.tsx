@@ -18,7 +18,11 @@ import {
 } from "@/lib/finances/accountGrouping";
 import { formatUsd } from "@/lib/finances/money";
 import { customFilter } from "@/lib/grid/customFilter";
-import { RefreshBanksButton, BankSnapshotPaste } from "./AccountOperations";
+import {
+  BankSnapshotFallback,
+  RefreshBanksButton,
+  useBankSnapshotPaste,
+} from "./AccountOperations";
 import type { GridRow } from "@/lib/tree/slice";
 import type { FinanceAccountRow } from "@/lib/finances/types";
 import {
@@ -42,7 +46,8 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { isTypingTarget } from "@/lib/keyboard";
+import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
+import { looksLikeBankBrowserSnapshot } from "@/lib/finances/bankSnapshot";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { FinanceImportPanel } from "../FinanceImportPanel";
 import { AccountDrawer } from "./AccountDrawer";
@@ -110,7 +115,8 @@ export function AccountsView({
   /** D3: per-account drift from the register. Empty before the budget is set up. */
   mismatch: BudgetMismatch;
 }) {
-  const [snapshotOpen, setSnapshotOpen] = useState(false);
+  const snapshot = useBankSnapshotPaste();
+  const { pasteFromClipboard } = snapshot;
   const [rows, setRows] = useState(initialAccounts);
   const position = accountPoolBreakdown(rows, operations.pending);
   const [seenServerRows, setSeenServerRows] = useState(initialAccounts);
@@ -284,6 +290,15 @@ export function AccountsView({
         onSelectAll: selectAll,
         pageCommands: [
           {
+            id: "accounts.pasteSnapshot",
+            label: "Paste bank snapshot",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            keywords: "chase capital one card clipboard reconcile pending",
+            run: () => void pasteFromClipboard(),
+          },
+          {
             id: "accounts.reconcile",
             label: "Reconcile",
             group: "record",
@@ -300,7 +315,15 @@ export function AccountsView({
         ],
       });
     },
-    [accounts, openImport, openDrawer, requestDelete, requestReconcile, selectAll],
+    [
+      accounts,
+      openImport,
+      openDrawer,
+      requestDelete,
+      requestReconcile,
+      selectAll,
+      pasteFromClipboard,
+    ],
   );
 
   const commandCapabilities = useMemo(
@@ -331,6 +354,20 @@ export function AccountsView({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [openId, pendingDelete, pendingReconcile, move]);
 
+  // Copying a snapshot on the bank page and switching here is the whole gesture: ⌘V applies it.
+  const { apply: applySnapshot } = snapshot;
+  useEffect(() => {
+    function onPaste(event: ClipboardEvent) {
+      if (isTypingTarget(event.target) || isModalOpen()) return;
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      if (!looksLikeBankBrowserSnapshot(text)) return;
+      event.preventDefault();
+      applySnapshot(text);
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [applySnapshot]);
+
   const openAccount = gridRows.find((row) => row.kind === "node" && row.id === openId);
   const accountDetail = openAccount?.kind === "node" ? openAccount.node : null;
 
@@ -341,7 +378,8 @@ export function AccountsView({
         <button
           type="button"
           className="min-h-tap rounded border border-rule px-2 py-1 text-sm md:min-h-0"
-          onClick={() => setSnapshotOpen(!snapshotOpen)}
+          disabled={snapshot.pending}
+          onClick={() => void snapshot.pasteFromClipboard()}
         >
           Paste bank snapshot
         </button>
@@ -356,9 +394,14 @@ export function AccountsView({
           Budget
         </Link>
       </div>
-      {snapshotOpen && (
+      {snapshot.fallbackReason && (
         <div className="max-h-[45dvh] shrink-0 overflow-auto p-3">
-          <BankSnapshotPaste />
+          <BankSnapshotFallback
+            reason={snapshot.fallbackReason}
+            pending={snapshot.pending}
+            onApply={snapshot.apply}
+            onClose={snapshot.closeFallback}
+          />
         </div>
       )}
       <div className="tabular flex shrink-0 flex-wrap gap-x-5 gap-y-1 border-b border-rule px-3 py-2 text-xs text-ink-muted">
