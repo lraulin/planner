@@ -1,6 +1,6 @@
 # Toasts and one-step bank snapshot paste
 
-**Status: active**  
+**Status: frozen / complete** (2026-09-26)  
 Spec folder: `agent-os/specs/2026-09-26-2137-toasts-and-one-step-snapshot-paste/`
 
 ## Spec relationships
@@ -70,9 +70,16 @@ the same missing concept means building the concept.
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                                                                             | Why                                                                                      |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 1   | The queue reducer is generic over toast content and the timer is a pure `ToastTimer` (`startTimer` / `pauseTimer` / `resumeTimer` / `timeLeft`) taking `now`.                                                                                                                                      | Keeps React out of `src/lib/toast/` and makes "pause preserves remaining time" testable. |
+| 2   | The outlet is `z-40` and lifted by two tap-target rows plus the safe-area inset on phone.                                                                                                                                                                                                          | The bottom nav is an in-flow two-row bar, not a fixed one.                               |
+| 3   | `BankSnapshotPaste` became `useBankSnapshotPaste()` + `BankSnapshotFallback`, both in `AccountOperations.tsx`. The hook holds the fallback reason.                                                                                                                                                 | Toolbar button, palette command and document paste share one apply path.                 |
+| 4   | `RefreshBanksButton` renders only the button.                                                                                                                                                                                                                                                      | Its inline notice and Activity link became a toast.                                      |
+| 5   | `NoticeDialog` is **kept**: `ScheduleView` still uses it. Only `useAttachFromClipboard` stopped using it, so the hook no longer returns `noticeDialog`.                                                                                                                                            | It has another caller.                                                                   |
+| 6   | Migrated beyond the list: `ItemList` and `MetricDrawer` CSV import results (success only; errors stay inline), Payees rebuild summary (a warning when charges are unresolved or split), and the partial bulk-category result in `FinancesView` (a warning; "none updated" stays the error banner). | Same rule: an outcome the surface does not show.                                         |
+| 7   | `ActivityDrawer` keeps a `restored` flag to disable the button.                                                                                                                                                                                                                                    | The old "Restored." line was what disabled it.                                           |
+| 8   | The `PayeeDrawer` alias notice and the `ViewPicker` "View saved" flash stay inline.                                                                                                                                                                                                                | They are in-place drawer or control state.                                               |
 
 ## Task 1: Save spec documentation
 
@@ -167,3 +174,14 @@ outcome notice remains.
 > scope (including from feedback on what was implemented), update the relevant sections and
 > append to **Changes from original plan**. Skip pure implementation details. Freeze when
 > verified.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Not verified in a browser:** a real snapshot's receipt toast and its View Activity link
+  (the checks ran against real data, so only a junk snapshot was applied), and the phone
+  layout above the bottom nav. Lee checks both on the iPhone.
+- Verified in the browser: ⌘V of arbitrary text does nothing; a denied clipboard read opens the
+  fallback textarea; a server error shows a persistent error toast bottom-right.
+- Not exercised: ⌘V inside the grid filter box (covered by `isTypingTarget`), and the migrated
+  Budget, Payees, Supplies and Activity-restore notices (typecheck, lint and `npm run smoke`
+  only).

@@ -93,7 +93,7 @@ All verified against the live database and the running app on 2026-08-14.
       must not depend on that table having produced a row.
 - [x] The same for Taylor Gas, which also now resolves to the merchant "Taylor Gas" —
       collapsing the two bank spellings on file, `TAYLOR GAS COMPANY INC.` and `TAYLOR GAS
-    HEATING AIR`, into one declaration. The Utilities category lands on the next
+HEATING AIR`, into one declaration. The Utilities category lands on the next
       **Reclassify**; `effectiveCategory` reads the stored `derivedCategory` rather than
       re-running the rules, so the rule change is not retroactive on its own.
 - [x] The review row for Geico arrives **pre-filled** with "Every 6 months" from the two

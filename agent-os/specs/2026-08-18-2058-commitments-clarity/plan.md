@@ -84,7 +84,7 @@ until it actually bites.
 - [x] No Hold checkbox anywhere; `set_aside` is gone from both tables and the agent contracts
 - [x] A yearly bill reads the same figures on both pages. The live 1Password row shows
       `$71.88 ready · overdue` on Commitments and `$2.76 per paycheck of $71.88 · due 3/30/2026
-    · fully set aside · overdue` on the Dashboard — the same accrual, from the same builder
+· fully set aside · overdue` on the Dashboard — the same accrual, from the same builder
 - [x] "Track as spend" opens a draft with the name pre-filled and editable; choosing an existing
       group swaps the commit button to "Add to Pizza" and hides the new-group fields
 - [x] A recurring-spend row can be renamed inline, and switched inactive, from the grid

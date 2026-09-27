@@ -1432,6 +1432,8 @@ period)` so money already spent stops being held twice and only going over bites
   counted by the account's source rather than by comparing timestamps.
   Chase then moved to bank-page pastes the same day (`specs/2026-09-24-1330-chase-to-bank-page`),
   and a cutover now keeps the SimpleFIN link so the provider account is not reported unmatched.
+  On 2026-09-26 the app got one outcome surface, toasts (`specs/2026-09-26-2137-toasts-and-one-step-snapshot-paste`),
+  and a copied bank snapshot applies on ⌘V or one toolbar click; the textarea is only a fallback.
 
 ---
 

@@ -263,6 +263,20 @@ sub-editors may treat Save as done (Cancel + Save only). Details live in
   Validation here is light by design (see partial saves); it is still not a reason to close
   on Save — stay open so a rare failure can be fixed in place.
 
+## Feedback
+
+Report the **outcome of an action whose own surface does not visibly show it** with
+`useToast()` — `toast.success | warning | error(title, { body?, action?, details? })`. Do not
+hand-roll a dismissible notice in a view.
+
+- **Tones:** success fades after about 6s (hover or focus pauses it). Warning and error stay
+  until dismissed. An outcome that carries warnings is a warning.
+- **Content:** a title, an optional one-line body, at most one action (e.g. "View Activity"),
+  and a full receipt behind `details`.
+- **Not a toast:** persistent state (the Google sync failure banner, "Reconnect bank"),
+  dialog or field validation (a failed modal stays open with an inline error), modal success
+  (closing is the signal), drawer "Saved", and structured import reports in Settings panels.
+
 ## Decision Guide
 
 | Question                                                                         | If yes →                                    | If no →                                          |

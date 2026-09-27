@@ -69,9 +69,10 @@ closes it. The dialog disappearing is what tells the user it worked.
 stays open and shows "Saved"; Cancel / × leaves. Save & Close is the finishing commit.
 Both surfaces still obey "never close over a failed save." See `drawer-pattern.md`.
 
-Do not add a toast on top of that. There are none in the app, and a feedback convention
-should be chosen for the whole app rather than introduced by whichever feature happened to
-want one first.
+Do not add a toast on top of that: a modal still signals success by closing. The app-wide
+surface for the outcome of an action whose own surface does not show it is `useToast()`
+(`src/components/shell/ToastProvider.tsx`); see "Feedback" in `ux-principles.md`. The outlet
+sits at `z-40`, below `ModalShell`, so an open dialog covers it.
 
 ## Modals are invisible to their own guard unless they use the shell
 

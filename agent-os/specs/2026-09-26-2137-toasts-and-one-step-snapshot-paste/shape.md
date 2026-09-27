@@ -1,6 +1,6 @@
 # Toasts and one-step bank snapshot paste — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-09-26)
 
 ## Scope
 

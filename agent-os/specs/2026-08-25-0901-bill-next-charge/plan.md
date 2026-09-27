@@ -41,8 +41,8 @@ Another session is working in the main checkout. Implementation lives in a git w
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change | Why |
-| --- | ------ | --- |
+| #   | Change   | Why                                     |
+| --- | -------- | --------------------------------------- |
 |     | _(none)_ | As-built matches the shaping decisions. |
 
 ## Follow-ups (new work — not amendments to this frozen spec)
