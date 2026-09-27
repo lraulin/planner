@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/components/shell/ToastProvider";
 import {
   useCallback,
   useEffect,
@@ -172,7 +173,7 @@ function MetricForm({
   const [draft, setDraft] = useState(() => toDraft(initial));
   const [tab, setTab] = useState<"general" | "tracking">("general");
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   // What a Delete is waiting on: one tracking entry, or the whole metric.
@@ -436,7 +437,6 @@ function MetricForm({
       const parsed = parseEntriesCsv(text);
       if (parsed.entries.length === 0) {
         const first = parsed.errors[0];
-        setStatus(null);
         setError(
           first?.message ??
             "No tracking rows found. Expected columns Date and Value (YYYY-MM-DD).",
@@ -447,7 +447,6 @@ function MetricForm({
       startTransition(async () => {
         const result = await importMetricEntriesAction(detail.id, parsed.entries);
         if (!result.ok) {
-          setStatus(null);
           setError(result.error);
           return;
         }
@@ -459,7 +458,7 @@ function MetricForm({
           parts.push(`${parsed.errors.length} invalid row(s) ignored`);
         }
         setError(null);
-        setStatus(parts.join("; ") + ".");
+        toast.success(parts.join("; ") + ".");
         setJustSaved(true);
         window.setTimeout(() => setJustSaved(false), 2000);
         reloadDetail();
@@ -467,7 +466,6 @@ function MetricForm({
       });
     };
     reader.onerror = () => {
-      setStatus(null);
       setError("Could not read the CSV file.");
     };
     reader.readAsText(file);
@@ -531,11 +529,6 @@ function MetricForm({
         {error && (
           <p className="mb-3 rounded border border-priority-a/40 bg-priority-a/10 px-3 py-2 text-[0.8125rem] text-priority-a">
             {error}
-          </p>
-        )}
-        {status && !error && (
-          <p className="mb-3 rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem] text-ink-muted">
-            {status}
           </p>
         )}
 

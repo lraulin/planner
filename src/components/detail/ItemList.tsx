@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/components/shell/ToastProvider";
 import {
   useEffect,
   useMemo,
@@ -104,7 +105,7 @@ export function ItemList({
   const [sort, setSort] = useState<ItemSort | null>(() =>
     defaultItemSort(config.columns),
   );
-  const [status, setStatus] = useState<string | null>(null);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [contacts, setContacts] = useState<ContactOption[]>([]);
   const csvImportRef = useRef<HTMLInputElement>(null);
@@ -147,12 +148,10 @@ export function ItemList({
     result: { ok: true; warning?: string } | { ok: false; error: string },
   ) => {
     if (!result.ok) {
-      setStatus(null);
       setError(result.error);
       return;
     }
     if (result.warning) {
-      setStatus(null);
       setError(result.warning);
       return;
     }
@@ -179,7 +178,6 @@ export function ItemList({
     reader.onload = () => {
       const text = typeof reader.result === "string" ? reader.result : "";
       if (kind === "contact" && contacts.length === 0) {
-        setStatus(null);
         setError("Contacts have not loaded yet. Try again in a moment.");
         return;
       }
@@ -190,7 +188,6 @@ export function ItemList({
       const errors = resolved ? [...parsed.errors, ...resolved.errors] : parsed.errors;
       if (rows.length === 0) {
         const first = errors[0];
-        setStatus(null);
         setError(
           first?.message ??
             `No ${config.singular} rows found. Export first for a template header.`,
@@ -201,7 +198,6 @@ export function ItemList({
       void (async () => {
         const result = await onImport(rows);
         if (!result.ok) {
-          setStatus(null);
           setError(result.error);
           return;
         }
@@ -210,11 +206,10 @@ export function ItemList({
           parts.push(`${errors.length} invalid row(s) ignored`);
         }
         setError(null);
-        setStatus(parts.join("; ") + ".");
+        toast.success(parts.join("; ") + ".");
       })();
     };
     reader.onerror = () => {
-      setStatus(null);
       setError("Could not read the CSV file.");
     };
     reader.readAsText(file);
@@ -225,30 +220,26 @@ export function ItemList({
     let text: string;
     try {
       if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
-        setStatus(null);
         setError(CLIPBOARD_UNREADABLE);
         return;
       }
       text = await navigator.clipboard.readText();
     } catch {
-      setStatus(null);
       setError(CLIPBOARD_UNREADABLE);
       return;
     }
     const refusal = clipboardAttachRefusal(text);
     if (refusal) {
-      setStatus(null);
       setError(refusal);
       return;
     }
     const result = await onAttachFromClipboard(text);
     if (!result.ok) {
-      setStatus(null);
       setError(result.error);
       return;
     }
     setError(null);
-    setStatus(clipboardAttachStatus(result.created));
+    toast.success(clipboardAttachStatus(result.created));
   };
 
   return (
@@ -303,12 +294,9 @@ export function ItemList({
         </div>
       </div>
 
-      {(error || status) && (
-        <p
-          className={`text-[0.75rem] ${error ? "text-priority-a" : "text-ink-muted"}`}
-          role={error ? "alert" : "status"}
-        >
-          {error ?? status}
+      {error && (
+        <p className="text-[0.75rem] text-priority-a" role="alert">
+          {error}
         </p>
       )}
 

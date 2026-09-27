@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback } from "react";
 import { attachUrlsToNodeAction } from "@/app/plan/outline/detail-actions";
-import { NoticeDialog } from "@/components/detail/NoticeDialog";
+import { useToast } from "@/components/shell/ToastProvider";
 import type { ActionResult } from "@/components/grid/useOptimisticNodes";
 import {
   CLIPBOARD_UNREADABLE,
@@ -13,15 +13,18 @@ import {
  * Read the clipboard, then attach its URLs to a project or task.
  *
  * The browser will not hand over clipboard text until this click, so enablement lives on
- * the row (project / task) and failures after the click are a one-button notice.
+ * the row (project / task) and failures after the click are an error toast.
  */
 export function useAttachFromClipboard(
   apply: (action: () => Promise<ActionResult>) => void,
 ): {
   attachFromClipboard: (id: string) => void;
-  noticeDialog: ReactNode;
 } {
-  const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
+  const fail = useCallback(
+    (message: string) => toast.error("Could not add attachment", { body: message }),
+    [toast],
+  );
 
   const attachFromClipboard = useCallback(
     (id: string) => {
@@ -29,34 +32,24 @@ export function useAttachFromClipboard(
         let text: string;
         try {
           if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
-            setNotice(CLIPBOARD_UNREADABLE);
+            fail(CLIPBOARD_UNREADABLE);
             return;
           }
           text = await navigator.clipboard.readText();
         } catch {
-          setNotice(CLIPBOARD_UNREADABLE);
+          fail(CLIPBOARD_UNREADABLE);
           return;
         }
         const refusal = clipboardAttachRefusal(text);
         if (refusal) {
-          setNotice(refusal);
+          fail(refusal);
           return;
         }
         apply(() => attachUrlsToNodeAction(id, text));
       })();
     },
-    [apply],
+    [apply, fail],
   );
 
-  return {
-    attachFromClipboard,
-    noticeDialog: (
-      <NoticeDialog
-        open={notice !== null}
-        title="Could not add attachment"
-        message={notice ?? ""}
-        onClose={() => setNotice(null)}
-      />
-    ),
-  };
+  return { attachFromClipboard };
 }

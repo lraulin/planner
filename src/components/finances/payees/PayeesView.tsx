@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/components/shell/ToastProvider";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import type { GridRow } from "@/lib/tree/slice";
 import type { BudgetEnvelopeCatalog } from "@/lib/finances/budget/queries";
@@ -61,7 +62,7 @@ export function PayeesView({
   const [seenServerRows, setSeenServerRows] = useState(initialPayees);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
   const [pendingDelete, setPendingDelete] = useState<PayeeRow | null>(null);
   const [pendingMerge, setPendingMerge] = useState<PayeeRow[] | null>(null);
   const [choosingMerge, setChoosingMerge] = useState(false);
@@ -124,7 +125,6 @@ export function PayeesView({
    */
   const rebuild = useCallback(() => {
     setError(null);
-    setNotice(null);
     startTransition(async () => {
       const result = await seedPayeesAction();
       if (!result.ok) {
@@ -133,7 +133,7 @@ export function PayeesView({
       }
       const summary = result.data;
       if (!summary) {
-        setNotice("Register rebuild finished.");
+        toast.success("Register rebuild finished.");
         refresh();
         return;
       }
@@ -157,10 +157,14 @@ export function PayeesView({
             .join(", ")}`,
         );
       }
-      setNotice(parts.join(" · "));
+      const show =
+        summary.conflicts.length > 0 || summary.unresolved > 0
+          ? toast.warning
+          : toast.success;
+      show(parts.join(" · "));
       refresh();
     });
-  }, [refresh]);
+  }, [refresh, toast]);
 
   const openDrawer = useCallback((id: string) => setOpenId(id), [setOpenId]);
   const closeDrawer = useCallback(() => {
@@ -221,11 +225,11 @@ export function PayeesView({
   const finishMerge = useCallback(
     (message: string) => {
       setPendingMerge(null);
-      setNotice(message);
+      toast.success(message);
       clearSelection(null);
       refresh();
     },
-    [clearSelection, refresh],
+    [clearSelection, refresh, toast],
   );
 
   const capabilitiesFor = useCallback(
@@ -308,19 +312,6 @@ export function PayeesView({
         views={views}
         commandCapabilities={commandCapabilities}
       />
-
-      {notice !== null && (
-        <div className="flex items-start gap-3 border-b border-rule px-4 py-2 text-[0.8125rem] text-ink-muted">
-          <span className="min-w-0 flex-1">{notice}</span>
-          <button
-            type="button"
-            className="shrink-0 text-ink-muted hover:text-ink"
-            onClick={() => setNotice(null)}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
 
       <DataGrid<PayeeColumnCtx, PayeeRow>
         rows={gridRows}

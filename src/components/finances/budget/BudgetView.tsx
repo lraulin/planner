@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/components/shell/ToastProvider";
 import {
   useCallback,
   useEffect,
@@ -232,7 +233,7 @@ export function BudgetView({
     readonly { id: string; name: string }[] | null
   >(null);
   const [filing, setFiling] = useState<PayeeEvidenceRow | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
   const [assigning, setAssigning] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [preview, setPreview] = useState<AssignResult | null>(null);
@@ -524,7 +525,6 @@ export function BudgetView({
   const commitAssign = useCallback(
     (option: AssignOption, categoryIds?: readonly string[]) => {
       setError(null);
-      setNotice(null);
       startTransition(async () => {
         const result = await assignBudgetAction(data.month, option, categoryIds);
         if (!result.ok) {
@@ -533,20 +533,18 @@ export function BudgetView({
         }
         const applied = result.data?.applied ?? 0;
         const problems = result.data?.errors ?? [];
-        setNotice(
-          [
-            applied === 0
-              ? "Nothing to assign."
-              : `${applied === 1 ? "1 envelope" : `${applied} envelopes`} updated.`,
-            ...problems,
-          ].join(" "),
-        );
+        const summary =
+          applied === 0
+            ? "Nothing to assign."
+            : `${applied === 1 ? "1 envelope" : `${applied} envelopes`} updated.`;
+        if (problems.length > 0) toast.warning(summary, { body: problems.join(" ") });
+        else toast.success(summary);
         setPreview(null);
         setAssigning(false);
         router.refresh();
       });
     },
-    [data.month, router],
+    [data.month, router, toast],
   );
 
   /** Preview when the split or a shortfall needs a look; otherwise write immediately. */
@@ -1655,23 +1653,6 @@ export function BudgetView({
             </p>
           ) : null}
 
-          {notice ? (
-            <p
-              role="status"
-              className="flex items-start gap-3 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem] text-ink"
-            >
-              <span className="min-w-0 flex-1">{notice}</span>
-              <button
-                type="button"
-                onClick={() => setNotice(null)}
-                aria-label="Dismiss"
-                className="flex-none rounded px-1 text-ink-muted hover:bg-surface-raised hover:text-ink"
-              >
-                ×
-              </button>
-            </p>
-          ) : null}
-
           {/* `shrink-0`, not `min-h-0`: these are stacked inside the page scroller, and a flex
             item allowed to shrink below its content collapses both grids to one row. */}
           <section
@@ -2053,7 +2034,7 @@ export function BudgetView({
           onMerged={(message) => {
             setMergingPayees(null);
             setSelectedPayees(null);
-            setNotice(message);
+            toast.success(message);
             refreshEvidence();
             router.refresh();
           }}
@@ -2075,7 +2056,7 @@ export function BudgetView({
             run(async () => {
               const result = await fileWaitingChargesAction(entry.payeeId, envelope.id);
               if (result.ok) {
-                setNotice(
+                toast.success(
                   `${result.data?.filed.toLocaleString() ?? 0} ${entry.name} charges filed into ${envelope.name}.`,
                 );
                 refreshEvidence();

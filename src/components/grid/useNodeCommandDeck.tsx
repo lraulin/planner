@@ -111,7 +111,7 @@ export function useNodeCommandDeck({
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const router = useRouter();
   const { clipboard, pickUp, clear: clearClipboard } = useRowClipboard();
-  const { attachFromClipboard, noticeDialog } = useAttachFromClipboard(apply);
+  const { attachFromClipboard } = useAttachFromClipboard(apply);
 
   const onConvert = useCallback((id: string, targetKind: NodeKind) => {
     setPendingConversion({ nodeId: id, targetKind });
@@ -422,7 +422,6 @@ export function useNodeCommandDeck({
         {deleteDialog}
         {priorityDialog}
         {conversionDialog}
-        {noticeDialog}
       </>
     ),
   };

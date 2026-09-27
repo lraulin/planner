@@ -160,7 +160,7 @@ function viewDefaults(): GridDefaults {
 export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { nodes, byId, patch, apply, error, setError } =
     useOptimisticNodes(initialNodes);
-  const { attachFromClipboard, noticeDialog } = useAttachFromClipboard(apply);
+  const { attachFromClipboard } = useAttachFromClipboard(apply);
   const {
     detail: detailId,
     select: selectId,
@@ -1251,8 +1251,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           onCancel={stateChange.cancel}
         />
       )}
-
-      {noticeDialog}
 
       <FileImportHost
         commandId="import.achieve"

@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/components/shell/ToastProvider";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import {
   createSupplyItemAction,
@@ -148,7 +149,7 @@ export function SuppliesView({
     readonly { id: string; name: string }[] | null
   >(null);
   const [choosingMerge, setChoosingMerge] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
   const [deleting, setDeleting] = useState<SupplyDeleteTargets | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -472,19 +473,6 @@ export function SuppliesView({
         }
       />
 
-      {notice !== null && (
-        <div className="flex items-start gap-3 border-b border-rule px-4 py-2 text-[0.8125rem] text-ink-muted">
-          <span className="min-w-0 flex-1">{notice}</span>
-          <button
-            type="button"
-            className="shrink-0 text-ink-muted hover:text-ink"
-            onClick={() => setNotice(null)}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
       <DataGrid<SuppliesColumnCtx, SupplyGridRow>
         rows={gridRows}
         columns={gridState.columns}
@@ -587,7 +575,7 @@ export function SuppliesView({
           onClose={() => setPendingMerge(null)}
           onMerged={(message) => {
             setPendingMerge(null);
-            setNotice(message);
+            toast.success(message);
             selectOne(null);
             refresh();
           }}

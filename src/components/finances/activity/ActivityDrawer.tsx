@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/components/shell/ToastProvider";
 import { useId, useState, useTransition } from "react";
 import { restoreDeletedHoldAction } from "@/app/finances/actions";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
@@ -172,7 +173,8 @@ function RestoreHold({
   onRestored: () => void;
 }) {
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const toast = useToast();
+  const [restored, setRestored] = useState(false);
   if (
     change.entityType !== "transaction" ||
     change.after !== null ||
@@ -184,32 +186,21 @@ function RestoreHold({
     <div className="mt-2 flex flex-col gap-1">
       <button
         type="button"
-        disabled={pending || message?.ok === true}
+        disabled={pending || restored}
         className="min-h-tap self-start rounded border border-rule px-3 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
         onClick={() =>
           startTransition(async () => {
             const result = await restoreDeletedHoldAction(change.entityIdentity);
             if (result.ok) {
-              setMessage({ ok: true, text: "Restored." });
+              setRestored(true);
+              toast.success("Hold restored.");
               onRestored();
-            } else setMessage({ ok: false, text: result.error });
+            } else toast.error("Could not restore the hold", { body: result.error });
           })
         }
       >
         {pending ? "Restoring…" : "Restore this hold"}
       </button>
-      {message && (
-        <p
-          role={message.ok ? "status" : "alert"}
-          className={
-            message.ok
-              ? "text-[0.8125rem] text-ink-muted"
-              : "text-[0.8125rem] text-priority-a"
-          }
-        >
-          {message.text}
-        </p>
-      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import { useToast } from "@/components/shell/ToastProvider";
 import Link from "next/link";
 
 import {
@@ -217,6 +218,7 @@ export function FinancesView({
     kind: Exclude<EnvelopeKind, "bill">;
   } | null>(null);
   const [createdEnvelopes, setCreatedEnvelopes] = useState<EnvelopePickerOption[]>([]);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<RegisterTransactionRow[]>([]);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
@@ -495,12 +497,17 @@ export function FinancesView({
           skipped: [],
         };
         if (skipped.length > 0) {
-          setError(
-            updated.length === 0
-              ? (skipped[0]?.reason ?? "Could not set the envelope.")
-              : `Category set on ${updated.length} of ${ids.length} selected transactions.`,
-          );
-          if (updated.length === 0) refresh();
+          if (updated.length === 0) {
+            setError(skipped[0]?.reason ?? "Could not set the envelope.");
+            refresh();
+          } else {
+            toast.warning(
+              `Category set on ${updated.length} of ${ids.length} selected transactions.`,
+              {
+                body: `${skipped.length} skipped: ${skipped[0]?.reason ?? "ineligible"}`,
+              },
+            );
+          }
         }
         if (
           registerQuery.groupBy.includes("category") ||
@@ -512,7 +519,16 @@ export function FinancesView({
         }
       });
     },
-    [envelopeNameById, refresh, patchRow, reload, registerQuery, selectedIds, order],
+    [
+      envelopeNameById,
+      refresh,
+      patchRow,
+      reload,
+      registerQuery,
+      selectedIds,
+      order,
+      toast,
+    ],
   );
 
   const onCreateEnvelope = useCallback(
