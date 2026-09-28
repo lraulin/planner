@@ -188,6 +188,19 @@ describe("parseFinanceCsv — Capital One card", () => {
     expect(parsed.accounts[0].transactions).toHaveLength(1);
     expect(parsed.errors).toEqual([]);
   });
+
+  it("names the row a spreadsheet would show even with a blank line above it", () => {
+    // A blank line dropped before counting would report this as row 3 (one behind where
+    // it actually sits, since the empty line in between never got its own index).
+    const text = [
+      CAPONE_CARD_HEADER,
+      "2026-08-10,2026-08-11,3448,GOOD,Dining,10.00,",
+      "",
+      "2026-08-10,2026-08-11,3448,NEITHER,Dining,,",
+    ].join("\n");
+    const parsed = ok("2026-08-12_transaction_download.csv", text);
+    expect(parsed.errors).toEqual([expect.objectContaining({ row: 4 })]);
+  });
 });
 
 describe("parseFinanceCsv — Capital One 360 bank", () => {

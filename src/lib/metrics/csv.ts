@@ -1,4 +1,4 @@
-import { escapeCsvField, parseCsvRows, splitCsvLine } from "@/lib/csv/text";
+import { escapeCsvField, parseCsvRowsWithLines, splitCsvLine } from "@/lib/csv/text";
 import { sortEntriesByDate } from "./derive";
 import { formatMetricNumber, isDateKey, parseMetricInput } from "./parse";
 import type { MetricEntryInput, MetricEntryView } from "./types";
@@ -46,13 +46,13 @@ function normalizeHeader(h: string): string {
  * {@link escapeCsvField} writes) does not split into two broken rows.
  */
 export function parseEntriesCsv(text: string): ParseCsvEntriesResult {
-  const rows = parseCsvRows(text);
+  const rows = parseCsvRowsWithLines(text);
 
   if (rows.length === 0) {
     return { entries: [], errors: [{ row: 1, message: "File is empty." }] };
   }
 
-  const headerIndex = rows.findIndex((cells) => {
+  const headerIndex = rows.findIndex(({ cells }) => {
     const headerCells = cells.map(normalizeHeader);
     return headerCells.includes("date") && headerCells.includes("value");
   });
@@ -68,7 +68,7 @@ export function parseEntriesCsv(text: string): ParseCsvEntriesResult {
     };
   }
 
-  const headerCells = rows[headerIndex].map(normalizeHeader);
+  const headerCells = rows[headerIndex].cells.map(normalizeHeader);
   const dateIdx = headerCells.findIndex((h) => h === "date");
   const valueIdx = headerCells.findIndex((h) => h === "value");
   const typeIdx = headerCells.findIndex((h) => h === "type");
@@ -78,9 +78,10 @@ export function parseEntriesCsv(text: string): ParseCsvEntriesResult {
   const errors: { row: number; message: string }[] = [];
 
   for (let i = headerIndex + 1; i < rows.length; i++) {
-    // 1-based data row numbers count the header as row 1 (same as a spreadsheet).
-    const rowNum = i + 1;
-    const cells = rows[i];
+    // The physical line this row sits on in the source file (a spreadsheet numbers the
+    // header 1, same as here when there is nothing blank above it).
+    const rowNum = rows[i].line;
+    const cells = rows[i].cells;
     const dateRaw = (cells[dateIdx] ?? "").trim();
     const valueRaw = (cells[valueIdx] ?? "").trim();
     const typeRaw = typeIdx >= 0 ? cells[typeIdx] : undefined;

@@ -1,6 +1,6 @@
 import type { NodeItem } from "@/db/schema";
 import type { ContactOption } from "@/lib/contacts/types";
-import { escapeCsvField, parseCsvRows } from "@/lib/csv/text";
+import { escapeCsvField, parseCsvRowsWithLines } from "@/lib/csv/text";
 import type { NodeItemValues } from "@/lib/detail/types";
 import type { ItemField } from "./itemKinds";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
@@ -152,12 +152,12 @@ export function parseItemsCsv(
   fields: readonly ItemCsvField[],
   text: string,
 ): ParseItemsCsvResult {
-  const table = parseCsvRows(text);
+  const table = parseCsvRowsWithLines(text);
   if (table.length === 0) {
     return { rows: [], errors: [{ row: 1, message: "File is empty." }] };
   }
 
-  const headerIndex = table.findIndex((header) =>
+  const headerIndex = table.findIndex(({ cells: header }) =>
     header.some((h) => matchField(fields, h)),
   );
   if (headerIndex < 0) {
@@ -173,7 +173,7 @@ export function parseItemsCsv(
     };
   }
 
-  const header = table[headerIndex];
+  const header = table[headerIndex].cells;
   const mapping: (ItemCsvField | null)[] = header.map(
     (h) => matchField(fields, h) ?? null,
   );
@@ -182,8 +182,8 @@ export function parseItemsCsv(
   const errors: { row: number; message: string }[] = [];
 
   for (let i = headerIndex + 1; i < table.length; i++) {
-    const rowNum = i + 1;
-    const cells = table[i];
+    const rowNum = table[i].line;
+    const cells = table[i].cells;
     if (cells.every((c) => c.trim() === "")) continue;
 
     const values: ItemCsvValues = {};

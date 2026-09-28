@@ -99,3 +99,77 @@ export function parseCsvRows(text: string): string[][] {
 
   return rows;
 }
+
+/** One kept row from {@link parseCsvRowsWithLines}, tagged with where it actually sits. */
+export type CsvLine = { cells: string[]; line: number };
+
+/**
+ * Same walk as {@link parseCsvRows}, but tags each kept row with its 1-based physical line
+ * number in the source text — the number a spreadsheet or text editor would show.
+ *
+ * `parseCsvRows` drops blank rows before a caller ever sees an index, so a caller that
+ * reports "row N" to the user by counting the array it got back is wrong by one for every
+ * blank line above N — off by more the further into the file a warning fires. Every CSV
+ * importer that surfaces row numbers in an error message (`amazon/csv.ts`, `metrics/csv.ts`,
+ * `finances/formats.ts`, `finances/coinbaseCsv.ts`, `detail/itemCsv.ts`) needs this instead
+ * of `parseCsvRows`, so the row a warning names is the row the person actually has open.
+ */
+export function parseCsvRowsWithLines(text: string): CsvLine[] {
+  const s = text.replace(/^﻿/, "");
+  const rows: CsvLine[] = [];
+  let row: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  let line = 1;
+  let rowStartLine = 1;
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (s[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        // A quoted cell may itself contain a newline (what `escapeCsvField` writes); that
+        // still advances the physical line count even though the row has not ended.
+        if (ch === "\n") line++;
+        cur += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === ",") {
+      row.push(cur);
+      cur = "";
+      continue;
+    }
+    if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && s[i + 1] === "\n") i++;
+      row.push(cur);
+      cur = "";
+      if (row.some((cell) => cell.trim() !== ""))
+        rows.push({ cells: row, line: rowStartLine });
+      row = [];
+      line++;
+      rowStartLine = line;
+      continue;
+    }
+    cur += ch;
+  }
+
+  if (cur.length > 0 || row.length > 0) {
+    row.push(cur);
+    if (row.some((cell) => cell.trim() !== ""))
+      rows.push({ cells: row, line: rowStartLine });
+  }
+
+  return rows;
+}

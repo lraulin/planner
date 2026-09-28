@@ -1,4 +1,4 @@
-import { parseCsvRows } from "@/lib/csv/text";
+import { parseCsvRows, parseCsvRowsWithLines } from "@/lib/csv/text";
 import { parseAmountCents } from "./money";
 import type {
   ParsedAccount,
@@ -133,8 +133,8 @@ export function parseCoinbaseCsv(
   if (text.trim() === "") {
     return { ok: false, error: `"${fileName}" is empty.` };
   }
-  const rows = parseCsvRows(text);
-  const headerAt = rows.findIndex((row) => {
+  const rows = parseCsvRowsWithLines(text);
+  const headerAt = rows.findIndex(({ cells: row }) => {
     const present = new Set(row.map(normalizeHeader));
     return HEADER_MARKERS.every((marker) => present.has(marker));
   });
@@ -145,17 +145,17 @@ export function parseCoinbaseCsv(
     };
   }
 
-  const userRow = rows.find((row) => row[0]?.trim() === "User");
-  const externalKey = userRow?.[2]?.trim() || "coinbase";
+  const userRow = rows.find(({ cells }) => cells[0]?.trim() === "User");
+  const externalKey = userRow?.cells[2]?.trim() || "coinbase";
 
-  const index = headerIndex(rows[headerAt]);
+  const index = headerIndex(rows[headerAt].cells);
   const errors: RowError[] = [];
   const drafts: Draft[] = [];
 
   for (let i = headerAt + 1; i < rows.length; i++) {
-    const cells = rows[i];
+    const cells = rows[i].cells;
     if (cells.every((value) => value.trim() === "")) continue;
-    const rowNumber = i + 1;
+    const rowNumber = rows[i].line;
     const timestamp = cell(cells, index.get("timestamp"));
     const transactionDate = dateFromTimestamp(timestamp);
     if (!transactionDate) {

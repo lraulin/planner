@@ -1,4 +1,4 @@
-import { parseCsvRows } from "@/lib/csv/text";
+import { parseCsvRowsWithLines } from "@/lib/csv/text";
 import { dateKeyFromParts, isRealCalendarDate } from "@/lib/schedule/geometry";
 import { parseAmountCents } from "@/lib/finances/money";
 import { toDateKey } from "@/lib/schedule/geometry";
@@ -123,17 +123,17 @@ export type CsvTable = {
 };
 
 export function csvTable(text: string): CsvTable {
-  const grid = parseCsvRows(text);
+  const grid = parseCsvRowsWithLines(text);
   if (grid.length === 0) return { headers: [], rows: [] };
-  const headers = grid[0].map((cell) => cell.trim());
+  const headers = grid[0].cells.map((cell) => cell.trim());
   const rows = [];
   for (let i = 1; i < grid.length; i++) {
-    const line = grid[i];
+    const { cells: line, line: lineNumber } = grid[i];
     const cells: Record<string, string> = {};
     for (let c = 0; c < headers.length; c++) {
       cells[headers[c]] = line[c] ?? "";
     }
-    rows.push({ row: i + 1, cells });
+    rows.push({ row: lineNumber, cells });
   }
   return { headers, rows };
 }

@@ -42,6 +42,27 @@ function byId(id: string) {
   return row!;
 }
 
+describe("parseCoinbaseCsv row numbers", () => {
+  it("names the row a spreadsheet would show, counting the blank preamble line", () => {
+    // Every real export has the shape `SNIPPET` does: a blank line 1, "Transactions" on
+    // line 2, the User line on 3, header on 4. A row-number count that started over after
+    // parseCsvRows dropped that blank line would call this bad row "5", not the "6" it
+    // actually sits on.
+    const header =
+      "ID,Timestamp,Transaction Type,Asset,Quantity Transacted,Price Currency," +
+      "Price at Transaction,Subtotal,Total (inclusive of fees and/or spread)," +
+      "Fees and/or Spread,Notes,Sender Address,Recipient Address";
+    const text =
+      `\nTransactions\nUser,Lee Raulin,0b7043a7-af9a-5c5c-bb18-6e15b4e0267e\n${header}\n` +
+      "698242c1ff3a8c113e3fa72f,2026-02-03 18:47:29 UTC,Withdrawal,USD,-1,USD,$1.00,$1.00,$1.00,$0.00,note,,\n" +
+      "bad-id,not-a-timestamp,Sell,BTC,-1,USD,$1,$1,$1,$0,note,,\n";
+    const result = parseCoinbaseCsv("coinbase.csv", text);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.parsed.errors).toEqual([expect.objectContaining({ row: 6 })]);
+  });
+});
+
 describe("looksLikeCoinbaseCsv", () => {
   it("recognises the real preamble and header", () => {
     expect(looksLikeCoinbaseCsv(SNIPPET)).toBe(true);

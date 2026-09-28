@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { escapeCsvField, parseCsvRows, splitCsvLine } from "./text";
+import {
+  escapeCsvField,
+  parseCsvRows,
+  parseCsvRowsWithLines,
+  splitCsvLine,
+} from "./text";
 
 describe("escapeCsvField", () => {
   it("quotes fields that contain commas, quotes, or newlines", () => {
@@ -54,5 +59,58 @@ describe("parseCsvRows", () => {
     const cells = ["plain", "a,b", 'say "hi"', "line1\nline2"];
     const line = cells.map(escapeCsvField).join(",");
     expect(parseCsvRows(line)).toEqual([cells]);
+  });
+});
+
+describe("parseCsvRowsWithLines", () => {
+  it("tags each row with its own line number when there are no blank lines", () => {
+    expect(parseCsvRowsWithLines("a,b\n1,2\n3,4\n")).toEqual([
+      { cells: ["a", "b"], line: 1 },
+      { cells: ["1", "2"], line: 2 },
+      { cells: ["3", "4"], line: 3 },
+    ]);
+  });
+
+  it("keeps reporting the true physical line across a dropped blank row", () => {
+    // A naive caller that numbers by array index instead of this field would call the
+    // last row "3", not "4" — this is the bug `csvTable` and friends used to have.
+    expect(parseCsvRowsWithLines("a,b\n1,2\n\n3,4\n")).toEqual([
+      { cells: ["a", "b"], line: 1 },
+      { cells: ["1", "2"], line: 2 },
+      { cells: ["3", "4"], line: 4 },
+    ]);
+  });
+
+  it("counts multiple consecutive blank lines correctly", () => {
+    expect(parseCsvRowsWithLines("a\n1\n\n\n\n2\n")).toEqual([
+      { cells: ["a"], line: 1 },
+      { cells: ["1"], line: 2 },
+      { cells: ["2"], line: 6 },
+    ]);
+  });
+
+  it("advances the line count for a newline embedded in a quoted cell", () => {
+    const doc = ["Date,Note,Value", '2026-01-05,"hello\nworld",1', "3,after,4"].join(
+      "\n",
+    );
+    expect(parseCsvRowsWithLines(doc)).toEqual([
+      { cells: ["Date", "Note", "Value"], line: 1 },
+      { cells: ["2026-01-05", "hello\nworld", "1"], line: 2 },
+      { cells: ["3", "after", "4"], line: 4 },
+    ]);
+  });
+
+  it("handles CRLF and a leading BOM the same as parseCsvRows", () => {
+    expect(parseCsvRowsWithLines('﻿"a""b",c\r\n\r\n1,2\r\n')).toEqual([
+      { cells: ['a"b', "c"], line: 1 },
+      { cells: ["1", "2"], line: 3 },
+    ]);
+  });
+
+  it("gives a file with no trailing newline the correct line for its last row", () => {
+    expect(parseCsvRowsWithLines("a,b\n\n1,2")).toEqual([
+      { cells: ["a", "b"], line: 1 },
+      { cells: ["1", "2"], line: 3 },
+    ]);
   });
 });

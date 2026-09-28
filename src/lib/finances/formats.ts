@@ -1,6 +1,6 @@
 import type { FinanceAccountKind } from "@/db/schema";
 import { dateKeyFromParts } from "@/lib/schedule/geometry";
-import { parseCsvRows } from "@/lib/csv/text";
+import { parseCsvRowsWithLines } from "@/lib/csv/text";
 import { parseAmountCents } from "./money";
 import type {
   FinanceFeed,
@@ -335,12 +335,12 @@ export function parseFinanceCsv(
   fileName: string,
   text: string,
 ): ParseSuccess | ParseFailure {
-  const rows = parseCsvRows(text);
+  const rows = parseCsvRowsWithLines(text);
   if (rows.length === 0) {
     return { ok: false, error: `"${fileName}" is empty.` };
   }
 
-  const feed = detectFeed(rows[0]);
+  const feed = detectFeed(rows[0].cells);
   if (!feed) {
     return {
       ok: false,
@@ -357,15 +357,16 @@ export function parseFinanceCsv(
     };
   }
 
-  const index = headerIndex(rows[0]);
+  const index = headerIndex(rows[0].cells);
   const parseRow = ROW_PARSERS[feed];
   const errors: RowError[] = [];
   const grouped = new Map<string, ParsedTransaction[]>();
 
   for (let i = 1; i < rows.length; i++) {
-    // Header is row 1, the way a spreadsheet numbers it.
-    const rowNumber = i + 1;
-    const cells = rows[i];
+    // The physical line this row sits on in the source file (a spreadsheet numbers the
+    // header 1, same as here when there is nothing blank above it).
+    const rowNumber = rows[i].line;
+    const cells = rows[i].cells;
     if (cells.every((value) => value.trim() === "")) continue;
 
     const result = parseRow(cells, index);
