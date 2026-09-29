@@ -8,7 +8,6 @@
  * been worth a library.
  */
 
-import { headers } from "next/headers";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts } from "@/db/schema";
@@ -83,21 +82,14 @@ export async function googleAccountId(userId: string): Promise<string | null> {
 
 export async function getGoogleAccessToken(userId: string): Promise<string> {
   try {
-    // `headers()` throws outside a request scope (a script, a test). The user is already
-    // identified by `userId`, so an absent header bag is not a problem worth failing on.
-    let requestHeaders: Headers | undefined;
-    try {
-      requestHeaders = await headers();
-    } catch {
-      requestHeaders = undefined;
-    }
-
     const accountId = await googleAccountId(userId);
     if (!accountId) throw new GoogleNotLinkedError();
 
     const result = await auth.api.getAccessToken({
+      // No request headers: this is a trusted server-side call for an already-resolved
+      // userId. Passing the inbound headers makes Better Auth demand a session cookie,
+      // which a Bearer-authenticated MCP / agent request never carries.
       body: { accountId, userId },
-      ...(requestHeaders ? { headers: requestHeaders } : {}),
     });
     if (!result?.accessToken) throw new GoogleNotLinkedError();
     return result.accessToken;
