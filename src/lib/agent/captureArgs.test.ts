@@ -92,6 +92,26 @@ describe("parseCaptureArgs — batch", () => {
       "not both",
     );
   });
+
+  // The schema is one flat object, so it cannot say that note/deadline/externalId belong to
+  // the single form; dropping them quietly from a batch would lose what the caller sent.
+  it("refuses single-item fields at the top level of a batch", () => {
+    for (const extra of [
+      { note: "x" },
+      { deadline: "2026-04-15" },
+      { externalId: "a" },
+    ]) {
+      expect(() => parseCaptureArgs({ items: [{ name: "One" }], ...extra })).toThrow(
+        "not at the top level",
+      );
+    }
+    expect(
+      parseCaptureArgs({
+        externalSource: "reminders",
+        items: [{ name: "One", externalId: "a" }],
+      }).items,
+    ).toHaveLength(1);
+  });
 });
 
 describe("parseCaptureArgs — deadlines", () => {

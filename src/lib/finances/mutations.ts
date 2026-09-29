@@ -778,18 +778,28 @@ export async function deleteAccount(userId: string, accountId: string): Promise<
 export type BillEnvelopeEdit = {
   /** Existing bills are always edited by stable envelope ID. */
   id?: string;
-  /** Display name; legacy creation callers may resolve an unambiguous name. */
+  /**
+   * Display name; legacy creation callers may resolve an unambiguous name. With `id`, a
+   * different name renames the bill.
+   */
   name: string;
   /** Stable payees whose transactions belong to this bill. Omitted leaves claims alone. */
   payeeIds?: readonly string[];
   /** Whether it is still live. See `EnvelopeStatus`. */
   status?: EnvelopeStatus;
-  /** When it was cancelled. Defaults to today when `status` becomes `cancelled`. */
+  /**
+   * When it was cancelled. Defaults to today when `status` becomes `cancelled`; on its own
+   * it corrects the date of a bill that is already cancelled.
+   */
   cancelledOn?: string | null;
   /** Where the bill is managed — account page, billing page, cancel page. */
   url?: string;
-  /** How often it charges: whole months, or a fixed number of days. */
-  cadence: Cadence;
+  /**
+   * How often it charges: whole months, or a fixed number of days. Omitted leaves an
+   * existing bill's cadence alone and gives a new bill the monthly default — a status or
+   * name correction must never quietly turn a 30-day bill into a calendar-monthly one.
+   */
+  cadence?: Cadence;
   /** Null keeps the median of the charges on file as the amount. */
   expectedCents?: number | null;
   anchorDate?: string | null;
@@ -845,14 +855,25 @@ function requireValidBillEnvelope(edit: BillEnvelopeEdit): string {
       edit.expectedCents > 2147483647)
   )
     throw new Error("A bill amount must be a nonnegative whole number of cents.");
-  if (!Number.isInteger(edit.cadence.n)) {
+  const cadence = edit.cadence;
+  if (cadence && !Number.isInteger(cadence.n)) {
     throw new Error("A cadence must be a whole number.");
   }
-  if (edit.cadence.unit === "month" && (edit.cadence.n < 1 || edit.cadence.n > 24)) {
+  if (cadence?.unit === "month" && (cadence.n < 1 || cadence.n > 24)) {
     throw new Error("A cadence in months must be from 1 to 24.");
   }
-  if (edit.cadence.unit === "day" && (edit.cadence.n < 2 || edit.cadence.n > 200)) {
+  if (cadence?.unit === "day" && (cadence.n < 2 || cadence.n > 200)) {
     throw new Error("A cadence in days must be from 2 to 200.");
+  }
+  if (
+    edit.cancelledOn !== undefined &&
+    edit.cancelledOn !== null &&
+    edit.status !== undefined &&
+    edit.status !== "cancelled"
+  ) {
+    throw new Error(
+      "A cancellation date is only allowed on a cancelled bill; status must be cancelled.",
+    );
   }
   if (edit.scheduled === false && !(Number(edit.expectedCents) > 0)) {
     throw new Error("A bill with no fixed schedule needs its cost for the period.");
@@ -965,13 +986,19 @@ async function attachUnassignedMerchantHistory(
 export async function upsertBillEnvelope(
   userId: string,
   edit: BillEnvelopeEdit,
-): Promise<void> {
+): Promise<string> {
   const name = requireValidBillEnvelope(edit);
 
   let categoryId: string | undefined;
   await db.transaction(async (tx) => {
     const matches = await tx
-      .select({ id: financeBudgetCategories.id })
+      .select({
+        id: financeBudgetCategories.id,
+        name: financeBudgetCategories.name,
+        status: financeBudgetCategories.status,
+        cadenceMonths: financeBudgetCategories.cadenceMonths,
+        cadenceDays: financeBudgetCategories.cadenceDays,
+      })
       .from(financeBudgetCategories)
       .where(
         and(
@@ -989,6 +1016,24 @@ export async function upsertBillEnvelope(
     const existing = matches[0];
     if (existing) {
       categoryId = existing.id;
+      // The cadence the bill will have after this write — the stored one when the edit
+      // leaves it alone — which is the one an anchor has to be checked against.
+      const cadence =
+        edit.cadence ??
+        cadenceOf({
+          cadenceMonths: existing.cadenceMonths ?? 1,
+          cadenceDays: existing.cadenceDays,
+        });
+      const nextStatus = edit.status ?? existing.status;
+      if (
+        edit.cancelledOn !== undefined &&
+        edit.cancelledOn !== null &&
+        nextStatus !== "cancelled"
+      ) {
+        throw new Error(
+          "A cancellation date is only allowed on a cancelled bill; status must be cancelled.",
+        );
+      }
       if (edit.anchorDate !== undefined) {
         // Last charge is what is filed to this envelope — `billLastCharge.ts`. A date
         // that charge already covers is one `billAnchor` would ignore, so storing it
@@ -996,7 +1041,7 @@ export async function upsertBillEnvelope(
         const error = nextChargeWriteError(
           edit.anchorDate,
           await lastChargeOnBill(userId, categoryId),
-          edit.cadence,
+          cadence,
         );
         if (error) throw new Error(error);
       }
@@ -1005,7 +1050,9 @@ export async function upsertBillEnvelope(
       // else, and a blanket write would silently clear the declared amount — after which the
       // bill's figure would quietly fall back to whatever the visible window's median was.
       const changes = {
-        ...cadenceColumns(edit.cadence),
+        // Renaming is only by id: a name lookup has, by definition, the name already.
+        ...(edit.id && name !== existing.name ? { name } : {}),
+        ...(edit.cadence ? cadenceColumns(edit.cadence) : {}),
         ...(edit.expectedCents !== undefined
           ? { expectedCents: edit.expectedCents }
           : {}),
@@ -1025,7 +1072,10 @@ export async function upsertBillEnvelope(
               cancelledOn:
                 edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,
             }
-          : {}),
+          : // Correcting the date of a bill that is already cancelled.
+            edit.cancelledOn !== undefined && nextStatus === "cancelled"
+            ? { cancelledOn: edit.cancelledOn ?? todayInUtc() }
+            : {}),
         ...(edit.url !== undefined ? { url: edit.url.trim() } : {}),
         updatedAt: new Date(),
       };
@@ -1039,6 +1089,15 @@ export async function upsertBillEnvelope(
           ),
         );
     } else {
+      if (
+        edit.cancelledOn !== undefined &&
+        edit.cancelledOn !== null &&
+        edit.status !== "cancelled"
+      ) {
+        throw new Error(
+          "A cancellation date is only allowed on a cancelled bill; status must be cancelled.",
+        );
+      }
       const groupId = edit.groupId ?? null;
       const siblings = await tx
         .select({ sortKey: financeBudgetCategories.sortKey })
@@ -1063,7 +1122,7 @@ export async function upsertBillEnvelope(
           name,
           sortKey: last === undefined ? sortKey.first() : sortKey.after(last),
           kind: "bill",
-          ...cadenceColumns(edit.cadence),
+          ...cadenceColumns(edit.cadence ?? { unit: "month", n: 1 }),
           expectedCents: edit.expectedCents ?? null,
           anchorDate: edit.anchorDate ?? null,
           notes: edit.notes?.trim() ?? "",
@@ -1096,6 +1155,7 @@ export async function upsertBillEnvelope(
   if (edit.payeeIds !== undefined) {
     await applyClaimedPayees(userId, categoryId, edit.payeeIds);
   }
+  return categoryId;
 }
 
 /**

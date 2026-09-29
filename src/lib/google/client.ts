@@ -8,49 +8,17 @@
  * been worth a library.
  */
 
-import { headers } from "next/headers";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts } from "@/db/schema";
 import { auth } from "@/lib/auth/server";
+import { GoogleApiError, GoogleEventGoneError, GoogleNotLinkedError } from "./errors";
 import type { GoogleEvent, GoogleEventWrite } from "./mapping";
 
+// Re-exported so existing importers keep one entry point for the Google client.
+export { GoogleApiError, GoogleEventGoneError, GoogleNotLinkedError };
+
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
-
-/**
- * Google is not connected, or the grant was revoked. Distinct from a transient failure
- * because the fix is different: the user has to reconnect, and no amount of retrying helps.
- */
-export class GoogleNotLinkedError extends Error {
-  constructor(message = "Google is not connected.") {
-    super(message);
-    this.name = "GoogleNotLinkedError";
-  }
-}
-
-/**
- * Google returned 404/410 — the addressed thing is gone. Usually an event someone already
- * deleted elsewhere, which `deleteEvent` tolerates; but the same status also means "no such
- * calendar", so the default wording stays resource-neutral. A banner reading "this event no
- * longer exists" when the real problem is a missing calendar sends you looking in the wrong
- * place.
- */
-export class GoogleEventGoneError extends Error {
-  constructor(message = "That Google Calendar item no longer exists.") {
-    super(message);
-    this.name = "GoogleEventGoneError";
-  }
-}
-
-/** Anything else: rate limits, 5xx, network. Transient — keep the mirror as it is. */
-export class GoogleApiError extends Error {
-  readonly status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = "GoogleApiError";
-    this.status = status;
-  }
-}
 
 /**
  * A valid access token for this user, refreshing it if needed.
@@ -83,21 +51,14 @@ export async function googleAccountId(userId: string): Promise<string | null> {
 
 export async function getGoogleAccessToken(userId: string): Promise<string> {
   try {
-    // `headers()` throws outside a request scope (a script, a test). The user is already
-    // identified by `userId`, so an absent header bag is not a problem worth failing on.
-    let requestHeaders: Headers | undefined;
-    try {
-      requestHeaders = await headers();
-    } catch {
-      requestHeaders = undefined;
-    }
-
     const accountId = await googleAccountId(userId);
     if (!accountId) throw new GoogleNotLinkedError();
 
     const result = await auth.api.getAccessToken({
+      // No request headers: this is a trusted server-side call for an already-resolved
+      // userId. Passing the inbound headers makes Better Auth demand a session cookie,
+      // which a Bearer-authenticated MCP / agent request never carries.
       body: { accountId, userId },
-      ...(requestHeaders ? { headers: requestHeaders } : {}),
     });
     if (!result?.accessToken) throw new GoogleNotLinkedError();
     return result.accessToken;

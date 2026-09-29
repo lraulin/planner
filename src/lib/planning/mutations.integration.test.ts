@@ -252,6 +252,46 @@ describeDb("plan entries", () => {
     expect(entry.focus).toBe(false);
   });
 
+  // Achieve Planner ties a project's weekly MVP flag to its Focus flag (release-log.txt:550,
+  // online-help.md:1722-1723), so a plan entry's focus on a project writes through.
+  it("writes a project entry's focus through to the project, both ways", async () => {
+    const projectId = await makeNode(userId, "project");
+    const focusOf = async () =>
+      (await db.select().from(nodes).where(eq(nodes.id, projectId)))[0]?.focus;
+
+    await upsertPlanEntry(userId, planId, projectId, { focus: true });
+    expect(await focusOf()).toBe(true);
+    await upsertPlanEntry(userId, planId, projectId, { committedMinutes: 60 });
+    expect(await focusOf()).toBe(true);
+    await upsertPlanEntry(userId, planId, projectId, { focus: false });
+    expect(await focusOf()).toBe(false);
+
+    await updateWeeklyPlanEntries(userId, planId, [{ nodeId: projectId, focus: true }]);
+    expect(await focusOf()).toBe(true);
+    await updateWeeklyPlanEntries(userId, planId, [
+      { nodeId: projectId, reviewed: true },
+    ]);
+    expect(await focusOf()).toBe(true);
+    await updateWeeklyPlanEntries(userId, planId, [
+      { nodeId: projectId, focus: false },
+    ]);
+    expect(await focusOf()).toBe(false);
+  });
+
+  it("keeps entry focus on Result Areas and goals out of the outline flag", async () => {
+    const areaId = await makeNode(userId, "result_area");
+    const goalId = await makeNode(userId, "goal");
+
+    await upsertPlanEntry(userId, planId, areaId, { focus: true });
+    await updateWeeklyPlanEntries(userId, planId, [{ nodeId: goalId, focus: true }]);
+
+    const rows = await db.select().from(nodes).where(eq(nodes.userId, userId));
+    expect(rows.find((row) => row.id === areaId)?.focus).toBe(false);
+    expect(rows.find((row) => row.id === goalId)?.focus).toBe(false);
+    const entries = await listPlanEntries(userId, planId);
+    expect(entries.every((entry) => entry.focus)).toBe(true);
+  });
+
   it("returns the most recent earlier rewrite for a goal, not the oldest", async () => {
     const goalId = await makeNode(userId, "goal");
     const older = await ensureWeeklyPlan(userId, { weekStart: new Date(2026, 6, 5) });

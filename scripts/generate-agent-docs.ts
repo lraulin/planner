@@ -11,9 +11,12 @@ type JsonSchema = {
   anyOf?: JsonSchema[];
 };
 
-function objectSignature(schema: z.ZodType): string {
+function objectSignature(schema: z.ZodType, side: "input" | "output"): string {
+  // Arguments render from the caller's side so a defaulted field shows as `=default`
+  // rather than as required.
   const json = z.toJSONSchema(schema, {
     target: "draft-2020-12",
+    io: side,
   }) as JsonSchema;
   const branches = json.anyOf ?? [json];
   return branches
@@ -62,8 +65,8 @@ ${tool.summary}
 - Returns: ${tool.returns}
 - Effects: ${tool.effects.kind}; destructive=${String(tool.effects.destructive)}; retry=${tool.effects.retry}; confirmation=${tool.effects.confirmation}
 - Exposure: ${tool.exposure}${tool.replacedBy ? `; replaced by \`${tool.replacedBy}\`` : ""}
-- Arguments: \`${objectSignature(tool.inputSchema)}\`
-- Output: \`${objectSignature(tool.outputSchema)}\`
+- Arguments: \`${objectSignature(tool.inputSchema, "input")}\`
+- Output: \`${objectSignature(tool.outputSchema, "output")}\`
 
 Call \`describe_tool\` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.`,
@@ -111,9 +114,10 @@ Authorization: Bearer <PLANNER_AGENT_API_KEY>
 Content-Type: application/json
 \`\`\`
 
-\`tools/list\` exposes the current core and domain tools — not HTTP discovery
-(\`list_tools\`, \`describe_tool\`, \`health\`) or legacy aliases. In Grok: grok.com/connectors
-→ New Connector → Custom, name \`Planner\`, URL
+\`tools/list\` exposes the current core and domain tools plus \`describe_tool\` — not
+\`list_tools\`, \`health\`, or legacy aliases. Each description ends with a \`Fields:\` line
+for clients that drop \`inputSchema\`; \`describe_tool\` returns the full schema.
+In Grok: grok.com/connectors → New Connector → Custom, name \`Planner\`, URL
 \`https://planner-lee-5344.vercel.app/api/mcp\`. Grok then asks for OAuth app
 credentials — Client ID \`planner\`, empty secret, authorize
 \`https://planner-lee-5344.vercel.app/oauth/authorize\`, token

@@ -36,6 +36,39 @@ describe("agent tool registry", () => {
     });
   });
 
+  // The agent may be on a client that dropped the schema, so the error itself has to say
+  // what would have been accepted.
+  it("lists the allowed fields when it rejects an unknown one", async () => {
+    await expect(
+      dispatchAgentTool(
+        "create_node",
+        { type: "task", name: "x", parent: null },
+        UNUSED_USER_ID,
+      ),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: expect.stringMatching(
+        /^Unknown field parent\. Allowed fields: .*\bparentId\b.*\. Call describe_tool/,
+      ),
+    });
+    await expect(
+      dispatchAgentTool(
+        "capture_inbox",
+        { items: [{ name: "One", notes: "x" }] },
+        UNUSED_USER_ID,
+      ),
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(
+        /^Unknown field items\.0\.notes\. Allowed fields: name, note, deadline, externalSource, externalId\./,
+      ),
+    });
+    await expect(
+      dispatchAgentTool("health", { surprise: true }, UNUSED_USER_ID),
+    ).rejects.toMatchObject({
+      message: "Unknown field surprise. This takes no fields.",
+    });
+  });
+
   it("requires both halves of a retry key", async () => {
     await expect(
       dispatchAgentTool(
@@ -76,28 +109,30 @@ describe("agent tool registry", () => {
       tool: {
         inputSchema: {
           $schema?: string;
+          type?: string;
           additionalProperties?: boolean;
-          anyOf?: {
-            additionalProperties?: boolean;
-            properties?: Record<string, { description?: string }>;
-          }[];
+          anyOf?: unknown;
+          required?: string[];
+          properties?: Record<string, { description?: string }>;
         };
         outputSchema: { $schema?: string };
       };
     };
+    // One flat object: a top-level anyOf makes several MCP clients drop the schema.
     expect(described.tool.inputSchema).toMatchObject({
       $schema: "https://json-schema.org/draft/2020-12/schema",
-      anyOf: expect.arrayContaining([
-        expect.objectContaining({ additionalProperties: false }),
-      ]),
+      type: "object",
+      additionalProperties: false,
     });
+    expect(described.tool.inputSchema.anyOf).toBeUndefined();
+    expect(described.tool.inputSchema.properties).toHaveProperty("externalSource");
+    expect(described.tool.inputSchema.properties).toHaveProperty("externalId");
+    expect(described.tool.inputSchema.required ?? []).not.toContain("externalId");
     expect(described.tool.outputSchema.$schema).toBe(
       "https://json-schema.org/draft/2020-12/schema",
     );
-    for (const branch of described.tool.inputSchema.anyOf ?? []) {
-      for (const property of Object.values(branch.properties ?? {})) {
-        expect(property.description).not.toBe("");
-      }
+    for (const property of Object.values(described.tool.inputSchema.properties ?? {})) {
+      expect(property.description).not.toBe("");
     }
 
     const legacy = (await dispatchAgentTool(
@@ -126,6 +161,7 @@ describe("agent tool registry", () => {
       "search_commitments",
       "find_commitment_candidates",
       "save_subscription",
+      "delete_subscription",
       "set_commitment_payees",
     ]);
     expect(finances.tools.every((tool) => tool.domain === "finances")).toBe(true);

@@ -2,7 +2,7 @@
 
 import { z, type ZodType } from "zod";
 import { getAgentUserId } from "@/lib/auth/identity";
-import { AgentError, toAgentError } from "./errors";
+import { AgentError, logAgentError, toAgentError } from "./errors";
 import { asObject } from "./parse";
 import { inputSchemas, outputSchemas } from "./contracts";
 import {
@@ -11,6 +11,7 @@ import {
   getContext,
   getNode,
   searchNodes,
+  moveNodeTool,
   updateNodeTool,
 } from "./outlineTools";
 import {
@@ -54,6 +55,7 @@ import {
   searchCommitmentsTool,
   findCommitmentCandidatesTool,
   saveSubscriptionTool,
+  deleteSubscriptionTool,
   setCommitmentPayeesTool,
   listRecurringBillsTool,
   listStatementsTool,
@@ -276,6 +278,28 @@ const definitions: AgentToolDefinition[] = [
     exposure: "core",
     handler: updateNodeTool,
   }),
+  defineTool("move_node", {
+    domain: "outline",
+    summary: "Move one outline item under a new parent and/or to a new position.",
+    useWhen:
+      "Use to re-file or reorder an item after resolving its id and the destination parent id.",
+    avoidWhen:
+      "Use update_node for fields; a move cannot change type and refuses a nesting the outline does not allow.",
+    returns: "The full node after the move, including its new parentId and path.",
+    effects: safeWrite,
+    exposure: "domain",
+    examples: [
+      {
+        title: "File a task under a project",
+        arguments: {
+          id: "00000000-0000-4000-8000-000000000001",
+          parentId: "00000000-0000-4000-8000-000000000002",
+          position: "last",
+        },
+      },
+    ],
+    handler: moveNodeTool,
+  }),
   defineTool("create_note", {
     domain: "notes",
     summary: "Create a standalone or node-linked note.",
@@ -393,7 +417,8 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("upsert_plan_entry", {
     domain: "planning",
-    summary: "Create or update one weekly-plan item decision.",
+    summary:
+      "Create or update one weekly-plan item decision. focus on a project entry marks it a weekly MVP and sets the project's outline Focus flag too.",
     useWhen: "Use for an isolated entry edit outside a multi-item review stage.",
     avoidWhen: "Use update_weekly_plan_entries for three or more approved decisions.",
     returns: "The plan entry after the upsert.",
@@ -403,7 +428,8 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("update_weekly_plan_entries", {
     domain: "planning",
-    summary: "Atomically apply an ordered batch of weekly-plan item decisions.",
+    summary:
+      "Atomically apply an ordered batch of weekly-plan item decisions. focus on a project entry also sets the project's outline Focus flag; on other types it stays on the entry.",
     useWhen: "Use once per approved review stage instead of repeated entry calls.",
     avoidWhen: "Do not include speculative or unapproved decisions in the batch.",
     returns:
@@ -559,7 +585,7 @@ const definitions: AgentToolDefinition[] = [
     avoidWhen:
       "Use get_spending_breakdown for envelope and group spending, get_cash_flow for total movement, and search_transactions for a named charge.",
     returns:
-      "Recurring merchants with typical/low/high/annual cents, declared vs detected, the annual total, and upcoming due dates.",
+      "Recurring merchants with bill id, status, typical/low/high/annual cents, declared vs detected, the annual total of active bills only, and upcoming due dates.",
     effects: read,
     exposure: "domain",
     handler: listRecurringBillsTool,
@@ -683,13 +709,27 @@ const definitions: AgentToolDefinition[] = [
   defineTool("save_subscription", {
     domain: "finances",
     summary: "Create or correct a bill using stable payee ids.",
-    useWhen: "Use for subscriptions and bills that charge unless cancelled.",
+    useWhen:
+      "Use for subscriptions and bills that charge unless cancelled. Correct an existing bill by id; only the fields you pass change.",
     avoidWhen:
       "Do not pass matcher strings — resolve payee ids first with list_payees.",
-    returns: "The saved bill id, name, payees, and status.",
+    returns: "The saved bill id, name, payees, status, cancelledOn, and cadence.",
     effects: safeWrite,
     exposure: "domain",
     handler: saveSubscriptionTool,
+  }),
+  defineTool("delete_subscription", {
+    domain: "finances",
+    summary: "Permanently delete a bill that was created by mistake.",
+    useWhen:
+      "Use only for a bill added in error (a duplicate, a typo, never a real commitment), after the user explicitly asks to delete it.",
+    avoidWhen:
+      "A bill that really existed and has ended should be kept as history: use save_subscription with status cancelled (and cancelledOn) instead.",
+    returns:
+      "The deleted bill id and name. Its charges and payees stay; the charges return to the review backlog unfiled.",
+    effects: destructiveWrite,
+    exposure: "domain",
+    handler: deleteSubscriptionTool,
   }),
   defineTool("set_commitment_payees", {
     domain: "finances",
@@ -1063,11 +1103,17 @@ function describeSchemaFields(node: JsonSchemaNode): JsonSchemaNode {
   return node;
 }
 
-export function agentJsonSchema(schema: ZodType, describeFields = false) {
+/**
+ * JSON Schema for a tool's input or output. Input schemas are rendered from the caller's
+ * side (`io: "input"`): a field with a default is optional to send, and rendering it from
+ * the output side would list it as required and make agents fill in every default.
+ */
+export function agentJsonSchema(schema: ZodType, side: "input" | "output" = "output") {
   const json = z.toJSONSchema(schema, {
     target: "draft-2020-12",
+    io: side,
   }) as JsonSchemaNode;
-  return describeFields ? describeSchemaFields(json) : json;
+  return side === "input" ? describeSchemaFields(json) : json;
 }
 
 function healthTool() {
@@ -1120,21 +1166,95 @@ function describeTool(_userId: string, args: Record<string, unknown>) {
         avoidWhen: tool.avoidWhen,
         returns: tool.returns,
       },
-      inputSchema: agentJsonSchema(tool.inputSchema, true),
-      outputSchema: agentJsonSchema(tool.outputSchema),
+      inputSchema: agentJsonSchema(tool.inputSchema, "input"),
+      outputSchema: agentJsonSchema(tool.outputSchema, "output"),
       examples: tool.examples,
     },
   };
 }
 
-function validationMessage(error: z.ZodError): string {
+const WRAPPER_TYPES = new Set([
+  "optional",
+  "nullable",
+  "default",
+  "prefault",
+  "readonly",
+  "nonoptional",
+  "catch",
+]);
+
+/** The field names an object in `schema` accepts at `path`, or undefined when unknown. */
+function allowedFieldsAt(
+  schema: z.ZodType,
+  path: readonly PropertyKey[],
+): string[] | undefined {
+  const unwrap = (node: z.ZodType): z.ZodType => {
+    let current = node;
+    for (;;) {
+      const def = current._zod.def as {
+        type: string;
+        innerType?: z.ZodType;
+        in?: z.ZodType;
+      };
+      if (WRAPPER_TYPES.has(def.type) && def.innerType) current = def.innerType;
+      else if (def.type === "pipe" && def.in) current = def.in;
+      else return current;
+    }
+  };
+  const fieldsOf = (node: z.ZodType): string[] | undefined => {
+    const def = unwrap(node)._zod.def as {
+      type: string;
+      shape?: Record<string, z.ZodType>;
+      options?: z.ZodType[];
+    };
+    if (def.type === "object" && def.shape) return Object.keys(def.shape);
+    if (def.type === "union" && def.options) {
+      const names = def.options.flatMap((option) => fieldsOf(option) ?? []);
+      return names.length > 0 ? [...new Set(names)] : undefined;
+    }
+    return undefined;
+  };
+
+  let current: z.ZodType = schema;
+  for (const segment of path) {
+    const def = unwrap(current)._zod.def as {
+      type: string;
+      shape?: Record<string, z.ZodType>;
+      element?: z.ZodType;
+    };
+    if (def.type === "array" && typeof segment === "number" && def.element) {
+      current = def.element;
+    } else if (def.type === "object" && def.shape && typeof segment === "string") {
+      const next = def.shape[segment];
+      if (!next) return undefined;
+      current = next;
+    } else {
+      return undefined;
+    }
+  }
+  return fieldsOf(current);
+}
+
+/**
+ * The validation text an agent sees. An unknown field names the fields that are allowed
+ * there, because the agent may be on a client that dropped the schema and cannot look it up
+ * any other way than by calling describe_tool.
+ */
+function validationMessage(error: z.ZodError, schema: z.ZodType): string {
   const issue = error.issues[0];
   if (!issue) return "Request body does not match the tool schema";
   const path = issue.path.length > 0 ? issue.path.join(".") : "request body";
   if (issue.code === "unrecognized_keys") {
     const field = issue.keys[0] ?? "unknown";
     const prefix = issue.path.length > 0 ? `${issue.path.join(".")}.` : "";
-    return `Unknown field ${prefix}${field}. Remove it or call describe_tool for the schema.`;
+    const allowed = allowedFieldsAt(schema, issue.path);
+    const hint =
+      allowed === undefined
+        ? "Remove it or call describe_tool for the schema."
+        : allowed.length === 0
+          ? "This takes no fields."
+          : `Allowed fields: ${allowed.join(", ")}. Call describe_tool for the full schema.`;
+    return `Unknown field ${prefix}${field}. ${hint}`;
   }
   return `${path}: ${issue.message}`;
 }
@@ -1173,7 +1293,10 @@ export async function dispatchAgentTool(
     }
     const parsed = tool.inputSchema.safeParse(args);
     if (!parsed.success) {
-      throw new AgentError("validation", validationMessage(parsed.error));
+      throw new AgentError(
+        "validation",
+        validationMessage(parsed.error, tool.inputSchema),
+      );
     }
     const uid =
       userId ??
@@ -1181,11 +1304,14 @@ export async function dispatchAgentTool(
     const result = await tool.handler(uid, parsed.data as Record<string, unknown>);
     const output = tool.outputSchema.safeParse(result);
     if (!output.success) {
-      console.error(
-        `Agent tool ${toolName} returned an invalid contract payload`,
-        output.error,
+      throw new AgentError(
+        "internal",
+        "Tool returned an invalid response",
+        logAgentError(
+          output.error,
+          `Agent tool ${toolName} returned an invalid contract payload`,
+        ),
       );
-      throw new AgentError("internal", "Tool returned an invalid response");
     }
     return result;
   } catch (error) {

@@ -154,7 +154,7 @@ export async function pushUpdate(
     event = await patchEvent(userId, row.externalCalendarId, targetEventId, patch);
   } catch (error) {
     if (error instanceof GoogleEventGoneError) {
-      throw new Error(GOOGLE_EVENT_GONE_MESSAGE);
+      throw new GoogleEventGoneError(GOOGLE_EVENT_GONE_MESSAGE);
     }
     throw error;
   }

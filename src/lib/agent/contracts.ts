@@ -150,23 +150,14 @@ const externalOptionalFields = {
     ),
 };
 
+/**
+ * A create input that can carry an optional external natural key. It is one flat object
+ * rather than a union of "without key" and "with both keys": a top-level anyOf is dropped or
+ * mangled by several MCP clients, which then show the tool as taking no arguments. The
+ * both-or-neither rule for externalSource/externalId is enforced in dispatchAgentTool.
+ */
 function retryableObject(fields: Record<string, z.ZodType>) {
-  return z.union([
-    z.strictObject(fields),
-    z.strictObject({
-      ...fields,
-      externalSource: z
-        .string()
-        .min(1)
-        .describe("Stable namespace for this external natural key."),
-      externalId: z
-        .string()
-        .min(1)
-        .describe(
-          "Opaque id within externalSource; makes a retry return the existing row.",
-        ),
-    }),
-  ]);
+  return z.strictObject({ ...fields, ...externalOptionalFields });
 }
 
 const nodePatchFields = {
@@ -589,18 +580,32 @@ const captureItemSchema = z.strictObject({
   externalId: z.string().min(1).optional(),
 });
 
-const captureInputSchema = z.union([
-  z.strictObject({
-    name: z.string().min(1),
-    note: z.string().optional(),
-    deadline: nullableIsoDate.optional(),
-    ...externalOptionalFields,
-  }),
-  z.strictObject({
-    externalSource: z.string().min(1).optional(),
-    items: z.array(captureItemSchema).min(1).max(100),
-  }),
-]);
+// One flat object for the same reason as retryableObject. Either name (one item, with its
+// own note/deadline/externalId) or items (a batch, with an optional shared externalSource);
+// parseCaptureArgs enforces which fields go with which form.
+const captureInputSchema = z.strictObject({
+  name: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("One item to capture. Omit when passing items."),
+  note: z
+    .string()
+    .optional()
+    .describe("Note for the single item; not used with items."),
+  deadline: nullableIsoDate
+    .optional()
+    .describe("Deadline for the single item; not used with items."),
+  ...externalOptionalFields,
+  items: z
+    .array(captureItemSchema)
+    .min(1)
+    .max(100)
+    .optional()
+    .describe(
+      "A batch of items to capture instead of name. externalSource may be shared.",
+    ),
+});
 
 const captureResultSchema = z.strictObject({
   nodeId: id,
@@ -653,6 +658,12 @@ const rankedSpendSchema = z.strictObject({
 });
 
 const recurringBillSchema = z.strictObject({
+  id: z
+    .string()
+    .nullable()
+    .describe(
+      "Declared bill id for save_subscription / delete_subscription; null when detected only.",
+    ),
   merchant: z.string(),
   typicalCents: cents,
   lowCents: cents,
@@ -665,6 +676,9 @@ const recurringBillSchema = z.strictObject({
   lastChargeOn: z.string(),
   declared: z.boolean(),
   scheduled: z.boolean(),
+  status: z
+    .enum(["active", "paused", "cancelled", "ignored"])
+    .describe("Only active bills count toward annualTotalCents."),
 });
 
 const upcomingBillSchema = z.strictObject({
@@ -748,6 +762,19 @@ export const inputSchemas = {
   capture_inbox: captureInputSchema,
   capture: captureInputSchema,
   update_node: z.strictObject({ id, ...nodePatchFields }),
+  move_node: z.strictObject({
+    id: id.describe("The node to move."),
+    parentId: nullableId.describe(
+      "New parent node id, or null for the top level. Pass the current parent to reorder in place.",
+    ),
+    position: z
+      .enum(["first", "last", "before", "after"])
+      .default("last")
+      .describe("Where among the new parent's children. before/after need siblingId."),
+    siblingId: id
+      .optional()
+      .describe("A child of parentId to place the node before or after."),
+  }),
   create_note: retryableObject(noteInputFields),
   update_note: z.strictObject({ id, ...noteInputFields }),
   search_notes: z.strictObject({
@@ -939,18 +966,53 @@ export const inputSchemas = {
     ...pageInputFields,
   }),
   save_subscription: z.strictObject({
-    name: z.string().min(1),
+    id: id
+      .optional()
+      .describe(
+        "Existing bill id from search_commitments or list_recurring_bills. Edits that bill; with name, renames it. Omit to create or match by name.",
+      ),
+    name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Bill name. Required without id; with id it renames the bill."),
     payeeIds: z.array(id).optional(),
-    cadenceMonths: z.number().int().min(1).max(24).optional(),
-    cadenceDays: z.number().int().min(2).max(200).nullable().optional(),
+    cadenceMonths: z
+      .number()
+      .int()
+      .min(1)
+      .max(24)
+      .optional()
+      .describe(
+        "Calendar cadence in whole months (1 monthly, 3 quarterly, 12 yearly). Omit both cadence fields to keep the current cadence.",
+      ),
+    cadenceDays: z
+      .number()
+      .int()
+      .min(2)
+      .max(200)
+      .nullable()
+      .optional()
+      .describe(
+        "Cadence in days for a vendor that counts days (28 for four-weekly). Wins over cadenceMonths; null with cadenceMonths switches back to months.",
+      ),
     expectedCents: z.number().int().nullable().optional(),
     anchorDate: dateKey.nullable().optional(),
     status: z.enum(["active", "paused", "cancelled"]).optional(),
+    cancelledOn: dateKey
+      .nullable()
+      .optional()
+      .describe(
+        "Date the bill was cancelled (YYYY-MM-DD). Only for a cancelled bill; defaults to today when status becomes cancelled.",
+      ),
     url: z.string().optional(),
     scheduled: z.boolean().optional(),
     dueDay: z.number().int().min(1).max(31).nullable().optional(),
     leadDays: z.number().int().min(0).max(60).optional(),
     notes: z.string().optional(),
+  }),
+  delete_subscription: z.strictObject({
+    id: id.describe("Bill id from search_commitments or list_recurring_bills."),
   }),
   set_commitment_payees: z.strictObject({
     id,
@@ -1074,6 +1136,7 @@ export const outputSchemas = {
   capture_inbox: captureOutput,
   capture: captureOutput,
   update_node: z.strictObject({ node: nodeDetailSchema }),
+  move_node: z.strictObject({ node: nodeDetailSchema }),
   create_note: z.strictObject({ note: noteSchema, created: z.boolean() }),
   update_note: z.strictObject({ note: noteSchema }),
   search_notes: z.strictObject({
@@ -1414,6 +1477,13 @@ export const outputSchemas = {
     name: z.string(),
     payees: z.array(commitmentPayeeSchema),
     status: z.enum(["active", "paused", "cancelled"]),
+    cancelledOn: z.string().nullable(),
+    cadence: z.string(),
+  }),
+  delete_subscription: z.strictObject({
+    deleted: z.literal(true),
+    id,
+    name: z.string(),
   }),
   set_commitment_payees: z.strictObject({ commitment: commitmentSummarySchema }),
   list_jobs: z.strictObject({

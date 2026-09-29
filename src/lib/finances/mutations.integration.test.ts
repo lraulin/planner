@@ -1344,7 +1344,8 @@ describeDb("trackTransactionAsBill", () => {
         name: "Paramount+",
         cadence: { unit: "month", n: 12 },
       }),
-    ).resolves.toBeUndefined();
+      // The intruder's same-named save lands on a bill of their own, never the owner's.
+    ).resolves.not.toBe(bill.id);
     expect((await loadRecurringBills(userId))[0]).toMatchObject({
       id: bill.id,
       cadenceMonths: 1,

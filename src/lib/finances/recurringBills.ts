@@ -23,6 +23,8 @@ import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 
 /** A declared bill, as the analytics and UI layers need it. Mirrors the table's columns. */
 export type DeclaredBill = {
+  /** The envelope id. Optional so the narrower analytics callers and fixtures keep working. */
+  id?: string;
   /**
    * The user's name for it, and the key every reporting path groups its charges under.
    *

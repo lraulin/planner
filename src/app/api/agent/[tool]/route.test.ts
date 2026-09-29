@@ -58,8 +58,7 @@ describe("agent HTTP boundary", () => {
       ok: false,
       error: {
         code: "validation",
-        message:
-          "Unknown field surprise. Remove it or call describe_tool for the schema.",
+        message: "Unknown field surprise. This takes no fields.",
       },
     });
   });

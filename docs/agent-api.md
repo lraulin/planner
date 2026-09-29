@@ -37,9 +37,10 @@ Authorization: Bearer <PLANNER_AGENT_API_KEY>
 Content-Type: application/json
 ```
 
-`tools/list` exposes the current core and domain tools — not HTTP discovery
-(`list_tools`, `describe_tool`, `health`) or legacy aliases. In Grok: grok.com/connectors
-→ New Connector → Custom, name `Planner`, URL
+`tools/list` exposes the current core and domain tools plus `describe_tool` — not
+`list_tools`, `health`, or legacy aliases. Each description ends with a `Fields:` line
+for clients that drop `inputSchema`; `describe_tool` returns the full schema.
+In Grok: grok.com/connectors → New Connector → Custom, name `Planner`, URL
 `https://planner-lee-5344.vercel.app/api/mcp`. Grok then asks for OAuth app
 credentials — Client ID `planner`, empty secret, authorize
 `https://planner-lee-5344.vercel.app/oauth/authorize`, token
@@ -91,7 +92,7 @@ List the focused core surface or one tool domain.
 - Returns: Compact selection metadata without full schemas.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: core
-- Arguments: `{ domain*, includeLegacy* }`
+- Arguments: `{ domain="core", includeLegacy=false }`
 - Output: `{ tools* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -123,7 +124,7 @@ Read a compact current-planning dashboard.
 - Returns: Focus, bounded top open work, weekly-plan status, and appointment count.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: core
-- Arguments: `{ weekStartsOn*, topOpenWorkLimit* }`
+- Arguments: `{ weekStartsOn=0, topOpenWorkLimit=25 }`
 - Output: `{ asOf*, weekStart*, focus*, topOpenWork*, topOpenWorkInfo*, weeklyPlan*, weekAppointmentCount* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -138,7 +139,7 @@ Find outline items with compact paths and paging metadata.
 - Returns: A compact page of matching nodes plus total and next offset.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: core
-- Arguments: `{ type?, state?, focus?, query?, parentId?, includeCompleted*, offset*, limit* }`
+- Arguments: `{ type?, state?, focus?, query?, parentId?, includeCompleted=false, offset=0, limit=50 }`
 - Output: `{ nodes*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -168,7 +169,7 @@ Create and optionally fully describe one outline item.
 - Returns: Full created or replayed node and whether this call created it.
 - Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
 - Exposure: core
-- Arguments: `{ type*, parentId?, name?, notes?, priorityLetter?, priorityRank?, state?, deadline?, targetStartDate?, targetEndDate?, deferredDate?, focus?, effortMinutes?, resultArea?, goal?, project?, task? } or { type*, parentId?, name?, notes?, priorityLetter?, priorityRank?, state?, deadline?, targetStartDate?, targetEndDate?, deferredDate?, focus?, effortMinutes?, resultArea?, goal?, project?, task?, externalSource*, externalId* }`
+- Arguments: `{ type*, parentId?, name?, notes?, priorityLetter?, priorityRank?, state?, deadline?, targetStartDate?, targetEndDate?, deferredDate?, focus?, effortMinutes?, resultArea?, goal?, project?, task?, externalSource?, externalId? }`
 - Output: `{ node*, created* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -183,7 +184,7 @@ Capture one or many unprocessed tasks into the Inbox.
 - Returns: The captured node or ordered batch results, including deduplication status.
 - Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
 - Exposure: core
-- Arguments: `{ name*, note?, deadline?, externalSource?, externalId? } or { externalSource?, items* }`
+- Arguments: `{ name?, note?, deadline?, externalSource?, externalId?, items? }`
 - Output: `{ node*, parentId*, created*, createdIds* } or { parentId*, created*, skipped*, results* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -198,7 +199,7 @@ Legacy alias for capture_inbox.
 - Returns: The same payload as capture_inbox.
 - Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
 - Exposure: legacy; replaced by `capture_inbox`
-- Arguments: `{ name*, note?, deadline?, externalSource?, externalId? } or { externalSource?, items* }`
+- Arguments: `{ name?, note?, deadline?, externalSource?, externalId?, items? }`
 - Output: `{ node*, parentId*, created*, createdIds* } or { parentId*, created*, skipped*, results* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -219,6 +220,21 @@ Apply a strict partial update to one outline item.
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
 
+### `move_node`
+
+Move one outline item under a new parent and/or to a new position.
+
+- Use when: Use to re-file or reorder an item after resolving its id and the destination parent id.
+- Avoid when: Use update_node for fields; a move cannot change type and refuses a nesting the outline does not allow.
+- Returns: The full node after the move, including its new parentId and path.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ id*, parentId*, position="last", siblingId? }`
+- Output: `{ node* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
 ## Notes
 
 ### `create_note`
@@ -230,7 +246,7 @@ Create a standalone or node-linked note.
 - Returns: The full created or replayed note and whether this call created it.
 - Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ title?, subject?, body?, nodeId?, noteDate?, flag?, contexts? } or { title?, subject?, body?, nodeId?, noteDate?, flag?, contexts?, externalSource*, externalId* }`
+- Arguments: `{ title?, subject?, body?, nodeId?, noteDate?, flag?, contexts?, externalSource?, externalId? }`
 - Output: `{ note*, created* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -260,7 +276,7 @@ Search note metadata and body text without returning full bodies.
 - Returns: Compact note snippets with paging metadata.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: core
-- Arguments: `{ query?, nodeId?, offset*, limit* }`
+- Arguments: `{ query?, nodeId?, offset=0, limit=30 }`
 - Output: `{ notes*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -290,7 +306,7 @@ Legacy full-body note listing.
 - Returns: A page of full notes plus paging metadata.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: legacy; replaced by `search_notes,get_note`
-- Arguments: `{ nodeId?, offset*, limit* }`
+- Arguments: `{ nodeId?, offset=0, limit=30 }`
 - Output: `{ notes*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -307,7 +323,7 @@ Read one week of appointments and expanded occurrences.
 - Returns: Weekly plan summary, appointment masters, and occurrence times.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ weekStart?, weekStartsOn* }`
+- Arguments: `{ weekStart?, weekStartsOn=0 }`
 - Output: `{ weekStart*, weekStartsOn*, plan*, appointments*, occurrences* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -369,7 +385,7 @@ Load or create the weekly plan for a normalized week.
 - Returns: The existing or newly initialized plan summary.
 - Effects: write; destructive=false; retry=safe; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ weekStart?, weekStartsOn*, reviewAreasGoals? }`
+- Arguments: `{ weekStart?, weekStartsOn=0, reviewAreasGoals? }`
 - Output: `{ plan* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -392,7 +408,7 @@ complete input/output JSON Schemas.
 
 ### `upsert_plan_entry`
 
-Create or update one weekly-plan item decision.
+Create or update one weekly-plan item decision. focus on a project entry marks it a weekly MVP and sets the project's outline Focus flag too.
 
 - Use when: Use for an isolated entry edit outside a multi-item review stage.
 - Avoid when: Use update_weekly_plan_entries for three or more approved decisions.
@@ -407,7 +423,7 @@ complete input/output JSON Schemas.
 
 ### `update_weekly_plan_entries`
 
-Atomically apply an ordered batch of weekly-plan item decisions.
+Atomically apply an ordered batch of weekly-plan item decisions. focus on a project entry also sets the project's outline Focus flag; on other types it stays on the entry.
 
 - Use when: Use once per approved review stage instead of repeated entry calls.
 - Avoid when: Do not include speculative or unapproved decisions in the batch.
@@ -444,7 +460,7 @@ Load the compact state needed for the weekly-planning workflow.
 - Returns: Plan machinery and compact candidate node summaries.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ weekStart?, weekStartsOn* }`
+- Arguments: `{ weekStart?, weekStartsOn=0 }`
 - Output: `{ weekStart*, weekStartsOn*, plan*, entries*, resultAreas*, goals*, projects*, previousRewrites*, schedule* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -476,7 +492,7 @@ Find metrics with compact progress summaries.
 - Returns: A compact metric page plus total and next offset.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ activeOnly*, query?, ownerNodeId?, offset*, limit* }`
+- Arguments: `{ activeOnly=false, query?, ownerNodeId?, offset=0, limit=50 }`
 - Output: `{ metrics*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -491,7 +507,7 @@ Read one metric and a page of tracking entries.
 - Returns: Full metric detail with entry count and entry paging metadata.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ id*, entryOffset*, entryLimit* }`
+- Arguments: `{ id*, entryOffset=0, entryLimit=30 }`
 - Output: `{ metric* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -506,7 +522,7 @@ Create one standalone or goal-owned metric.
 - Returns: Full created or replayed metric and whether this call created it.
 - Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ title?, category?, question?, description?, reason?, units?, active?, metricType?, priorityLetter?, priorityRank?, objectiveTarget?, ownerNodeId? } or { title?, category?, question?, description?, reason?, units?, active?, metricType?, priorityLetter?, priorityRank?, objectiveTarget?, ownerNodeId?, externalSource*, externalId* }`
+- Arguments: `{ title?, category?, question?, description?, reason?, units?, active?, metricType?, priorityLetter?, priorityRank?, objectiveTarget?, ownerNodeId?, externalSource?, externalId? }`
 - Output: `{ metric*, created* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -536,7 +552,7 @@ Record one dated measurement for a metric.
 - Returns: The created or replayed entry plus refreshed metric detail.
 - Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ metricId*, value*, entryDate?, target?, entryType? } or { metricId*, value*, entryDate?, target?, entryType?, externalSource*, externalId* }`
+- Arguments: `{ metricId*, value*, entryDate?, target?, entryType?, externalSource?, externalId? }`
 - Output: `{ entryId*, entryDate*, value*, metric*, created* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -583,7 +599,7 @@ Total inflows, outflows, net movement, and statement reconciliation.
 - Returns: Per-bucket income/spend/fixed/variable/net, signed external transfers, trailing averages, statement-anchored position and net, the residual the identity leaves unexplained, window totals and historical income details.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants* }`
+- Arguments: `{ window="12m", from?, to?, axis="month", levelRecurring=false, accountIds=[], categories=[], merchants=[] }`
 - Output: `{ range*, axis*, window*, levelRecurring*, points*, totals*, income* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -598,7 +614,7 @@ Envelope spending ranked by stable category, group or payee IDs.
 - Returns: Ranked { id, name, groupId, parentGroupId, cents, share, count }, total spend, otherCents, and optional monthly spending vs actual regular income. Cost of living is the default; Savings and all spending are explicit scopes.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants*, by*, scope*, categoryIds*, payeeIds*, limit*, trend* }`
+- Arguments: `{ window="12m", from?, to?, axis="month", levelRecurring=false, accountIds=[], categories=[], merchants=[], by="category", scope="living", categoryIds=[], payeeIds=[], limit=20, trend=false }`
 - Output: `{ range*, by*, scope*, items*, totalSpendCents*, otherCents*, returned*, total*, trends? }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -610,10 +626,10 @@ Detected and declared recurring commitments, annualized.
 
 - Use when: Use to find the actual levers — subscriptions and bills whose annual cost is a decision.
 - Avoid when: Use get_spending_breakdown for envelope and group spending, get_cash_flow for total movement, and search_transactions for a named charge.
-- Returns: Recurring merchants with typical/low/high/annual cents, declared vs detected, the annual total, and upcoming due dates.
+- Returns: Recurring merchants with bill id, status, typical/low/high/annual cents, declared vs detected, the annual total of active bills only, and upcoming due dates.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants*, includeUpcoming* }`
+- Arguments: `{ window="12m", from?, to?, axis="month", levelRecurring=false, accountIds=[], categories=[], merchants=[], includeUpcoming=true }`
 - Output: `{ range*, bills*, annualTotalCents*, upcoming* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -628,7 +644,7 @@ Asset vs debt trajectory, account contributions, and statement carrying cost.
 - Returns: Per-bucket asset/debt/net, the latest snapshot and ratio, per-account contributions, and interest/fees/APR from statements.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants* }`
+- Arguments: `{ window="12m", from?, to?, axis="month", levelRecurring=false, accountIds=[], categories=[], merchants=[] }`
 - Output: `{ range*, series*, latest*, debtToAssetRatio*, contributions*, carryingCost* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -643,7 +659,7 @@ Official statement snapshots with the register check for each period.
 - Returns: A page of period rows (open/close, activity, registerDeltaCents, holeAfter) plus the hole list and pageInfo.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ accountId?, from?, to?, offset*, limit* }`
+- Arguments: `{ accountId?, from?, to?, offset=0, limit=50 }`
 - Output: `{ statements*, holes*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -658,7 +674,7 @@ Find compact transaction rows and the income/spend/net of the whole match set.
 - Returns: A compact page of rows plus matchedIncomeCents, matchedSpendCents, and matchedNetCents over every match, not just the page.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ query?, from?, to?, accountId?, category?, flow?, direction*, minCents?, maxCents?, offset*, limit* }`
+- Arguments: `{ query?, from?, to?, accountId?, category?, flow?, direction="any", minCents?, maxCents?, offset=0, limit=50 }`
 - Output: `{ transactions*, pageInfo*, matchedIncomeCents*, matchedSpendCents*, matchedNetCents* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -718,7 +734,7 @@ Search stable payees and see their aliases and commitment claim.
 - Returns: A compact page of id-bearing payees, aliases, claim, and pageInfo.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ query?, offset*, limit* }`
+- Arguments: `{ query?, offset=0, limit=50 }`
 - Output: `{ payees*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -733,7 +749,7 @@ Search declared bills by name or stable payee.
 - Returns: A compact page of id-bearing commitments and their payees.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ query?, offset*, limit* }`
+- Arguments: `{ query?, offset=0, limit=50 }`
 - Output: `{ commitments*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -748,7 +764,7 @@ Find unclaimed recurring payees that may be bills.
 - Returns: A page of stable payee ids, suggested tier, typical amount, and charge count.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ query?, offset*, limit* }`
+- Arguments: `{ query?, offset=0, limit=50 }`
 - Output: `{ candidates*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -758,13 +774,28 @@ complete input/output JSON Schemas.
 
 Create or correct a bill using stable payee ids.
 
-- Use when: Use for subscriptions and bills that charge unless cancelled.
+- Use when: Use for subscriptions and bills that charge unless cancelled. Correct an existing bill by id; only the fields you pass change.
 - Avoid when: Do not pass matcher strings — resolve payee ids first with list_payees.
-- Returns: The saved bill id, name, payees, and status.
+- Returns: The saved bill id, name, payees, status, cancelledOn, and cadence.
 - Effects: write; destructive=false; retry=safe; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ name*, payeeIds?, cadenceMonths?, cadenceDays?, expectedCents?, anchorDate?, status?, url?, scheduled?, dueDay?, leadDays?, notes? }`
-- Output: `{ id*, name*, payees*, status* }`
+- Arguments: `{ id?, name?, payeeIds?, cadenceMonths?, cadenceDays?, expectedCents?, anchorDate?, status?, cancelledOn?, url?, scheduled?, dueDay?, leadDays?, notes? }`
+- Output: `{ id*, name*, payees*, status*, cancelledOn*, cadence* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `delete_subscription`
+
+Permanently delete a bill that was created by mistake.
+
+- Use when: Use only for a bill added in error (a duplicate, a typo, never a real commitment), after the user explicitly asks to delete it.
+- Avoid when: A bill that really existed and has ended should be kept as history: use save_subscription with status cancelled (and cancelledOn) instead.
+- Returns: The deleted bill id and name. Its charges and payees stay; the charges return to the review backlog unfiled.
+- Effects: write; destructive=true; retry=unsafe; confirmation=explicit
+- Exposure: domain
+- Arguments: `{ id* }`
+- Output: `{ deleted*, id*, name* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
@@ -795,7 +826,7 @@ Find jobs with compact employer, title, dates, and location.
 - Returns: A compact job page plus total and next offset.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ currentOnly*, query?, from?, to?, offset*, limit* }`
+- Arguments: `{ currentOnly=false, query?, from?, to?, offset=0, limit=50 }`
 - Output: `{ jobs*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -825,7 +856,7 @@ Create one employment record.
 - Returns: Full created or replayed job and whether this call created it.
 - Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ employer?, jobTitle?, employmentType?, startDate?, endDate?, duties?, reasonForLeaving?, startingPay?, endingPay?, payPeriod?, phone?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, supervisorName?, supervisorTitle?, supervisorPhone?, supervisorEmail?, mayContactSupervisor?, notes? } or { employer?, jobTitle?, employmentType?, startDate?, endDate?, duties?, reasonForLeaving?, startingPay?, endingPay?, payPeriod?, phone?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, supervisorName?, supervisorTitle?, supervisorPhone?, supervisorEmail?, mayContactSupervisor?, notes?, externalSource*, externalId* }`
+- Arguments: `{ employer?, jobTitle?, employmentType?, startDate?, endDate?, duties?, reasonForLeaving?, startingPay?, endingPay?, payPeriod?, phone?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, supervisorName?, supervisorTitle?, supervisorPhone?, supervisorEmail?, mayContactSupervisor?, notes?, externalSource?, externalId? }`
 - Output: `{ job*, created* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -855,7 +886,7 @@ Find residences with compact address and move-in/out dates.
 - Returns: A compact residence page plus total and next offset.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ currentOnly*, query?, from?, to?, offset*, limit* }`
+- Arguments: `{ currentOnly=false, query?, from?, to?, offset=0, limit=50 }`
 - Output: `{ residences*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -885,7 +916,7 @@ Create one housing record.
 - Returns: Full created or replayed residence and whether this call created it.
 - Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ label?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, movedIn?, movedOut?, housingType?, monthlyRent?, reasonForLeaving?, landlordName?, landlordPhone?, landlordEmail?, notes? } or { label?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, movedIn?, movedOut?, housingType?, monthlyRent?, reasonForLeaving?, landlordName?, landlordPhone?, landlordEmail?, notes?, externalSource*, externalId* }`
+- Arguments: `{ label?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, movedIn?, movedOut?, housingType?, monthlyRent?, reasonForLeaving?, landlordName?, landlordPhone?, landlordEmail?, notes?, externalSource?, externalId? }`
 - Output: `{ residence*, created* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -915,7 +946,7 @@ Find typed Timeline events by title, category, or date window.
 - Returns: A compact event page plus total and next offset.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ query?, from?, to?, offset*, limit* }`
+- Arguments: `{ query?, from?, to?, offset=0, limit=50 }`
 - Output: `{ events*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -945,7 +976,7 @@ Create one dated life fact on the Timeline.
 - Returns: Full created or replayed event and whether this call created it.
 - Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ eventDate*, title?, category?, notes? } or { eventDate*, title?, category?, notes?, externalSource*, externalId* }`
+- Arguments: `{ eventDate*, title?, category?, notes?, externalSource?, externalId? }`
 - Output: `{ event*, created* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -977,7 +1008,7 @@ Find house listings being compared, with price, size, and drive time.
 - Returns: A compact house page plus total and next offset.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ status?, query?, offset*, limit* }`
+- Arguments: `{ status?, query?, offset=0, limit=50 }`
 - Output: `{ houses*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -1007,7 +1038,7 @@ Add one house listing to the comparison catalog.
 - Returns: Full created or replayed house and whether this call created it. Drive time is computed automatically once an address is set; check routeError if it is missing.
 - Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ nickname?, listingUrl?, streetAddress?, city?, state?, postalCode?, askingPriceCents?, hoaFeeCents?, propertyTaxCents?, squareFeet?, beds?, baths?, yearBuilt?, lotAcres?, hasFence?, hasBasement?, hasGarage?, status?, priorityLetter?, priorityRank?, notes? } or { nickname?, listingUrl?, streetAddress?, city?, state?, postalCode?, askingPriceCents?, hoaFeeCents?, propertyTaxCents?, squareFeet?, beds?, baths?, yearBuilt?, lotAcres?, hasFence?, hasBasement?, hasGarage?, status?, priorityLetter?, priorityRank?, notes?, externalSource*, externalId* }`
+- Arguments: `{ nickname?, listingUrl?, streetAddress?, city?, state?, postalCode?, askingPriceCents?, hoaFeeCents?, propertyTaxCents?, squareFeet?, beds?, baths?, yearBuilt?, lotAcres?, hasFence?, hasBasement?, hasGarage?, status?, priorityLetter?, priorityRank?, notes?, externalSource?, externalId? }`
 - Output: `{ house*, created* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the

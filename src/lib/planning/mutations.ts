@@ -179,7 +179,9 @@ export async function upsertPlanEntry(
     .limit(1);
   if (!node) throw new Error("Item not found.");
 
-  return upsertPlanEntryInTransaction(db, userId, planId, nodeId, patch);
+  return db.transaction((tx) =>
+    upsertPlanEntryInTransaction(tx, userId, planId, nodeId, patch),
+  );
 }
 
 async function upsertPlanEntryInTransaction(
@@ -214,7 +216,31 @@ async function upsertPlanEntryInTransaction(
       set: values,
     })
     .returning();
+  if (patch.focus !== undefined)
+    await syncProjectFocus(tx, userId, nodeId, patch.focus);
   return row;
+}
+
+/**
+ * A project's weekly MVP flag is its Focus flag, as in Achieve Planner ("Weekly planning
+ * wizard MVP flag now tied to the focus flag", release-log.txt:550; step 4 of the wizard
+ * marks the week's MVP projects, online-help.md:1722-1723). So a plan entry's `focus` on a
+ * project is written through to `nodes.focus`, which is what the outline's Focus filter
+ * reads. Other node types keep the flag on the entry only: a Result Area's week focus is
+ * `setFocusArea`'s explicit step 1 decision, and goals and tasks have no MVP role.
+ */
+async function syncProjectFocus(
+  tx: Db | Tx,
+  userId: string,
+  nodeId: string,
+  focus: boolean,
+) {
+  await tx
+    .update(nodes)
+    .set({ focus, updatedAt: new Date() })
+    .where(
+      and(eq(nodes.id, nodeId), eq(nodes.userId, userId), eq(nodes.type, "project")),
+    );
 }
 
 /** Apply one approved weekly-review stage as an all-or-nothing ordered batch. */
@@ -242,14 +268,7 @@ export async function updateWeeklyPlanEntries(
 
     const rows = [];
     for (const { nodeId, ...patch } of entries) {
-      const row = await upsertPlanEntryInTransaction(tx, userId, planId, nodeId, patch);
-      if (patch.focus !== undefined) {
-        await tx
-          .update(nodes)
-          .set({ focus: patch.focus, updatedAt: new Date() })
-          .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
-      }
-      rows.push(row);
+      rows.push(await upsertPlanEntryInTransaction(tx, userId, planId, nodeId, patch));
     }
     return rows;
   });

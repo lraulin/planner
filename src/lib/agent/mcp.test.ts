@@ -6,6 +6,7 @@ import {
   listMcpToolDefinitions,
   MCP_PROTOCOL_LATEST,
   MCP_SERVER_NAME,
+  mcpToolDescription,
   toMcpTool,
 } from "./mcp";
 import { TOOL_REGISTRY } from "./tools";
@@ -13,7 +14,6 @@ import { TOOL_REGISTRY } from "./tools";
 const HIDDEN = [
   "health",
   "list_tools",
-  "describe_tool",
   "capture",
   "list_notes",
   "set_focus_area",
@@ -23,12 +23,14 @@ const HIDDEN = [
 ] as const;
 
 const REQUIRED = [
+  "describe_tool",
   "get_context",
   "search_nodes",
   "get_node",
   "create_node",
   "capture_inbox",
   "update_node",
+  "move_node",
   "search_notes",
   "get_note",
   "create_note",
@@ -60,6 +62,7 @@ const REQUIRED = [
   "search_commitments",
   "find_commitment_candidates",
   "save_subscription",
+  "delete_subscription",
   "set_commitment_payees",
   "list_jobs",
   "get_job",
@@ -84,7 +87,7 @@ describe("MCP catalog", () => {
   it("exposes the core and domain tools and hides discovery plus legacy", () => {
     const tools = listMcpToolDefinitions();
     const names = tools.map((tool) => tool.name);
-    expect(names).toHaveLength(55);
+    expect(names).toHaveLength(REQUIRED.length);
     expect(names).toEqual(expect.arrayContaining([...REQUIRED]));
     for (const hidden of HIDDEN) {
       expect(names).not.toContain(hidden);
@@ -102,14 +105,67 @@ describe("MCP catalog", () => {
       expect(tool.description).toContain("Use when:");
       expect(tool.description).toContain("Avoid when:");
       expect(tool.description).toContain("Effects:");
+      expect(tool.description).toContain("Fields:");
       const schema = tool.inputSchema as {
         $schema?: string;
         type?: string;
         anyOf?: unknown;
+        oneOf?: unknown;
+        allOf?: unknown;
       };
       expect(schema.$schema).toContain("json-schema.org");
-      expect(schema.type === "object" || Array.isArray(schema.anyOf)).toBe(true);
+      // MCP requires an object schema, and clients that meet a top-level combinator tend
+      // to drop the whole schema and show the tool as taking no arguments.
+      expect(schema.type, tool.name).toBe("object");
+      expect(schema.anyOf ?? schema.oneOf ?? schema.allOf, tool.name).toBeUndefined();
+      // A field with a default is optional to send; listing it as required makes agents
+      // fill in every default.
+      const { properties = {}, required = [] } = tool.inputSchema as {
+        properties?: Record<string, { default?: unknown }>;
+        required?: string[];
+      };
+      for (const name of required) {
+        expect(properties[name]?.default, `${tool.name}.${name}`).toBeUndefined();
+      }
     }
+  });
+});
+
+describe("MCP input schemas", () => {
+  it("requires only the fields a caller must send", () => {
+    const move = TOOL_REGISTRY.get("move_node");
+    if (!move) throw new Error("move_node missing");
+    expect((toMcpTool(move).inputSchema as { required?: string[] }).required).toEqual([
+      "id",
+      "parentId",
+    ]);
+  });
+});
+
+describe("MCP descriptions", () => {
+  // Some clients drop inputSchema and hand the model only the description.
+  it("name each tool's fields, marking the required ones", () => {
+    const move = TOOL_REGISTRY.get("move_node");
+    const context = TOOL_REGISTRY.get("get_context");
+    if (!move || !context) throw new Error("tool missing");
+    expect(mcpToolDescription(move)).toContain(
+      "Fields: id (required), parentId (required), position, siblingId.",
+    );
+    expect(mcpToolDescription(context)).toMatch(/Fields: /);
+  });
+
+  it("serves describe_tool over MCP so a schema-less client can still look one up", async () => {
+    const response = await handleMcpMessage({
+      jsonrpc: "2.0",
+      id: 9,
+      method: "tools/call",
+      params: { name: "describe_tool", arguments: { name: "create_node" } },
+    });
+    const result = (
+      response as { result: { isError?: boolean; content: { text: string }[] } }
+    ).result;
+    expect(result.isError).not.toBe(true);
+    expect(result.content[0]?.text).toContain("externalSource");
   });
 });
 
@@ -166,7 +222,7 @@ describe("MCP JSON-RPC", () => {
       method: "tools/list",
     });
     const tools = (response as { result: { tools: { name: string }[] } }).result.tools;
-    expect(tools).toHaveLength(55);
+    expect(tools).toHaveLength(REQUIRED.length);
     expect(tools.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining([...HIDDEN]),
     );
@@ -224,7 +280,7 @@ describe("MCP JSON-RPC", () => {
         content: [
           {
             type: "text",
-            text: expect.stringContaining("Unknown field surprise"),
+            text: expect.stringMatching(/^validation: Unknown field surprise/),
           },
         ],
       },
