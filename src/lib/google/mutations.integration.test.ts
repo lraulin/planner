@@ -2,7 +2,6 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, appointments, contacts, users } from "@/db/schema";
-import { GOOGLE_ISSUER } from "@/lib/auth/accountKey";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import type { GoogleCalendarListEntry } from "./client";
 import {
@@ -48,13 +47,15 @@ function entry(over: Partial<GoogleCalendarListEntry> = {}): GoogleCalendarListE
   return { id: "personal@example.com", summary: "Personal", ...over };
 }
 
-/** Stand in for a completed OAuth link — the row Better Auth would have written. */
+/**
+ * Stand in for a completed OAuth link — the row Better Auth would have written. No `issuer`:
+ * Better Auth 1.7.3 and later leave it null, so Google code must not depend on it.
+ */
 async function linkGoogle(userId: string): Promise<void> {
   await db.insert(accounts).values({
     userId,
     accountId: `google-${crypto.randomUUID()}`,
     providerId: "google",
-    issuer: GOOGLE_ISSUER,
     accessToken: "token",
   });
 }

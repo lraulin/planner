@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, users } from "@/db/schema";
-import { CREDENTIAL_ISSUER, GOOGLE_ISSUER } from "@/lib/auth/accountKey";
+import { CREDENTIAL_ISSUER } from "@/lib/auth/accountKey";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { getGoogleAccessToken, googleAccountId, GoogleNotLinkedError } from "./client";
 
@@ -31,7 +31,10 @@ async function makeUser(): Promise<string> {
   return user.id;
 }
 
-/** Stand in for a completed OAuth link — the row Better Auth would have written. */
+/**
+ * Stand in for a completed OAuth link — the row Better Auth would have written. No `issuer`:
+ * Better Auth 1.7.3 and later leave it null, so Google code must not depend on it.
+ */
 async function linkGoogle(userId: string): Promise<string> {
   const [account] = await db
     .insert(accounts)
@@ -39,7 +42,6 @@ async function linkGoogle(userId: string): Promise<string> {
       userId,
       accountId: `google-${crypto.randomUUID()}`,
       providerId: "google",
-      issuer: GOOGLE_ISSUER,
       accessToken: "token",
     })
     .returning({ id: accounts.id });
