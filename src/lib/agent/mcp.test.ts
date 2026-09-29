@@ -116,7 +116,27 @@ describe("MCP catalog", () => {
       // to drop the whole schema and show the tool as taking no arguments.
       expect(schema.type, tool.name).toBe("object");
       expect(schema.anyOf ?? schema.oneOf ?? schema.allOf, tool.name).toBeUndefined();
+      // A field with a default is optional to send; listing it as required makes agents
+      // fill in every default.
+      const { properties = {}, required = [] } = tool.inputSchema as {
+        properties?: Record<string, { default?: unknown }>;
+        required?: string[];
+      };
+      for (const name of required) {
+        expect(properties[name]?.default, `${tool.name}.${name}`).toBeUndefined();
+      }
     }
+  });
+});
+
+describe("MCP input schemas", () => {
+  it("requires only the fields a caller must send", () => {
+    const move = TOOL_REGISTRY.get("move_node");
+    if (!move) throw new Error("move_node missing");
+    expect((toMcpTool(move).inputSchema as { required?: string[] }).required).toEqual([
+      "id",
+      "parentId",
+    ]);
   });
 });
 

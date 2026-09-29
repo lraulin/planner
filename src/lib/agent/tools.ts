@@ -1101,11 +1101,17 @@ function describeSchemaFields(node: JsonSchemaNode): JsonSchemaNode {
   return node;
 }
 
-export function agentJsonSchema(schema: ZodType, describeFields = false) {
+/**
+ * JSON Schema for a tool's input or output. Input schemas are rendered from the caller's
+ * side (`io: "input"`): a field with a default is optional to send, and rendering it from
+ * the output side would list it as required and make agents fill in every default.
+ */
+export function agentJsonSchema(schema: ZodType, side: "input" | "output" = "output") {
   const json = z.toJSONSchema(schema, {
     target: "draft-2020-12",
+    io: side,
   }) as JsonSchemaNode;
-  return describeFields ? describeSchemaFields(json) : json;
+  return side === "input" ? describeSchemaFields(json) : json;
 }
 
 function healthTool() {
@@ -1158,8 +1164,8 @@ function describeTool(_userId: string, args: Record<string, unknown>) {
         avoidWhen: tool.avoidWhen,
         returns: tool.returns,
       },
-      inputSchema: agentJsonSchema(tool.inputSchema, true),
-      outputSchema: agentJsonSchema(tool.outputSchema),
+      inputSchema: agentJsonSchema(tool.inputSchema, "input"),
+      outputSchema: agentJsonSchema(tool.outputSchema, "output"),
       examples: tool.examples,
     },
   };

@@ -71,7 +71,7 @@ export function toMcpTool(tool: AgentToolDefinition): McpTool {
   return {
     name: tool.name,
     description: mcpToolDescription(tool),
-    inputSchema: agentJsonSchema(tool.inputSchema, true),
+    inputSchema: agentJsonSchema(tool.inputSchema, "input"),
   };
 }
 
