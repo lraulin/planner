@@ -683,10 +683,11 @@ const definitions: AgentToolDefinition[] = [
   defineTool("save_subscription", {
     domain: "finances",
     summary: "Create or correct a bill using stable payee ids.",
-    useWhen: "Use for subscriptions and bills that charge unless cancelled.",
+    useWhen:
+      "Use for subscriptions and bills that charge unless cancelled. Correct an existing bill by id; only the fields you pass change.",
     avoidWhen:
       "Do not pass matcher strings — resolve payee ids first with list_payees.",
-    returns: "The saved bill id, name, payees, and status.",
+    returns: "The saved bill id, name, payees, status, cancelledOn, and cadence.",
     effects: safeWrite,
     exposure: "domain",
     handler: saveSubscriptionTool,

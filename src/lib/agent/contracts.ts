@@ -939,13 +939,45 @@ export const inputSchemas = {
     ...pageInputFields,
   }),
   save_subscription: z.strictObject({
-    name: z.string().min(1),
+    id: id
+      .optional()
+      .describe(
+        "Existing bill id from search_commitments or list_recurring_bills. Edits that bill; with name, renames it. Omit to create or match by name.",
+      ),
+    name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Bill name. Required without id; with id it renames the bill."),
     payeeIds: z.array(id).optional(),
-    cadenceMonths: z.number().int().min(1).max(24).optional(),
-    cadenceDays: z.number().int().min(2).max(200).nullable().optional(),
+    cadenceMonths: z
+      .number()
+      .int()
+      .min(1)
+      .max(24)
+      .optional()
+      .describe(
+        "Calendar cadence in whole months (1 monthly, 3 quarterly, 12 yearly). Omit both cadence fields to keep the current cadence.",
+      ),
+    cadenceDays: z
+      .number()
+      .int()
+      .min(2)
+      .max(200)
+      .nullable()
+      .optional()
+      .describe(
+        "Cadence in days for a vendor that counts days (28 for four-weekly). Wins over cadenceMonths; null with cadenceMonths switches back to months.",
+      ),
     expectedCents: z.number().int().nullable().optional(),
     anchorDate: dateKey.nullable().optional(),
     status: z.enum(["active", "paused", "cancelled"]).optional(),
+    cancelledOn: dateKey
+      .nullable()
+      .optional()
+      .describe(
+        "Date the bill was cancelled (YYYY-MM-DD). Only for a cancelled bill; defaults to today when status becomes cancelled.",
+      ),
     url: z.string().optional(),
     scheduled: z.boolean().optional(),
     dueDay: z.number().int().min(1).max(31).nullable().optional(),
@@ -1414,6 +1446,8 @@ export const outputSchemas = {
     name: z.string(),
     payees: z.array(commitmentPayeeSchema),
     status: z.enum(["active", "paused", "cancelled"]),
+    cancelledOn: z.string().nullable(),
+    cadence: z.string(),
   }),
   set_commitment_payees: z.strictObject({ commitment: commitmentSummarySchema }),
   list_jobs: z.strictObject({

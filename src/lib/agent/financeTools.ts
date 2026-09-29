@@ -576,7 +576,16 @@ async function writeOrConflict<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (error) {
-    if (error instanceof Error && error.message.includes("already belongs")) {
+    // The bill write's refusals are all things the caller can fix by changing the call.
+    if (
+      error instanceof Error &&
+      [
+        "already belongs",
+        "More than one bill has this name",
+        "A bill needs a name",
+        "needs its cost for the period",
+      ].some((phrase) => error.message.includes(phrase))
+    ) {
       throw new AgentError("validation", error.message);
     }
     throw error;
@@ -770,8 +779,19 @@ export async function saveSubscriptionTool(
   userId: string,
   args: Record<string, unknown>,
 ) {
-  const name = optionalString(args, "name") ?? "";
-  await upsertBillEnvelope(userId, {
+  const id = optionalString(args, "id");
+  let name = optionalString(args, "name");
+  if (id === undefined && name === undefined) {
+    throw new AgentError("validation", "Either id or name is required.");
+  }
+  if (name === undefined) {
+    // An id-only correction keeps the bill's name; the write still wants one to validate.
+    const existing = (await loadRecurringBills(userId)).find((bill) => bill.id === id);
+    if (!existing) throw new AgentError("not_found", `Bill not found: ${id}`);
+    name = existing.name;
+  }
+  const edit = {
+    ...(id !== undefined ? { id } : {}),
     name,
     payeeIds: asStringList(args.payeeIds),
     cadence: cadenceFromArgs(args),
@@ -785,16 +805,24 @@ export async function saveSubscriptionTool(
     dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),
     leadDays: optionalNumber(args, "leadDays"),
     notes: optionalString(args, "notes"),
-  });
-  const row = (await loadRecurringBills(userId)).find(
-    (bill) => bill.name === name.trim(),
-  );
+    ...(args.cancelledOn !== undefined
+      ? {
+          cancelledOn:
+            args.cancelledOn === null ? null : optionalString(args, "cancelledOn"),
+        }
+      : {}),
+  };
+  const billId = await writeOrConflict(() => upsertBillEnvelope(userId, edit));
+  // By id, never by name: names repeat across groups, and a rename changes it.
+  const row = (await loadRecurringBills(userId)).find((bill) => bill.id === billId);
   if (!row) throw new AgentError("not_found", "Saved bill was not found.");
   return {
     id: row.id,
     name: row.name,
     payees: row.payees.map((payee) => ({ ...payee })),
     status: row.status,
+    cancelledOn: row.cancelledOn,
+    cadence: cadenceLabel(cadenceOf(row)),
   };
 }
 
@@ -818,13 +846,25 @@ export async function setCommitmentPayeesTool(
 }
 
 /**
- * The cadence an agent asked for. Days win over months, matching the column rule, and a
- * caller that names neither gets monthly — the cadence a bill is on unless told otherwise.
+ * The cadence an agent asked for, or undefined when it named none. Days win over months,
+ * matching the column rule.
+ *
+ * Undefined rather than a monthly default is the point: the write leaves an existing bill's
+ * cadence alone when told nothing, so correcting a status or a name cannot reset a 30-day
+ * bill to monthly. A new bill still gets monthly, from the write itself.
  */
-function cadenceFromArgs(args: Record<string, unknown>): Cadence {
+function cadenceFromArgs(args: Record<string, unknown>): Cadence | undefined {
   const days = args.cadenceDays === null ? null : optionalNumber(args, "cadenceDays");
   if (days !== undefined && days !== null && days > 0) return { unit: "day", n: days };
-  return { unit: "month", n: optionalNumber(args, "cadenceMonths") ?? 1 };
+  const months = optionalNumber(args, "cadenceMonths");
+  if (months !== undefined) return { unit: "month", n: months };
+  if (days === null) {
+    throw new AgentError(
+      "validation",
+      "cadenceDays: null needs cadenceMonths to say which month cadence replaces it.",
+    );
+  }
+  return undefined;
 }
 
 export async function upsertSubscriptionTool(
