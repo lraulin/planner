@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { listMcpToolDefinitions } from "@/lib/agent/mcp";
 import { issueAccessToken } from "@/lib/oauth/tokens";
 import { GET, POST } from "./route";
 
@@ -87,7 +88,7 @@ describe("MCP HTTP boundary", () => {
     const payload = (await listed.json()) as {
       result: { tools: { name: string }[] };
     };
-    expect(payload.result.tools).toHaveLength(55);
+    expect(payload.result.tools).toHaveLength(listMcpToolDefinitions().length);
     expect(payload.result.tools.map((tool) => tool.name)).not.toContain("list_tools");
   });
 

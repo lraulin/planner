@@ -60,6 +60,7 @@ const REQUIRED = [
   "search_commitments",
   "find_commitment_candidates",
   "save_subscription",
+  "delete_subscription",
   "set_commitment_payees",
   "list_jobs",
   "get_job",
@@ -84,7 +85,7 @@ describe("MCP catalog", () => {
   it("exposes the core and domain tools and hides discovery plus legacy", () => {
     const tools = listMcpToolDefinitions();
     const names = tools.map((tool) => tool.name);
-    expect(names).toHaveLength(55);
+    expect(names).toHaveLength(REQUIRED.length);
     expect(names).toEqual(expect.arrayContaining([...REQUIRED]));
     for (const hidden of HIDDEN) {
       expect(names).not.toContain(hidden);
@@ -166,7 +167,7 @@ describe("MCP JSON-RPC", () => {
       method: "tools/list",
     });
     const tools = (response as { result: { tools: { name: string }[] } }).result.tools;
-    expect(tools).toHaveLength(55);
+    expect(tools).toHaveLength(REQUIRED.length);
     expect(tools.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining([...HIDDEN]),
     );

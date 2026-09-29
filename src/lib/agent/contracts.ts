@@ -993,6 +993,9 @@ export const inputSchemas = {
     leadDays: z.number().int().min(0).max(60).optional(),
     notes: z.string().optional(),
   }),
+  delete_subscription: z.strictObject({
+    id: id.describe("Bill id from search_commitments or list_recurring_bills."),
+  }),
   set_commitment_payees: z.strictObject({
     id,
     payeeIds: z.array(id),
@@ -1457,6 +1460,11 @@ export const outputSchemas = {
     status: z.enum(["active", "paused", "cancelled"]),
     cancelledOn: z.string().nullable(),
     cadence: z.string(),
+  }),
+  delete_subscription: z.strictObject({
+    deleted: z.literal(true),
+    id,
+    name: z.string(),
   }),
   set_commitment_payees: z.strictObject({ commitment: commitmentSummarySchema }),
   list_jobs: z.strictObject({

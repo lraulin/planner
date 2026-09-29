@@ -26,6 +26,7 @@ import {
   nextDueFrom,
   type Cadence,
 } from "@/lib/finances/recurringBills";
+import { deleteBudgetCategory } from "@/lib/finances/budget/mutations";
 import { upsertBillEnvelope } from "@/lib/finances/mutations";
 import {
   addAlias,
@@ -827,6 +828,27 @@ export async function saveSubscriptionTool(
     cancelledOn: row.cancelledOn,
     cadence: cadenceLabel(cadenceOf(row)),
   };
+}
+
+/**
+ * Hard-delete a bill added in error. Cancelling is the ordinary end of a bill and keeps it
+ * as history; this is for a row that should never have existed.
+ *
+ * Reuses the envelope delete, which already does the related-row work the schema needs: it
+ * releases payee claims and defaults, lets filed transactions fall back to unfiled (the FK is
+ * `set null`), drops the envelope's allocations (cascade), and writes the audit event. The
+ * `kind = 'bill'` check is here because that delete takes any envelope, and this tool must
+ * not become a way to remove a spending or income envelope.
+ */
+export async function deleteSubscriptionTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const id = optionalString(args, "id") ?? "";
+  const bill = (await loadRecurringBills(userId)).find((row) => row.id === id);
+  if (!bill) throw new AgentError("not_found", `Bill not found: ${id}`);
+  await deleteBudgetCategory(userId, bill.id);
+  return { deleted: true as const, id: bill.id, name: bill.name };
 }
 
 export async function setCommitmentPayeesTool(

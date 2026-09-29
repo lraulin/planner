@@ -1,9 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { financeBudgetCategories, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
+import { createBudgetCategory } from "@/lib/finances/budget/mutations";
+import { listTransactions } from "@/lib/finances/queries";
 import { dispatchAgentTool } from "./tools";
 
 /**
@@ -236,5 +238,112 @@ describeDb("list_recurring_bills", () => {
       intruderId,
     )) as { bills: ListedBill[] };
     expect(intruder.bills.map((bill) => bill.id)).not.toContain(gym.id);
+  });
+});
+
+async function seedSimpliSafe(userId: string): Promise<void> {
+  await importFinanceCsvFiles({
+    userId,
+    files: [
+      {
+        name: "Chase9910_Activity_20260812.csv",
+        text: [
+          "Transaction Date,Post Date,Description,Category,Type,Amount,Memo",
+          "03/09/2026,03/10/2026,SIMPLISAFE 8888957880,Bills & Utilities,Sale,-34.71,",
+          "04/09/2026,04/10/2026,SIMPLISAFE 8888957880,Bills & Utilities,Sale,-34.71,",
+          "",
+        ].join("\n"),
+      },
+    ],
+  });
+}
+
+async function envelopeExists(id: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: financeBudgetCategories.id })
+    .from(financeBudgetCategories)
+    .where(eq(financeBudgetCategories.id, id));
+  return rows.length > 0;
+}
+
+describeDb("delete_subscription", () => {
+  it("deletes a mistaken bill and releases its payee and charges without losing them", async () => {
+    const ownerId = await makeUser();
+    await seedSimpliSafe(ownerId);
+    const payees = (await dispatchAgentTool(
+      "list_payees",
+      { query: "simplisafe" },
+      ownerId,
+    )) as { payees: { id: string }[] };
+    const payeeId = payees.payees[0]?.id;
+    expect(payeeId).toBeDefined();
+    const bill = await save(ownerId, {
+      name: "SimpliSafe",
+      payeeIds: [payeeId],
+      cadenceMonths: 1,
+      expectedCents: 3471,
+    });
+    const filed = (await listTransactions(ownerId)).filter(
+      (row) => row.budgetCategoryId === bill.id,
+    );
+    expect(filed).toHaveLength(2);
+
+    const deleted = await dispatchAgentTool(
+      "delete_subscription",
+      { id: bill.id },
+      ownerId,
+    );
+    expect(deleted).toEqual({ deleted: true, id: bill.id, name: "SimpliSafe" });
+
+    expect(await envelopeExists(bill.id)).toBe(false);
+    const found = (await dispatchAgentTool(
+      "search_commitments",
+      { query: "SimpliSafe" },
+      ownerId,
+    )) as { commitments: unknown[] };
+    expect(found.commitments).toEqual([]);
+
+    // The payee survives with its claim released, and the charges survive unfiled.
+    const after = (await dispatchAgentTool(
+      "list_payees",
+      { query: "simplisafe" },
+      ownerId,
+    )) as { payees: { id: string; claim: unknown }[] };
+    expect(after.payees).toEqual([
+      expect.objectContaining({ id: payeeId, claim: null }),
+    ]);
+    const charges = (await listTransactions(ownerId)).filter((row) =>
+      filed.some((was) => was.id === row.id),
+    );
+    expect(charges).toHaveLength(2);
+    expect(charges.every((row) => row.budgetCategoryId === null)).toBe(true);
+  });
+
+  it("refuses an envelope that is not a bill", async () => {
+    const ownerId = await makeUser();
+    const groceries = await createBudgetCategory(ownerId, {
+      name: "Groceries",
+      kind: "spending",
+    });
+
+    await expect(
+      dispatchAgentTool("delete_subscription", { id: groceries }, ownerId),
+    ).rejects.toMatchObject({ code: "not_found" });
+    expect(await envelopeExists(groceries)).toBe(true);
+  });
+
+  it("will not let another user delete the bill", async () => {
+    const ownerId = await makeUser();
+    const intruderId = await makeUser();
+    const bill = await save(ownerId, {
+      name: "Gym",
+      cadenceMonths: 1,
+      expectedCents: 5000,
+    });
+
+    await expect(
+      dispatchAgentTool("delete_subscription", { id: bill.id }, intruderId),
+    ).rejects.toMatchObject({ code: "not_found" });
+    expect(await envelopeExists(bill.id)).toBe(true);
   });
 });

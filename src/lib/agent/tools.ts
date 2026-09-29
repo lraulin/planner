@@ -54,6 +54,7 @@ import {
   searchCommitmentsTool,
   findCommitmentCandidatesTool,
   saveSubscriptionTool,
+  deleteSubscriptionTool,
   setCommitmentPayeesTool,
   listRecurringBillsTool,
   listStatementsTool,
@@ -691,6 +692,19 @@ const definitions: AgentToolDefinition[] = [
     effects: safeWrite,
     exposure: "domain",
     handler: saveSubscriptionTool,
+  }),
+  defineTool("delete_subscription", {
+    domain: "finances",
+    summary: "Permanently delete a bill that was created by mistake.",
+    useWhen:
+      "Use only for a bill added in error (a duplicate, a typo, never a real commitment), after the user explicitly asks to delete it.",
+    avoidWhen:
+      "A bill that really existed and has ended should be kept as history: use save_subscription with status cancelled (and cancelledOn) instead.",
+    returns:
+      "The deleted bill id and name. Its charges and payees stay; the charges return to the review backlog unfiled.",
+    effects: destructiveWrite,
+    exposure: "domain",
+    handler: deleteSubscriptionTool,
   }),
   defineTool("set_commitment_payees", {
     domain: "finances",
