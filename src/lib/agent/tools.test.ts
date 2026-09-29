@@ -36,6 +36,39 @@ describe("agent tool registry", () => {
     });
   });
 
+  // The agent may be on a client that dropped the schema, so the error itself has to say
+  // what would have been accepted.
+  it("lists the allowed fields when it rejects an unknown one", async () => {
+    await expect(
+      dispatchAgentTool(
+        "create_node",
+        { type: "task", name: "x", parent: null },
+        UNUSED_USER_ID,
+      ),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: expect.stringMatching(
+        /^Unknown field parent\. Allowed fields: .*\bparentId\b.*\. Call describe_tool/,
+      ),
+    });
+    await expect(
+      dispatchAgentTool(
+        "capture_inbox",
+        { items: [{ name: "One", notes: "x" }] },
+        UNUSED_USER_ID,
+      ),
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(
+        /^Unknown field items\.0\.notes\. Allowed fields: name, note, deadline, externalSource, externalId\./,
+      ),
+    });
+    await expect(
+      dispatchAgentTool("health", { surprise: true }, UNUSED_USER_ID),
+    ).rejects.toMatchObject({
+      message: "Unknown field surprise. This takes no fields.",
+    });
+  });
+
   it("requires both halves of a retry key", async () => {
     await expect(
       dispatchAgentTool(

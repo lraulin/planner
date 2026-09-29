@@ -1171,14 +1171,88 @@ function describeTool(_userId: string, args: Record<string, unknown>) {
   };
 }
 
-function validationMessage(error: z.ZodError): string {
+const WRAPPER_TYPES = new Set([
+  "optional",
+  "nullable",
+  "default",
+  "prefault",
+  "readonly",
+  "nonoptional",
+  "catch",
+]);
+
+/** The field names an object in `schema` accepts at `path`, or undefined when unknown. */
+function allowedFieldsAt(
+  schema: z.ZodType,
+  path: readonly PropertyKey[],
+): string[] | undefined {
+  const unwrap = (node: z.ZodType): z.ZodType => {
+    let current = node;
+    for (;;) {
+      const def = current._zod.def as {
+        type: string;
+        innerType?: z.ZodType;
+        in?: z.ZodType;
+      };
+      if (WRAPPER_TYPES.has(def.type) && def.innerType) current = def.innerType;
+      else if (def.type === "pipe" && def.in) current = def.in;
+      else return current;
+    }
+  };
+  const fieldsOf = (node: z.ZodType): string[] | undefined => {
+    const def = unwrap(node)._zod.def as {
+      type: string;
+      shape?: Record<string, z.ZodType>;
+      options?: z.ZodType[];
+    };
+    if (def.type === "object" && def.shape) return Object.keys(def.shape);
+    if (def.type === "union" && def.options) {
+      const names = def.options.flatMap((option) => fieldsOf(option) ?? []);
+      return names.length > 0 ? [...new Set(names)] : undefined;
+    }
+    return undefined;
+  };
+
+  let current: z.ZodType = schema;
+  for (const segment of path) {
+    const def = unwrap(current)._zod.def as {
+      type: string;
+      shape?: Record<string, z.ZodType>;
+      element?: z.ZodType;
+    };
+    if (def.type === "array" && typeof segment === "number" && def.element) {
+      current = def.element;
+    } else if (def.type === "object" && def.shape && typeof segment === "string") {
+      const next = def.shape[segment];
+      if (!next) return undefined;
+      current = next;
+    } else {
+      return undefined;
+    }
+  }
+  return fieldsOf(current);
+}
+
+/**
+ * The validation text an agent sees. An unknown field names the fields that are allowed
+ * there, because the agent may be on a client that dropped the schema and cannot look it up
+ * any other way than by calling describe_tool.
+ */
+function validationMessage(error: z.ZodError, schema: z.ZodType): string {
   const issue = error.issues[0];
   if (!issue) return "Request body does not match the tool schema";
   const path = issue.path.length > 0 ? issue.path.join(".") : "request body";
   if (issue.code === "unrecognized_keys") {
     const field = issue.keys[0] ?? "unknown";
     const prefix = issue.path.length > 0 ? `${issue.path.join(".")}.` : "";
-    return `Unknown field ${prefix}${field}. Remove it or call describe_tool for the schema.`;
+    const allowed = allowedFieldsAt(schema, issue.path);
+    const hint =
+      allowed === undefined
+        ? "Remove it or call describe_tool for the schema."
+        : allowed.length === 0
+          ? "This takes no fields."
+          : `Allowed fields: ${allowed.join(", ")}. Call describe_tool for the full schema.`;
+    return `Unknown field ${prefix}${field}. ${hint}`;
   }
   return `${path}: ${issue.message}`;
 }
@@ -1217,7 +1291,10 @@ export async function dispatchAgentTool(
     }
     const parsed = tool.inputSchema.safeParse(args);
     if (!parsed.success) {
-      throw new AgentError("validation", validationMessage(parsed.error));
+      throw new AgentError(
+        "validation",
+        validationMessage(parsed.error, tool.inputSchema),
+      );
     }
     const uid =
       userId ??
