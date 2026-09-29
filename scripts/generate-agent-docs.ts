@@ -116,8 +116,8 @@ Content-Type: application/json
 
 \`tools/list\` exposes the current core and domain tools plus \`describe_tool\` — not
 \`list_tools\`, \`health\`, or legacy aliases. Each description ends with a \`Fields:\` line
-for clients that drop \`inputSchema\`; \`describe_tool\` returns the full schema. In Grok: grok.com/connectors
-→ New Connector → Custom, name \`Planner\`, URL
+for clients that drop \`inputSchema\`; \`describe_tool\` returns the full schema.
+In Grok: grok.com/connectors → New Connector → Custom, name \`Planner\`, URL
 \`https://planner-lee-5344.vercel.app/api/mcp\`. Grok then asks for OAuth app
 credentials — Client ID \`planner\`, empty secret, authorize
 \`https://planner-lee-5344.vercel.app/oauth/authorize\`, token
