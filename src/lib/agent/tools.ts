@@ -417,7 +417,8 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("upsert_plan_entry", {
     domain: "planning",
-    summary: "Create or update one weekly-plan item decision.",
+    summary:
+      "Create or update one weekly-plan item decision. focus on a project entry marks it a weekly MVP and sets the project's outline Focus flag too.",
     useWhen: "Use for an isolated entry edit outside a multi-item review stage.",
     avoidWhen: "Use update_weekly_plan_entries for three or more approved decisions.",
     returns: "The plan entry after the upsert.",
@@ -427,7 +428,8 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("update_weekly_plan_entries", {
     domain: "planning",
-    summary: "Atomically apply an ordered batch of weekly-plan item decisions.",
+    summary:
+      "Atomically apply an ordered batch of weekly-plan item decisions. focus on a project entry also sets the project's outline Focus flag; on other types it stays on the entry.",
     useWhen: "Use once per approved review stage instead of repeated entry calls.",
     avoidWhen: "Do not include speculative or unapproved decisions in the batch.",
     returns:

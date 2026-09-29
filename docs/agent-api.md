@@ -408,7 +408,7 @@ complete input/output JSON Schemas.
 
 ### `upsert_plan_entry`
 
-Create or update one weekly-plan item decision.
+Create or update one weekly-plan item decision. focus on a project entry marks it a weekly MVP and sets the project's outline Focus flag too.
 
 - Use when: Use for an isolated entry edit outside a multi-item review stage.
 - Avoid when: Use update_weekly_plan_entries for three or more approved decisions.
@@ -423,7 +423,7 @@ complete input/output JSON Schemas.
 
 ### `update_weekly_plan_entries`
 
-Atomically apply an ordered batch of weekly-plan item decisions.
+Atomically apply an ordered batch of weekly-plan item decisions. focus on a project entry also sets the project's outline Focus flag; on other types it stays on the entry.
 
 - Use when: Use once per approved review stage instead of repeated entry calls.
 - Avoid when: Do not include speculative or unapproved decisions in the batch.
