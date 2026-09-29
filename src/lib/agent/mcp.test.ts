@@ -224,7 +224,7 @@ describe("MCP JSON-RPC", () => {
         content: [
           {
             type: "text",
-            text: expect.stringContaining("Unknown field surprise"),
+            text: expect.stringMatching(/^validation: Unknown field surprise/),
           },
         ],
       },

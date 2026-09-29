@@ -9,7 +9,7 @@ import {
 export type AgentSuccess<T> = { ok: true; data: T };
 export type AgentFailure = {
   ok: false;
-  error: { code: AgentErrorCode; message: string };
+  error: { code: AgentErrorCode; message: string; errorId?: string };
 };
 export type AgentEnvelope<T> = AgentSuccess<T> | AgentFailure;
 
@@ -22,7 +22,11 @@ export function errorResponse(err: AgentError | unknown): NextResponse {
   const agentErr = toAgentError(err);
   const body: AgentFailure = {
     ok: false,
-    error: { code: agentErr.code, message: agentErr.message },
+    error: {
+      code: agentErr.code,
+      message: agentErr.message,
+      ...(agentErr.errorId ? { errorId: agentErr.errorId } : {}),
+    },
   };
   return NextResponse.json(body, { status: httpStatusFor(agentErr.code) });
 }

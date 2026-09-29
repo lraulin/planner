@@ -2,7 +2,7 @@
 
 import { z, type ZodType } from "zod";
 import { getAgentUserId } from "@/lib/auth/identity";
-import { AgentError, toAgentError } from "./errors";
+import { AgentError, logAgentError, toAgentError } from "./errors";
 import { asObject } from "./parse";
 import { inputSchemas, outputSchemas } from "./contracts";
 import {
@@ -1181,11 +1181,14 @@ export async function dispatchAgentTool(
     const result = await tool.handler(uid, parsed.data as Record<string, unknown>);
     const output = tool.outputSchema.safeParse(result);
     if (!output.success) {
-      console.error(
-        `Agent tool ${toolName} returned an invalid contract payload`,
-        output.error,
+      throw new AgentError(
+        "internal",
+        "Tool returned an invalid response",
+        logAgentError(
+          output.error,
+          `Agent tool ${toolName} returned an invalid contract payload`,
+        ),
       );
-      throw new AgentError("internal", "Tool returned an invalid response");
     }
     return result;
   } catch (error) {

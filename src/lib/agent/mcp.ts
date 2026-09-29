@@ -1,6 +1,6 @@
 /** Stateless MCP Streamable HTTP adapter over the agent tool registry. */
 
-import { toAgentError } from "./errors";
+import { formatAgentErrorText, toAgentError } from "./errors";
 import {
   AGENT_CONTRACT_VERSION,
   agentJsonSchema,
@@ -172,8 +172,7 @@ async function callTool(params: unknown, userId?: string): Promise<unknown> {
     const data = await dispatchAgentTool(name, args, userId);
     return toolResult(data);
   } catch (error) {
-    const agentError = toAgentError(error);
-    return toolError(agentError.message);
+    return toolError(formatAgentErrorText(toAgentError(error)));
   }
 }
 
@@ -239,10 +238,9 @@ export async function handleMcpMessage(
     if (isJsonRpcCoded(error)) {
       return errorResponse(id, { code: error.code, message: error.message });
     }
-    const agentError = toAgentError(error);
     return errorResponse(id, {
       code: INTERNAL_ERROR,
-      message: agentError.message,
+      message: formatAgentErrorText(toAgentError(error)),
     });
   }
 }
