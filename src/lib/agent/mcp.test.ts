@@ -29,6 +29,7 @@ const REQUIRED = [
   "create_node",
   "capture_inbox",
   "update_node",
+  "move_node",
   "search_notes",
   "get_note",
   "create_note",

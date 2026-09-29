@@ -757,6 +757,19 @@ export const inputSchemas = {
   capture_inbox: captureInputSchema,
   capture: captureInputSchema,
   update_node: z.strictObject({ id, ...nodePatchFields }),
+  move_node: z.strictObject({
+    id: id.describe("The node to move."),
+    parentId: nullableId.describe(
+      "New parent node id, or null for the top level. Pass the current parent to reorder in place.",
+    ),
+    position: z
+      .enum(["first", "last", "before", "after"])
+      .default("last")
+      .describe("Where among the new parent's children. before/after need siblingId."),
+    siblingId: id
+      .optional()
+      .describe("A child of parentId to place the node before or after."),
+  }),
   create_note: retryableObject(noteInputFields),
   update_note: z.strictObject({ id, ...noteInputFields }),
   search_notes: z.strictObject({
@@ -1118,6 +1131,7 @@ export const outputSchemas = {
   capture_inbox: captureOutput,
   capture: captureOutput,
   update_node: z.strictObject({ node: nodeDetailSchema }),
+  move_node: z.strictObject({ node: nodeDetailSchema }),
   create_note: z.strictObject({ note: noteSchema, created: z.boolean() }),
   update_note: z.strictObject({ note: noteSchema }),
   search_notes: z.strictObject({

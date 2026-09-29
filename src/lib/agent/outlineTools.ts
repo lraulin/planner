@@ -13,7 +13,8 @@ import { getWeeklyPlan } from "@/lib/planning/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
 import { weekRange } from "@/lib/schedule/range";
-import { createNodeOnce } from "@/lib/tree/mutations";
+import { createNodeOnce, moveNode } from "@/lib/tree/mutations";
+import type { Position } from "@/lib/tree/types";
 import { formatNodePath, loadNodeChain } from "@/lib/tree/path";
 import { loadOutline } from "@/lib/tree/queries";
 import { parseCaptureArgs } from "./captureArgs";
@@ -260,5 +261,54 @@ export async function updateNodeTool(userId: string, args: Record<string, unknow
     await saveNodeDetail(userId, id, patch);
   }
 
+  return getNode(userId, { id });
+}
+
+/**
+ * Re-file or reorder one node. `update_node` deliberately has no parent field — a move is
+ * not a field write: it re-keys siblings, renumbers priorities in both groups, and inherits a
+ * result area's category — so it goes through the same `moveNode` the outline's drag uses.
+ */
+export async function moveNodeTool(userId: string, args: Record<string, unknown>) {
+  const id = requireString(args, "id");
+  const parentId = args.parentId as string | null;
+  const at = (optionalString(args, "position") ?? "last") as Position["at"];
+  const siblingId = optionalString(args, "siblingId");
+
+  let position: Position;
+  if (at === "before" || at === "after") {
+    if (!siblingId) {
+      throw new AgentError(
+        "validation",
+        `siblingId is required when position is ${at}`,
+      );
+    }
+    if (siblingId === id) {
+      throw new AgentError("validation", "siblingId must be a different node than id");
+    }
+    position = { at, siblingId };
+  } else {
+    if (siblingId !== undefined) {
+      throw new AgentError(
+        "validation",
+        `siblingId only applies when position is before or after, not ${at}`,
+      );
+    }
+    position = { at };
+  }
+
+  // Ownership first, so another user's id is not_found rather than a nesting complaint.
+  await getNode(userId, { id });
+  try {
+    await moveNode({ userId, nodeId: id, parentId, position });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Sibling not found")) {
+      throw new AgentError(
+        "validation",
+        `siblingId ${siblingId} is not a child of ${parentId ?? "the top level"}`,
+      );
+    }
+    throw error;
+  }
   return getNode(userId, { id });
 }

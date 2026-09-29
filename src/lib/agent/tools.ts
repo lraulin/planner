@@ -11,6 +11,7 @@ import {
   getContext,
   getNode,
   searchNodes,
+  moveNodeTool,
   updateNodeTool,
 } from "./outlineTools";
 import {
@@ -276,6 +277,28 @@ const definitions: AgentToolDefinition[] = [
     effects: safeWrite,
     exposure: "core",
     handler: updateNodeTool,
+  }),
+  defineTool("move_node", {
+    domain: "outline",
+    summary: "Move one outline item under a new parent and/or to a new position.",
+    useWhen:
+      "Use to re-file or reorder an item after resolving its id and the destination parent id.",
+    avoidWhen:
+      "Use update_node for fields; a move cannot change type and refuses a nesting the outline does not allow.",
+    returns: "The full node after the move, including its new parentId and path.",
+    effects: safeWrite,
+    exposure: "domain",
+    examples: [
+      {
+        title: "File a task under a project",
+        arguments: {
+          id: "00000000-0000-4000-8000-000000000001",
+          parentId: "00000000-0000-4000-8000-000000000002",
+          position: "last",
+        },
+      },
+    ],
+    handler: moveNodeTool,
   }),
   defineTool("create_note", {
     domain: "notes",
