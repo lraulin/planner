@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { importFinanceCsvFiles } from "@/lib/finances/import";
 import { dispatchAgentTool } from "./tools";
 
 /**
@@ -161,5 +162,79 @@ describeDb("save_subscription corrections", () => {
 
     const untouched = await save(ownerId, { id: plan.id });
     expect(untouched).toMatchObject({ name: "Payment Plan", status: "active" });
+  });
+});
+
+type ListedBill = {
+  id: string | null;
+  merchant: string;
+  annualCents: number;
+  status: string;
+  declared: boolean;
+};
+
+/** One charge on file, so the analysis has a range and does not short-circuit to empty. */
+async function seedOneCharge(userId: string): Promise<void> {
+  await importFinanceCsvFiles({
+    userId,
+    files: [
+      {
+        name: "Chase9910_Activity_20260812.csv",
+        text: [
+          "Transaction Date,Post Date,Description,Category,Type,Amount,Memo",
+          "03/02/2026,03/03/2026,WM SUPERCENTER #1981,Groceries,Sale,-84.12,",
+          "",
+        ].join("\n"),
+      },
+    ],
+  });
+}
+
+describeDb("list_recurring_bills", () => {
+  it("names each declared bill by id and status and totals only the active ones", async () => {
+    const ownerId = await makeUser();
+    const intruderId = await makeUser();
+    await seedOneCharge(ownerId);
+    const gym = await save(ownerId, {
+      name: "Gym",
+      cadenceMonths: 1,
+      expectedCents: 5000,
+    });
+    const plan = await save(ownerId, {
+      name: "Payment Plan",
+      cadenceDays: 30,
+      expectedCents: 7500,
+    });
+    await save(ownerId, { id: plan.id, status: "cancelled" });
+
+    const listed = (await dispatchAgentTool(
+      "list_recurring_bills",
+      { window: "all" },
+      ownerId,
+    )) as { bills: ListedBill[]; annualTotalCents: number };
+
+    const byName = new Map(listed.bills.map((bill) => [bill.merchant, bill]));
+    expect(byName.get("Gym")).toMatchObject({
+      id: gym.id,
+      status: "active",
+      declared: true,
+    });
+    // Cancelled stays visible as history, and says so.
+    const cancelled = byName.get("Payment Plan");
+    expect(cancelled).toMatchObject({ id: plan.id, status: "cancelled" });
+    expect(cancelled?.annualCents).toBeGreaterThan(0);
+
+    const activeTotal = listed.bills
+      .filter((bill) => bill.status === "active")
+      .reduce((total, bill) => total + bill.annualCents, 0);
+    expect(listed.annualTotalCents).toBe(activeTotal);
+    expect(listed.annualTotalCents).toBe(byName.get("Gym")?.annualCents);
+
+    const intruder = (await dispatchAgentTool(
+      "list_recurring_bills",
+      { window: "all" },
+      intruderId,
+    )) as { bills: ListedBill[] };
+    expect(intruder.bills.map((bill) => bill.id)).not.toContain(gym.id);
   });
 });

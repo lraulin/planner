@@ -1045,6 +1045,11 @@ export type RecurringMerchant = {
   /** True when this row came from a declaration. Drives the marker in the table. */
   declared: boolean;
   /**
+   * The declared bill's envelope id, when the declaration carried one. Absent for a detected
+   * merchant, which has no row to name — and optional so fixtures need not invent one.
+   */
+  billId?: string;
+  /**
    * False when the user declared the cost but not a schedule — propane, whose yearly figure
    * is solid and whose delivery date is a tank sensor. Always true for a detected merchant,
    * which was found by having a cadence in the first place.
@@ -1197,6 +1202,7 @@ export function recurringMerchants(
         charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "",
       cadence: cadenceOf(bill),
       declared: true,
+      ...(bill.id ? { billId: bill.id } : {}),
       scheduled: bill.scheduled,
       status: billStatusOf(bill),
       shape: "bill",

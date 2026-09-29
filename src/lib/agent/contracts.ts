@@ -653,6 +653,12 @@ const rankedSpendSchema = z.strictObject({
 });
 
 const recurringBillSchema = z.strictObject({
+  id: z
+    .string()
+    .nullable()
+    .describe(
+      "Declared bill id for save_subscription / delete_subscription; null when detected only.",
+    ),
   merchant: z.string(),
   typicalCents: cents,
   lowCents: cents,
@@ -665,6 +671,9 @@ const recurringBillSchema = z.strictObject({
   lastChargeOn: z.string(),
   declared: z.boolean(),
   scheduled: z.boolean(),
+  status: z
+    .enum(["active", "paused", "cancelled", "ignored"])
+    .describe("Only active bills count toward annualTotalCents."),
 });
 
 const upcomingBillSchema = z.strictObject({

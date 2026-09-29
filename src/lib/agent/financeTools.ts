@@ -389,6 +389,7 @@ export async function listRecurringBillsTool(
   return {
     range: analysis.range,
     bills: analysis.recurring.map((entry) => ({
+      id: entry.billId ?? null,
       merchant: entry.merchant,
       typicalCents: entry.typicalCents,
       lowCents: entry.lowCents,
@@ -401,11 +402,13 @@ export async function listRecurringBillsTool(
       lastChargeOn: entry.lastChargeOn,
       declared: entry.declared,
       scheduled: entry.scheduled,
+      status: entry.status,
     })),
-    annualTotalCents: analysis.recurring.reduce(
-      (total, entry) => total + entry.annualCents,
-      0,
-    ),
+    // Paused and cancelled bills stay listed as history, but a year of them costs nothing —
+    // the same rule the Bills page total follows (`activeBillTotals`).
+    annualTotalCents: analysis.recurring
+      .filter((entry) => entry.status === "active")
+      .reduce((total, entry) => total + entry.annualCents, 0),
     upcoming: args.includeUpcoming === false ? [] : analysis.upcoming,
   };
 }
