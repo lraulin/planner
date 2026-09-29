@@ -6,6 +6,7 @@ import {
   listMcpToolDefinitions,
   MCP_PROTOCOL_LATEST,
   MCP_SERVER_NAME,
+  mcpToolDescription,
   toMcpTool,
 } from "./mcp";
 import { TOOL_REGISTRY } from "./tools";
@@ -13,7 +14,6 @@ import { TOOL_REGISTRY } from "./tools";
 const HIDDEN = [
   "health",
   "list_tools",
-  "describe_tool",
   "capture",
   "list_notes",
   "set_focus_area",
@@ -23,6 +23,7 @@ const HIDDEN = [
 ] as const;
 
 const REQUIRED = [
+  "describe_tool",
   "get_context",
   "search_nodes",
   "get_node",
@@ -104,6 +105,7 @@ describe("MCP catalog", () => {
       expect(tool.description).toContain("Use when:");
       expect(tool.description).toContain("Avoid when:");
       expect(tool.description).toContain("Effects:");
+      expect(tool.description).toContain("Fields:");
       const schema = tool.inputSchema as {
         $schema?: string;
         type?: string;
@@ -137,6 +139,33 @@ describe("MCP input schemas", () => {
       "id",
       "parentId",
     ]);
+  });
+});
+
+describe("MCP descriptions", () => {
+  // Some clients drop inputSchema and hand the model only the description.
+  it("name each tool's fields, marking the required ones", () => {
+    const move = TOOL_REGISTRY.get("move_node");
+    const context = TOOL_REGISTRY.get("get_context");
+    if (!move || !context) throw new Error("tool missing");
+    expect(mcpToolDescription(move)).toContain(
+      "Fields: id (required), parentId (required), position, siblingId.",
+    );
+    expect(mcpToolDescription(context)).toMatch(/Fields: /);
+  });
+
+  it("serves describe_tool over MCP so a schema-less client can still look one up", async () => {
+    const response = await handleMcpMessage({
+      jsonrpc: "2.0",
+      id: 9,
+      method: "tools/call",
+      params: { name: "describe_tool", arguments: { name: "create_node" } },
+    });
+    const result = (
+      response as { result: { isError?: boolean; content: { text: string }[] } }
+    ).result;
+    expect(result.isError).not.toBe(true);
+    expect(result.content[0]?.text).toContain("externalSource");
   });
 });
 

@@ -12,7 +12,9 @@ import {
 export const MCP_PROTOCOL_LATEST = "2025-03-26";
 export const MCP_PROTOCOL_SUPPORTED = ["2025-03-26", "2024-11-05"] as const;
 export const MCP_SERVER_NAME = "planner";
-const HTTP_DISCOVERY_TOOLS = new Set(["health", "list_tools", "describe_tool"]);
+// describe_tool stays on MCP: some clients drop the published inputSchema, and it is the
+// only way left for an agent there to see a tool's fields before calling it.
+const HTTP_DISCOVERY_TOOLS = new Set(["health", "list_tools"]);
 
 const PARSE_ERROR = -32700;
 const INVALID_REQUEST = -32600;
@@ -56,6 +58,25 @@ export function listMcpToolDefinitions(): AgentToolDefinition[] {
   return [...TOOL_REGISTRY.values()].filter(isMcpExposedTool);
 }
 
+/**
+ * One line naming a tool's top-level fields, marking the required ones. It repeats what the
+ * inputSchema says because some MCP clients drop the schema and pass only the description
+ * to the model; without this line an agent there has to guess field names.
+ */
+export function mcpFieldsLine(tool: AgentToolDefinition): string {
+  const schema = agentJsonSchema(tool.inputSchema, "input") as {
+    properties?: Record<string, unknown>;
+    required?: string[];
+  };
+  const required = new Set(schema.required ?? []);
+  const names = Object.keys(schema.properties ?? {});
+  if (names.length === 0) return "Fields: none.";
+  const listed = names.map((name) =>
+    required.has(name) ? `${name} (required)` : name,
+  );
+  return `Fields: ${listed.join(", ")}. Call describe_tool for types and meanings.`;
+}
+
 export function mcpToolDescription(tool: AgentToolDefinition): string {
   const { kind, destructive, retry, confirmation } = tool.effects;
   return [
@@ -64,6 +85,7 @@ export function mcpToolDescription(tool: AgentToolDefinition): string {
     `Avoid when: ${tool.avoidWhen}`,
     `Returns: ${tool.returns}`,
     `Effects: ${kind}; destructive=${String(destructive)}; retry=${retry}; confirmation=${confirmation}`,
+    mcpFieldsLine(tool),
   ].join("\n");
 }
 
@@ -145,7 +167,7 @@ function initializeResult(params: unknown) {
       version: String(AGENT_CONTRACT_VERSION),
     },
     instructions:
-      "Planner personal planning tools. Start with get_context. For money questions start with get_finance_overview. For jobs, residences, or dated life facts use the history tools. For house-shopping listings — price, size, features, drive time to Lee's parents' house — use the houses tools; drive time computes automatically from the address, so check routeError rather than retrying it. Search before mutating and use ids from search or read results. Use capture_inbox for unprocessed ideas. Do not guess a parent or node id.",
+      "Planner personal planning tools. Start with get_context. For money questions start with get_finance_overview. For jobs, residences, or dated life facts use the history tools. For house-shopping listings — price, size, features, drive time to Lee's parents' house — use the houses tools; drive time computes automatically from the address, so check routeError rather than retrying it. Search before mutating and use ids from search or read results. Use capture_inbox for unprocessed ideas. Do not guess a parent or node id. If a tool's fields are unclear, call describe_tool with its name before calling it.",
   };
 }
 

@@ -114,8 +114,9 @@ Authorization: Bearer <PLANNER_AGENT_API_KEY>
 Content-Type: application/json
 \`\`\`
 
-\`tools/list\` exposes the current core and domain tools — not HTTP discovery
-(\`list_tools\`, \`describe_tool\`, \`health\`) or legacy aliases. In Grok: grok.com/connectors
+\`tools/list\` exposes the current core and domain tools plus \`describe_tool\` — not
+\`list_tools\`, \`health\`, or legacy aliases. Each description ends with a \`Fields:\` line
+for clients that drop \`inputSchema\`; \`describe_tool\` returns the full schema. In Grok: grok.com/connectors
 → New Connector → Custom, name \`Planner\`, URL
 \`https://planner-lee-5344.vercel.app/api/mcp\`. Grok then asks for OAuth app
 credentials — Client ID \`planner\`, empty secret, authorize
