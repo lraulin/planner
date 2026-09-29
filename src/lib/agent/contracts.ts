@@ -150,23 +150,14 @@ const externalOptionalFields = {
     ),
 };
 
+/**
+ * A create input that can carry an optional external natural key. It is one flat object
+ * rather than a union of "without key" and "with both keys": a top-level anyOf is dropped or
+ * mangled by several MCP clients, which then show the tool as taking no arguments. The
+ * both-or-neither rule for externalSource/externalId is enforced in dispatchAgentTool.
+ */
 function retryableObject(fields: Record<string, z.ZodType>) {
-  return z.union([
-    z.strictObject(fields),
-    z.strictObject({
-      ...fields,
-      externalSource: z
-        .string()
-        .min(1)
-        .describe("Stable namespace for this external natural key."),
-      externalId: z
-        .string()
-        .min(1)
-        .describe(
-          "Opaque id within externalSource; makes a retry return the existing row.",
-        ),
-    }),
-  ]);
+  return z.strictObject({ ...fields, ...externalOptionalFields });
 }
 
 const nodePatchFields = {
@@ -589,18 +580,32 @@ const captureItemSchema = z.strictObject({
   externalId: z.string().min(1).optional(),
 });
 
-const captureInputSchema = z.union([
-  z.strictObject({
-    name: z.string().min(1),
-    note: z.string().optional(),
-    deadline: nullableIsoDate.optional(),
-    ...externalOptionalFields,
-  }),
-  z.strictObject({
-    externalSource: z.string().min(1).optional(),
-    items: z.array(captureItemSchema).min(1).max(100),
-  }),
-]);
+// One flat object for the same reason as retryableObject. Either name (one item, with its
+// own note/deadline/externalId) or items (a batch, with an optional shared externalSource);
+// parseCaptureArgs enforces which fields go with which form.
+const captureInputSchema = z.strictObject({
+  name: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("One item to capture. Omit when passing items."),
+  note: z
+    .string()
+    .optional()
+    .describe("Note for the single item; not used with items."),
+  deadline: nullableIsoDate
+    .optional()
+    .describe("Deadline for the single item; not used with items."),
+  ...externalOptionalFields,
+  items: z
+    .array(captureItemSchema)
+    .min(1)
+    .max(100)
+    .optional()
+    .describe(
+      "A batch of items to capture instead of name. externalSource may be shared.",
+    ),
+});
 
 const captureResultSchema = z.strictObject({
   nodeId: id,

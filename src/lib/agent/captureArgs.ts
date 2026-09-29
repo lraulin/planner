@@ -43,6 +43,19 @@ export function parseCaptureArgs(args: Record<string, unknown>): ParsedCaptureAr
   if (!hasItems && !hasName) {
     throw new AgentError("validation", "name or items is required");
   }
+  if (hasItems) {
+    // The schema is one flat object so every MCP client can see it; these fields belong
+    // to a single item and would be silently dropped in batch form.
+    const stray = ["note", "deadline", "externalId"].find(
+      (key) => args[key] !== undefined,
+    );
+    if (stray) {
+      throw new AgentError(
+        "validation",
+        `${stray} belongs on each entry in items, not at the top level of a batch`,
+      );
+    }
+  }
 
   // A source named once at the top level covers every item in the batch; one drain is one
   // source, and repeating it on all fifty items is noise.

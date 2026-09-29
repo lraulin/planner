@@ -108,9 +108,14 @@ describe("MCP catalog", () => {
         $schema?: string;
         type?: string;
         anyOf?: unknown;
+        oneOf?: unknown;
+        allOf?: unknown;
       };
       expect(schema.$schema).toContain("json-schema.org");
-      expect(schema.type === "object" || Array.isArray(schema.anyOf)).toBe(true);
+      // MCP requires an object schema, and clients that meet a top-level combinator tend
+      // to drop the whole schema and show the tool as taking no arguments.
+      expect(schema.type, tool.name).toBe("object");
+      expect(schema.anyOf ?? schema.oneOf ?? schema.allOf, tool.name).toBeUndefined();
     }
   });
 });

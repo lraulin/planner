@@ -76,28 +76,30 @@ describe("agent tool registry", () => {
       tool: {
         inputSchema: {
           $schema?: string;
+          type?: string;
           additionalProperties?: boolean;
-          anyOf?: {
-            additionalProperties?: boolean;
-            properties?: Record<string, { description?: string }>;
-          }[];
+          anyOf?: unknown;
+          required?: string[];
+          properties?: Record<string, { description?: string }>;
         };
         outputSchema: { $schema?: string };
       };
     };
+    // One flat object: a top-level anyOf makes several MCP clients drop the schema.
     expect(described.tool.inputSchema).toMatchObject({
       $schema: "https://json-schema.org/draft/2020-12/schema",
-      anyOf: expect.arrayContaining([
-        expect.objectContaining({ additionalProperties: false }),
-      ]),
+      type: "object",
+      additionalProperties: false,
     });
+    expect(described.tool.inputSchema.anyOf).toBeUndefined();
+    expect(described.tool.inputSchema.properties).toHaveProperty("externalSource");
+    expect(described.tool.inputSchema.properties).toHaveProperty("externalId");
+    expect(described.tool.inputSchema.required ?? []).not.toContain("externalId");
     expect(described.tool.outputSchema.$schema).toBe(
       "https://json-schema.org/draft/2020-12/schema",
     );
-    for (const branch of described.tool.inputSchema.anyOf ?? []) {
-      for (const property of Object.values(branch.properties ?? {})) {
-        expect(property.description).not.toBe("");
-      }
+    for (const property of Object.values(described.tool.inputSchema.properties ?? {})) {
+      expect(property.description).not.toBe("");
     }
 
     const legacy = (await dispatchAgentTool(
