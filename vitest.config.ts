@@ -28,11 +28,16 @@ export default defineConfig({
      * never contend for shared rows.
      *
      * Isolation and worker count are deliberately *not* set here. Vitest 3.2.7 builds a single
-     * Tinypool from the root config, so `isolate` and `poolOptions.forks.*` are per-process,
-     * not per-project — set on a project they are accepted and silently ignored (verified:
-     * `maxForks: 1` on this project still ran 8-way). They live on the `test:unit` and
-     * `test:integration` invocations in package.json instead, which is why `npm test` chains
-     * those two scripts rather than running one vitest.
+     * Tinypool from the root config, so `isolate` and the worker count are per-process, not
+     * per-project — set on a project they are accepted and silently ignored (verified:
+     * `poolOptions.forks.maxForks: 1` on this project still ran 8-way). They live on the
+     * `test:unit` and `test:integration` invocations in package.json instead, which is why
+     * `npm test` chains those two scripts rather than running one vitest.
+     *
+     * The worker count is spelled `--maxWorkers`, not `--poolOptions.forks.maxForks`: Vitest 4
+     * removed `poolOptions` and refuses the old flag as an unknown option, while `--maxWorkers`
+     * means the same thing on 3.2.7 and on 4. Whether Vitest 4 honours these per project is
+     * unverified; re-check before moving them into the config.
      */
     projects: [
       {
