@@ -284,13 +284,14 @@ export const accounts = pgTable(
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
     /**
-     * The identity namespace `account_id` belongs to — Better Auth 1.7's account key.
-     * Credential rows carry the synthetic `local:credential`; an OAuth provider carries
-     * its real issuer (`https://accounts.google.com`), so two providers cannot mint
-     * colliding subjects. Sign-in matches on it, which is why a row written without one
-     * is invisible to `signInEmail` rather than merely untidy.
+     * Better Auth 1.7.0–1.7.2's account key, kept nullable and no longer part of any key.
+     * 1.7.3 restored the 1.6 identity `(provider_id, account_id)` and stopped writing this
+     * column — and it refuses every auth request while a NOT NULL column it never writes
+     * exists, so this cannot go back to required. Credential rows still get
+     * `local:credential` (see `upsertCredential`) because 1.7.0–1.7.2 sign-in matches on
+     * it; rows Better Auth writes itself from 1.7.3 on leave it null.
      */
-    issuer: text("issuer").notNull(),
+    issuer: text("issuer"),
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
@@ -305,7 +306,11 @@ export const accounts = pgTable(
   },
   (table) => [
     index("accounts_user_idx").on(table.userId),
-    uniqueIndex("accounts_issuer_account_id_uq").on(table.issuer, table.accountId),
+    // Better Auth's account identity, and it rejects a lookup that matches two rows.
+    uniqueIndex("accounts_provider_account_id_uq").on(
+      table.providerId,
+      table.accountId,
+    ),
   ],
 );
 

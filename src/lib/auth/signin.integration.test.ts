@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, users } from "@/db/schema";
+import { isUniqueViolation } from "@/lib/db/constraints";
 import { auth } from "@/lib/auth/server";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { CREDENTIAL_ISSUER, credentialAccountFor } from "./accountKey";
@@ -14,11 +15,13 @@ import { createCredentialUser, upsertUser } from "./provision";
  * Every other test here asserts on the stored hash, and `verifyPassword` is happy with a
  * row Better Auth will not look at. That is how a provisioned account could be perfectly
  * correct by every existing assertion and still answer "Invalid email or password" at the
- * login form — the accounts table had no `issuer`, which Better Auth 1.7 matches on.
+ * login form — the accounts table had no `issuer`, which Better Auth 1.7.0–1.7.2 matched on.
+ * The reverse break followed: 1.7.3 stopped writing `issuer` and refused every auth request
+ * while the column was NOT NULL.
  *
  * So these go through `auth.api.signInEmail`, the same call the login form makes. They
- * fail if the issuer we write ever stops being the one Better Auth looks for, whichever
- * side moved.
+ * fail if the row we write ever stops being one Better Auth will sign in with, or if the
+ * schema stops being one it will run against, whichever side moved.
  */
 
 const dbReachable = await databaseReachable();
@@ -60,20 +63,44 @@ describeDb("credential sign-in", () => {
     await expect(signIn(email, PASSWORD)).resolves.toBe(user.id);
   });
 
-  it("stamps the issuer Better Auth matches credential rows on", async () => {
-    const email = freshEmail("issuer");
+  it("writes the credential row under the key Better Auth looks it up by", async () => {
+    const email = freshEmail("key");
     const user = await upsertUser({ email, password: PASSWORD });
     createdUserIds.push(user.id);
 
-    const [row] = await db
-      .select({ issuer: accounts.issuer, accountId: accounts.accountId })
+    const rows = await db
+      .select({
+        providerId: accounts.providerId,
+        accountId: accounts.accountId,
+        issuer: accounts.issuer,
+      })
       .from(accounts)
-      .where(credentialAccountFor(user.id));
+      .where(eq(accounts.userId, user.id));
 
-    expect(row.issuer).toBe(CREDENTIAL_ISSUER);
-    // Better Auth keys the account by (issuer, accountId); for credentials that subject is
-    // the user's own id, which is what makes the pair unique per account.
-    expect(row.accountId).toBe(user.id);
+    // Better Auth keys the account by (providerId, accountId); for credentials that subject
+    // is the user's own id, which is what makes the pair unique per account.
+    expect(rows).toEqual([
+      { providerId: "credential", accountId: user.id, issuer: CREDENTIAL_ISSUER },
+    ]);
+  });
+
+  it("finds that row through credentialAccountFor, and only for its owner", async () => {
+    const owner = await upsertUser({
+      email: freshEmail("pred-owner"),
+      password: PASSWORD,
+    });
+    const other = await upsertUser({
+      email: freshEmail("pred-other"),
+      password: PASSWORD,
+    });
+    createdUserIds.push(owner.id, other.id);
+
+    const found = await db
+      .select({ userId: accounts.userId })
+      .from(accounts)
+      .where(credentialAccountFor(owner.id));
+
+    expect(found).toEqual([{ userId: owner.id }]);
   });
 
   it("still signs in after a password rotation, with the new password only", async () => {
@@ -110,5 +137,30 @@ describeDb("credential sign-in", () => {
       /invalid email or password/i,
     );
     await expect(signIn(ownerEmail, PASSWORD)).resolves.toBe(owner.id);
+  });
+});
+
+describeDb("account identity", () => {
+  it("refuses a second account row under the same provider and subject", async () => {
+    const first = await upsertUser({ email: freshEmail("dup-a"), password: PASSWORD });
+    const second = await upsertUser({ email: freshEmail("dup-b"), password: PASSWORD });
+    createdUserIds.push(first.id, second.id);
+    const subject = `google-${crypto.randomUUID()}`;
+
+    await db
+      .insert(accounts)
+      .values({ userId: first.id, providerId: "google", accountId: subject });
+
+    // Better Auth resolves an OAuth sign-in or link by (providerId, accountId) and rejects
+    // the lookup when two rows match, so the database must never hold the second one —
+    // whichever user it would belong to.
+    const duplicate = await db
+      .insert(accounts)
+      .values({ userId: second.id, providerId: "google", accountId: subject })
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    expect(isUniqueViolation(duplicate)).toBe(true);
   });
 });

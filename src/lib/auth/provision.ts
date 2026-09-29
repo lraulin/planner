@@ -183,10 +183,12 @@ export async function createCredentialUser(input: {
 }
 
 /**
- * The credential row Better Auth checks at sign-in. `accountId` is the user's own id for
- * this provider, and `issuer` is the namespace that id belongs to — Better Auth reads the
- * pair (`issuer`, `accountId`) as the account's identity and will not consider a row whose
- * issuer does not match, however correct the password is.
+ * The credential row Better Auth checks at sign-in. Its identity is (`providerId`,
+ * `accountId`), and for credentials `accountId` is the user's own id.
+ *
+ * `issuer` is still written: Better Auth 1.7.0–1.7.2 matched credential sign-in on
+ * `issuer = CREDENTIAL_ISSUER` and would not consider a row without it, however correct the
+ * password. 1.7.3 and later ignore the column, so writing it costs nothing on either side.
  */
 async function upsertCredential(userId: string, password: string): Promise<void> {
   const hashed = await hashPassword(password);
