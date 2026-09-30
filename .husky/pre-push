@@ -7,8 +7,18 @@
 # src/lib/testing/database.ts for why that is right for a manual `npm test`), which used to
 # mean a push with Docker stopped shipped unverified database code to a Vercel deploy.
 #
-# docker-compose.yml defines a pg_isready healthcheck, so `--wait` blocks until the database
-# answers and exits non-zero if it never does. If Docker Desktop itself is not running this
-# fails with Docker's own message — a hard stop, which is the point.
-bash scripts/gate.sh "postgres" docker compose up -d --wait
+# The one exception is a database that is already provably usable: when the DATABASE_URL
+# the tests will use (environment, else .env.local) answers an authenticated query, there
+# is nothing for Docker to start, so the step is skipped with a one-line note. That covers
+# the compose container already running and machines with a native Postgres and no Docker.
+# scripts/postgres-reachable.mjs explains why an open port is not enough to skip on.
+#
+# Otherwise: docker-compose.yml defines a pg_isready healthcheck, so `--wait` blocks until
+# the database answers and exits non-zero if it never does. If Docker Desktop itself is not
+# running this fails with Docker's own message — a hard stop, which is the point.
+if target="$(node scripts/postgres-reachable.mjs 2>/dev/null)"; then
+  echo "postgres: $target already reachable — skipping docker compose up"
+else
+  bash scripts/gate.sh "postgres" docker compose up -d --wait
+fi
 bash scripts/gate.sh "tests" npm test

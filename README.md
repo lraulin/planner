@@ -151,7 +151,11 @@ Nothing here needs remembering — three hooks run the gates for you:
   `npm run lint`, `npm run typecheck`, and `npm run test:unit` across the project.
   `npm install` installs the hook through the `prepare` script.
 - **Pre-push** (`.husky/pre-push`): the full suite, so nothing reaches `origin` without
-  the database-backed tests having run.
+  the database-backed tests having run. It runs `docker compose up -d --wait` first, unless
+  the `DATABASE_URL` the tests use (environment, else `.env.local`) already answers a query
+  — the container is already up, or a native Postgres serves it — in which case it prints
+  `postgres: … already reachable — skipping docker compose up` and goes straight to the
+  tests.
 - **Agent turns**: `.claude/hooks/lint-changed.sh` is a `Stop` hook — when an AI agent
   finishes a turn it lints every uncommitted file in one pass and reports violations back
   for the agent to fix. Turn-end is used rather than per-edit deliberately: it is a
