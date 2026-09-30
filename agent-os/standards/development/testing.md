@@ -90,7 +90,10 @@ warning before trusting a green run on a change that touched `src/lib/**/mutatio
 It does, however, block a **push**. `.husky/pre-push` runs `docker compose up -d --wait`
 before the suite, so the container is started rather than assumed and a Docker daemon that
 is not running is a hard stop. The skip path exists for a manual `npm test` with Docker
-down; it can no longer carry unverified database code to origin.
+down; it can no longer carry unverified database code to origin. The hook skips Docker only
+when the tests' own `DATABASE_URL` already answers an authenticated query
+(`scripts/postgres-reachable.mjs`) — a running container or a native Postgres — which is
+proof the suites will not skip, not an assumption.
 
 **And it does not exist at all in CI.** With `CI` set, an unreachable database throws
 instead of skipping: a workflow whose Postgres service never came up is a broken gate, not
