@@ -668,37 +668,54 @@ const rankedSpendSchema = z.strictObject({
   count: z.number().int().min(0),
 });
 
+const declaredBillId = z
+  .string()
+  .nullable()
+  .describe(
+    "Declared bill id for save_subscription / delete_subscription; null when detected only.",
+  );
+
 const recurringBillSchema = z.strictObject({
-  id: z
-    .string()
-    .nullable()
-    .describe(
-      "Declared bill id for save_subscription / delete_subscription; null when detected only.",
-    ),
+  id: declaredBillId,
   merchant: z.string(),
+  status: z
+    .enum(["active", "paused", "cancelled", "ignored"])
+    .describe("Only active bills count toward annualTotalCents."),
   typicalCents: cents,
   lowCents: cents,
   highCents: cents,
   deviationCents: cents,
-  chargeCount: z.number().int().min(0),
+  chargeCount: z
+    .number()
+    .int()
+    .min(0)
+    .describe("Charges inside range, for declared and detected rows alike."),
   observedGapDays: z.number().int(),
   cadence: z.string().nullable(),
   annualCents: cents,
-  lastChargeOn: z.string(),
+  lastChargeOn: dateKey
+    .nullable()
+    .describe(
+      "Newest charge on file, even before range; null when none has been seen.",
+    ),
   declared: z.boolean(),
   scheduled: z.boolean(),
-  status: z
-    .enum(["active", "paused", "cancelled", "ignored"])
-    .describe("Only active bills count toward annualTotalCents."),
 });
 
 const upcomingBillSchema = z.strictObject({
+  id: declaredBillId,
   merchant: z.string(),
-  cadence: z.strictObject({ unit: z.enum(["month", "day"]), n: z.number().int() }),
-  dueOn: dateKey,
+  dueOn: dateKey.describe(
+    "Next expected charge, today or later; the Bills page's date.",
+  ),
   daysAway: z.number().int(),
   expectedCents: cents,
-  lastChargeOn: z.string(),
+  cadence: z.string(),
+  lastChargeOn: dateKey
+    .nullable()
+    .describe(
+      "Newest charge on file; null when the date stands on the declared anchor.",
+    ),
 });
 
 const assetDebtPointSchema = z.strictObject({
@@ -910,6 +927,12 @@ export const inputSchemas = {
   list_recurring_bills: z.strictObject({
     ...financeWindowFields,
     includeUpcoming: z.boolean().default(true),
+    status: z
+      .enum(["active", "paused", "cancelled", "any"])
+      .default("active")
+      .describe("Which bills to list. annualTotalCents always totals the active ones."),
+    offset: z.number().int().min(0).default(0),
+    limit: z.number().int().min(1).max(200).default(20),
   }),
   get_debt_summary: z.strictObject(financeWindowFields),
   list_statements: z.strictObject({
@@ -1391,9 +1414,10 @@ export const outputSchemas = {
   }),
   list_recurring_bills: z.strictObject({
     range: nullableDateRangeSchema,
-    bills: z.array(recurringBillSchema),
     annualTotalCents: cents,
     upcoming: z.array(upcomingBillSchema),
+    bills: z.array(recurringBillSchema),
+    pageInfo: pageInfoSchema,
   }),
   get_debt_summary: z.strictObject({
     range: nullableDateRangeSchema,

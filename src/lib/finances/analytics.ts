@@ -25,7 +25,12 @@ import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { medianRounded } from "@/lib/statistics";
 import { UNCATEGORIZED } from "./classify/categories";
-import { periodIndex, RATE_LOOKBACK_PERIODS, type Period } from "./commitments";
+import {
+  billAnchor,
+  periodIndex,
+  RATE_LOOKBACK_PERIODS,
+  type Period,
+} from "./commitments";
 import {
   detectIncome,
   normalizedMonthlyIncome,
@@ -46,8 +51,8 @@ import {
   detectCadence,
   type Cadence,
   type DeclaredBill,
-  nextDueFrom,
   spanDays,
+  type StoredBill,
 } from "./recurringBills";
 
 /** One classified transaction, as every panel reads it. */
@@ -1003,7 +1008,8 @@ export function debtToAssetRatio(assetCents: number, debtCents: number): number 
 
 // — Recurring merchants ——————————————————————————————————————————————————————
 
-export type RecurringMerchant = {
+/** What a recurring row says whether it was detected or declared. */
+type RecurringRow = {
   merchant: string;
   payeeId: string | null;
   /** Last spend charge on file, so Review can track the bill from that row. */
@@ -1027,6 +1033,12 @@ export type RecurringMerchant = {
    */
   lowCents: number;
   highCents: number;
+  /**
+   * Charges inside the rows the detection ran over — the window, for the Insights and agent
+   * callers. A declared bill counts the same way a detected merchant does, even though its
+   * amounts and last charge read the whole history: "6 charges" beside a 3-month window
+   * must not mean six years of rent.
+   */
   chargeCount: number;
   /**
    * Median days between charges — what the history *observed*, as distinct from the cadence
@@ -1036,14 +1048,11 @@ export type RecurringMerchant = {
   observedGapDays: number;
   /** `typical × 365 ÷ cadence` — what a year of this costs. */
   annualCents: number;
-  lastChargeOn: string;
   /**
    * Set when the user declared the cadence rather than the statistics finding it. Null for a
    * detected merchant, where a cadence would be a rounding of an observed gap and not a fact.
    */
   cadence: Cadence | null;
-  /** True when this row came from a declaration. Drives the marker in the table. */
-  declared: boolean;
   /**
    * The declared bill's envelope id, when the declaration carried one. Absent for a detected
    * merchant, which has no row to name — and optional so fixtures need not invent one.
@@ -1084,6 +1093,33 @@ export type RecurringMerchant = {
   coverage: number | null;
 };
 
+/**
+ * A merchant the statistics found. It was found by having charges, so it always has a last
+ * one — which is what lets Review project a next charge from it without a null check.
+ */
+export type RecurringMerchant = RecurringRow & {
+  /** False: this row came from detection. Drives the marker in the table. */
+  declared: false;
+  lastChargeOn: string;
+};
+
+/**
+ * A declared bill's row. It exists because the user said so, not because charges were
+ * found, so its last charge can be absent.
+ */
+export type DeclaredRecurring = RecurringRow & {
+  declared: true;
+  /**
+   * The newest charge on file, or **null when none is** — never the stored `anchorDate`.
+   * That column is the predicted *next* charge (`billAnchor` in `commitments.ts`); reading
+   * it here reported "last charged 2026-10-21" for a bill that had never been seen.
+   */
+  lastChargeOn: string | null;
+};
+
+/** One row of the recurring table: detected or declared. */
+export type RecurringEntry = RecurringMerchant | DeclaredRecurring;
+
 /** Below six charges there is no cadence to speak of, only a coincidence. */
 const MIN_RECURRING_CHARGES = 6;
 /** Weekly through quarterly. Wider than monthly because rent, utilities and insurance
@@ -1122,14 +1158,18 @@ export function recurringMerchants(
    * what it costs in a month that holds none of its charges, and reading its amount from the
    * visible slice would make the row blink out of this table whenever someone narrowed the
    * range. Callers with a window pass their whole history here.
+   *
+   * Amounts and the last charge come from here; `chargeCount` still counts `rows`, so it
+   * means the same thing on a declared row as on a detected one.
    */
   billRows: readonly AnalyticsRow[] = rows,
-): RecurringMerchant[] {
+): RecurringEntry[] {
   const byMerchant = chargesByMerchant(rows);
   const byPayeeForBills = chargesByPayee(billRows);
+  const byPayeeInRows = billRows === rows ? byPayeeForBills : chargesByPayee(rows);
   const claimed = claimedByBills(bills);
 
-  const found: RecurringMerchant[] = [];
+  const found: RecurringEntry[] = [];
   for (const [merchant, ordered] of byMerchant) {
     // A declaration is the user's answer to the same question, so the statistics do not get
     // to disagree with it — and a semi-annual bill would fail every threshold below anyway.
@@ -1192,14 +1232,13 @@ export function recurringMerchants(
       // range invented out of nothing.
       lowCents: amounts.length > 0 ? Math.min(...amounts) : typicalCents,
       highCents: amounts.length > 0 ? Math.max(...amounts) : typicalCents,
-      chargeCount: charges.length,
+      chargeCount: chargesForBill(byPayeeInRows, bill).length,
       observedGapDays: spanDays(
         charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "2000-01-01",
         cadenceOf(bill),
       ),
       annualCents: annualFromCharge(typicalCents, cadenceOf(bill)),
-      lastChargeOn:
-        charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "",
+      lastChargeOn: charges[charges.length - 1]?.transactionDate ?? null,
       cadence: cadenceOf(bill),
       declared: true,
       ...(bill.id ? { billId: bill.id } : {}),
@@ -1476,23 +1515,31 @@ export function cadenceCandidates(
 // — Upcoming bills ————————————————————————————————————————————————————————————
 
 export type UpcomingBill = {
+  /** The declared bill's envelope id, when the declaration carried one. */
+  billId?: string;
   merchant: string;
   cadence: Cadence;
-  /** The next date this is expected to land. */
+  /** The next date this is expected to land, at or after today. */
   dueOn: string;
-  /** Negative once the expected date has passed without a matching charge. */
+  /** Days from today to `dueOn`. */
   daysAway: number;
   expectedCents: number;
-  /** What the forecast is anchored on — the last real charge, or the declared anchor. */
-  lastChargeOn: string;
+  /** The newest real charge on file, or null when the forecast stands on the anchor alone. */
+  lastChargeOn: string | null;
 };
 
 /**
  * When each declared bill is next expected, and for how much.
  *
- * A projection from the last charge, not a promise: nothing here reconciles against the
- * charge that eventually arrives, so a bill still listed a week after its date means the
- * import is behind or the date moved, not that the money is missing.
+ * A projection, not a promise: nothing here reconciles against the charge that eventually
+ * arrives, so a bill still listed a week after its date means the import is behind or the
+ * date moved, not that the money is missing.
+ *
+ * **The date is `billAnchor`'s `nextDueKey`** — the same answer the Bills page's Next charge
+ * column gives. This used to walk one cadence on from `last charge ?? anchorDate`, which
+ * read the anchor as a *past* charge. It is the predicted next one, so a quarterly bill
+ * anchored on 2026-10-21 was forecast for 2027-01-21 and its real due date never showed.
+ * `billAnchor` also honours a declared due day, which the walk ignored.
  *
  * Pass the **whole** history. The anchor is the most recent charge, and a window that
  * excludes it would forecast from whichever older charge happened to survive the filter.
@@ -1504,7 +1551,7 @@ export type UpcomingBill = {
  */
 export function upcomingBills(
   rows: readonly AnalyticsRow[],
-  bills: readonly DeclaredBill[],
+  bills: readonly StoredBill[],
   todayKey: string,
 ): UpcomingBill[] {
   const byPayee = chargesByPayee(rows);
@@ -1513,18 +1560,18 @@ export function upcomingBills(
     .flatMap((bill) => {
       if (!bill.scheduled || billStatusOf(bill) !== "active") return [];
       const charges = chargesForBill(byPayee, bill);
-      const lastChargeOn =
-        charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "";
-      if (lastChargeOn === "") return [];
+      const lastChargeOn = charges[charges.length - 1]?.transactionDate ?? null;
+      const dueOn = billAnchor(bill, lastChargeOn, todayKey).nextDueKey;
+      if (dueOn === null) return [];
 
       const expectedCents =
         bill.expectedCents ??
         (charges.length > 0 ? medianRounded(charges.map(spendCentsOf)) : 0);
       if (expectedCents <= 0) return [];
 
-      const dueOn = nextDueFrom(lastChargeOn, cadenceOf(bill), todayKey);
       return [
         {
+          ...(bill.id ? { billId: bill.id } : {}),
           merchant: bill.name,
           cadence: cadenceOf(bill),
           dueOn,

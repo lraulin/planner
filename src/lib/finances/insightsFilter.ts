@@ -79,6 +79,51 @@ export function applyInsightsFilter(
 }
 
 /**
+ * The declared bills a filtered view should list.
+ *
+ * Detected merchants drop out of a filtered view on their own — they are found *in* the
+ * filtered rows. A declaration is not, so without this every bill came back under
+ * `categories: ["Rent"]`, the non-matching ones zeroed out (no charges, low = high =
+ * typical) and looking like data.
+ *
+ * A bill is in the view when one of its charges is (the filtered rows already satisfy every
+ * dimension at once), or — on a category-only filter — when its envelope is one of the named
+ * categories. Bill envelopes are categories under the bill's own name, and a yearly bill with
+ * no charge on file yet still belongs to its category. An account or merchant filter can only
+ * be met by a charge, so the name alone does not qualify there.
+ *
+ * Charges are what `recurringMerchants` counts: spend rows on a claimed payee.
+ */
+export function declaredBillsInFilter<
+  Bill extends { name: string; payeeIds?: readonly string[] },
+>(
+  bills: readonly Bill[],
+  filtered: readonly AnalyticsRow[],
+  filter: InsightsReportFilter,
+): Bill[] {
+  if (
+    filter.accountIds.length === 0 &&
+    filter.categories.length === 0 &&
+    filter.merchants.length === 0
+  ) {
+    return [...bills];
+  }
+  const charged = new Set(
+    filtered.flatMap((row) =>
+      row.payeeId && spendCentsOf(row) > 0 ? [row.payeeId] : [],
+    ),
+  );
+  const byName =
+    filter.accountIds.length === 0 && filter.merchants.length === 0
+      ? new Set(filter.categories)
+      : new Set<string>();
+  return bills.filter(
+    (bill) =>
+      byName.has(bill.name) || (bill.payeeIds ?? []).some((id) => charged.has(id)),
+  );
+}
+
+/**
  * Resolve a window onto the imported history.
  *
  * Trailing presets (3m/6m/12m/24m) end on the last imported day — same as the frozen
