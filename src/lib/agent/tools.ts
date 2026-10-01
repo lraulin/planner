@@ -542,7 +542,7 @@ const definitions: AgentToolDefinition[] = [
     avoidWhen:
       "Do not use it for a dated series or a named transaction; those are the other finance tools. Do not treat ledgerBalanceCents as the current balance when mismatchCents is nonzero.",
     returns:
-      "Accounts with statement-anchored balances (plus ledger sum and mismatch), the imported date range, unclassified count, coverage (late starts, holes, mismatches), category vocabulary, merchant count (names via list_payees), and headline interest/fees.",
+      "Accounts with the working balance Dashboard shows (live + pending when the bank feed is linked, else statement-anchored; source, as-of time, posted and pending split, ledger sum and drift), the imported date range, unclassified count, coverage (late starts, holes, statement-anchored mismatches), category vocabulary, merchant count (names via list_payees), and headline interest/fees.",
     effects: read,
     exposure: "domain",
     handler: getFinanceOverviewTool,
@@ -1032,11 +1032,19 @@ const fieldDescriptions: Record<string, string> = {
   accountId: "Finance account UUID returned by get_finance_overview.",
   flow: "Effective flow kind: spend, income, internal_transfer, external_transfer, refund, interest_fee.",
   balanceCents:
-    "Headline current balance in integer cents (100 = $1.00). Latest statement closing plus later txs when a snapshot exists; otherwise the ledger sum. Signed; positive is money into the account.",
+    "Current working balance in integer cents (100 = $1.00), the figure Dashboard and Budget show: a live bank balance plus its selected pending rows, else the newest statement close plus later rows, else the ledger sum. Signed; positive is money into the account.",
+  balanceSource:
+    "Where the posted part of balanceCents comes from: live (bank feed or snapshot, see balanceAsOf), statement (newest statement close plus later rows), or ledger (sum of rows; nothing outside anchors it).",
+  balanceAsOf:
+    "When the live feed last reported the posted balance (ISO timestamp). Null unless balanceSource is live.",
+  postedCents:
+    "Posted part of balanceCents, in integer cents: the live bank balance, or the statement/ledger figure.",
+  pendingCents:
+    "Pending rows added on top of a live posted balance, in integer cents. Always 0 for statement or ledger sources, which already contain pending rows.",
   ledgerBalanceCents:
     "Sum of every imported transaction on the account, in integer cents. Diagnostic; can disagree with the official close.",
   mismatchCents:
-    "ledgerBalanceCents minus the headline. Zero when the account has no statement.",
+    "ledgerBalanceCents minus balanceCents: how far the register has drifted from the bank or statement. Zero when balanceSource is ledger.",
   merchantCount:
     "How many distinct merchants the imported rows name. The names themselves are not returned here; call list_payees to page through payees.",
   merchantsTool: "The tool that lists merchants and payees: list_payees.",

@@ -581,7 +581,7 @@ Orient on accounts, imported history, coverage gaps, and carrying cost.
 
 - Use when: Start here for any money question. Use before cash flow, spending, or search so you know the coverage gap and which accounts exist.
 - Avoid when: Do not use it for a dated series or a named transaction; those are the other finance tools. Do not treat ledgerBalanceCents as the current balance when mismatchCents is nonzero.
-- Returns: Accounts with statement-anchored balances (plus ledger sum and mismatch), the imported date range, unclassified count, coverage (late starts, holes, mismatches), category vocabulary, merchant count (names via list_payees), and headline interest/fees.
+- Returns: Accounts with the working balance Dashboard shows (live + pending when the bank feed is linked, else statement-anchored; source, as-of time, posted and pending split, ledger sum and drift), the imported date range, unclassified count, coverage (late starts, holes, statement-anchored mismatches), category vocabulary, merchant count (names via list_payees), and headline interest/fees.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
 - Arguments: `{  }`

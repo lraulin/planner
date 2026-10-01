@@ -56,6 +56,8 @@ import {
 } from "@/lib/finances/insightsFilter";
 import { listAccounts, listStatements } from "@/lib/finances/queries";
 import type { FinanceAccountRow } from "@/lib/finances/types";
+import { accountBalanceView, type PendingRow } from "@/lib/finances/workingBalance";
+import { loadWorkingPendingSelection } from "@/lib/finances/workingPendingQuery";
 import { reconcileAccounts } from "@/lib/finances/reconcile";
 import { searchTransactions } from "@/lib/finances/transactionSearch";
 import { localDateKey } from "@/lib/schedule/geometry";
@@ -174,10 +176,56 @@ function flattenFlowPoint(point: {
   };
 }
 
+/** Where an account's headline posted balance comes from (see `listAccounts`). */
+export type AgentBalanceSource = "live" | "statement" | "ledger";
+
+function balanceSourceOf(account: FinanceAccountRow): AgentBalanceSource {
+  if (account.syncedBalanceAsOf) return "live";
+  return account.statementPeriodEnd ? "statement" : "ledger";
+}
+
+/**
+ * One account as the agent sees it: the same working balance Dashboard and Budget show.
+ *
+ * A live balance is what the bank reports as posted, so the pending rows the working-balance
+ * rule selects go on top (`accountBalanceView`). A statement- or ledger-sourced balance
+ * already contains every pending row, so pendingCents is 0 there. mismatchCents compares
+ * the register with that working figure; comparing it with the posted figure alone, as
+ * before, reported every pending charge as drift.
+ */
+export function agentAccount(
+  account: FinanceAccountRow,
+  pending: readonly PendingRow[],
+) {
+  const view = accountBalanceView(account, pending);
+  const source = balanceSourceOf(account);
+  return {
+    id: account.id,
+    name: account.name,
+    kind: account.kind,
+    institution: account.institution,
+    balanceCents: view.workingCents,
+    balanceSource: source,
+    balanceAsOf: account.syncedBalanceAsOf
+      ? account.syncedBalanceAsOf.toISOString()
+      : null,
+    postedCents: view.postedCents,
+    pendingCents: view.pendingCents,
+    ledgerBalanceCents: account.ledgerBalanceCents,
+    statementClosingCents: account.statementClosingCents,
+    statementPeriodEnd: account.statementPeriodEnd,
+    mismatchCents:
+      source === "ledger" ? 0 : account.ledgerBalanceCents - view.workingCents,
+    transactionCount: account.transactionCount,
+    closedAt: account.closedAt ? account.closedAt.toISOString() : null,
+  };
+}
+
 type BudgetData = Awaited<ReturnType<typeof loadBudget>>;
 
 type FinanceOverviewInputs = {
   accounts: readonly FinanceAccountRow[];
+  pending: readonly PendingRow[];
   rows: readonly AnalyticsRow[];
   unclassifiedCount: number;
   carrying: { interestCents: number; feesCents: number };
@@ -213,19 +261,7 @@ export function financeOverviewResponse(input: FinanceOverviewInputs) {
       parentGroupId: row.parentGroupId,
       kind: row.kind,
     })),
-    accounts: input.accounts.map((account) => ({
-      id: account.id,
-      name: account.name,
-      kind: account.kind,
-      institution: account.institution,
-      balanceCents: account.balanceCents,
-      ledgerBalanceCents: account.ledgerBalanceCents,
-      statementClosingCents: account.statementClosingCents,
-      statementPeriodEnd: account.statementPeriodEnd,
-      mismatchCents: account.balanceMismatchCents,
-      transactionCount: account.transactionCount,
-      closedAt: account.closedAt ? account.closedAt.toISOString() : null,
-    })),
+    accounts: input.accounts.map((account) => agentAccount(account, input.pending)),
     history: {
       startKey: history?.startKey ?? null,
       endKey: history?.endKey ?? null,
@@ -255,8 +291,10 @@ export async function getFinanceOverviewTool(userId: string) {
       listStatements(userId),
       loadBudget(userId, null),
     ]);
+  const pending = await loadWorkingPendingSelection(userId, accounts);
   return financeOverviewResponse({
     accounts,
+    pending: pending.rows,
     rows,
     unclassifiedCount: unclassified,
     carrying,

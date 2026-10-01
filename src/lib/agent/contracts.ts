@@ -1283,6 +1283,10 @@ export const outputSchemas = {
         kind: z.enum(financeAccountKindEnum.enumValues),
         institution: z.string(),
         balanceCents: cents,
+        balanceSource: z.enum(["live", "statement", "ledger"]),
+        balanceAsOf: isoDate.nullable(),
+        postedCents: cents,
+        pendingCents: cents,
         ledgerBalanceCents: cents,
         statementClosingCents: cents.nullable(),
         statementPeriodEnd: dateKey.nullable(),
@@ -1314,13 +1318,20 @@ export const outputSchemas = {
           discontinuityCents: cents,
         }),
       ),
+      // Statement reconciliation, not the live position: these compare the register with
+      // the newest statement close plus later rows, whatever accounts[].balanceSource is.
+      // Own descriptions, because the flat field map describes the account-level figures.
       mismatches: z.array(
         z.strictObject({
           accountId: id,
           accountName: z.string(),
           ledgerBalanceCents: cents,
-          anchoredBalanceCents: cents,
-          mismatchCents: cents,
+          anchoredBalanceCents: cents.describe(
+            "Statement-anchored balance in integer cents: newest statement close plus every later row. Not the live bank balance; see accounts[].balanceCents for that.",
+          ),
+          mismatchCents: cents.describe(
+            "ledgerBalanceCents minus anchoredBalanceCents (statement-anchored). Differs from accounts[].mismatchCents, which compares the register with the live working balance.",
+          ),
         }),
       ),
     }),

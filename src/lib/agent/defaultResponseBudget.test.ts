@@ -192,6 +192,7 @@ function overviewFixture() {
   ];
   return {
     accounts,
+    pending: [{ accountId: live.id, amountCents: -32249 }],
     rows: overviewRows(),
     unclassifiedCount: 0,
     carrying: { interestCents: 124500, feesCents: 2900 },
@@ -213,6 +214,16 @@ describe("get_finance_overview response budget", () => {
     const merchants = insightsFilterOptions(input.rows).merchants;
     expect(response.merchantCount).toBe(merchants.length);
     expect(bytes({ ...response, merchants })).toBeGreaterThan(GATEWAY_CAP_BYTES);
+  });
+
+  it("reports the live account as posted plus pending", () => {
+    const live = response.accounts.find((row) => row.balanceSource === "live");
+    expect(live).toMatchObject({
+      postedCents: -10148,
+      pendingCents: -32249,
+      balanceCents: -42397,
+      balanceAsOf: "2026-10-01T12:00:00.000Z",
+    });
   });
 });
 
