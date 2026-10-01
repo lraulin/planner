@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
 import {
@@ -133,7 +133,65 @@ describeDb("finance agent tools", () => {
     expect(overview.carryingCost).toMatchObject({
       interestCents: 1245,
       feesCents: 2900,
+    }); // Names are paged by list_payees; the overview only says how many there are.
+    expect(overview).not.toHaveProperty("merchants");
+    expect(overview).toMatchObject({ merchantCount: 3, merchantsTool: "list_payees" });
+  });
+
+  it("reports a live balance plus pending, with its source, as-of and split", async () => {
+    const asOf = new Date("2026-09-30T13:00:00Z");
+    await db
+      .update(financeAccounts)
+      .set({ balanceCents: -50000, balanceAsOf: asOf, balanceSource: "browser" })
+      .where(eq(financeAccounts.userId, ownerId));
+    const hold = (await listTransactions(ownerId)).find(
+      (row) =>
+        row.description.includes("SIMPLISAFE") && row.transactionDate === "2026-04-09",
+    );
+    expect(hold).toBeDefined();
+    await db
+      .update(financeTransactions)
+      .set({ pending: true })
+      .where(eq(financeTransactions.id, hold!.id));
+
+    const overview = (await dispatchAgentTool("get_finance_overview", {}, ownerId)) as {
+      accounts: {
+        balanceCents: number;
+        balanceSource: string;
+        balanceAsOf: string | null;
+        postedCents: number;
+        pendingCents: number;
+        ledgerBalanceCents: number;
+        mismatchCents: number;
+      }[];
+    };
+    const [account] = overview.accounts;
+    expect(account).toMatchObject({
+      balanceSource: "live",
+      balanceAsOf: asOf.toISOString(),
+      postedCents: -50000,
+      pendingCents: -3471,
+      balanceCents: -53471,
     });
+    // Drift is measured against the working figure, so the pending hold is not drift.
+    expect(account.mismatchCents).toBe(account.ledgerBalanceCents - -53471);
+  });
+
+  it("keeps a statement-anchored balance free of pending, which it already contains", async () => {
+    const overview = (await dispatchAgentTool("get_finance_overview", {}, ownerId)) as {
+      accounts: {
+        balanceCents: number;
+        balanceSource: string;
+        balanceAsOf: string | null;
+        postedCents: number;
+        pendingCents: number;
+      }[];
+    };
+    const [account] = overview.accounts;
+    expect(account.balanceSource).toBe("statement");
+    expect(account.balanceAsOf).toBeNull();
+    expect(account.pendingCents).toBe(0);
+    expect(account.balanceCents).toBe(account.postedCents);
   });
 
   it("returns total cash movement including gifts", async () => {

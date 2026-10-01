@@ -216,6 +216,17 @@ export const nodeSummarySchema = z.strictObject({
   path: z.string(),
 });
 
+/** A goal or project in load_weekly_plan: the summary minus path, type, depth, effort, focus. */
+const planNodeSchema = nodeSummarySchema.pick({
+  id: true,
+  parentId: true,
+  name: true,
+  state: true,
+  priorityLetter: true,
+  priorityRank: true,
+  deadline: true,
+});
+
 const nodeDetailSchema = nodeSummarySchema.extend({
   notes: z.string(),
   targetStartDate: nullableIsoDate,
@@ -759,7 +770,7 @@ export const inputSchemas = {
   describe_tool: z.strictObject({ name: z.string().min(1) }),
   get_context: z.strictObject({
     weekStartsOn: z.number().int().min(0).max(6).default(0),
-    topOpenWorkLimit: z.number().int().min(1).max(100).default(25),
+    topOpenWorkLimit: z.number().int().min(1).max(100).default(10),
   }),
   search_nodes: z.strictObject({
     type: z.union([nodeType, z.array(nodeType).min(1)]).optional(),
@@ -1224,9 +1235,18 @@ export const outputSchemas = {
     weekStartsOn: z.number().int().min(0).max(6),
     plan: compactPlanSchema.nullable(),
     entries: z.array(planEntrySchema.omit({ planId: true })),
-    resultAreas: z.array(nodeSummarySchema),
-    goals: z.array(nodeSummarySchema),
-    projects: z.array(nodeSummarySchema),
+    // Slimmer than nodeSummarySchema: no path, type, depth, effort or focus. These rows
+    // were most of the response; parentId still links each one to its goal or area.
+    resultAreas: z.array(
+      z.strictObject({
+        id,
+        name: z.string(),
+        priorityLetter,
+        priorityRank: z.number().int().nullable(),
+      }),
+    ),
+    goals: z.array(planNodeSchema),
+    projects: z.array(planNodeSchema),
     previousRewrites: z.array(
       // Calendar day of the prior plan week — not an instant. ISO midnight was one day
       // early when agents (or the wizard) formatted it with local getters west of the
@@ -1286,6 +1306,10 @@ export const outputSchemas = {
         kind: z.enum(financeAccountKindEnum.enumValues),
         institution: z.string(),
         balanceCents: cents,
+        balanceSource: z.enum(["live", "statement", "ledger"]),
+        balanceAsOf: isoDate.nullable(),
+        postedCents: cents,
+        pendingCents: cents,
         ledgerBalanceCents: cents,
         statementClosingCents: cents.nullable(),
         statementPeriodEnd: dateKey.nullable(),
@@ -1317,18 +1341,26 @@ export const outputSchemas = {
           discontinuityCents: cents,
         }),
       ),
+      // Statement reconciliation, not the live position: these compare the register with
+      // the newest statement close plus later rows, whatever accounts[].balanceSource is.
+      // Own descriptions, because the flat field map describes the account-level figures.
       mismatches: z.array(
         z.strictObject({
           accountId: id,
           accountName: z.string(),
           ledgerBalanceCents: cents,
-          anchoredBalanceCents: cents,
-          mismatchCents: cents,
+          anchoredBalanceCents: cents.describe(
+            "Statement-anchored balance in integer cents: newest statement close plus every later row. Not the live bank balance; see accounts[].balanceCents for that.",
+          ),
+          mismatchCents: cents.describe(
+            "ledgerBalanceCents minus anchoredBalanceCents (statement-anchored). Differs from accounts[].mismatchCents, which compares the register with the live working balance.",
+          ),
         }),
       ),
     }),
     categories: z.array(z.string()),
-    merchants: z.array(z.string()),
+    merchantCount: z.number().int().min(0),
+    merchantsTool: z.literal("list_payees"),
     carryingCost: z.strictObject({
       interestCents: cents,
       feesCents: cents,
