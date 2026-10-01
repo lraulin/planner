@@ -192,6 +192,18 @@ async function seedOneCharge(userId: string): Promise<void> {
   });
 }
 
+type ListedPage = {
+  bills: ListedBill[];
+  annualTotalCents: number;
+  upcoming: { id: string | null; merchant: string; dueOn: string }[];
+  pageInfo: {
+    total: number;
+    returned: number;
+    hasMore: boolean;
+    nextOffset: number | null;
+  };
+};
+
 describeDb("list_recurring_bills", () => {
   it("names each declared bill by id and status and totals only the active ones", async () => {
     const ownerId = await makeUser();
@@ -211,9 +223,9 @@ describeDb("list_recurring_bills", () => {
 
     const listed = (await dispatchAgentTool(
       "list_recurring_bills",
-      { window: "all" },
+      { window: "all", status: "any" },
       ownerId,
-    )) as { bills: ListedBill[]; annualTotalCents: number };
+    )) as ListedPage;
 
     const byName = new Map(listed.bills.map((bill) => [bill.merchant, bill]));
     expect(byName.get("Gym")).toMatchObject({
@@ -221,7 +233,7 @@ describeDb("list_recurring_bills", () => {
       status: "active",
       declared: true,
     });
-    // Cancelled stays visible as history, and says so.
+    // Cancelled stays visible as history when asked for, and says so.
     const cancelled = byName.get("Payment Plan");
     expect(cancelled).toMatchObject({ id: plan.id, status: "cancelled" });
     expect(cancelled?.annualCents).toBeGreaterThan(0);
@@ -232,12 +244,71 @@ describeDb("list_recurring_bills", () => {
     expect(listed.annualTotalCents).toBe(activeTotal);
     expect(listed.annualTotalCents).toBe(byName.get("Gym")?.annualCents);
 
-    const intruder = (await dispatchAgentTool(
+    // The default is active only — and the total is the same either way.
+    const active = (await dispatchAgentTool(
       "list_recurring_bills",
       { window: "all" },
+      ownerId,
+    )) as ListedPage;
+    expect(active.bills.map((bill) => bill.merchant)).toEqual(["Gym"]);
+    expect(active.annualTotalCents).toBe(listed.annualTotalCents);
+
+    const intruder = (await dispatchAgentTool(
+      "list_recurring_bills",
+      { window: "all", status: "any" },
       intruderId,
-    )) as { bills: ListedBill[] };
+    )) as ListedPage;
     expect(intruder.bills.map((bill) => bill.id)).not.toContain(gym.id);
+    expect(intruder.upcoming.map((bill) => bill.id)).not.toContain(gym.id);
+  });
+
+  it("puts the total and due dates ahead of a paged bill table", async () => {
+    const ownerId = await makeUser();
+    await seedOneCharge(ownerId);
+    const saved: SavedBill[] = [];
+    for (const [index, name] of ["Alpha", "Bravo", "Charlie"].entries()) {
+      saved.push(
+        await save(ownerId, {
+          name,
+          cadenceMonths: 1,
+          expectedCents: 1000 * (index + 1),
+          anchorDate: `2099-0${index + 1}-15`,
+        }),
+      );
+    }
+
+    const first = (await dispatchAgentTool(
+      "list_recurring_bills",
+      { window: "all", limit: 2 },
+      ownerId,
+    )) as ListedPage;
+    expect(Object.keys(first)).toEqual([
+      "range",
+      "annualTotalCents",
+      "upcoming",
+      "bills",
+      "pageInfo",
+    ]);
+    expect(first.bills).toHaveLength(2);
+    expect(first.pageInfo).toMatchObject({ total: 3, hasMore: true, nextOffset: 2 });
+    // Every due date, whatever page of the table this is, each naming its bill.
+    expect(first.upcoming).toEqual([
+      expect.objectContaining({ id: saved[0].id, dueOn: "2099-01-15" }),
+      expect.objectContaining({ id: saved[1].id, dueOn: "2099-02-15" }),
+      expect.objectContaining({ id: saved[2].id, dueOn: "2099-03-15" }),
+    ]);
+
+    const second = (await dispatchAgentTool(
+      "list_recurring_bills",
+      { window: "all", limit: 2, offset: 2 },
+      ownerId,
+    )) as ListedPage;
+    expect(second.bills).toHaveLength(1);
+    expect(second.pageInfo).toMatchObject({ hasMore: false, nextOffset: null });
+    expect(second.annualTotalCents).toBe(first.annualTotalCents);
+    expect(
+      [...first.bills, ...second.bills].map((bill) => bill.merchant).sort(),
+    ).toEqual(["Alpha", "Bravo", "Charlie"]);
   });
 });
 

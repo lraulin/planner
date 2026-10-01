@@ -585,7 +585,7 @@ const definitions: AgentToolDefinition[] = [
     avoidWhen:
       "Use get_spending_breakdown for envelope and group spending, get_cash_flow for total movement, and search_transactions for a named charge.",
     returns:
-      "Recurring merchants with bill id, status, typical/low/high/annual cents, declared vs detected, the annual total of active bills only, and upcoming due dates.",
+      "The annual total of active bills, then upcoming due dates (with bill ids), then a page of recurring rows (bill id, status, typical/low/high/annual cents, charges in range, last charge or null, declared vs detected) and pageInfo. Active rows by default; status picks others.",
     effects: read,
     exposure: "domain",
     handler: listRecurringBillsTool,

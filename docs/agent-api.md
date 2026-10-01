@@ -626,11 +626,11 @@ Detected and declared recurring commitments, annualized.
 
 - Use when: Use to find the actual levers — subscriptions and bills whose annual cost is a decision.
 - Avoid when: Use get_spending_breakdown for envelope and group spending, get_cash_flow for total movement, and search_transactions for a named charge.
-- Returns: Recurring merchants with bill id, status, typical/low/high/annual cents, declared vs detected, the annual total of active bills only, and upcoming due dates.
+- Returns: The annual total of active bills, then upcoming due dates (with bill ids), then a page of recurring rows (bill id, status, typical/low/high/annual cents, charges in range, last charge or null, declared vs detected) and pageInfo. Active rows by default; status picks others.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ window="12m", from?, to?, axis="month", levelRecurring=false, accountIds=[], categories=[], merchants=[], includeUpcoming=true }`
-- Output: `{ range*, bills*, annualTotalCents*, upcoming* }`
+- Arguments: `{ window="12m", from?, to?, axis="month", levelRecurring=false, accountIds=[], categories=[], merchants=[], includeUpcoming=true, status="active", offset=0, limit=20 }`
+- Output: `{ range*, annualTotalCents*, upcoming*, bills*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.

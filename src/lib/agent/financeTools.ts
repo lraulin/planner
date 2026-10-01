@@ -18,12 +18,11 @@ import {
   loadRecurringBills,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
-import { unclaimedMerchants } from "@/lib/finances/commitments";
+import { billAnchor, unclaimedMerchants } from "@/lib/finances/commitments";
 import {
   annualCents,
   cadenceLabel,
   cadenceOf,
-  nextDueFrom,
   type Cadence,
 } from "@/lib/finances/recurringBills";
 import { deleteBudgetCategory } from "@/lib/finances/budget/mutations";
@@ -47,7 +46,10 @@ import {
   cashReportPoints,
   type SpendingScope,
 } from "@/lib/finances/reports";
-import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
+import {
+  analyzeInsights,
+  type InsightsAnalysis,
+} from "@/lib/finances/insightsAnalysis";
 import {
   insightsFilterOptions,
   type InsightsReportFilter,
@@ -379,19 +381,71 @@ export async function getSpendingBreakdownTool(
   };
 }
 
-export async function listRecurringBillsTool(
-  userId: string,
-  args: Record<string, unknown>,
+/** Which declared statuses `list_recurring_bills` returns; detected merchants are active. */
+export type RecurringStatusFilter = "active" | "paused" | "cancelled" | "any";
+
+/** The default page: small enough that the whole response stays well under the gateway cap. */
+export const RECURRING_BILLS_DEFAULT_LIMIT = 20;
+
+/**
+ * The `list_recurring_bills` payload, as a pure function of the analysis.
+ *
+ * **Key order is the contract here, not style.** The connector gateway keeps the first
+ * 20,000 bytes of a tool's text and drops the rest, and with 60-odd bills ahead of it the
+ * `upcoming` section never arrived — every due date was cut off. JSON keeps insertion order,
+ * so the short, decision-bearing sections (the active total, what is due next) go first and
+ * the long table goes last, paged.
+ *
+ * `annualTotalCents` covers every active row the filter matched, not just the page, the same
+ * way `search_transactions` totals its whole match set.
+ */
+export function recurringBillsResponse(
+  analysis: InsightsAnalysis,
+  options: {
+    includeUpcoming: boolean;
+    status: RecurringStatusFilter;
+    offset?: number;
+    limit?: number;
+  },
 ) {
-  const { analysis } = await loadAnalyzed(userId, args);
+  const bounds = pageBounds(options.offset, options.limit, {
+    limit: RECURRING_BILLS_DEFAULT_LIMIT,
+  });
   if (analysis.empty) {
-    return { range: null, bills: [], annualTotalCents: 0, upcoming: [] };
+    return {
+      range: null,
+      annualTotalCents: 0,
+      upcoming: [],
+      bills: [],
+      pageInfo: paginate([], bounds).pageInfo,
+    };
   }
+  const matching = analysis.recurring.filter(
+    (entry) => options.status === "any" || entry.status === options.status,
+  );
+  const page = paginate(matching, bounds);
   return {
     range: analysis.range,
-    bills: analysis.recurring.map((entry) => ({
+    // Paused and cancelled bills stay listed as history, but a year of them costs nothing —
+    // the same rule the Bills page total follows (`activeBillTotals`).
+    annualTotalCents: analysis.recurring
+      .filter((entry) => entry.status === "active")
+      .reduce((total, entry) => total + entry.annualCents, 0),
+    upcoming: options.includeUpcoming
+      ? analysis.upcoming.map((entry) => ({
+          id: entry.billId ?? null,
+          merchant: entry.merchant,
+          dueOn: entry.dueOn,
+          daysAway: entry.daysAway,
+          expectedCents: entry.expectedCents,
+          cadence: cadenceLabel(entry.cadence),
+          lastChargeOn: entry.lastChargeOn,
+        }))
+      : [],
+    bills: page.items.map((entry) => ({
       id: entry.billId ?? null,
       merchant: entry.merchant,
+      status: entry.status,
       typicalCents: entry.typicalCents,
       lowCents: entry.lowCents,
       highCents: entry.highCents,
@@ -403,15 +457,26 @@ export async function listRecurringBillsTool(
       lastChargeOn: entry.lastChargeOn,
       declared: entry.declared,
       scheduled: entry.scheduled,
-      status: entry.status,
     })),
-    // Paused and cancelled bills stay listed as history, but a year of them costs nothing —
-    // the same rule the Bills page total follows (`activeBillTotals`).
-    annualTotalCents: analysis.recurring
-      .filter((entry) => entry.status === "active")
-      .reduce((total, entry) => total + entry.annualCents, 0),
-    upcoming: args.includeUpcoming === false ? [] : analysis.upcoming,
+    pageInfo: page.pageInfo,
   };
+}
+
+export async function listRecurringBillsTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const { analysis } = await loadAnalyzed(userId, args);
+  const status = optionalString(args, "status");
+  return recurringBillsResponse(analysis, {
+    includeUpcoming: args.includeUpcoming !== false,
+    status:
+      status === "paused" || status === "cancelled" || status === "any"
+        ? status
+        : "active",
+    offset: optionalNumber(args, "offset"),
+    limit: optionalNumber(args, "limit"),
+  });
 }
 
 export async function getDebtSummaryTool(
@@ -668,7 +733,6 @@ export async function listCommitmentsTool(userId: string) {
         .map((charge) => charge.dateKey)
         .sort()
         .at(-1);
-      const anchor = last ?? bill.anchorDate;
       const annual =
         bill.expectedCents !== null
           ? annualCents(bill.expectedCents, cadenceOf(bill))
@@ -680,9 +744,11 @@ export async function listCommitmentsTool(userId: string) {
         cadence: cadenceLabel(cadenceOf(bill)),
         expectedCents: bill.expectedCents,
         annualCents: annual,
+        // The Bills page's own answer. `anchorDate` is the predicted next charge, so walking
+        // a cadence on from it skipped the date it names.
         nextDue:
-          bill.scheduled && bill.status === "active" && anchor !== null
-            ? nextDueFrom(anchor, cadenceOf(bill), today)
+          bill.scheduled && bill.status === "active"
+            ? billAnchor(bill, last ?? null, today).nextDueKey
             : null,
         scheduled: bill.scheduled,
       };
