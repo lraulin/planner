@@ -803,6 +803,7 @@ export async function listPayeesTool(userId: string, args: Record<string, unknow
       name: payee.name,
       aliases: payee.aliases,
       claim: payee.claim ? { id: payee.claim.id, name: payee.claim.name } : null,
+      transactionCount: payee.transactionCount,
     })),
     pageInfo: page.pageInfo,
   };

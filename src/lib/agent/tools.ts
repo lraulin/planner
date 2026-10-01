@@ -76,7 +76,7 @@ import {
   updateLifeEventTool,
   updateResidenceTool,
 } from "./historyTools";
-import { deleteTransactionTool } from "./ledgerTools";
+import { deleteTransactionTool, updatePayeeAliasesTool } from "./ledgerTools";
 import {
   createHouseTool,
   deleteHouseTool,
@@ -750,6 +750,29 @@ const definitions: AgentToolDefinition[] = [
       },
     ],
     handler: deleteTransactionTool,
+  }),
+  defineTool("update_payee_aliases", {
+    domain: "finances",
+    summary: "Add, move, or remove the merchant spellings a payee answers to.",
+    useWhen:
+      "Use when one merchant shows up under two spellings (an alert says YouTube, the bank says PP*GOOGLE YOUTUBE SUBSCRI) so both resolve to the same payee.",
+    avoidWhen:
+      "Do not use to set a category; a payee's envelope claim or default files its uncategorized rows on its own. Do not use to merge two claimed payees.",
+    returns:
+      "The payee's aliases after the edit, what was added, moved, removed or already there, how many rows changed payee or were filed, and a sample.",
+    effects: safeWrite,
+    exposure: "domain",
+    examples: [
+      {
+        title: "Teach a payee the alert spelling",
+        arguments: {
+          payeeId: "00000000-0000-4000-8000-000000000002",
+          add: ["YouTube"],
+          dryRun: true,
+        },
+      },
+    ],
+    handler: updatePayeeAliasesTool,
   }),
   defineTool("set_commitment_payees", {
     domain: "finances",

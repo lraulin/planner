@@ -5,10 +5,13 @@ import {
   financeAccounts,
   financeAuditEvents,
   financeBudgetCategories,
+  financePayeeAliases,
+  financePayees,
   financeTransactions,
   users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { normalizeMerchant } from "@/lib/finances/classify/merchant";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
 import { reclassifyTransactions } from "@/lib/finances/mutations";
 import { removePayeeAlias } from "@/lib/finances/payees/aliases";
@@ -317,6 +320,17 @@ describeDb("delete_transaction", () => {
   });
 });
 
+type AliasReceipt = {
+  payee: { id: string; name: string; aliases: string[] };
+  added: { input: string; alias: string; movedFrom: { payeeId: string } | null }[];
+  removed: { alias: string; reassignedTo: { payeeId: string; name: string } | null }[];
+  unchanged: { alias: string; reason: string }[];
+  relinkedTransactions: number;
+  categorizedTransactions: number;
+  sample: { id: string; description: string }[];
+  dryRun: boolean;
+};
+
 async function payeeOf(rowId: string): Promise<string | null> {
   const [row] = await db
     .select({ payeeId: financeTransactions.payeeId })
@@ -332,6 +346,217 @@ async function categoryOf(rowId: string): Promise<string | null> {
     .where(eq(financeTransactions.id, rowId));
   return row.budgetCategoryId;
 }
+
+async function aliasesOf(payeeId: string): Promise<string[]> {
+  const rows = await db
+    .select({ alias: financePayeeAliases.alias })
+    .from(financePayeeAliases)
+    .where(eq(financePayeeAliases.payeeId, payeeId));
+  return rows.map((row) => row.alias).sort();
+}
+
+describeDb("update_payee_aliases", () => {
+  const youtube = normalizeMerchant("YouTube");
+  let userId: string;
+  let accountId: string;
+  let streaming: string;
+  let target: string;
+  let alertRow: string;
+  let filedRow: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+    accountId = await makeAccount(userId);
+    streaming = await makeEnvelope(userId, "Streaming");
+    const other = await makeEnvelope(userId, "Gifts");
+    target = await createPayee(userId, {
+      name: "Google Youtube Subscri",
+      aliases: ["PP*GOOGLE YOUTUBE SUBSCRI"],
+    });
+    await db
+      .update(financePayees)
+      .set({ claimedBudgetCategoryId: streaming })
+      .where(eq(financePayees.id, target));
+    alertRow = await insertRow(userId, {
+      accountId,
+      description: "YouTube",
+      amount: "-13.99",
+      pending: true,
+    });
+    filedRow = await insertRow(userId, {
+      accountId,
+      description: "YOUTUBE",
+      amount: "-13.99",
+      transactionDate: "2026-08-10",
+      budgetCategoryId: other,
+    });
+    // Mints the unclaimed YOUTUBE payee these rows resolve to before any alias edit.
+    await reclassifyTransactions(userId);
+  });
+
+  it("refuses an alias another payee holds unless asked to move it", async () => {
+    const minted = await payeeOf(alertRow);
+    expect(minted).not.toBe(target);
+    await expect(
+      dispatchAgentTool(
+        "update_payee_aliases",
+        { payeeId: target, add: ["YouTube"] },
+        userId,
+      ),
+    ).rejects.toMatchObject({
+      code: "conflict",
+      message: expect.stringContaining("move"),
+    });
+    expect(await payeeOf(alertRow)).toBe(minted);
+  });
+
+  it("moves the alias, re-links its rows, and files only the uncategorized one", async () => {
+    const minted = await payeeOf(alertRow);
+    const receipt = (await dispatchAgentTool(
+      "update_payee_aliases",
+      { payeeId: target, add: ["YouTube"], onConflict: "move" },
+      userId,
+    )) as AliasReceipt;
+
+    expect(receipt.added).toEqual([
+      {
+        input: "YouTube",
+        alias: youtube,
+        movedFrom: expect.objectContaining({ payeeId: minted }),
+      },
+    ]);
+    expect(receipt.payee.aliases).toContain(youtube);
+    expect(receipt.relinkedTransactions).toBe(2);
+    expect(receipt.categorizedTransactions).toBe(1);
+    expect(receipt.sample.map((row) => row.id).sort()).toEqual(
+      [alertRow, filedRow].sort(),
+    );
+    expect(await payeeOf(alertRow)).toBe(target);
+    expect(await payeeOf(filedRow)).toBe(target);
+    expect(await categoryOf(alertRow)).toBe(streaming);
+    // A category someone chose always wins over the claim.
+    expect(await categoryOf(filedRow)).not.toBe(streaming);
+    const listed = (await dispatchAgentTool(
+      "list_payees",
+      { query: "Google Youtube" },
+      userId,
+    )) as { payees: { id: string; transactionCount: number }[] };
+    expect(listed.payees).toEqual([
+      expect.objectContaining({ id: target, transactionCount: 2 }),
+    ]);
+
+    const again = (await dispatchAgentTool(
+      "update_payee_aliases",
+      { payeeId: target, add: ["youtube"] },
+      userId,
+    )) as AliasReceipt;
+    expect(again.added).toEqual([]);
+    expect(again.unchanged).toEqual([
+      expect.objectContaining({ alias: youtube, reason: "already_on_payee" }),
+    ]);
+  });
+
+  it("never moves an alias off a payee an envelope claims", async () => {
+    const plain = await createPayee(userId, { name: "Somebody" });
+    await expect(
+      dispatchAgentTool(
+        "update_payee_aliases",
+        { payeeId: plain, add: ["PP*GOOGLE YOUTUBE SUBSCRI"], onConflict: "move" },
+        userId,
+      ),
+    ).rejects.toMatchObject({
+      code: "conflict",
+      message: expect.stringContaining("claims"),
+    });
+    expect(await aliasesOf(plain)).toEqual([]);
+  });
+
+  it("adds the spelling a transaction carries", async () => {
+    const minted = await payeeOf(alertRow);
+    const receipt = (await dispatchAgentTool(
+      "update_payee_aliases",
+      { payeeId: target, addFromTransactionIds: [alertRow], onConflict: "move" },
+      userId,
+    )) as AliasReceipt;
+    expect(receipt.added).toEqual([
+      expect.objectContaining({ input: alertRow, alias: youtube }),
+    ]);
+    expect(await aliasesOf(minted ?? "")).toEqual([]);
+  });
+
+  it("changes nothing on a dry run", async () => {
+    const minted = await payeeOf(alertRow);
+    const before = await aliasesOf(target);
+    const receipt = (await dispatchAgentTool(
+      "update_payee_aliases",
+      { payeeId: target, add: ["YouTube"], onConflict: "move", dryRun: true },
+      userId,
+    )) as AliasReceipt;
+    expect(receipt).toMatchObject({ dryRun: true, relinkedTransactions: 2 });
+    expect(await aliasesOf(target)).toEqual(before);
+    expect(await payeeOf(alertRow)).toBe(minted);
+    expect(await categoryOf(alertRow)).toBeNull();
+  });
+
+  it("moves a removed alias's rows onto a payee of their own", async () => {
+    await dispatchAgentTool(
+      "update_payee_aliases",
+      { payeeId: target, add: ["YouTube"], onConflict: "move" },
+      userId,
+    );
+    const receipt = (await dispatchAgentTool(
+      "update_payee_aliases",
+      { payeeId: target, remove: ["YouTube"] },
+      userId,
+    )) as AliasReceipt;
+    expect(receipt.removed).toHaveLength(1);
+    const next = receipt.removed[0].reassignedTo;
+    expect(next).not.toBeNull();
+    expect(next?.payeeId).not.toBe(target);
+    expect(await payeeOf(alertRow)).toBe(next?.payeeId);
+    expect(receipt.payee.aliases).not.toContain(youtube);
+  });
+
+  it("names a removal that is not on the payee", async () => {
+    await expect(
+      dispatchAgentTool(
+        "update_payee_aliases",
+        { payeeId: target, remove: ["NETFLIX"] },
+        userId,
+      ),
+    ).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("refuses input that holds no merchant name", async () => {
+    await expect(
+      dispatchAgentTool(
+        "update_payee_aliases",
+        { payeeId: target, add: ["   "] },
+        userId,
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
+  });
+
+  it("does not let a second user edit the payee or borrow a transaction's spelling", async () => {
+    const intruder = await makeUser();
+    const theirs = await createPayee(intruder, { name: "Theirs" });
+    await expect(
+      dispatchAgentTool(
+        "update_payee_aliases",
+        { payeeId: target, add: ["X"] },
+        intruder,
+      ),
+    ).rejects.toMatchObject({ code: "not_found" });
+    await expect(
+      dispatchAgentTool(
+        "update_payee_aliases",
+        { payeeId: theirs, addFromTransactionIds: [alertRow] },
+        intruder,
+      ),
+    ).rejects.toMatchObject({ code: "not_found" });
+    expect(await aliasesOf(theirs)).toEqual([]);
+  });
+});
 
 describeDb("alias paths that recompute payee_id", () => {
   it("re-points rows when the Payees page removes an alias", async () => {

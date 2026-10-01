@@ -1055,6 +1055,40 @@ export const inputSchemas = {
       .default(false)
       .describe("Validate and return the receipt without deleting anything."),
   }),
+  update_payee_aliases: z.strictObject({
+    payeeId: id.describe("Payee to edit, from list_payees."),
+    add: z
+      .array(z.string().min(1).max(200))
+      .max(20)
+      .default([])
+      .describe(
+        "Merchant spellings to add, e.g. YouTube. Normalized the way bank lines are, so case and store numbers do not matter.",
+      ),
+    addFromTransactionIds: z
+      .array(id)
+      .max(20)
+      .default([])
+      .describe("Add the merchant spelling these transactions carry."),
+    remove: z
+      .array(z.string().min(1).max(200))
+      .max(20)
+      .default([])
+      .describe(
+        "Aliases to take off this payee. Their transactions move to a payee of their own.",
+      ),
+    onConflict: z
+      .enum(["refuse", "move"])
+      .default("refuse")
+      .describe(
+        "When an added alias belongs to another payee: refuse (default) or move it here. A move off a payee an envelope claims is always refused.",
+      ),
+    dryRun: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Report what would change, including re-linked rows, and change nothing.",
+      ),
+  }),
   set_commitment_payees: z.strictObject({
     id,
     payeeIds: z.array(id),
@@ -1495,6 +1529,11 @@ export const outputSchemas = {
         name: z.string(),
         aliases: z.array(z.string()),
         claim: commitmentPayeeSchema.nullable(),
+        transactionCount: z
+          .number()
+          .int()
+          .min(0)
+          .describe("Transactions that resolve to this payee, across all history."),
       }),
     ),
     pageInfo: pageInfoSchema,
@@ -1563,6 +1602,57 @@ export const outputSchemas = {
         "Activity record of the delete, restorable in Planner; null on a dry run.",
       ),
     warnings: z.array(z.string()),
+  }),
+  update_payee_aliases: z.strictObject({
+    payee: z.strictObject({ id, name: z.string(), aliases: z.array(z.string()) }),
+    added: z.array(
+      z.strictObject({
+        input: z.string(),
+        alias: z.string(),
+        movedFrom: z.strictObject({ payeeId: id, name: z.string() }).nullable(),
+      }),
+    ),
+    removed: z.array(
+      z.strictObject({
+        alias: z.string(),
+        reassignedTo: z
+          .strictObject({ payeeId: id, name: z.string() })
+          .nullable()
+          .describe(
+            "Payee the alias's transactions now resolve to; null on a dry run or when none of them remain.",
+          ),
+      }),
+    ),
+    unchanged: z.array(
+      z.strictObject({
+        input: z.string(),
+        alias: z.string(),
+        reason: z.literal("already_on_payee"),
+      }),
+    ),
+    relinkedTransactions: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Transactions whose payee changed."),
+    categorizedTransactions: z
+      .number()
+      .int()
+      .min(0)
+      .describe(
+        "Uncategorized transactions this payee's claim or default filed. Existing categories are never changed.",
+      ),
+    sample: z
+      .array(
+        z.strictObject({
+          id,
+          transactionDate: dateKey,
+          description: z.string(),
+          amountCents: cents,
+        }),
+      )
+      .describe("Up to ten transactions that now resolve to this payee, newest first."),
+    dryRun: z.boolean(),
   }),
   set_commitment_payees: z.strictObject({ commitment: commitmentSummarySchema }),
   list_jobs: z.strictObject({

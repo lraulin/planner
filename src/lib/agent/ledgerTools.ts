@@ -1,5 +1,5 @@
 /**
- * Agent writes to individual ledger rows
+ * Agent writes to individual ledger rows and the payee identity they resolve to
  * (`agent-os/specs/2026-10-01-1040-mcp-transaction-delete-and-payee-aliases/`).
  */
 
@@ -13,11 +13,16 @@ import {
   TransactionDeleteRefused,
   type DeletedTransaction,
 } from "@/lib/finances/mutations";
+import {
+  PayeeAliasEditRefused,
+  updatePayeeAliases,
+} from "@/lib/finances/payees/aliases";
 import { feedLabel } from "@/lib/finances/types";
 import type { inputSchemas } from "./contracts";
 import { AgentError } from "./errors";
 
 type DeleteArgs = z.output<typeof inputSchemas.delete_transaction>;
+type AliasArgs = z.output<typeof inputSchemas.update_payee_aliases>;
 
 /** The `history_source` value a feed writes under. */
 function historySourceOf(
@@ -137,4 +142,35 @@ export async function deleteTransactionTool(
       return warning ? [warning] : [];
     }),
   };
+}
+
+export async function updatePayeeAliasesTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const input = args as AliasArgs;
+  if (
+    input.add.length === 0 &&
+    input.addFromTransactionIds.length === 0 &&
+    input.remove.length === 0
+  ) {
+    throw new AgentError(
+      "validation",
+      "Nothing to change: pass add, addFromTransactionIds, or remove.",
+    );
+  }
+  try {
+    return await updatePayeeAliases(userId, input.payeeId, {
+      add: input.add,
+      addFromTransactionIds: input.addFromTransactionIds,
+      remove: input.remove,
+      onConflict: input.onConflict,
+      dryRun: input.dryRun,
+    });
+  } catch (error) {
+    if (error instanceof PayeeAliasEditRefused) {
+      throw new AgentError(error.code, error.message);
+    }
+    throw error;
+  }
 }
