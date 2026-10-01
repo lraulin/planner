@@ -121,10 +121,10 @@ Read a compact current-planning dashboard.
 
 - Use when: Use to orient at the start of a planning conversation or briefing.
 - Avoid when: Use search_nodes or get_node for a named item or full detail.
-- Returns: Focus, bounded top open work, weekly-plan status, and appointment count.
+- Returns: Focus, the top 10 open work items by default (topOpenWorkInfo says when there are more; raise topOpenWorkLimit or page with search_nodes), weekly-plan status, and appointment count.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: core
-- Arguments: `{ weekStartsOn=0, topOpenWorkLimit=25 }`
+- Arguments: `{ weekStartsOn=0, topOpenWorkLimit=10 }`
 - Output: `{ asOf*, weekStart*, focus*, topOpenWork*, topOpenWorkInfo*, weeklyPlan*, weekAppointmentCount* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -457,7 +457,7 @@ Load the compact state needed for the weekly-planning workflow.
 
 - Use when: Use to review areas, goals, projects, prior rewrites, and schedule together.
 - Avoid when: Use get_context for a normal briefing outside weekly planning.
-- Returns: Plan machinery and compact candidate node summaries.
+- Returns: Plan machinery and slim candidate rows: result areas (id, name, priority), goals and projects (id, parentId, name, state, priority, deadline). No paths, effort or focus flags; use get_node for one item's detail.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
 - Arguments: `{ weekStart?, weekStartsOn=0 }`
@@ -581,11 +581,11 @@ Orient on accounts, imported history, coverage gaps, and carrying cost.
 
 - Use when: Start here for any money question. Use before cash flow, spending, or search so you know the coverage gap and which accounts exist.
 - Avoid when: Do not use it for a dated series or a named transaction; those are the other finance tools. Do not treat ledgerBalanceCents as the current balance when mismatchCents is nonzero.
-- Returns: Accounts with statement-anchored balances (plus ledger sum and mismatch), the imported date range, unclassified count, coverage (late starts, holes, mismatches), category vocabulary, and headline interest/fees.
+- Returns: Accounts with statement-anchored balances (plus ledger sum and mismatch), the imported date range, unclassified count, coverage (late starts, holes, mismatches), category vocabulary, merchant count (names via list_payees), and headline interest/fees.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
 - Arguments: `{  }`
-- Output: `{ envelopes*, groups*, accounts*, history*, unclassifiedCount*, coverage*, categories*, merchants*, carryingCost* }`
+- Output: `{ envelopes*, groups*, accounts*, history*, unclassifiedCount*, coverage*, categories*, merchantCount*, merchantsTool*, carryingCost* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.

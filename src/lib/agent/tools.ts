@@ -205,7 +205,8 @@ const definitions: AgentToolDefinition[] = [
     summary: "Read a compact current-planning dashboard.",
     useWhen: "Use to orient at the start of a planning conversation or briefing.",
     avoidWhen: "Use search_nodes or get_node for a named item or full detail.",
-    returns: "Focus, bounded top open work, weekly-plan status, and appointment count.",
+    returns:
+      "Focus, the top 10 open work items by default (topOpenWorkInfo says when there are more; raise topOpenWorkLimit or page with search_nodes), weekly-plan status, and appointment count.",
     effects: read,
     exposure: "core",
     handler: getContext,
@@ -456,7 +457,8 @@ const definitions: AgentToolDefinition[] = [
     useWhen:
       "Use to review areas, goals, projects, prior rewrites, and schedule together.",
     avoidWhen: "Use get_context for a normal briefing outside weekly planning.",
-    returns: "Plan machinery and compact candidate node summaries.",
+    returns:
+      "Plan machinery and slim candidate rows: result areas (id, name, priority), goals and projects (id, parentId, name, state, priority, deadline). No paths, effort or focus flags; use get_node for one item's detail.",
     effects: read,
     exposure: "domain",
     handler: loadWeeklyPlanTool,
@@ -540,7 +542,7 @@ const definitions: AgentToolDefinition[] = [
     avoidWhen:
       "Do not use it for a dated series or a named transaction; those are the other finance tools. Do not treat ledgerBalanceCents as the current balance when mismatchCents is nonzero.",
     returns:
-      "Accounts with statement-anchored balances (plus ledger sum and mismatch), the imported date range, unclassified count, coverage (late starts, holes, mismatches), category vocabulary, and headline interest/fees.",
+      "Accounts with statement-anchored balances (plus ledger sum and mismatch), the imported date range, unclassified count, coverage (late starts, holes, mismatches), category vocabulary, merchant count (names via list_payees), and headline interest/fees.",
     effects: read,
     exposure: "domain",
     handler: getFinanceOverviewTool,
@@ -1035,6 +1037,9 @@ const fieldDescriptions: Record<string, string> = {
     "Sum of every imported transaction on the account, in integer cents. Diagnostic; can disagree with the official close.",
   mismatchCents:
     "ledgerBalanceCents minus the headline. Zero when the account has no statement.",
+  merchantCount:
+    "How many distinct merchants the imported rows name. The names themselves are not returned here; call list_payees to page through payees.",
+  merchantsTool: "The tool that lists merchants and payees: list_payees.",
   statementClosingCents:
     "Official closing balance of the newest statement, in integer cents.",
   statementPeriodEnd: "Closing date of the newest statement (YYYY-MM-DD).",

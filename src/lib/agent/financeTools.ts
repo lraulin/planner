@@ -9,6 +9,7 @@ import {
   effectiveFlow,
   effectiveMerchant,
   rowsRange,
+  type AnalyticsRow,
   type DateRange,
 } from "@/lib/finances/analytics";
 import {
@@ -54,6 +55,7 @@ import {
   type InsightsWindowKey,
 } from "@/lib/finances/insightsFilter";
 import { listAccounts, listStatements } from "@/lib/finances/queries";
+import type { FinanceAccountRow } from "@/lib/finances/types";
 import { reconcileAccounts } from "@/lib/finances/reconcile";
 import { searchTransactions } from "@/lib/finances/transactionSearch";
 import { localDateKey } from "@/lib/schedule/geometry";
@@ -172,20 +174,32 @@ function flattenFlowPoint(point: {
   };
 }
 
-export async function getFinanceOverviewTool(userId: string) {
-  const [accounts, rows, unclassified, carrying, statements, budget] =
-    await Promise.all([
-      listAccounts(userId),
-      loadInsightsRows(userId),
-      unclassifiedCount(userId),
-      loadCarryingCost(userId),
-      listStatements(userId),
-      loadBudget(userId, null),
-    ]);
-  const history = rowsRange(rows);
-  const options = insightsFilterOptions(rows);
+type BudgetData = Awaited<ReturnType<typeof loadBudget>>;
+
+type FinanceOverviewInputs = {
+  accounts: readonly FinanceAccountRow[];
+  rows: readonly AnalyticsRow[];
+  unclassifiedCount: number;
+  carrying: { interestCents: number; feesCents: number };
+  statements: Parameters<typeof coverageGap>[1];
+  budget: {
+    categories: readonly Pick<
+      BudgetData["categories"][number],
+      "id" | "name" | "groupId" | "kind" | "incomeRole" | "expectedMonthlyIncomeCents"
+    >[];
+    groups: readonly Pick<
+      BudgetData["groups"][number],
+      "id" | "name" | "parentGroupId" | "kind"
+    >[];
+  };
+};
+
+/** get_finance_overview's response from loaded data. Pure, so the size guard can drive it. */
+export function financeOverviewResponse(input: FinanceOverviewInputs) {
+  const history = rowsRange(input.rows);
+  const options = insightsFilterOptions(input.rows);
   return {
-    envelopes: budget.categories.map((row) => ({
+    envelopes: input.budget.categories.map((row) => ({
       id: row.id,
       name: row.name,
       groupId: row.groupId,
@@ -193,13 +207,13 @@ export async function getFinanceOverviewTool(userId: string) {
       incomeRole: row.incomeRole,
       expectedMonthlyIncomeCents: row.expectedMonthlyIncomeCents,
     })),
-    groups: budget.groups.map((row) => ({
+    groups: input.budget.groups.map((row) => ({
       id: row.id,
       name: row.name,
       parentGroupId: row.parentGroupId,
       kind: row.kind,
     })),
-    accounts: accounts.map((account) => ({
+    accounts: input.accounts.map((account) => ({
       id: account.id,
       name: account.name,
       kind: account.kind,
@@ -215,17 +229,40 @@ export async function getFinanceOverviewTool(userId: string) {
     history: {
       startKey: history?.startKey ?? null,
       endKey: history?.endKey ?? null,
-      transactionCount: rows.length,
+      transactionCount: input.rows.length,
     },
-    unclassifiedCount: unclassified,
-    coverage: coverageGap(rows, statements),
+    unclassifiedCount: input.unclassifiedCount,
+    coverage: coverageGap(input.rows, input.statements),
     categories: options.categories,
-    merchants: options.merchants,
+    // The full merchant vocabulary was most of this response (hundreds of raw bank
+    // descriptions) and pushed it past the client's size limit. list_payees pages it.
+    merchantCount: options.merchants.length,
+    merchantsTool: "list_payees" as const,
     carryingCost: {
-      interestCents: carrying.interestCents,
-      feesCents: carrying.feesCents,
+      interestCents: input.carrying.interestCents,
+      feesCents: input.carrying.feesCents,
     },
   };
+}
+
+export async function getFinanceOverviewTool(userId: string) {
+  const [accounts, rows, unclassified, carrying, statements, budget] =
+    await Promise.all([
+      listAccounts(userId),
+      loadInsightsRows(userId),
+      unclassifiedCount(userId),
+      loadCarryingCost(userId),
+      listStatements(userId),
+      loadBudget(userId, null),
+    ]);
+  return financeOverviewResponse({
+    accounts,
+    rows,
+    unclassifiedCount: unclassified,
+    carrying,
+    statements,
+    budget,
+  });
 }
 
 export async function getCashFlowTool(userId: string, args: Record<string, unknown>) {

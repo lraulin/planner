@@ -16,6 +16,7 @@ import {
 import { loadWeeklyPlanPayload } from "@/lib/planning/queries";
 import { startOfWeek } from "@/lib/schedule/geometry";
 import { isSettled } from "@/lib/tree/completionCascade";
+import type { OutlineNode } from "@/lib/tree/types";
 import { AgentError } from "./errors";
 import {
   optionalBoolean,
@@ -25,7 +26,7 @@ import {
   parseDate,
   requireString,
 } from "./parse";
-import { buildPathMap, iso, nodeSummary } from "./serialize";
+import { iso } from "./serialize";
 
 function planWeekArgs(args: Record<string, unknown>): {
   weekStart: Date;
@@ -212,14 +213,80 @@ export async function updateWeeklyPlanEntriesTool(
   };
 }
 
+/**
+ * A result area, goal or project as the weekly plan lists it: what the wizard plans with.
+ *
+ * Planning candidates were most of load_weekly_plan's size, mostly the full path string,
+ * and pushed it past the client's limit. The parent chain is still there through `parentId`
+ * (areas, goals and projects all come back together); get_node or search_nodes gives the
+ * path, type-specific fields and effort when an agent needs them. `focus` is left out too:
+ * the plan's entries carry it for this week's projects, and get_context lists Focus items.
+ */
+export type PlanNodeSummary = {
+  id: string;
+  parentId: string | null;
+  name: string;
+  state: OutlineNode["state"];
+  priorityLetter: OutlineNode["priorityLetter"];
+  priorityRank: number | null;
+  deadline: string | null;
+};
+
+function planNodeSummary(node: OutlineNode): PlanNodeSummary {
+  return {
+    id: node.id,
+    parentId: node.parentId,
+    name: node.name,
+    state: node.state,
+    priorityLetter: node.priorityLetter,
+    priorityRank: node.priorityRank,
+    deadline: iso(node.deadline),
+  };
+}
+
+/** Result areas have no parent, state or deadline, so their rows drop those too. */
+function planAreaSummary(node: OutlineNode) {
+  return {
+    id: node.id,
+    name: node.name,
+    priorityLetter: node.priorityLetter,
+    priorityRank: node.priorityRank,
+  };
+}
+
 export async function loadWeeklyPlanTool(
   userId: string,
   args: Record<string, unknown>,
 ) {
   const { weekStart, weekStartsOn } = planWeekArgs(args);
   const payload = await loadWeeklyPlanPayload(userId, { weekStart, weekStartsOn });
-  const paths = buildPathMap(payload.nodes);
+  return weeklyPlanResponse(payload);
+}
 
+type WeeklyPlanPayload = Awaited<ReturnType<typeof loadWeeklyPlanPayload>>;
+type PlanOccurrence = WeeklyPlanPayload["schedule"]["occurrences"][number];
+
+/** The parts of the payload the response reads. */
+type WeeklyPlanResponseInput = Pick<
+  WeeklyPlanPayload,
+  "weekStart" | "weekStartsOn" | "plan" | "previousRewrites"
+> & {
+  entries: readonly Pick<
+    WeeklyPlanPayload["entries"][number],
+    "id" | "nodeId" | "focus" | "reviewed" | "rewrite" | "committedMinutes"
+  >[];
+  nodes: OutlineNode[];
+  schedule: {
+    rangeStart: string;
+    occurrences: readonly Pick<
+      PlanOccurrence,
+      "id" | "occurrenceKey" | "subject" | "startAt" | "endAt" | "projectId"
+    >[];
+  };
+};
+
+/** load_weekly_plan's response from the loaded payload. Pure, so the size guard can drive it. */
+export function weeklyPlanResponse(payload: WeeklyPlanResponseInput) {
   // Compact for agents — full outline is large; send summaries + plan machinery.
   return {
     weekStart: payload.weekStart,
@@ -247,7 +314,7 @@ export async function loadWeeklyPlanTool(
     })),
     resultAreas: payload.nodes
       .filter((n) => n.type === "result_area")
-      .map((n) => nodeSummary(n, paths)),
+      .map(planAreaSummary),
     goals: payload.nodes
       .filter(
         (n) =>
@@ -255,10 +322,10 @@ export async function loadWeeklyPlanTool(
           (n.state === "not_started" || n.state === "in_progress") &&
           (n.priorityLetter === "A" || n.priorityLetter === null),
       )
-      .map((n) => nodeSummary(n, paths)),
+      .map(planNodeSummary),
     projects: payload.nodes
       .filter((n) => n.type === "project" && !isSettled(n.state))
-      .map((n) => nodeSummary(n, paths)),
+      .map(planNodeSummary),
     previousRewrites: payload.previousRewrites,
     schedule: {
       // The wizard always loads a week, so the range's start *is* the week start. The

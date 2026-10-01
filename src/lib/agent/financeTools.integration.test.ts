@@ -133,7 +133,9 @@ describeDb("finance agent tools", () => {
     expect(overview.carryingCost).toMatchObject({
       interestCents: 1245,
       feesCents: 2900,
-    });
+    }); // Names are paged by list_payees; the overview only says how many there are.
+    expect(overview).not.toHaveProperty("merchants");
+    expect(overview).toMatchObject({ merchantCount: 3, merchantsTool: "list_payees" });
   });
 
   it("returns total cash movement including gifts", async () => {
