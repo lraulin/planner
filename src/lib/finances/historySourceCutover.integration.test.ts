@@ -226,7 +226,12 @@ describeDb("history source cutover", () => {
       ),
     );
     const month = async () => {
-      const budget = await loadBudget(owner, "2026-09-01");
+      // Pinned to the seed's day. loadBudget otherwise reads the wall clock, and once
+      // September is a past month the released hold no longer shows in its Ready to
+      // Assign, so this failed from 2026-10-01 without anything having regressed.
+      const budget = await loadBudget(owner, "2026-09-01", db, {
+        todayKey: "2026-09-23",
+      });
       const found = budget.months.find((m) => m.month === "2026-09-01")!;
       return { rta: found.readyToAssignCents, envelope: found.categories[envelope.id] };
     };
