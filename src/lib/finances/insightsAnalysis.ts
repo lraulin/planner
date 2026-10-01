@@ -41,17 +41,18 @@ import {
   type DateRange,
   type IncomeBreakdown,
   type MerchantTotal,
-  type RecurringMerchant,
+  type RecurringEntry,
   type UpcomingBill,
 } from "./analytics";
 import {
   applyInsightsFilter,
+  declaredBillsInFilter,
   EMPTY_INSIGHTS_FILTER,
   resolveInsightsRange,
   type InsightsReportFilter,
   type InsightsWindowKey,
 } from "./insightsFilter";
-import type { DeclaredBill } from "./recurringBills";
+import type { StoredBill } from "./recurringBills";
 import type { InsightsAxis } from "@/lib/settings/finances";
 import { statementCashFlow, type PositionStatement } from "./statementCashFlow";
 
@@ -89,7 +90,7 @@ export type InsightsAnalysisReady = {
   categories: CategoryTotal[];
   payees: MerchantTotal[];
   trends: ReturnType<typeof spendByCategoryPerBucket>;
-  recurring: RecurringMerchant[];
+  recurring: RecurringEntry[];
   candidates: CadenceCandidate[];
   upcoming: UpcomingBill[];
   assetDebt: AssetDebtPoint[];
@@ -125,7 +126,7 @@ export type InsightsAnalysis = InsightsAnalysisEmpty | InsightsAnalysisReady;
 
 export function analyzeInsights(
   rows: readonly AnalyticsRow[],
-  bills: readonly DeclaredBill[],
+  bills: readonly StoredBill[],
   options: InsightsAnalysisOptions = {},
 ): InsightsAnalysis {
   const filter = options.filter ?? EMPTY_INSIGHTS_FILTER;
@@ -137,8 +138,15 @@ export function analyzeInsights(
   const full = rowsRange(filtered);
   if (!full) return { filtered, empty: true };
 
+  // A trailing window ends on the last **imported** day, not the last day the filter
+  // happens to match: "3m of Rent" ended on the 25th, when rent posted, while the import ran
+  // to the 27th — so the window moved with the filter and a charge on the 26th would have
+  // fallen outside it. The start stays the filtered one, so "all" still begins at the first
+  // matching row rather than padding the chart with empty months.
+  const imported = rowsRange(rows) ?? full;
+  const span = { startKey: full.startKey, endKey: imported.endKey };
   const range =
-    options.range ?? resolveInsightsRange(window, options.today ?? full.endKey, full);
+    options.range ?? resolveInsightsRange(window, options.today ?? span.endKey, span);
   if (!range) return { filtered, empty: true };
   const windowed = rowsInRange(filtered, range);
 
@@ -183,8 +191,10 @@ export function analyzeInsights(
 
   const income = monthlyIncome(filtered, paydays, range);
   // Detection runs on the window; declared bills read their amounts from the whole
-  // history, so a commitment does not vanish from the table when the window narrows.
-  const recurring = recurringMerchants(windowed, bills, filtered);
+  // history, so a commitment does not vanish from the table when the window narrows. A
+  // filter is different from a window: it says which bills the question is about.
+  const visibleBills = declaredBillsInFilter(bills, filtered, filter);
+  const recurring = recurringMerchants(windowed, visibleBills, filtered);
   const trends = spendByCategoryPerBucket(windowed, buckets);
   const assetDebt = assetDebtSeries(filtered, buckets);
   const latest = assetDebt[assetDebt.length - 1];
@@ -244,7 +254,7 @@ export function analyzeInsights(
         ...(options.suppressPayeeIds ?? []),
       ],
     }),
-    upcoming: upcomingBills(filtered, bills, options.today ?? full.endKey),
+    upcoming: upcomingBills(filtered, visibleBills, options.today ?? span.endKey),
     assetDebt,
     contributions: accountContributions(filtered, range),
     debtRatio: latest ? debtToAssetRatio(latest.assetCents, latest.debtCents) : null,
