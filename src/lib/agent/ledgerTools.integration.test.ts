@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -11,6 +11,8 @@ import {
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
 import { reclassifyTransactions } from "@/lib/finances/mutations";
+import { removePayeeAlias } from "@/lib/finances/payees/aliases";
+import { createPayee } from "@/lib/finances/payees/mutations";
 import { dispatchAgentTool } from "./tools";
 
 const dbReachable = await databaseReachable();
@@ -312,5 +314,70 @@ describeDb("delete_transaction", () => {
       dispatchAgentTool("delete_transaction", { ids: [mine] }, intruder),
     ).rejects.toMatchObject({ code: "not_found" });
     expect(await existing([mine, theirs])).toHaveLength(2);
+  });
+});
+
+async function payeeOf(rowId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ payeeId: financeTransactions.payeeId })
+    .from(financeTransactions)
+    .where(eq(financeTransactions.id, rowId));
+  return row.payeeId;
+}
+
+async function categoryOf(rowId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ budgetCategoryId: financeTransactions.budgetCategoryId })
+    .from(financeTransactions)
+    .where(eq(financeTransactions.id, rowId));
+  return row.budgetCategoryId;
+}
+
+describeDb("alias paths that recompute payee_id", () => {
+  it("re-points rows when the Payees page removes an alias", async () => {
+    const userId = await makeUser();
+    const accountId = await makeAccount(userId);
+    const payee = await createPayee(userId, {
+      name: "Streaming",
+      aliases: ["NETFLIX", "HULU"],
+    });
+    const hulu = await insertRow(userId, {
+      accountId,
+      description: "HULU",
+      amount: "-9.99",
+    });
+    await reclassifyTransactions(userId);
+    expect(await payeeOf(hulu)).toBe(payee);
+
+    await removePayeeAlias(userId, payee, "HULU");
+
+    const now = await payeeOf(hulu);
+    expect(now).not.toBeNull();
+    expect(now).not.toBe(payee);
+  });
+
+  it("files the rows a legacy matcher newly covers", async () => {
+    const userId = await makeUser();
+    const accountId = await makeAccount(userId);
+    const row = await insertRow(userId, {
+      accountId,
+      description: "SPOTIFY",
+      amount: "-11.99",
+    });
+    await dispatchAgentTool(
+      "upsert_subscription",
+      { name: "Music", matchers: ["Spotify"], cadenceMonths: 1 },
+      userId,
+    );
+    const [bill] = await db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          eq(financeBudgetCategories.name, "Music"),
+        ),
+      );
+    expect(await categoryOf(row)).toBe(bill.id);
   });
 });

@@ -8,7 +8,7 @@
 
 import { reclassifyTransactions } from "../mutations";
 import { applyPayeeAutoCategories } from "./claims";
-import { addAlias } from "./mutations";
+import { addAlias, removeAlias } from "./mutations";
 
 export async function addPayeeAlias(
   userId: string,
@@ -20,4 +20,19 @@ export async function addPayeeAlias(
   // Newly recognized rows may now be eligible for this payee's claim or default. Existing
   // Categories still win because this path fills only uncategorized rows.
   await applyPayeeAutoCategories(userId, { payeeIds: [payeeId] });
+}
+
+/**
+ * Remove an alias and recompute who its rows belong to.
+ *
+ * The rows it covered lose this payee. The reclassify mints a payee of their own for the
+ * merchant, as it would for a merchant seen for the first time.
+ */
+export async function removePayeeAlias(
+  userId: string,
+  payeeId: string,
+  alias: string,
+): Promise<void> {
+  await removeAlias(userId, payeeId, alias);
+  await reclassifyTransactions(userId);
 }
