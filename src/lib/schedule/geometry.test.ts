@@ -18,6 +18,7 @@ import {
   startOfWeek,
   toDateKey,
   weekDays,
+  zonedDateKey,
   weekdayOfDateKey,
 } from "./geometry";
 
@@ -208,5 +209,14 @@ describe("isRealCalendarDate / dateKeyFromParts", () => {
     const key = dateKeyFromParts(2026, 8, 1);
     expect(key).toBe("2026-08-01");
     expect(toDateKey(fromDateKey(key!))).toBe("2026-08-01");
+  });
+});
+
+describe("zonedDateKey", () => {
+  it("reads the day in the named zone, not the process zone", () => {
+    // 9 PM Eastern on Sep 30 is already Oct 1 in UTC.
+    const instant = new Date("2026-10-01T01:00:00Z");
+    expect(zonedDateKey(instant, "America/New_York")).toBe("2026-09-30");
+    expect(zonedDateKey(instant, "UTC")).toBe("2026-10-01");
   });
 });
