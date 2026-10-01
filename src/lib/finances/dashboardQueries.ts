@@ -466,7 +466,7 @@ function reviewCandidates(
   dismissed: ReadonlySet<string>,
 ): RecurringMerchant[] {
   const billShaped = recurringMerchants(rows, bills).filter(
-    (entry) =>
+    (entry): entry is RecurringMerchant =>
       !entry.declared &&
       (!entry.payeeId || !index.has(entry.payeeId)) &&
       (!entry.payeeId || !dismissed.has(entry.payeeId)),

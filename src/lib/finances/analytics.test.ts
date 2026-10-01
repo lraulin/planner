@@ -682,6 +682,8 @@ const geicoBill = {
   expectedCents: 141260,
   anchorDate: null,
   scheduled: true,
+  dueDay: null,
+  leadDays: 0,
 };
 
 describe("recurringMerchants with declared bills", () => {
@@ -986,10 +988,60 @@ describe("upcomingBills", () => {
     expect(upcomingBills([old], [geicoBill], "2026-08-14")[0].dueOn).toBe("2026-09-03");
   });
 
-  it("uses the declared anchor when no charge is on file", () => {
+  it("uses the declared anchor when no charge is on file, without calling it a charge", () => {
     expect(
       upcomingBills([], [{ ...geicoBill, anchorDate: "2026-03-03" }], "2026-08-14")[0],
-    ).toMatchObject({ dueOn: "2026-09-03", lastChargeOn: "2026-03-03" });
+    ).toMatchObject({ dueOn: "2026-09-03", lastChargeOn: null });
+  });
+
+  it("forecasts a future anchor for its own date, not one cadence past it", () => {
+    // Mint Mobile, Oct 2026: quarterly, next charge typed as 10/21. The old walk read the
+    // anchor as the last charge and forecast 2027-01-21.
+    const mint = {
+      ...geicoBill,
+      name: "Mint",
+      payeeIds: ["MINT MOBILE"],
+      cadenceMonths: 3,
+      anchorDate: "2026-10-21",
+    };
+    const july = row({
+      description: "MINT MOBILE",
+      transactionDate: "2026-07-20",
+      amountCents: -10062,
+    });
+    for (const rows of [[], [july]]) {
+      expect(upcomingBills(rows, [mint], "2026-10-01")[0]).toMatchObject({
+        dueOn: "2026-10-21",
+        daysAway: 20,
+      });
+    }
+  });
+
+  it("follows a declared due day the way the Bills page does", () => {
+    const rent = {
+      ...geicoBill,
+      name: "Rent",
+      payeeIds: ["RENT"],
+      cadenceMonths: 1,
+      dueDay: 1,
+      leadDays: 0,
+    };
+    // Autopay landed late on Sep 3; the bill is still due on the 1st, not the 3rd.
+    const september = row({
+      description: "RENT",
+      transactionDate: "2026-09-03",
+      amountCents: -210000,
+    });
+    expect(upcomingBills([september], [rent], "2026-09-15")[0].dueOn).toBe(
+      "2026-10-01",
+    );
+  });
+
+  it("names the bill it forecasts", () => {
+    expect(
+      upcomingBills([charge], [{ ...geicoBill, id: "geico-id" }], "2026-08-14")[0]
+        .billId,
+    ).toBe("geico-id");
   });
 
   it("forecasts nothing it has no anchor for", () => {
@@ -1006,6 +1058,8 @@ describe("unscheduled bills", () => {
     expectedCents: 50_000,
     anchorDate: null,
     scheduled: false,
+    dueDay: null,
+    leadDays: 0,
   };
   /** Two deliveries in one cold winter — the case that double-counts if levelled. */
   const deliveries = [

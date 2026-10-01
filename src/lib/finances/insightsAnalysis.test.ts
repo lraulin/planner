@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AnalyticsRow } from "./analytics";
 import { analyzeInsights } from "./insightsAnalysis";
-import type { DeclaredBill } from "./recurringBills";
+import type { StoredBill } from "./recurringBills";
 
 function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
   const description = overrides.description ?? "WM SUPERCENTER #1981";
@@ -47,13 +47,15 @@ function groceryHistory(extras: AnalyticsRow[] = []): AnalyticsRow[] {
   return [...rows, ...extras];
 }
 
-const geicoBill: DeclaredBill = {
+const geicoBill: StoredBill = {
   name: "Geico",
   payeeIds: ["GEICO *AUTO"],
   cadenceMonths: 12,
   expectedCents: 282500,
   anchorDate: "2025-01-15",
   scheduled: true,
+  dueDay: null,
+  leadDays: 0,
 };
 
 describe("analyzeInsights", () => {
@@ -97,6 +99,131 @@ describe("analyzeInsights", () => {
     expect(analysis.windowed.some((entry) => entry.description === "GEICO *AUTO")).toBe(
       false,
     );
+  });
+
+  describe("declared bills under a filter (Oct 2026 list_recurring_bills report)", () => {
+    const rentBill: StoredBill = {
+      name: "Rent",
+      payeeIds: ["RENT"],
+      cadenceMonths: 1,
+      expectedCents: 210000,
+      anchorDate: null,
+      scheduled: true,
+      dueDay: null,
+      leadDays: 0,
+    };
+    /** Never charged: the stored anchor is the *next* charge, typed into the Bills page. */
+    const mintBill: StoredBill = {
+      ...rentBill,
+      name: "Phone (Mint Mobile)",
+      payeeIds: ["MINT MOBILE"],
+      cadenceMonths: 3,
+      expectedCents: 16594,
+      anchorDate: "2026-04-21",
+    };
+    const propaneBill: StoredBill = {
+      ...rentBill,
+      name: "Propane (Taylor Gas)",
+      payeeIds: ["TAYLOR GAS"],
+      cadenceMonths: 12,
+      expectedCents: 35758,
+      scheduled: false,
+    };
+    // Rent posts on the 10th, a year of it; groceries run to the 15th of March.
+    const rents = Array.from({ length: 12 }, (_, index) => {
+      const month = index + 4; // 2025-04 … 2026-03
+      const year = month <= 12 ? 2025 : 2026;
+      return row({
+        description: "RENT",
+        transactionDate: `${monthKey(year, month <= 12 ? month : month - 12)}-10`,
+        amountCents: -210000,
+        derivedCategory: "Rent",
+      });
+    });
+    const premium = row({
+      description: "GEICO *AUTO",
+      transactionDate: "2025-01-15",
+      amountCents: -282500,
+      derivedCategory: "Car Insurance (Geico)",
+    });
+    const rows = groceryHistory([...rents, premium]);
+    const bills = [rentBill, { ...geicoBill, name: "Car Insurance (Geico)" }, mintBill];
+
+    function analyze(categories: string[], extraBills: StoredBill[] = []) {
+      const analysis = analyzeInsights(rows, [...bills, ...extraBills], {
+        filter: { accountIds: [], categories, merchants: [] },
+        window: "3m",
+        today: "2026-03-31",
+      });
+      if (analysis.empty) throw new Error("fixture should not be empty");
+      return analysis;
+    }
+
+    it("lists only the bills the category filter names, not every bill zeroed out", () => {
+      const filtered = analyze(["Rent"]);
+      expect(filtered.recurring.map((entry) => entry.merchant)).toEqual(["Rent"]);
+      expect(filtered.upcoming.map((entry) => entry.merchant)).toEqual(["Rent"]);
+
+      const all = analyze([]);
+      expect(all.recurring.map((entry) => entry.merchant).sort()).toEqual([
+        "Car Insurance (Geico)",
+        "Phone (Mint Mobile)",
+        "Rent",
+      ]);
+    });
+
+    it("keeps a named bill with no charge on file yet, on a category-only filter", () => {
+      const filtered = analyze(["Rent", "Propane (Taylor Gas)"], [propaneBill]);
+      expect(filtered.recurring.map((entry) => entry.merchant).sort()).toEqual([
+        "Propane (Taylor Gas)",
+        "Rent",
+      ]);
+
+      const byAccount = analyzeInsights(rows, [...bills, propaneBill], {
+        filter: { accountIds: ["checking"], categories: [], merchants: [] },
+        window: "3m",
+        today: "2026-03-31",
+      });
+      if (byAccount.empty) throw new Error("fixture should not be empty");
+      // An account filter can only be met by a charge, and propane has none.
+      expect(byAccount.recurring.map((entry) => entry.merchant)).not.toContain(
+        "Propane (Taylor Gas)",
+      );
+    });
+
+    it("ends the window on the last imported day, whatever the filter matches", () => {
+      expect(analyze([]).range).toEqual({
+        startKey: "2026-01-01",
+        endKey: "2026-03-15",
+      });
+      expect(analyze(["Rent"]).range).toEqual({
+        startKey: "2026-01-01",
+        endKey: "2026-03-15",
+      });
+    });
+
+    it("reports no last charge rather than the stored next-charge anchor", () => {
+      const mint = analyze([]).recurring.find(
+        (entry) => entry.merchant === "Phone (Mint Mobile)",
+      );
+      expect(mint).toMatchObject({ chargeCount: 0, lastChargeOn: null });
+      const propane = analyze([], [propaneBill]).recurring.find(
+        (entry) => entry.merchant === "Propane (Taylor Gas)",
+      );
+      expect(propane).toMatchObject({ lastChargeOn: null });
+    });
+
+    it("counts charges inside the window for declared bills, as for detected ones", () => {
+      const all = analyze([]);
+      const rent = all.recurring.find((entry) => entry.merchant === "Rent");
+      // Jan, Feb and Mar of a year of rent — not all twelve.
+      expect(rent).toMatchObject({ chargeCount: 3, lastChargeOn: "2026-03-10" });
+      const geico = all.recurring.find(
+        (entry) => entry.merchant === "Car Insurance (Geico)",
+      );
+      // Its one premium is outside the window, but it is still the last charge on file.
+      expect(geico).toMatchObject({ chargeCount: 0, lastChargeOn: "2025-01-15" });
+    });
   });
 
   it("builds more buckets on the pay-period axis than on months", () => {

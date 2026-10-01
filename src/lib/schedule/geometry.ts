@@ -103,6 +103,23 @@ export function localDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Calendar day of an **instant** in a named IANA zone.
+ *
+ * For server code with no reader to ask (agent tools): `localDateKey` there reads the process
+ * zone, which is UTC on Vercel, so "today" rolls over at 8 PM Eastern.
+ */
+export function zonedDateKey(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 /** Normalize any Date to the stored encoding of its calendar day (`fromDateKey(toDateKey)`). */
 export function asCalendarDay(date: Date): Date {
   return fromDateKey(toDateKey(date));
