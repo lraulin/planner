@@ -63,6 +63,7 @@ const REQUIRED = [
   "find_commitment_candidates",
   "save_subscription",
   "delete_subscription",
+  "delete_transaction",
   "set_commitment_payees",
   "list_jobs",
   "get_job",

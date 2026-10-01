@@ -1037,6 +1037,24 @@ export const inputSchemas = {
   delete_subscription: z.strictObject({
     id: id.describe("Bill id from search_commitments or list_recurring_bills."),
   }),
+  delete_transaction: z.strictObject({
+    ids: z
+      .array(id)
+      .min(1)
+      .max(25)
+      .describe(
+        "Transaction ids from search_transactions. Top-level rows only; a split parent takes its children with it.",
+      ),
+    reason: z
+      .string()
+      .max(200)
+      .optional()
+      .describe("Why the rows are being deleted, kept in the audit record."),
+    dryRun: z
+      .boolean()
+      .default(false)
+      .describe("Validate and return the receipt without deleting anything."),
+  }),
   set_commitment_payees: z.strictObject({
     id,
     payeeIds: z.array(id),
@@ -1508,6 +1526,43 @@ export const outputSchemas = {
     deleted: z.literal(true),
     id,
     name: z.string(),
+  }),
+  delete_transaction: z.strictObject({
+    deleted: z
+      .boolean()
+      .describe("False on a dry run: the receipt is what would have been deleted."),
+    transactions: z.array(
+      z.strictObject({
+        id,
+        accountName: z.string(),
+        transactionDate: dateKey,
+        description: z.string(),
+        amountCents: cents,
+        pending: z.boolean(),
+        source: z
+          .string()
+          .nullable()
+          .describe("Feed that wrote the row, e.g. api:simplefin or scrape:chase."),
+        sourceLabel: z.string(),
+        category: z.string().nullable(),
+        splitChildren: z
+          .number()
+          .int()
+          .min(0)
+          .describe("Split lines deleted along with this row."),
+      }),
+    ),
+    readyToAssignDeltaCents: cents
+      .nullable()
+      .describe(
+        "Change to this month's Ready to Assign; null when no budget is set up.",
+      ),
+    auditEventId: id
+      .nullable()
+      .describe(
+        "Activity record of the delete, restorable in Planner; null on a dry run.",
+      ),
+    warnings: z.array(z.string()),
   }),
   set_commitment_payees: z.strictObject({ commitment: commitmentSummarySchema }),
   list_jobs: z.strictObject({

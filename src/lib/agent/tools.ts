@@ -76,6 +76,7 @@ import {
   updateLifeEventTool,
   updateResidenceTool,
 } from "./historyTools";
+import { deleteTransactionTool } from "./ledgerTools";
 import {
   createHouseTool,
   deleteHouseTool,
@@ -730,6 +731,25 @@ const definitions: AgentToolDefinition[] = [
     effects: destructiveWrite,
     exposure: "domain",
     handler: deleteSubscriptionTool,
+  }),
+  defineTool("delete_transaction", {
+    domain: "finances",
+    summary: "Permanently delete transactions, with an audited, restorable receipt.",
+    useWhen:
+      "Use after the user explicitly asks to delete specific rows: a stale duplicate, a test row, or a card-alert hold that will never post. Run with dryRun first to show what goes.",
+    avoidWhen:
+      "Do not use to recategorize or hide a real charge, or to delete one line of a split; a row whose feed still writes the account can come back on its next import.",
+    returns:
+      "Each deleted row with account, date, amount, source and category, the Ready to Assign change, the audit event id, and re-import warnings.",
+    effects: destructiveWrite,
+    exposure: "domain",
+    examples: [
+      {
+        title: "Preview deleting a duplicate hold",
+        arguments: { ids: ["00000000-0000-4000-8000-000000000001"], dryRun: true },
+      },
+    ],
+    handler: deleteTransactionTool,
   }),
   defineTool("set_commitment_payees", {
     domain: "finances",

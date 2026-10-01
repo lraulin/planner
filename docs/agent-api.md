@@ -800,6 +800,21 @@ Permanently delete a bill that was created by mistake.
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
 
+### `delete_transaction`
+
+Permanently delete transactions, with an audited, restorable receipt.
+
+- Use when: Use after the user explicitly asks to delete specific rows: a stale duplicate, a test row, or a card-alert hold that will never post. Run with dryRun first to show what goes.
+- Avoid when: Do not use to recategorize or hide a real charge, or to delete one line of a split; a row whose feed still writes the account can come back on its next import.
+- Returns: Each deleted row with account, date, amount, source and category, the Ready to Assign change, the audit event id, and re-import warnings.
+- Effects: write; destructive=true; retry=unsafe; confirmation=explicit
+- Exposure: domain
+- Arguments: `{ ids*, reason?, dryRun=false }`
+- Output: `{ deleted*, transactions*, readyToAssignDeltaCents*, auditEventId*, warnings* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
 ### `set_commitment_payees`
 
 Replace a commitment's complete stable-payee set.
