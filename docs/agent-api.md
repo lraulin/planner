@@ -800,6 +800,36 @@ Permanently delete a bill that was created by mistake.
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
 
+### `delete_transaction`
+
+Permanently delete transactions, with an audited, restorable receipt.
+
+- Use when: Use after the user explicitly asks to delete specific rows: a stale duplicate, a test row, or a card-alert hold that will never post. Run with dryRun first to show what goes.
+- Avoid when: Do not use to recategorize or hide a real charge, or to delete one line of a split; a row whose feed still writes the account can come back on its next import.
+- Returns: Each deleted row with account, date, amount, source and category, the Ready to Assign change, the audit event id, and re-import warnings.
+- Effects: write; destructive=true; retry=unsafe; confirmation=explicit
+- Exposure: domain
+- Arguments: `{ ids*, reason?, dryRun=false }`
+- Output: `{ deleted*, transactions*, readyToAssignDeltaCents*, auditEventId*, warnings* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `update_payee_aliases`
+
+Add, move, or remove the merchant spellings a payee answers to.
+
+- Use when: Use when one merchant shows up under two spellings (an alert says YouTube, the bank says PP*GOOGLE YOUTUBE SUBSCRI) so both resolve to the same payee.
+- Avoid when: Do not use to set a category; a payee's envelope claim or default files its uncategorized rows on its own. Do not use to merge two claimed payees.
+- Returns: The payee's aliases after the edit, what was added, moved, removed or already there, how many rows changed payee or were filed, and a sample.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ payeeId*, add=[], addFromTransactionIds=[], remove=[], onConflict="refuse", dryRun=false }`
+- Output: `{ payee*, added*, removed*, unchanged*, relinkedTransactions*, categorizedTransactions*, sample*, dryRun* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
 ### `set_commitment_payees`
 
 Replace a commitment's complete stable-payee set.

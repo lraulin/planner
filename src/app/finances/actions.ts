@@ -6,12 +6,11 @@ import {
   deletePayee,
   mergePayees,
   replaceCommitmentPayees,
-  removeAlias,
   setPayeeNotACommitment,
   setPayeeAutoCategory,
   updatePayeeDetails,
 } from "@/lib/finances/payees/mutations";
-import { addPayeeAlias } from "@/lib/finances/payees/aliases";
+import { addPayeeAlias, removePayeeAlias } from "@/lib/finances/payees/aliases";
 import { applyPayeeAutoCategories } from "@/lib/finances/payees/claims";
 import {
   listPayees,
@@ -534,7 +533,7 @@ export async function removePayeeAliasAction(
   payeeId: string,
   alias: string,
 ): Promise<ActionResult> {
-  return run((userId) => removeAlias(userId, payeeId, alias));
+  return run((userId) => removePayeeAlias(userId, payeeId, alias));
 }
 
 export async function updatePayeeDetailsAction(

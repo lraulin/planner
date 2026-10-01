@@ -12,7 +12,7 @@ import {
   type FinanceFlowKind,
 } from "@/db/schema";
 import * as sortKey from "@/lib/tree/sortKey";
-import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
 import { isCoreBudgetKind, resolvedOffBudget } from "./accountKind";
 import { rebaseAccountMembership } from "./budget/membership";
@@ -35,6 +35,8 @@ import {
 import { applyClaimedPayees } from "./payees/claims";
 import { aliasFor, payeeIndex } from "./payees/resolve";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
+import type { FinanceMoneyCheckpoint } from "./audit/types";
+import { reclassifyInsideTransaction } from "./bankSnapshotApply";
 import { writeFinanceAuditEvent } from "./audit/writes";
 import { monthKeyOf } from "./budget/envelope";
 
@@ -238,54 +240,171 @@ export async function deleteTransaction(
   await deleteTransactions(userId, [transactionId]);
 }
 
-/** Delete the user's own rows in `ids`. Other users' ids are ignored. */
+/** A row `deleteTransactions` removed, with the split children its delete took by cascade. */
+export type DeletedTransaction = TransactionAuditRow & {
+  splitChildren: TransactionAuditRow[];
+};
+
+export type DeleteTransactionsResult = {
+  deleted: DeletedTransaction[];
+  /**
+   * Ready to Assign after minus before for the current month; null when no budget is set up.
+   * A dry run reports what the delete would have done.
+   */
+  readyToAssignDeltaCents: number | null;
+  auditEventId: string | null;
+};
+
+export type DeleteTransactionsOptions = {
+  /** Who asked, for the audit record. The register's own delete is "Register". */
+  auditOrigin?: string;
+  /** Why, appended to the audit summary. */
+  reason?: string;
+  /**
+   * Fail the whole call when an id is missing, foreign, or a split child, instead of
+   * ignoring it. The agent tool sets this: a caller naming rows to delete should learn that
+   * one of them was not deleted rather than read a smaller receipt.
+   */
+  requireAll?: boolean;
+  /** Do everything, then roll back. */
+  dryRun?: boolean;
+};
+
+/** An id `deleteTransactions` was asked to remove and, under `requireAll`, would not. */
+export class TransactionDeleteRefused extends Error {
+  readonly reason: "not_found" | "split_child";
+  readonly ids: string[];
+
+  constructor(reason: "not_found" | "split_child", ids: string[]) {
+    super(
+      reason === "not_found"
+        ? `Transaction not found: ${ids.join(", ")}. Nothing was deleted.`
+        : `Transaction ${ids.join(", ")} is part of a split. Delete its parent, or edit the split in Planner. Nothing was deleted.`,
+    );
+    this.name = "TransactionDeleteRefused";
+    this.reason = reason;
+    this.ids = ids;
+  }
+}
+
+class RollbackDryRun extends Error {
+  constructor(readonly result: DeleteTransactionsResult) {
+    super("dry run");
+  }
+}
+
+function readyToAssignDelta(
+  before: FinanceMoneyCheckpoint,
+  after: FinanceMoneyCheckpoint,
+  month: string,
+): number | null {
+  const was = before.budgets.find((budget) => budget.month === month);
+  const now = after.budgets.find((budget) => budget.month === month);
+  if (!was || !now) return null;
+  return now.readyToAssignCents - was.readyToAssignCents;
+}
+
+/**
+ * Delete the user's own rows in `ids`. Other users' ids are ignored unless `requireAll`.
+ *
+ * The surviving rows are reclassified in the same transaction: a deleted transfer leg
+ * otherwise leaves its partner holding a `transfer_group_id` nobody shares, counted as an
+ * internal transfer, until some later import happens to run the classifier.
+ */
 export async function deleteTransactions(
   userId: string,
   transactionIds: readonly string[],
-): Promise<void> {
+  options: DeleteTransactionsOptions = {},
+): Promise<DeleteTransactionsResult> {
   const unique = [...new Set(transactionIds)];
-  if (unique.length === 0) return;
-  await db.transaction(async (tx) => {
-    const rows = await tx
-      .select(TRANSACTION_AUDIT_COLUMNS)
-      .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          or(
-            inArray(financeTransactions.id, unique),
-            inArray(financeTransactions.parentId, unique),
+  const empty: DeleteTransactionsResult = {
+    deleted: [],
+    readyToAssignDeltaCents: null,
+    auditEventId: null,
+  };
+  if (unique.length === 0) return empty;
+  try {
+    return await db.transaction(async (tx) => {
+      const rows = await tx
+        .select(TRANSACTION_AUDIT_COLUMNS)
+        .from(financeTransactions)
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            or(
+              inArray(financeTransactions.id, unique),
+              inArray(financeTransactions.parentId, unique),
+            ),
           ),
+        );
+      const selected = rows.filter((row) => unique.includes(row.id));
+      if (options.requireAll) {
+        const found = new Set(selected.map((row) => row.id));
+        const missing = unique.filter((rowId) => !found.has(rowId));
+        if (missing.length > 0)
+          throw new TransactionDeleteRefused("not_found", missing);
+        const children = selected.filter((row) => row.parentId !== null);
+        if (children.length > 0) {
+          throw new TransactionDeleteRefused(
+            "split_child",
+            children.map((row) => row.id),
+          );
+        }
+      }
+      if (selected.length === 0) return empty;
+      const currentMonth = monthKeyOf(localDateKey(new Date()));
+      const auditScope = transactionAuditScope(rows);
+      const scope = {
+        ...auditScope,
+        budgetMonths: [...new Set([...auditScope.budgetMonths, currentMonth])],
+      };
+      const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+      await tx
+        .delete(financeTransactions)
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            inArray(financeTransactions.id, unique),
+          ),
+        );
+      await reclassifyInsideTransaction(tx, userId);
+      const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
+      const reason = options.reason?.trim();
+      const audit = await writeFinanceAuditEvent(tx, userId, {
+        kind: "transaction_delete",
+        origin: options.auditOrigin ?? "Register",
+        summary:
+          `Deleted ${selected.length} transaction${selected.length === 1 ? "" : "s"}.` +
+          (reason ? ` Reason: ${reason}` : ""),
+        scope,
+        beforeCheckpoint,
+        afterCheckpoint,
+        changes: rows.map((row) => ({
+          entityType: row.parentId ? "transaction_split_child" : "transaction",
+          entityIdentity: row.id,
+          before: transactionAuditFields(row),
+          after: null,
+        })),
+      });
+      const result: DeleteTransactionsResult = {
+        deleted: selected.map((row) => ({
+          ...row,
+          splitChildren: rows.filter((child) => child.parentId === row.id),
+        })),
+        readyToAssignDeltaCents: readyToAssignDelta(
+          beforeCheckpoint,
+          afterCheckpoint,
+          currentMonth,
         ),
-      );
-    const selected = rows.filter((row) => unique.includes(row.id));
-    if (selected.length === 0) return;
-    const scope = transactionAuditScope(rows);
-    const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
-    await tx
-      .delete(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          inArray(financeTransactions.id, unique),
-        ),
-      );
-    const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
-    await writeFinanceAuditEvent(tx, userId, {
-      kind: "transaction_delete",
-      origin: "Register",
-      summary: `Deleted ${selected.length} transaction${selected.length === 1 ? "" : "s"}.`,
-      scope,
-      beforeCheckpoint,
-      afterCheckpoint,
-      changes: rows.map((row) => ({
-        entityType: row.parentId ? "transaction_split_child" : "transaction",
-        entityIdentity: row.id,
-        before: transactionAuditFields(row),
-        after: null,
-      })),
+        auditEventId: audit.eventId,
+      };
+      if (options.dryRun) throw new RollbackDryRun({ ...result, auditEventId: null });
+      return result;
     });
-  });
+  } catch (error) {
+    if (error instanceof RollbackDryRun) return error.result;
+    throw error;
+  }
 }
 
 async function requirePaymentResolution(
