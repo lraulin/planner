@@ -17,7 +17,7 @@ import { buildCsp, createNonce } from "@/lib/security/csp";
  * - `/login`
  * - `/signup` (invite redeem; the page is public, creating an account still needs a token)
  * - `/api/auth/*` (Better Auth)
- * - `/api/agent/*` and `/api/mcp` (Bearer / OAuth checked in the route handler)
+ * - `/api/agent/*`, `/api/finances/alerts` and `/api/mcp` (Bearer / OAuth checked in the route handler)
  * - `/.well-known/*` and `/api/oauth/*` (MCP OAuth discovery and token/register)
  */
 export function proxy(request: NextRequest) {
@@ -54,6 +54,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/signup") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/agent") ||
+    pathname === "/api/finances/alerts" ||
     pathname.startsWith("/api/mcp") ||
     pathname.startsWith("/api/oauth") ||
     pathname.startsWith("/.well-known")

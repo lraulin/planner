@@ -317,7 +317,7 @@ export async function reclassifyInsideTransaction(
   }
 }
 
-async function autoFileNewRows(
+export async function autoFileNewRows(
   executor: FinanceExecutor,
   userId: string,
   transactionIds: readonly string[],

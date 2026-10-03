@@ -30,6 +30,11 @@ export function selectWorkingPending<T extends WorkingPendingRow>(
       .filter((account) => account.historySource === "bank_page")
       .map((account) => account.id),
   );
+  // An alert-email hold counts on a feed account beside the feed's own: it is what stands in
+  // for a charge SimpleFIN has not delivered yet, and retirement (`retireAlertHolds`) is what
+  // stops it counting twice once SimpleFIN does
+  // (`agent-os/specs/2026-10-03-1500-card-holds-from-alert-emails/` D4). On a bank-page
+  // account the page owns the holds and an alert would be a second author.
   return pending.filter((row) =>
     pageSourced.has(row.accountId)
       ? isScrapeFeed(row.source)

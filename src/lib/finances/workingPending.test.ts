@@ -39,4 +39,20 @@ describe("selectWorkingPending", () => {
       selectWorkingPending([row("capone", "scrape:capitalone", -5000)], accounts),
     ).toHaveLength(1);
   });
+
+  it("counts an alert hold beside the feed's on a feed account, and never on a page account", () => {
+    expect(
+      selectWorkingPending(
+        [
+          row("chase", "alert:capitalone", -1271),
+          row("chase", "api:simplefin", -1059),
+          row("capone", "alert:capitalone", -1271),
+        ],
+        accounts,
+      ),
+    ).toEqual([
+      row("chase", "alert:capitalone", -1271),
+      row("chase", "api:simplefin", -1059),
+    ]);
+  });
 });

@@ -1,6 +1,6 @@
 # Card holds from alert emails — Plan
 
-**Status: active** (shaped 2026-10-03; not yet implemented)
+**Status: active** (shaped 2026-10-03; code implemented 2026-10-03; production cutover, Apps Script install and live acceptance remain, so not frozen)
 
 ## Spec relationships
 
@@ -30,8 +30,8 @@
   prevents double counting.
 - **D5. Delivery by Apps Script push.** A time-triggered script (every 5 min) in Lee's Gmail
   searches `from:(capitalone@notification.capitalone.com OR no.reply.alerts@chase.com)
-newer_than:2d` for messages without a `planner/pushed` label, POSTs
-  `{messageId, from, subject, receivedAt, plainText}`, and labels on a 2xx. **Parsing happens in
+newer_than:2d` for messages not yet handled, POSTs
+  `{messageId, from, subject, receivedAt, plainText}`, and records the id as handled on a 2xx or 422. **Parsing happens in
   Planner**, so a format change is a deploy, not a script edit. The raw text is kept as audit
   evidence.
 - **D6. Routing by the card's last four digits.** An unknown last-four or unparseable body
@@ -89,6 +89,13 @@ alert exists.
 
 ## Changes from original plan
 
-| What         | Why |
-| ------------ | --- |
-| _(none yet)_ |     |
+| What                                                                                                                                        | Why                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D5 bookkeeping: handled message ids kept in a script property, not a `planner/pushed` label                                                 | Capital One threads several alerts together; a thread label hides every alert after the first. A re-push is a no-op, so losing the property costs only a repeat.     |
+| D5 script searches only Capital One charge alerts for now                                                                                   | Chase has no per-purchase alert yet; the Chase line is a comment in the script.                                                                                      |
+| `ALERT_FEEDS` lives in `alertEmail.ts`, not `bankSnapshot.ts`                                                                               | The alert parser owns the feed names; `bankSnapshot.ts` is the page's capture format.                                                                                |
+| Retirement is two passes (`alertHolds.ts`): `retireRowsOntoOtherSources` for exact pairs, then `resolveLostHold` for tips and the 7.5% band | `pairRows` needs an exact amount, so a tipped charge never paired; D2's acceptance of tips needs the lost-hold rule. A row the first pass used is not offered again. |
+| An alert on an account whose history is not SimpleFIN is rejected (422)                                                                     | On a bank-page or files account it would be a second author of the same money.                                                                                       |
+| Rejected alerts write an `alert_email` audit event; the script marks 422s handled                                                           | Otherwise a refused alert would re-audit every five minutes.                                                                                                         |
+| `--to simplefin` from `bank_page` also rewinds `bank_connections.synced_through` to `history_source_since`                                  | The sync cursor is connection-wide and had moved past the days SimpleFIN skipped; without the rewind nothing backfills them. Receipt reports `resyncFrom`.           |
+| Task 9 (roadmap, memory) not done                                                                                                           | Waits on Lee installing the script and applying the cutover.                                                                                                         |

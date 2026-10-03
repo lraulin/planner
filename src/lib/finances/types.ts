@@ -12,7 +12,9 @@ export type FinanceFeed =
   | "csv:coinbase"
   | "api:simplefin"
   | "scrape:capitalone"
-  | "scrape:chase";
+  | "scrape:chase"
+  | "alert:capitalone"
+  | "alert:chase";
 
 export const FINANCE_FEEDS: readonly FinanceFeed[] = [
   "csv:chase-credit",
@@ -22,6 +24,8 @@ export const FINANCE_FEEDS: readonly FinanceFeed[] = [
   "api:simplefin",
   "scrape:capitalone",
   "scrape:chase",
+  "alert:capitalone",
+  "alert:chase",
 ] as const;
 
 /** Human label for a feed, for import summaries and warnings. */
@@ -33,6 +37,8 @@ export const FEED_LABELS: Record<FinanceFeed, string> = {
   "api:simplefin": "Bank sync",
   "scrape:capitalone": "Capital One pending",
   "scrape:chase": "Chase pending",
+  "alert:capitalone": "Capital One alert",
+  "alert:chase": "Chase alert",
 };
 
 export function isFinanceFeed(value: string): value is FinanceFeed {

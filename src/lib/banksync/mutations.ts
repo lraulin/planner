@@ -25,6 +25,8 @@ import type { FinanceAuditChange } from "@/lib/finances/audit/types";
 import { recordSourceState } from "@/lib/finances/sourceStateWrite";
 import { writeFinanceAuditEvent } from "@/lib/finances/audit/writes";
 import { monthKeyOf } from "@/lib/finances/budget/envelope";
+import { retireAlertHolds } from "@/lib/finances/alertHolds";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { retireCoveredScrapeRowsForAccounts } from "@/lib/finances/feedHandoverWrite";
 import type { BankInsert, BankUpdate, SyncCarry } from "./syncPlan";
 
@@ -613,6 +615,22 @@ export async function applySync(
     const handover = await retireCoveredScrapeRowsForAccounts(tx, userId, accountIds);
     changes.push(...handover.changes);
 
+    // Alert-email holds yield to the same rows, or are flagged after a week with no
+    // successor (`agent-os/specs/2026-10-03-1500-card-holds-from-alert-emails/` D2, D3).
+    const alertWarnings: string[] = [];
+    let alertRetired = 0;
+    for (const accountId of new Set(accountIds)) {
+      const alerts = await retireAlertHolds(
+        tx,
+        userId,
+        accountId,
+        localDateKey(new Date()),
+      );
+      alertRetired += alerts.retired;
+      alertWarnings.push(...alerts.warnings);
+      changes.push(...alerts.changes);
+    }
+
     const advanced = await tx
       .update(bankConnections)
       .set({
@@ -641,10 +659,14 @@ export async function applySync(
         `SimpleFIN rows: ${inserted} inserted, ${updated} updated, ${deleted} deleted` +
         (handover.retired > 0
           ? `; retired ${handover.retired} browser row${handover.retired === 1 ? "" : "s"} the feed now covers, carrying ${handover.carried} forward.`
-          : "."),
+          : ".") +
+        (alertRetired > 0
+          ? ` Retired ${alertRetired} alert hold${alertRetired === 1 ? "" : "s"} the feed now covers.`
+          : ""),
       scope,
       warnings: [
         ...handover.warnings,
+        ...alertWarnings,
         ...(input.providerErrors ?? []),
         ...(input.unmatchedAccountCount > 0
           ? [

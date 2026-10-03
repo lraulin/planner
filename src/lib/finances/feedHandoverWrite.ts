@@ -27,6 +27,8 @@ export type FeedHandoverResult = {
   retired: number;
   /** Retired rows whose envelope, notes or split moved onto the replacing feed row. */
   carried: number;
+  /** The rows the retired ones paired with: already spoken for, whatever pairs next. */
+  replacementIds: string[];
   warnings: string[];
   changes: FinanceAuditChange[];
 };
@@ -34,6 +36,7 @@ export type FeedHandoverResult = {
 const EMPTY: FeedHandoverResult = {
   retired: 0,
   carried: 0,
+  replacementIds: [],
   warnings: [],
   changes: [],
 };
@@ -259,6 +262,7 @@ export async function retireRowsOntoOtherSources(
   return {
     retired: deleted.length,
     carried,
+    replacementIds: plan.steps.map((step) => step.replacementId),
     warnings: plan.warnings,
     changes,
   };
@@ -276,6 +280,7 @@ export async function retireCoveredScrapeRowsForAccounts(
     result = {
       retired: result.retired + one.retired,
       carried: result.carried + one.carried,
+      replacementIds: [...result.replacementIds, ...one.replacementIds],
       warnings: [...result.warnings, ...one.warnings],
       changes: [...result.changes, ...one.changes],
     };

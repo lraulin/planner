@@ -40,7 +40,12 @@ function normalizeHeader(cell: string): string {
  */
 type BankCsvFeed = Exclude<
   FinanceFeed,
-  "csv:coinbase" | "api:simplefin" | "scrape:capitalone" | "scrape:chase"
+  | "csv:coinbase"
+  | "api:simplefin"
+  | "scrape:capitalone"
+  | "scrape:chase"
+  | "alert:capitalone"
+  | "alert:chase"
 >;
 
 const HEADERS: Record<BankCsvFeed, readonly string[]> = {
