@@ -14,6 +14,7 @@ function retiring(over: Partial<RetiringRow> = {}): RetiringRow {
     amountCents: -2284,
     description: "CVS",
     isParent: false,
+    pending: false,
     budgetCategoryId: null,
     notes: "",
     flowOverride: null,
@@ -30,6 +31,7 @@ function replacement(over: Partial<ReplacementRow> = {}): ReplacementRow {
     amountCents: -2284,
     description: "CVS",
     isParent: false,
+    pending: false,
     budgetCategoryId: null,
     notes: "",
     flowOverride: null,
@@ -160,5 +162,114 @@ describe("hasUserState", () => {
     expect(hasUserState({ ...empty, notes: "n" })).toBe(true);
     expect(hasUserState({ ...empty, flowOverride: "refund" })).toBe(true);
     expect(hasUserState({ ...empty, notes: "Trip" })).toBe(true);
+  });
+
+  describe("posted rows the identity pairing refused", () => {
+    it("retires an Amazon page row onto SimpleFIN's starred descriptor, carrying its envelope", () => {
+      const plan = planFeedHandover(
+        [
+          retiring({
+            id: "page",
+            description: "Amazon.com",
+            amountCents: -4233,
+            transactionDate: "2026-08-28",
+            postedDate: "2026-08-28",
+            budgetCategoryId: "household",
+          }),
+        ],
+        [
+          replacement({
+            id: "feed",
+            description: "Amazon.com*5Q27Q84C1",
+            amountCents: -4233,
+            transactionDate: "2026-08-27",
+            postedDate: "2026-08-27",
+          }),
+        ],
+      );
+      expect(plan.steps).toEqual([
+        {
+          retiredId: "page",
+          replacementId: "feed",
+          carry: { budgetCategoryId: "household" },
+          moveSplitTo: null,
+        },
+      ]);
+    });
+
+    it("still keeps ChatGPT off Claude's row: a different brand word is not a pair", () => {
+      const plan = planFeedHandover(
+        [retiring({ id: "page", description: "ChatGPT", amountCents: -2120 })],
+        [replacement({ id: "feed", description: "Claude", amountCents: -2120 })],
+      );
+      expect(plan.steps).toEqual([]);
+    });
+
+    it("never pairs a hold this way, or onto a hold", () => {
+      const pageHold = retiring({
+        id: "hold",
+        description: "Amazon.com",
+        amountCents: -4233,
+        pending: true,
+      });
+      const feed = replacement({
+        id: "feed",
+        description: "Amazon.com*5Q27Q84C1",
+        amountCents: -4233,
+      });
+      expect(planFeedHandover([pageHold], [feed]).steps).toEqual([]);
+      expect(
+        planFeedHandover(
+          [{ ...pageHold, pending: false }],
+          [{ ...feed, pending: true }],
+        ).steps,
+      ).toEqual([]);
+    });
+
+    it("pairs three identical same-day Amazon rows one-to-one and leaves a fourth alone", () => {
+      const page = ["a", "b", "c", "d"].map((id) =>
+        retiring({ id, description: "Amazon.com", amountCents: -2193 }),
+      );
+      const feed = ["x", "y", "z"].map((id) =>
+        replacement({
+          id,
+          description: `Amazon.com*5Q${id}`,
+          amountCents: -2193,
+        }),
+      );
+      const plan = planFeedHandover(page, feed);
+      expect(plan.steps).toHaveLength(3);
+      expect(new Set(plan.steps.map((step) => step.replacementId)).size).toBe(3);
+      expect(new Set(plan.steps.map((step) => step.retiredId)).size).toBe(3);
+    });
+
+    it("needs the exact amount and a near date even when the brand matches", () => {
+      expect(
+        planFeedHandover(
+          [retiring({ id: "page", description: "Amazon.com", amountCents: -4233 })],
+          [
+            replacement({
+              id: "feed",
+              description: "Amazon.com*1",
+              amountCents: -4234,
+            }),
+          ],
+        ).steps,
+      ).toEqual([]);
+      expect(
+        planFeedHandover(
+          [retiring({ id: "page", description: "Amazon.com", amountCents: -4233 })],
+          [
+            replacement({
+              id: "feed",
+              description: "Amazon.com*1",
+              amountCents: -4233,
+              transactionDate: "2026-09-20",
+              postedDate: "2026-09-20",
+            }),
+          ],
+        ).steps,
+      ).toEqual([]);
+    });
   });
 });

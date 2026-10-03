@@ -320,6 +320,9 @@ async function main(): Promise<number> {
         description: row.description,
         amountCents: numericStringToCents(row.amount) ?? 0,
         isParent: row.isParent,
+        // This replay judges the identity pairing as it stood; "pending" keeps the posted-row
+        // brand fallback (`pairWithPostedFallback`) out of it.
+        pending: true,
         budgetCategoryId: row.budgetCategoryId,
         notes: row.notes,
         flowOverride: row.flowOverride,
@@ -357,6 +360,7 @@ async function main(): Promise<number> {
         amountCents: row.amountCents,
         description: row.description,
         isParent: row.isParent,
+        pending: true,
         budgetCategoryId: row.budgetCategoryId,
         notes: "",
         flowOverride: null,

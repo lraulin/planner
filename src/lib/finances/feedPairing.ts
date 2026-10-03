@@ -53,6 +53,7 @@ export type RowPairing = {
 export function pairRows(
   browserRows: readonly PairableRow[],
   feedRows: readonly PairableRow[],
+  descriptionsMatch: (a: string, b: string) => boolean = descriptionsOverlap,
 ): RowPairing[] {
   const candidates: { browser: PairableRow; feed: PairableRow; distance: number }[] =
     [];
@@ -62,7 +63,7 @@ export function pairRows(
       if (browser.amountCents !== feed.amountCents) continue;
       const distance = dateDistance(browser, feed);
       if (distance > DATE_TOLERANCE_DAYS) continue;
-      if (!descriptionsOverlap(browser.description, feed.description)) continue;
+      if (!descriptionsMatch(browser.description, feed.description)) continue;
       candidates.push({ browser, feed, distance });
     }
   }

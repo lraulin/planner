@@ -25,7 +25,8 @@
  */
 
 import type { FinanceFlowKind } from "@/db/schema";
-import { pairRows, type PairableRow } from "./feedPairing";
+import { sharesBrandWord } from "./liveFeedMatch";
+import { pairRows, type PairableRow, type RowPairing } from "./feedPairing";
 
 /** The user-owned fields that survive a handover. Everything else is the bank's. */
 export type CarriedState = {
@@ -42,6 +43,7 @@ export type RetiringRow = CarriedState & {
   description: string;
   /** A split parent, whose children have to move before it can be deleted. */
   isParent: boolean;
+  pending: boolean;
 };
 
 export type ReplacementRow = CarriedState & {
@@ -51,6 +53,7 @@ export type ReplacementRow = CarriedState & {
   amountCents: number;
   description: string;
   isParent: boolean;
+  pending: boolean;
 };
 
 export type FeedHandoverStep = {
@@ -110,6 +113,39 @@ function toPairable(row: RetiringRow | ReplacementRow): PairableRow {
 }
 
 /**
+ * The identity pairing, then a second pass for posted rows the first one refused.
+ *
+ * `pairRows` needs overlapping descriptions, and for Amazon that is never true: the page says
+ * `Amazon.com` where SimpleFIN says `Amazon.com*5Q27Q84C1` or `AMAZON MKTPL*5Q7PJ04X0`, and
+ * `descriptionsOverlap` rightly will not equate a bare brand with a `*` handoff. Left alone,
+ * every posted Amazon charge on a card that changed source stayed in the register twice, the
+ * page copy carrying the envelope (Lee's Chase •••9910, August 2026;
+ * `agent-os/specs/2026-10-03-1500-card-holds-from-alert-emails/`).
+ *
+ * The second pass takes only **posted** rows on both sides, an exact amount, a date within
+ * tolerance — all `pairRows` already demands — and in place of overlapping descriptions only
+ * `sharesBrandWord`. That keeps ChatGPT's −$21.20 off Claude's row (different brand word)
+ * while pairing the Amazon rows. Holds are excluded: a pending row's amount can still move,
+ * and its own successor rule is `resolveLostHold`.
+ */
+function pairWithPostedFallback(
+  retiring: readonly RetiringRow[],
+  replacements: readonly ReplacementRow[],
+): RowPairing[] {
+  const strict = pairRows(retiring.map(toPairable), replacements.map(toPairable));
+  const usedRetiring = new Set(strict.map((pair) => pair.browserId));
+  const usedReplacement = new Set(strict.map((pair) => pair.feedId));
+  const loose = pairRows(
+    retiring.filter((row) => !row.pending && !usedRetiring.has(row.id)).map(toPairable),
+    replacements
+      .filter((row) => !row.pending && !usedReplacement.has(row.id))
+      .map(toPairable),
+    sharesBrandWord,
+  );
+  return [...strict, ...loose];
+}
+
+/**
  * Plan one account's handover.
  *
  * A retiring row with no pair produces no step — it is not retired, so there is nothing to
@@ -122,7 +158,7 @@ export function planFeedHandover(
 ): FeedHandoverPlan {
   const retiringById = new Map(retiring.map((row) => [row.id, row]));
   const replacementById = new Map(replacements.map((row) => [row.id, row]));
-  const pairings = pairRows(retiring.map(toPairable), replacements.map(toPairable));
+  const pairings = pairWithPostedFallback(retiring, replacements);
 
   const steps: FeedHandoverStep[] = [];
   const warnings: string[] = [];

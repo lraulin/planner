@@ -264,6 +264,29 @@ export function descriptionsOverlap(a: string, b: string): boolean {
   );
 }
 
+/**
+ * Do two descriptions open with the same brand word (four or more letters, after any
+ * processor stamp)? `Amazon.com`, `Amazon Marketplace, Amazon.com` and `AMAZON MKTPL*5Q7PJ04X0`
+ * all open with AMAZON.
+ *
+ * Deliberately **not** part of `descriptionsOverlap`: that refuses `Amazon.com` against
+ * `Amazon.com*5Q27Q84C1` because the `*` can hand off to a different counterparty. This is
+ * the looser test the posted-row handover uses *only after* an exact amount and a near date
+ * have already paired the two (`pairPostedRowsByBrand`, `feedHandover.ts`) — never a way to
+ * say two descriptions name the same merchant.
+ */
+export function sharesBrandWord(a: string, b: string): boolean {
+  const word = (description: string): string[] => {
+    const folded = fold(description);
+    return [folded, folded.replace(PROCESSOR_STAMP, "")].flatMap((form) => {
+      const match = /^[^A-Z]*([A-Z]{4,})/.exec(form);
+      return match ? [match[1]] : [];
+    });
+  };
+  const right = word(b);
+  return word(a).some((one) => right.includes(one));
+}
+
 export type ComparableRow = {
   transactionDate: string;
   amountCents: number;

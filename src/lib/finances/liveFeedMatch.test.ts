@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   descriptionsOverlap,
+  sharesBrandWord,
   selectNewAgainstMixed,
   selectUnmatched,
 } from "./liveFeedMatch";
@@ -528,5 +529,28 @@ describe("selectNewAgainstMixed — a statement imported after a sync", () => {
       ],
     );
     expect(keep).toHaveLength(1);
+  });
+});
+
+describe("sharesBrandWord", () => {
+  it("joins the Amazon spellings a page and a feed use", () => {
+    expect(sharesBrandWord("Amazon.com", "Amazon.com*5Q27Q84C1")).toBe(true);
+    expect(
+      sharesBrandWord("Amazon Marketplace, Amazon.com", "AMAZON MKTPL*5Q7PJ04X0"),
+    ).toBe(true);
+    expect(sharesBrandWord("Amazon Prime Membership", "AMAZON PRIME*4H6016CM3")).toBe(
+      true,
+    );
+  });
+
+  it("keeps different brands apart, and ignores a processor stamp", () => {
+    expect(sharesBrandWord("ChatGPT", "Claude")).toBe(false);
+    expect(sharesBrandWord("Netflix", "Spotify")).toBe(false);
+    expect(sharesBrandWord("PP*SPOTIFY*P46D", "Spotify")).toBe(true);
+  });
+
+  it("needs a real word: short stamps and digits are not a brand", () => {
+    expect(sharesBrandWord("SQ *ABC", "ABC STORE")).toBe(false);
+    expect(sharesBrandWord("1234", "1234")).toBe(false);
   });
 });

@@ -286,6 +286,48 @@ describeDb("retireCoveredScrapeRows", () => {
     ]);
   });
 
+  it("retires a posted Amazon page row onto SimpleFIN's starred twin, carrying the envelope, and never touches another user's", async () => {
+    await insertRow(userId, accountId, "browser-amazon", "2026-08-28", -4233, {
+      budgetCategoryId: envelopeId,
+      description: "Amazon.com",
+    });
+    const twinId = await insertRow(
+      userId,
+      accountId,
+      "sf-amazon",
+      "2026-08-27",
+      -4233,
+      {
+        externalSource: "api:simplefin",
+        description: "Amazon.com*5Q27Q84C1",
+      },
+    );
+    // Another user's identical pair must be neither read nor retired by this user's pass.
+    const otherUser = await makeUser();
+    const otherAccount = await makeAccount(otherUser);
+    await insertRow(otherUser, otherAccount, "browser-amazon", "2026-08-28", -4233, {
+      description: "Amazon.com",
+    });
+    await insertRow(otherUser, otherAccount, "sf-amazon", "2026-08-27", -4233, {
+      externalSource: "api:simplefin",
+      description: "Amazon.com*5Q27Q84C1",
+    });
+
+    const result = await retireCoveredScrapeRows(db, userId, accountId);
+
+    expect(result).toMatchObject({ retired: 1, carried: 1 });
+    expect(await idsOn(userId, accountId)).toEqual(["sf-amazon"]);
+    const [twin] = await db
+      .select({ budgetCategoryId: financeTransactions.budgetCategoryId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, twinId));
+    expect(twin.budgetCategoryId).toBe(envelopeId);
+    expect(await idsOn(otherUser, otherAccount)).toEqual([
+      "browser-amazon",
+      "sf-amazon",
+    ]);
+  });
+
   it("does not pair a scraped ChatGPT row onto SimpleFIN's Claude row two days away", async () => {
     await insertRow(userId, accountId, "browser-chatgpt", "2026-09-07", -2120, {
       budgetCategoryId: envelopeId,
