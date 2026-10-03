@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bankAccountLinks,
+  bankConnections,
   financeAccounts,
   financeBudgetCategories,
   financeTransactions,
@@ -397,5 +398,64 @@ describeDb("history source cutover", () => {
     expect(await rowsOf(owner, accountId)).toEqual([
       { description: "AMAZON MKTPL", externalSource: "api:simplefin", notes: "gift" },
     ]);
+  });
+
+  it("returns a bank-page card to SimpleFIN: page rows retire onto twins, the cursor rewinds, the unpaired stay", async () => {
+    const owner = await makeUser();
+    const accountId = await linkedCard(owner, [
+      {
+        source: "scrape:capitalone",
+        date: "2026-09-25",
+        description: "SHEETZ",
+        amount: "-30.00",
+        notes: "fuel",
+      },
+      {
+        source: "api:simplefin",
+        date: "2026-09-25",
+        description: "SHEETZ 0123",
+        amount: "-30.00",
+      },
+      // Posted on the page, not yet delivered by SimpleFIN: waits for the backfill.
+      {
+        source: "scrape:capitalone",
+        date: "2026-09-27",
+        description: "WALMART",
+        amount: "-261.36",
+      },
+    ]);
+    await db
+      .update(financeAccounts)
+      .set({ historySource: "bank_page", historySourceSince: "2026-09-22" })
+      .where(eq(financeAccounts.id, accountId));
+    await db
+      .update(bankConnections)
+      .set({ syncedThrough: "2026-10-02" })
+      .where(eq(bankConnections.userId, owner));
+
+    const dry = await applyHistorySourceCutover(owner, accountId, "simplefin", {
+      dryRun: true,
+    });
+    expect(dry).toMatchObject({ retired: 1, carried: 1, resyncFrom: "2026-09-22" });
+    expect((await accountOf(accountId)).historySource).toBe("bank_page");
+
+    const receipt = await applyHistorySourceCutover(owner, accountId, "simplefin", {
+      dryRun: false,
+    });
+
+    expect(receipt.unpaired.map((row) => row.description)).toEqual(["WALMART"]);
+    expect(await accountOf(accountId)).toMatchObject({
+      historySource: "simplefin",
+      since: null,
+    });
+    const [connection] = await db
+      .select({ syncedThrough: bankConnections.syncedThrough })
+      .from(bankConnections)
+      .where(eq(bankConnections.userId, owner));
+    expect(connection.syncedThrough).toBe("2026-09-22");
+    const rows = await rowsOf(owner, accountId);
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.description === "SHEETZ 0123")?.notes).toBe("fuel");
+    expect(rows.find((row) => row.description === "WALMART")).toBeDefined();
   });
 });

@@ -10,8 +10,11 @@
  * cutover day and that nothing stores, as the page would have written them.
  *
  * `--to bank_page` is Capital One: the page authors history after SimpleFIN's last posted day,
- * SimpleFIN's holds retire onto the page's, and the link stays (the sync ignores it). `--to simplefin` is
- * Chase: it stays on the feed and sheds the page's leftover holds.
+ * SimpleFIN's holds retire onto the page's, and the link stays (the sync ignores it). `--to simplefin`
+ * returns a bank-page card to the feed: the page's holds and posted rows retire onto SimpleFIN's
+ * twins, the sync cursor rewinds to the cutover day so SimpleFIN's skipped days arrive, and any
+ * page row still unpaired is listed, never deleted. On a feed account it sheds the page's
+ * leftover holds.
  *
  * Prefix `DATABASE_URL="$NEON_URL"` for production (it wins over `.env.local`); the banner names
  * the database either way.
@@ -106,6 +109,12 @@ async function main(): Promise<number> {
   for (const row of receipt.unpaired) {
     console.log(
       `  ${row.transactionDate}  ${usd(row.amountCents).padStart(9)}  ${row.description}${row.hasUserState ? "  [has envelope/notes]" : ""}  ${row.id}`,
+    );
+  }
+
+  if (receipt.resyncFrom) {
+    console.log(
+      `\nSync cursor moved back to ${receipt.resyncFrom}: the next sync fetches what SimpleFIN skipped and retires the page's rows onto it. The unpaired rows above are page rows still waiting for that sync.`,
     );
   }
 

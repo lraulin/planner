@@ -1,15 +1,22 @@
 /**
  * Hand an account's history to one source (`agent-os/specs/2026-09-23-1316-one-history-source-per-account/`
- * D5). Capital One moves from SimpleFIN to the bank page; Chase stays on SimpleFIN and sheds the
- * page's leftover holds.
+ * D5). Capital One moved from SimpleFIN to the bank page; Chase stayed on SimpleFIN and shed the
+ * page's leftover holds. `--to simplefin` also reverses a bank-page account
+ * (`agent-os/specs/2026-10-03-1500-card-holds-from-alert-emails/` D7).
  *
  * Everything runs in one transaction, and a dry run is that same transaction rolled back, so
  * the receipt Lee reads is exactly what `--apply` will do.
  */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financeAuditEvents, financeTransactions } from "@/db/schema";
+import {
+  bankAccountLinks,
+  bankConnections,
+  financeAccounts,
+  financeAuditEvents,
+  financeTransactions,
+} from "@/db/schema";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import type { FinanceAuditChange } from "./audit/types";
 import { writeFinanceAuditEvent } from "./audit/writes";
@@ -63,6 +70,11 @@ export type HistorySourceCutoverReceipt = {
   latestCaptureAt: Date | null;
   /** How many of those were inserted as page rows (`insertMissed`). */
   insertedMissed: number;
+  /**
+   * Only for a return to SimpleFIN: the sync cursor was moved back to this day so the next
+   * sync fetches what SimpleFIN skipped while the page authored history. Null otherwise.
+   */
+  resyncFrom: string | null;
   warnings: string[];
 };
 
@@ -197,6 +209,8 @@ async function cutover(
   let missed: ParsedBankSnapshotRow[] = [];
   let latestCaptureAt: Date | null = null;
   let insertedMissed = 0;
+  let leavingPage = false;
+  let resyncFrom: string | null = null;
   const insertedChanges: FinanceAuditChange[] = [];
   if (to === "bank_page" && account.historySource !== "bank_page") {
     since = await lastSimpleFinPostingDay(tx, userId, account.id);
@@ -251,6 +265,61 @@ async function cutover(
     // The link stays. The sync ignores a linked account whose source is not SimpleFIN, and
     // counts a provider account with no link as unmatched: deleting it left a red "Match
     // accounts" line on Accounts that only re-linking cleared.
+  } else if (to === "simplefin" && account.historySource === "bank_page") {
+    // The page's posted rows since the cutover day have no SimpleFIN twin yet, because the
+    // sync ignored this account while the page owned it. Rewind the cursor of the account's
+    // connection(s) so the next sync fetches those days; the ordinary handover then retires
+    // each page row onto its twin. Rows already stored are recognised by identity, so the
+    // wider window cannot duplicate them.
+    leavingPage = true;
+    const resumeFrom = account.historySourceSince;
+    if (resumeFrom !== null) {
+      const connectionIds = (
+        await tx
+          .select({ id: bankAccountLinks.connectionId })
+          .from(bankAccountLinks)
+          .where(
+            and(
+              eq(bankAccountLinks.userId, userId),
+              eq(bankAccountLinks.accountId, account.id),
+            ),
+          )
+      ).map((row) => row.id);
+      if (connectionIds.length === 0) {
+        warnings.push(
+          "This account has no SimpleFIN link, so nothing will backfill its history.",
+        );
+      } else {
+        await tx
+          .update(bankConnections)
+          .set({
+            syncedThrough: sql`least(coalesce(${bankConnections.syncedThrough}, ${resumeFrom}::date), ${resumeFrom}::date)`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(bankConnections.userId, userId),
+              inArray(bankConnections.id, connectionIds),
+            ),
+          );
+        resyncFrom = resumeFrom;
+      }
+    } else {
+      warnings.push(
+        "The page has no recorded start day, so the sync cursor was not moved.",
+      );
+    }
+    since = null;
+    await tx
+      .update(financeAccounts)
+      .set({
+        historySource: "simplefin",
+        historySourceSince: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, account.id)),
+      );
   } else if (to === "simplefin" && account.historySource !== "simplefin") {
     throw new Error(
       `${account.name} takes its history from ${account.historySource}; link it to SimpleFIN instead.`,
@@ -263,15 +332,17 @@ async function cutover(
     to === "bank_page"
       ? [SIMPLEFIN_FEED]
       : [CAPITAL_ONE_SCRAPE_FEED, CHASE_SCRAPE_FEED];
+  // Leaving the page, its posted rows yield as well as its holds: it authored history since
+  // the cutover day and SimpleFIN now does.
   const handover = await retireRowsOntoOtherSources(tx, userId, account.id, losing, {
-    pendingOnly: true,
+    pendingOnly: !leavingPage,
   });
   warnings.push(...handover.warnings);
 
   const unpaired = (await storedRows(tx, userId, account.id))
     .filter(
       (row) =>
-        row.pending &&
+        (row.pending || leavingPage) &&
         row.externalSource !== null &&
         losing.includes(row.externalSource),
     )
@@ -332,6 +403,7 @@ async function cutover(
     missedByPreviousSource: missed,
     latestCaptureAt,
     insertedMissed,
+    resyncFrom,
     warnings,
   };
 }
