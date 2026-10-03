@@ -5,10 +5,10 @@ import { errorResponse } from "@/lib/agent/envelope";
 import { getAgentUserId } from "@/lib/auth/identity";
 import { AlertRejected, applyAlertEmail } from "@/lib/finances/alertIngestWrite";
 
-const MAX_BODY_BYTES = 256 * 1024;
+const MAX_BODY_BYTES = 512 * 1024;
 
 /**
- * POST a bank alert email as JSON `{ messageId, from, subject, receivedAt, plainText }`.
+ * POST a bank alert email as JSON `{ messageId, from, subject, receivedAt, plainText, htmlBody? }`.
  *
  * Called by the time-triggered Apps Script in Lee's Gmail (`scripts/gmail-alert-push.gs`),
  * so auth is the agent Bearer key, not a session. 200 means the alert is accounted for (a
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       throw new AgentError("validation", "Request body must be valid JSON");
     }
     const record = (body ?? {}) as Record<string, unknown>;
-    const { messageId, from, subject, receivedAt, plainText } = record;
+    const { messageId, from, subject, receivedAt, plainText, htmlBody } = record;
     if (
       typeof messageId !== "string" ||
       messageId.trim() === "" ||
@@ -39,7 +39,8 @@ export async function POST(request: Request) {
       typeof subject !== "string" ||
       typeof plainText !== "string" ||
       typeof receivedAt !== "string" ||
-      Number.isNaN(Date.parse(receivedAt))
+      Number.isNaN(Date.parse(receivedAt)) ||
+      (htmlBody !== undefined && typeof htmlBody !== "string")
     ) {
       throw new AgentError(
         "validation",
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
       subject,
       receivedAt: new Date(receivedAt),
       plainText,
+      htmlBody,
     });
     return NextResponse.json({ ok: true, data: result });
   } catch (err) {

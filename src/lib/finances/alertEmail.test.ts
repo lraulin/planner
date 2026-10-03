@@ -71,7 +71,7 @@ describe("parseAlertEmail", () => {
 
   it("refuses a sender it has no parser for rather than guessing", () => {
     const result = parseAlertEmail({
-      from: "no.reply.alerts@chase.com",
+      from: "alerts@example.com",
       subject: SUBJECT,
       plainText: PIZZA,
     });
@@ -108,9 +108,74 @@ describe("parseAlertEmail", () => {
   });
 });
 
+describe("parseAlertEmail, Chase", () => {
+  const CHASE_FROM = "Chase <no.reply.alerts@chase.com>";
+  const CHASE_SUBJECT = "You made a $49.55 transaction with Amazon.com";
+  /** The plain-text part Gmail returned for the real 2026-10-03 alert: table borders only. */
+  const STUB =
+    "| |\n\n| Transaction alert |\n\n| | You made a $49.55 transaction |\n\n| Account | Prime Visa (...9910) |\n\n| |";
+  const HTML =
+    "<table><tr><td>Account</td><td>Prime Visa (...9910)</td></tr><tr><td>Date</td><td>Oct 3, 2026 at 11:02 AM ET</td></tr><tr><td>Merchant</td><td>Amazon.com</td></tr></table>";
+
+  it("reads amount and merchant from the subject, the card from the body, the day from the Date row", () => {
+    expect(
+      parseAlertEmail({
+        from: CHASE_FROM,
+        subject: CHASE_SUBJECT,
+        plainText: STUB,
+        htmlBody: HTML,
+        receivedAt: new Date("2026-10-03T15:02:28Z"),
+      }),
+    ).toEqual({
+      ok: true,
+      alert: {
+        feed: "alert:chase",
+        accountLast4: "9910",
+        transactionDate: "2026-10-03",
+        description: "Amazon.com",
+        amountCents: -4955,
+      },
+    });
+  });
+
+  it("falls back to the New York day of arrival when no Date row survives", () => {
+    // 01:30 UTC on Oct 4 is still the evening of Oct 3 in New York.
+    const result = parseAlertEmail({
+      from: CHASE_FROM,
+      subject: CHASE_SUBJECT,
+      plainText: STUB,
+      receivedAt: new Date("2026-10-04T01:30:00Z"),
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      alert: { transactionDate: "2026-10-03" },
+    });
+  });
+
+  it("refuses an alert with no card, and a Chase mail that is not a purchase alert", () => {
+    expect(
+      parseAlertEmail({
+        from: CHASE_FROM,
+        subject: CHASE_SUBJECT,
+        plainText: "| Transaction alert |",
+        receivedAt: new Date("2026-10-03T15:02:28Z"),
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseAlertEmail({
+        from: CHASE_FROM,
+        subject: "Your statement is ready",
+        plainText: STUB,
+        receivedAt: new Date("2026-10-03T15:02:28Z"),
+      }).ok,
+    ).toBe(false);
+  });
+});
+
 describe("isAlertFeed", () => {
   it("accepts alert sources only", () => {
     expect(isAlertFeed("alert:capitalone")).toBe(true);
+    expect(isAlertFeed("alert:chase")).toBe(true);
     expect(isAlertFeed("scrape:capitalone")).toBe(false);
   });
 });

@@ -60,18 +60,107 @@ const CAPITAL_ONE_CHARGE =
   /\bon\s+([A-Za-z]{3,9})\.?\s+(\d{1,2}),\s*(\d{4}),\s+at\s+(.+?),\s+a\s+(?:pending authorization or purchase|purchase|pending authorization)\s+in the amount of\s+(\$[\d,]+\.\d{2})/i;
 const CAPITAL_ONE_LAST4 = /\bending in\s+(\d{4})\b/i;
 
+const CHASE_SENDER = "no.reply.alerts@chase.com";
+/** "You made a $49.55 transaction with Amazon.com" */
+const CHASE_SUBJECT =
+  /^\s*You made a\s+(\$[\d,]+\.\d{2})\s+transaction with\s+(.+?)\s*$/i;
+const CHASE_LAST4 = /\(\.\.\.(\d{4})\)/;
+/** "Date Oct 3, 2026 at 11:02 AM ET" */
+const CHASE_DATE = /\bDate\b[\s|]*([A-Za-z]{3,9})\.?\s+(\d{1,2}),\s*(\d{4})/;
+
+/** The calendar day in New York, where Chase stamps its alerts. */
+function easternDateKey(instant: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(
+    instant,
+  );
+}
+
+/**
+ * Chase's per-purchase alert. The subject is the dependable part: it carries the amount and
+ * merchant even when the plain-text body is a stub. The card comes from "(...9910)" and the
+ * day from the "Date" row, falling back to the day the mail arrived (New York time).
+ */
+function parseChaseAlert(input: AlertEmailInput): ParseAlertResult {
+  const subject = CHASE_SUBJECT.exec(input.subject);
+  if (!subject) {
+    return {
+      ok: false,
+      error: `Chase alert "${input.subject}" is not a purchase alert.`,
+    };
+  }
+  const text =
+    `${input.plainText} ${input.htmlBody ? stripTags(input.htmlBody) : ""}`.replace(
+      /\s+/g,
+      " ",
+    );
+  const last4 = CHASE_LAST4.exec(text);
+  if (!last4) return { ok: false, error: "Could not find the card's last four." };
+
+  let transactionDate: string | null = null;
+  const named = CHASE_DATE.exec(text);
+  if (named) {
+    const month = MONTHS[named[1].slice(0, 3).toLowerCase()];
+    transactionDate = month
+      ? dateKeyFromParts(Number(named[3]), month, Number(named[2]))
+      : null;
+    if (transactionDate === null) {
+      return {
+        ok: false,
+        error: `Unreadable date "${named[1]} ${named[2]}, ${named[3]}".`,
+      };
+    }
+  } else if (input.receivedAt) {
+    transactionDate = easternDateKey(input.receivedAt);
+  } else {
+    return { ok: false, error: "The alert names no date and none was supplied." };
+  }
+
+  const cents = parseAmountCents(subject[1]);
+  if (cents === null || cents <= 0) {
+    return { ok: false, error: `Unreadable amount "${subject[1]}".` };
+  }
+  return {
+    ok: true,
+    alert: {
+      feed: CHASE_ALERT_FEED,
+      accountLast4: last4[1],
+      transactionDate,
+      description: subject[2],
+      amountCents: -cents,
+    },
+  };
+}
+
 /** The sender's bare address, whether given as `Name <addr>` or `addr`. */
 function senderAddress(from: string): string {
   const bracketed = /<([^>]+)>/.exec(from);
   return (bracketed ? bracketed[1] : from).trim().toLowerCase();
 }
 
-export function parseAlertEmail(input: {
+export type AlertEmailInput = {
   from: string;
   subject: string;
   plainText: string;
-}): ParseAlertResult {
+  /**
+   * The HTML part, when the sender's plain text is cut short (Chase's is a stub of table
+   * borders). Its tags are stripped and the text appended before matching.
+   */
+  htmlBody?: string;
+  /** When the mail arrived; the day of an alert that names none. */
+  receivedAt?: Date;
+};
+
+function stripTags(html: string): string {
+  return html
+    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&");
+}
+
+export function parseAlertEmail(input: AlertEmailInput): ParseAlertResult {
   const sender = senderAddress(input.from);
+  if (sender === CHASE_SENDER) return parseChaseAlert(input);
   if (sender !== CAPITAL_ONE_SENDER) {
     return { ok: false, error: `No alert parser for sender ${sender || "(none)"}.` };
   }

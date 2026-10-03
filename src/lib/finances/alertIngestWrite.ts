@@ -24,6 +24,7 @@ export type AlertPush = {
   subject: string;
   receivedAt: Date;
   plainText: string;
+  htmlBody?: string;
 };
 
 export type AlertIngestResult = {
@@ -45,6 +46,7 @@ export async function applyAlertEmail(
     subject: push.subject,
     receivedAt: push.receivedAt.toISOString(),
     rawText: push.plainText,
+    ...(push.htmlBody ? { htmlBody: push.htmlBody } : {}),
   };
 
   const reject = async (reason: string): Promise<never> => {

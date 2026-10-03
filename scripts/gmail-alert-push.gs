@@ -24,10 +24,10 @@
  */
 
 var SEARCH =
-  "from:(capitalone@notification.capitalone.com) " +
-  'subject:"new transaction was charged" newer_than:2d';
-// Add Chase once a real per-purchase alert exists:
-//   from:(capitalone@notification.capitalone.com OR no.reply.alerts@chase.com)
+  "(" +
+  '(from:capitalone@notification.capitalone.com subject:"new transaction was charged") OR ' +
+  '(from:no.reply.alerts@chase.com subject:"You made a" subject:transaction)' +
+  ") newer_than:2d";
 
 function pushAlerts() {
   var props = PropertiesService.getScriptProperties();
@@ -58,6 +58,8 @@ function pushAlerts() {
           subject: message.getSubject(),
           receivedAt: message.getDate().toISOString(),
           plainText: message.getPlainBody(),
+          // Chase's plain text is a stub of table borders; Planner reads the HTML part too.
+          htmlBody: message.getBody(),
         }),
       });
       var code = response.getResponseCode();
