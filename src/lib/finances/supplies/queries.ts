@@ -5,6 +5,7 @@ import {
   amazonOrders,
   financeBudgetAllocations,
   financeBudgetCategories,
+  financeSupplyGroups,
   financeSupplyItems,
   financeSupplyOptions,
   type SupplyRateBasis,
@@ -29,6 +30,9 @@ export type SupplyOptionRow = {
 export type SupplyItemRow = {
   id: string;
   name: string;
+  /** Null when ungrouped. */
+  groupId: string | null;
+  /** The group's name, or `""` when ungrouped — what the grid sorts, filters and shows. */
   groupLabel: string;
   envelopeId: string | null;
   /** The envelope's name, for the group header's "currently funded from" line. */
@@ -58,7 +62,8 @@ export async function listSupplyItems(userId: string): Promise<SupplyItemRow[]> 
       .select({
         id: financeSupplyItems.id,
         name: financeSupplyItems.name,
-        groupLabel: financeSupplyItems.groupLabel,
+        groupId: financeSupplyItems.groupId,
+        groupName: financeSupplyGroups.name,
         envelopeId: financeSupplyItems.envelopeId,
         envelopeName: financeBudgetCategories.name,
         envelopeBudgetedCents: financeBudgetAllocations.amountCents,
@@ -72,6 +77,13 @@ export async function listSupplyItems(userId: string): Promise<SupplyItemRow[]> 
       // Left joins throughout: an item need not name an envelope, and an envelope need not
       // have been assigned anything this month — a missing allocation row means zero, never
       // a missing item (`finance_budget_allocations` is sparse by design).
+      .leftJoin(
+        financeSupplyGroups,
+        and(
+          eq(financeSupplyGroups.id, financeSupplyItems.groupId),
+          eq(financeSupplyGroups.userId, userId),
+        ),
+      )
       .leftJoin(
         financeBudgetCategories,
         and(
@@ -88,7 +100,7 @@ export async function listSupplyItems(userId: string): Promise<SupplyItemRow[]> 
         ),
       )
       .where(eq(financeSupplyItems.userId, userId))
-      .orderBy(asc(financeSupplyItems.groupLabel), asc(financeSupplyItems.name)),
+      .orderBy(asc(financeSupplyGroups.name), asc(financeSupplyItems.name)),
     db
       .select()
       .from(financeSupplyOptions)
@@ -119,8 +131,9 @@ export async function listSupplyItems(userId: string): Promise<SupplyItemRow[]> 
     byItem.set(option.itemId, list);
   }
 
-  return items.map((item) => ({
+  return items.map(({ groupName, ...item }) => ({
     ...item,
+    groupLabel: groupName ?? "",
     envelopeBudgetedCents:
       item.envelopeId === null ? null : (item.envelopeBudgetedCents ?? 0),
     options: byItem.get(item.id) ?? [],
@@ -203,4 +216,15 @@ export async function listAmazonRepeatPurchases(
     latestUnitPriceCents: numericStringToCents(row.latestUnitPrice),
     subscribeAndSave: row.subscribeAndSave,
   }));
+}
+
+export type SupplyGroupRow = { id: string; name: string };
+
+/** Every group, including empty ones — the Group cell offers them before any item uses one. */
+export async function listSupplyGroups(userId: string): Promise<SupplyGroupRow[]> {
+  return db
+    .select({ id: financeSupplyGroups.id, name: financeSupplyGroups.name })
+    .from(financeSupplyGroups)
+    .where(eq(financeSupplyGroups.userId, userId))
+    .orderBy(asc(financeSupplyGroups.sortKey), asc(financeSupplyGroups.name));
 }

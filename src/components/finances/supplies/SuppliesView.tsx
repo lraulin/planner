@@ -9,6 +9,7 @@ import {
   deleteSupplyOptionAction,
   listSupplyItemsAction,
   setSupplyOptionInUseAction,
+  setSupplyItemGroupAction,
   updateSupplyItemAction,
   updateSupplyOptionAction,
 } from "@/app/finances/actions";
@@ -45,6 +46,7 @@ import { SupplyMergeDialog } from "./SupplyMergeDialog";
 import { SupplyMergePickerDialog } from "./SupplyMergePickerDialog";
 import {
   SUPPLIES_COLUMN_IDS,
+  SUPPLY_GROUP_LIST_ID,
   suppliesColumns,
   type SuppliesColumnCtx,
 } from "./suppliesColumns";
@@ -276,6 +278,8 @@ export function SuppliesView({
       onPatchOption: (optionId, edit) =>
         commit(() => updateSupplyOptionAction(optionId, edit)),
       onSetInUse: (optionId) => commit(() => setSupplyOptionInUseAction(optionId)),
+      onSetGroup: (itemId, name) =>
+        commit(() => setSupplyItemGroupAction(itemId, name)),
     }),
     [catalog, pending, commit],
   );
@@ -289,16 +293,16 @@ export function SuppliesView({
   }, [selectedItemIds, items, compact]);
 
   const addItem = useCallback(() => {
-    const groupLabel =
+    const groupId =
       selectedItemIds[0] != null
-        ? (items.find((item) => item.id === selectedItemIds[0])?.groupLabel ?? "")
-        : "";
+        ? (items.find((item) => item.id === selectedItemIds[0])?.groupId ?? null)
+        : null;
     setError(null);
     startTransition(async () => {
       const result = await createSupplyItemAction({
         name: "New item",
         rate: { rateBasis: "units_per_day", unitsPerDayMilli: 1000 },
-        ...(groupLabel !== "" ? { groupLabel } : {}),
+        ...(groupId !== null ? { groupId } : {}),
       });
       if (!result.ok) {
         setError(result.error);
@@ -452,6 +456,11 @@ export function SuppliesView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
+      <datalist id={SUPPLY_GROUP_LIST_ID}>
+        {groups.flatMap((group) =>
+          group.label === "" ? [] : [<option key={group.label} value={group.label} />],
+        )}
+      </datalist>
       <GridToolbar
         grid={gridState}
         gridLabel="Supplies"

@@ -28,6 +28,7 @@ function item(over: Partial<SupplyItemRow> = {}): SupplyItemRow {
   return {
     id: "item",
     name: "Canned Cat Food",
+    groupId: "pets",
     groupLabel: "Pets",
     envelopeId: null,
     envelopeName: null,
@@ -143,6 +144,7 @@ describe("supplyGroups", () => {
     const drink = item({
       id: "drink",
       name: "Energy Drink",
+      groupId: "groceries",
       groupLabel: "Groceries",
       unitsPerDayMilli: 2000,
       options: [
@@ -162,7 +164,7 @@ describe("supplyGroups", () => {
   });
   it("sorts the ungrouped bucket last", () => {
     const groups = supplyGroups([
-      item({ id: "a", groupLabel: "" }),
+      item({ id: "a", groupId: null, groupLabel: "" }),
       item({ id: "b", groupLabel: "Pets" }),
     ]);
     expect(groups.map((group) => group.label)).toEqual(["Pets", ""]);
@@ -202,6 +204,7 @@ describe("supplyRowTotals", () => {
     const drink = item({
       id: "drink",
       name: "Energy Drink",
+      groupId: "groceries",
       groupLabel: "Groceries",
       unitsPerDayMilli: 2000,
       options: [

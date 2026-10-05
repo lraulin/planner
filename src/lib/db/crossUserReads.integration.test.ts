@@ -91,9 +91,10 @@ import {
   listBudgetEnvelopeOptions,
   openingPositionFor,
 } from "@/lib/finances/budget/queries";
-import { createSupplyItem } from "@/lib/finances/supplies/mutations";
+import { createSupplyGroup, createSupplyItem } from "@/lib/finances/supplies/mutations";
 import {
   listAmazonRepeatPurchases,
+  listSupplyGroups,
   listSupplyItems,
 } from "@/lib/finances/supplies/queries";
 import { refreshCalendarLinks, setCalendarSyncEnabled } from "@/lib/google/mutations";
@@ -408,6 +409,7 @@ async function seedOwner(): Promise<Owned> {
   await createSupplyItem(userId, {
     name: "Owner paper towels",
     envelopeId: billEnvelope.id,
+    groupId: await createSupplyGroup(userId, "Owner household"),
     rate: { rateBasis: "days_per_unit", daysPerUnitTenths: 70 },
   });
   // Both Google surfaces keep their own per-user table, written here without any network:
@@ -913,6 +915,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     });
     expect(await listMasterContexts(intruder)).toEqual([]);
     expect(await listSupplyItems(intruder)).toEqual([]);
+    expect(await listSupplyGroups(intruder)).toEqual([]);
     // Repeat purchases are a shopping history: ASIN, product name, how many times and how
     // recently. The owner's single seeded item qualifies through the Subscribe & Save arm of
     // the `having`, not the three-order one.
@@ -926,6 +929,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(catalog.envelopes.map((row) => row.id)).toContain(owner.billEnvelopeId);
     expect((await listMasterContexts(owner.userId)).length).toBeGreaterThan(0);
     expect((await listSupplyItems(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listSupplyGroups(owner.userId)).length).toBeGreaterThan(0);
     expect((await listAmazonRepeatPurchases(owner.userId)).length).toBeGreaterThan(0);
     expect(await openingPositionFor(owner.userId, "2026-09-01")).not.toBe(0);
   });

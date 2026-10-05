@@ -6,6 +6,7 @@ import {
   amazonOrders,
   financeBudgetAllocations,
   financeBudgetCategories,
+  financeSupplyGroups,
   financeSupplyItems,
   financeSupplyOptions,
   users,
@@ -16,13 +17,17 @@ import { localDateKey } from "@/lib/schedule/geometry";
 import {
   addSupplyItemFromAmazon,
   addSupplyOptionFromAmazon,
+  createSupplyGroup,
   createSupplyItem,
   createSupplyItemFromSuggestion,
   createSupplyOption,
+  deleteSupplyGroup,
   deleteSupplyItem,
   deleteSupplyOption,
   mergeSupplyItems,
   previewSupplyMerge,
+  renameSupplyGroup,
+  setSupplyItemGroup,
   setSupplyOptionInUse,
   updateSupplyItem,
   updateSupplyOption,
@@ -96,7 +101,8 @@ describeDb("supply worksheet", () => {
   });
 
   it("prices an item from its in-use option and leaves comparisons inert", async () => {
-    const itemId = await createSupplyItem(owner, { ...CAT_FOOD, groupLabel: "Pets" });
+    const petsId = await createSupplyGroup(owner, "Pets");
+    const itemId = await createSupplyItem(owner, { ...CAT_FOOD, groupId: petsId });
     await createSupplyOption(owner, {
       itemId,
       brand: "Fancy Feast",
@@ -241,7 +247,7 @@ describeDb("supply worksheet", () => {
     await createSupplyItemFromSuggestion(owner, {
       name: "Energy Drink",
       rate: { rateBasis: "units_per_day", unitsPerDayMilli: 2000 },
-      groupLabel: "Groceries",
+      groupId: await createSupplyGroup(owner, "Groceries"),
       option: {
         brand: "C4 Energy Drink",
         vendor: "Amazon",
@@ -272,7 +278,7 @@ describeDb("supply worksheet", () => {
       const twentyFour = await createSupplyItemFromSuggestion(owner, {
         name: "C4 24ct",
         rate: { rateBasis: "units_per_day", unitsPerDayMilli: 1500 },
-        groupLabel: "Drinks",
+        groupId: await createSupplyGroup(owner, "Drinks"),
         option: {
           vendor: "Amazon",
           qtyPerItem: 24,
@@ -407,7 +413,7 @@ describeDb("supply worksheet", () => {
       const itemId = await createSupplyItem(owner, {
         name: "Energy Drink",
         rate: { rateBasis: "units_per_day", unitsPerDayMilli: 2000 },
-        groupLabel: "Groceries",
+        groupId: await createSupplyGroup(owner, "Groceries"),
       });
 
       await addSupplyOptionFromAmazon(owner, itemId, "B07ATTACH");
@@ -463,12 +469,59 @@ describeDb("supply worksheet", () => {
     });
   });
 
+  describe("groups", () => {
+    it("picks an existing group by name, ignoring case and space, instead of duplicating it", async () => {
+      const first = await createSupplyGroup(owner, "Pets");
+      expect(await createSupplyGroup(owner, "  pets ")).toBe(first);
+      await expect(createSupplyGroup(owner, "   ")).rejects.toThrow(
+        "A group needs a name.",
+      );
+    });
+
+    it("renames a group in one edit and every item follows", async () => {
+      const groupId = await createSupplyGroup(owner, "Pets");
+      await createSupplyItem(owner, { ...CAT_FOOD, groupId });
+      await createSupplyItem(owner, { ...CAT_FOOD, name: "Litter", groupId });
+      await renameSupplyGroup(owner, groupId, "Cats");
+      const items = await listSupplyItems(owner);
+      expect(items.map((item) => item.groupLabel)).toEqual(["Cats", "Cats"]);
+      expect(items.every((item) => item.groupId === groupId)).toBe(true);
+    });
+
+    it("refuses a rename onto another group's name", async () => {
+      await createSupplyGroup(owner, "Home");
+      const pets = await createSupplyGroup(owner, "Pets");
+      await expect(renameSupplyGroup(owner, pets, "home")).rejects.toThrow(
+        'There is already a group called "home".',
+      );
+    });
+
+    it("ungroups the items when a group is deleted and keeps them", async () => {
+      const groupId = await createSupplyGroup(owner, "Pets");
+      await createSupplyItem(owner, { ...CAT_FOOD, groupId });
+      await deleteSupplyGroup(owner, groupId);
+      const [item] = await listSupplyItems(owner);
+      expect(item.groupId).toBeNull();
+      expect(item.groupLabel).toBe("");
+    });
+
+    it("groups and ungroups an item from the Group cell", async () => {
+      const itemId = await createSupplyItem(owner, CAT_FOOD);
+      await setSupplyItemGroup(owner, itemId, "Pets");
+      expect((await listSupplyItems(owner))[0].groupLabel).toBe("Pets");
+      await setSupplyItemGroup(owner, itemId, "");
+      expect((await listSupplyItems(owner))[0].groupId).toBeNull();
+    });
+  });
+
   describe("user isolation", () => {
+    let groupId = "";
     let itemId = "";
     let optionId = "";
 
     beforeEach(async () => {
-      itemId = await createSupplyItem(owner, { ...CAT_FOOD, groupLabel: "Pets" });
+      groupId = await createSupplyGroup(owner, "Pets");
+      itemId = await createSupplyItem(owner, { ...CAT_FOOD, groupId });
       optionId = await createSupplyOption(owner, {
         itemId,
         vendor: "Walmart",
@@ -547,6 +600,34 @@ describeDb("supply worksheet", () => {
         addSupplyOptionFromAmazon(intruder, itemId, "B07INTRUDE"),
       ).rejects.toThrow("That supply item does not exist.");
       expect((await listSupplyItems(owner))[0].options).toHaveLength(1);
+    });
+
+    it("does not let a second user rename, delete or group into another user's group", async () => {
+      await expect(renameSupplyGroup(intruder, groupId, "Mine now")).rejects.toThrow(
+        "That supply group does not exist.",
+      );
+      await expect(deleteSupplyGroup(intruder, groupId)).rejects.toThrow(
+        "That supply group does not exist.",
+      );
+      await expect(
+        createSupplyItem(intruder, { ...CAT_FOOD, groupId }),
+      ).rejects.toThrow("That supply group does not exist.");
+      const theirs = await createSupplyItem(intruder, CAT_FOOD);
+      await expect(updateSupplyItem(intruder, theirs, { groupId })).rejects.toThrow(
+        "That supply group does not exist.",
+      );
+      const [item] = await listSupplyItems(owner);
+      expect(item.groupLabel).toBe("Pets");
+    });
+
+    it("does not reach another user's group by typing its name", async () => {
+      const theirs = await createSupplyItem(intruder, CAT_FOOD);
+      await setSupplyItemGroup(intruder, theirs, "pets");
+      const [row] = await db
+        .select({ id: financeSupplyGroups.id })
+        .from(financeSupplyGroups)
+        .where(eq(financeSupplyGroups.userId, intruder));
+      expect(row.id).not.toBe(groupId);
     });
 
     it("does not let a second user point an item at another user's envelope", async () => {

@@ -39,10 +39,15 @@ export type SuppliesColumnCtx = {
   onPatchItem: (itemId: string, edit: SupplyItemEdit) => void;
   onPatchOption: (optionId: string, edit: SupplyOptionEdit) => void;
   onSetInUse: (optionId: string) => void;
+  /** Pick-or-create: an existing group's name picks it, a new name creates it, blank ungroups. */
+  onSetGroup: (itemId: string, name: string) => void;
   /** Non-income envelopes the "funded from" picker offers, including hidden. */
   catalog: EnvelopeCatalog;
   pending: boolean;
 };
+
+/** The one `<datalist>` of group names `SuppliesView` renders for the Group cells. */
+export const SUPPLY_GROUP_LIST_ID = "supply-group-names";
 
 const INPUT =
   "min-w-0 w-full rounded border border-transparent bg-transparent px-1 text-base text-ink hover:border-rule focus:border-rule md:text-[0.8125rem]";
@@ -52,11 +57,14 @@ function TextCell({
   value,
   label,
   disabled,
+  listId,
   onCommit,
 }: {
   value: string;
   label: string;
   disabled: boolean;
+  /** Id of a `<datalist>` offering existing values to pick from. */
+  listId?: string;
   onCommit: (next: string) => void;
 }) {
   return (
@@ -64,6 +72,7 @@ function TextCell({
       key={value}
       defaultValue={value}
       aria-label={label}
+      list={listId}
       disabled={disabled}
       className={INPUT}
       onKeyDown={(event) => {
@@ -520,7 +529,8 @@ export function suppliesColumns(): ColumnDef<SuppliesColumnCtx, SupplyGridRow>[]
             value={row.node.item.groupLabel}
             label={`Group for ${row.node.item.name}`}
             disabled={ctx.pending}
-            onCommit={(groupLabel) => ctx.onPatchItem(row.id, { groupLabel })}
+            listId={SUPPLY_GROUP_LIST_ID}
+            onCommit={(name) => ctx.onSetGroup(row.id, name)}
           />
         ) : null,
     },

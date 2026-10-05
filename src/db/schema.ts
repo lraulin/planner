@@ -3853,6 +3853,31 @@ export const SUPPLY_RATE_BASES = ["units_per_day", "days_per_unit"] as const;
 export type SupplyRateBasis = (typeof SUPPLY_RATE_BASES)[number];
 
 /**
+ * A named slice of the Supplies worksheet. Names are unique per user, ignoring case and
+ * surrounding space, because the grid's Group cell is pick-or-create by what was typed.
+ */
+export const financeSupplyGroups = pgTable(
+  "finance_supply_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sortKey: text("sort_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_supply_groups_user_name_uq").on(
+      table.userId,
+      sql`lower(${table.name})`,
+    ),
+    check("finance_supply_groups_name_present", sql`length(trim(${table.name})) > 0`),
+  ],
+);
+
+/**
  * One thing you consume on a cycle, and how fast.
  *
  * `rate_basis` exists because half these items have no countable daily rate. You can say
@@ -3874,15 +3899,18 @@ export const financeSupplyItems = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     /**
-     * How you slice the worksheet — "Pets", "Household". Free text, and deliberately **not**
-     * the envelope link below.
+     * How you slice the worksheet — "Pets", "Household". A row of its own rather than text on
+     * each item, so something else (a scenario line) can follow a group by id and a rename is
+     * one edit. Deliberately **not** the envelope link below.
      *
      * You must be able to name a group before the envelope exists: the whole point of the
      * page is to discover that pet supplies cost $1,355/yr out of Groceries and therefore
      * want an envelope of their own. One field cannot say both what you call a group and
-     * where it is funded from today.
+     * where it is funded from today. Deleting a group ungroups its items.
      */
-    groupLabel: text("group_label").notNull().default(""),
+    groupId: uuid("group_id").references(() => financeSupplyGroups.id, {
+      onDelete: "set null",
+    }),
     /** Which envelope pays for this today. Read-only comparison target; never written to. */
     envelopeId: uuid("envelope_id").references(() => financeBudgetCategories.id, {
       onDelete: "set null",
@@ -3902,7 +3930,7 @@ export const financeSupplyItems = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("finance_supply_items_user_group_idx").on(table.userId, table.groupLabel),
+    index("finance_supply_items_user_group_idx").on(table.userId, table.groupId),
     index("finance_supply_items_user_envelope_idx").on(table.userId, table.envelopeId),
     check("finance_supply_items_name_present", sql`length(trim(${table.name})) > 0`),
     // Text plus a check rather than a pgEnum, for the reason `finance_account_kind` gives:
@@ -4283,6 +4311,7 @@ export type AmazonChargeMatch = typeof amazonChargeMatches.$inferSelect;
 export type NewAmazonChargeMatch = typeof amazonChargeMatches.$inferInsert;
 export type AmazonReceiptAllocation = typeof amazonReceiptAllocations.$inferSelect;
 export type NewAmazonReceiptAllocation = typeof amazonReceiptAllocations.$inferInsert;
+export type FinanceSupplyGroup = typeof financeSupplyGroups.$inferSelect;
 export type FinanceSupplyItem = typeof financeSupplyItems.$inferSelect;
 export type NewFinanceSupplyItem = typeof financeSupplyItems.$inferInsert;
 export type FinanceSupplyOption = typeof financeSupplyOptions.$inferSelect;

@@ -27,10 +27,13 @@ import {
   createSupplyItem,
   createSupplyItemFromSuggestion,
   createSupplyOption,
+  deleteSupplyGroup,
   deleteSupplyItem,
   deleteSupplyOption,
   mergeSupplyItems,
   previewSupplyMerge,
+  renameSupplyGroup,
+  setSupplyItemGroup,
   setSupplyOptionInUse,
   updateSupplyItem,
   updateSupplyOption,
@@ -616,6 +619,25 @@ export async function updateSupplyItemAction(
   edit: SupplyItemEdit,
 ): Promise<ActionResult> {
   return run((userId) => updateSupplyItem(userId, itemId, edit), { revalidate: [] });
+}
+
+/** The Group cell: pick an existing group by name, create one, or blank to ungroup. */
+export async function setSupplyItemGroupAction(
+  itemId: string,
+  name: string,
+): Promise<ActionResult> {
+  return run((userId) => setSupplyItemGroup(userId, itemId, name), { revalidate: [] });
+}
+
+export async function renameSupplyGroupAction(
+  groupId: string,
+  name: string,
+): Promise<ActionResult> {
+  return run((userId) => renameSupplyGroup(userId, groupId, name), { revalidate: [] });
+}
+
+export async function deleteSupplyGroupAction(groupId: string): Promise<ActionResult> {
+  return run((userId) => deleteSupplyGroup(userId, groupId), { revalidate: [] });
 }
 
 export async function deleteSupplyItemAction(itemId: string): Promise<ActionResult> {

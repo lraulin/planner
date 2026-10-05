@@ -715,6 +715,13 @@
       "when": 1790708364920,
       "tag": "0101_accounts_provider_account_key",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1791159787136,
+      "tag": "0102_open_meteorite",
+      "breakpoints": true
     }
   ]
 }

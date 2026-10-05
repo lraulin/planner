@@ -1,11 +1,13 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeBudgetCategories,
+  financeSupplyGroups,
   financeSupplyItems,
   financeSupplyOptions,
   type SupplyRateBasis,
 } from "@/db/schema";
+import { after, first } from "@/lib/tree/sortKey";
 import { parsePackCount } from "./packSize";
 import { listAmazonRepeatPurchases, listSupplyItems } from "./queries";
 import {
@@ -36,7 +38,7 @@ export type SupplyRateInput =
 export type SupplyItemInput = {
   name: string;
   rate: SupplyRateInput;
-  groupLabel?: string;
+  groupId?: string | null;
   envelopeId?: string | null;
   unitLabel?: string;
   notes?: string;
@@ -44,7 +46,7 @@ export type SupplyItemInput = {
 
 export type SupplyItemEdit = {
   name?: string;
-  groupLabel?: string;
+  groupId?: string | null;
   envelopeId?: string | null;
   unitLabel?: string;
   rate?: SupplyRateInput;
@@ -121,6 +123,18 @@ async function requireEnvelope(userId: string, envelopeId: string): Promise<void
   if (!row) throw new Error("That envelope does not exist.");
 }
 
+/** Same reasoning as `requireEnvelope`: a group id is a claim about the caller's own rows. */
+async function requireGroup(userId: string, groupId: string): Promise<void> {
+  const [row] = await db
+    .select({ id: financeSupplyGroups.id })
+    .from(financeSupplyGroups)
+    .where(
+      and(eq(financeSupplyGroups.userId, userId), eq(financeSupplyGroups.id, groupId)),
+    )
+    .limit(1);
+  if (!row) throw new Error("That supply group does not exist.");
+}
+
 function requireName(name: string): string {
   const trimmed = name.trim();
   if (trimmed === "") throw new Error("A supply item needs a name.");
@@ -153,17 +167,109 @@ function rateColumns(rate: SupplyRateInput): {
   };
 }
 
+function requireGroupName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed === "") throw new Error("A group needs a name.");
+  return trimmed;
+}
+
+async function findGroupByName(userId: string, name: string): Promise<string | null> {
+  const [row] = await db
+    .select({ id: financeSupplyGroups.id })
+    .from(financeSupplyGroups)
+    .where(
+      and(
+        eq(financeSupplyGroups.userId, userId),
+        sql`lower(${financeSupplyGroups.name}) = lower(${name})`,
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/**
+ * The group called `name`, created when there is none. The Group cell is pick-or-create, so
+ * typing "pets" where "Pets" exists means the existing one rather than a duplicate the unique
+ * index would refuse.
+ */
+export async function createSupplyGroup(userId: string, name: string): Promise<string> {
+  const trimmed = requireGroupName(name);
+  const existing = await findGroupByName(userId, trimmed);
+  if (existing) return existing;
+  const [last] = await db
+    .select({ sortKey: financeSupplyGroups.sortKey })
+    .from(financeSupplyGroups)
+    .where(eq(financeSupplyGroups.userId, userId))
+    .orderBy(desc(financeSupplyGroups.sortKey))
+    .limit(1);
+  const [row] = await db
+    .insert(financeSupplyGroups)
+    .values({
+      userId,
+      name: trimmed,
+      sortKey: last ? after(last.sortKey) : first(),
+    })
+    .returning({ id: financeSupplyGroups.id });
+  if (!row) throw new Error("Could not save that group.");
+  return row.id;
+}
+
+/** One edit: every item, and every scenario line, follows the group by id. */
+export async function renameSupplyGroup(
+  userId: string,
+  groupId: string,
+  name: string,
+): Promise<void> {
+  await requireGroup(userId, groupId);
+  const trimmed = requireGroupName(name);
+  const clash = await findGroupByName(userId, trimmed);
+  if (clash && clash !== groupId) {
+    throw new Error(`There is already a group called "${trimmed}".`);
+  }
+  await db
+    .update(financeSupplyGroups)
+    .set({ name: trimmed, updatedAt: new Date() })
+    .where(
+      and(eq(financeSupplyGroups.userId, userId), eq(financeSupplyGroups.id, groupId)),
+    );
+}
+
+/** The items stay, ungrouped — the foreign key is `set null`. */
+export async function deleteSupplyGroup(
+  userId: string,
+  groupId: string,
+): Promise<void> {
+  await requireGroup(userId, groupId);
+  await db
+    .delete(financeSupplyGroups)
+    .where(
+      and(eq(financeSupplyGroups.userId, userId), eq(financeSupplyGroups.id, groupId)),
+    );
+}
+
+/** What typing in the Group cell does: blank ungroups, anything else picks or creates. */
+export async function setSupplyItemGroup(
+  userId: string,
+  itemId: string,
+  name: string,
+): Promise<void> {
+  await requireSupplyItem(userId, itemId);
+  const groupId = name.trim() === "" ? null : await createSupplyGroup(userId, name);
+  await updateSupplyItem(userId, itemId, { groupId });
+}
+
 export async function createSupplyItem(
   userId: string,
   input: SupplyItemInput,
 ): Promise<string> {
   if (input.envelopeId) await requireEnvelope(userId, input.envelopeId);
+  if (input.groupId) await requireGroup(userId, input.groupId);
   const [row] = await db
     .insert(financeSupplyItems)
     .values({
       userId,
       name: requireName(input.name),
-      groupLabel: input.groupLabel ?? "",
+      groupId: input.groupId ?? null,
       envelopeId: input.envelopeId ?? null,
       unitLabel: input.unitLabel ?? "",
       notes: input.notes ?? "",
@@ -181,11 +287,12 @@ export async function updateSupplyItem(
 ): Promise<void> {
   await requireSupplyItem(userId, itemId);
   if (edit.envelopeId) await requireEnvelope(userId, edit.envelopeId);
+  if (edit.groupId) await requireGroup(userId, edit.groupId);
   await db
     .update(financeSupplyItems)
     .set({
       ...(edit.name !== undefined ? { name: requireName(edit.name) } : {}),
-      ...(edit.groupLabel !== undefined ? { groupLabel: edit.groupLabel } : {}),
+      ...(edit.groupId !== undefined ? { groupId: edit.groupId } : {}),
       ...(edit.envelopeId !== undefined ? { envelopeId: edit.envelopeId } : {}),
       ...(edit.unitLabel !== undefined ? { unitLabel: edit.unitLabel } : {}),
       ...(edit.notes !== undefined ? { notes: edit.notes } : {}),
