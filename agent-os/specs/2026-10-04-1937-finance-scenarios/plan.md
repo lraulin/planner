@@ -1,7 +1,11 @@
 # Scenarios — a planning worksheet for a month that does not exist yet
 
-**Status: active**
-Spec folder: `agent-os/specs/2026-10-04-1937-finance-scenarios/`
+**Status: frozen / complete** (2026-10-04)
+
+> **Not yet deployed.** Task 2 is a data-transforming migration; the recovery gate in
+> `agent-os/standards/database/migrations.md` has to run before the push that carries it.
+> Everything is committed on `master` locally and verified against the dev database.
+> Spec folder: `agent-os/specs/2026-10-04-1937-finance-scenarios/`
 
 ## Spec relationships
 
@@ -127,38 +131,52 @@ and it deliberately leaves Actual's envelope math untouched.
 
 ## Acceptance criteria
 
-- [ ] A new scenario with no edits shows Regular income minus active bills, equal to the
+- [x] A new scenario with no edits shows Regular income minus active bills, equal to the
       Bills page's "after bills" remainder.
-- [ ] Switching Rent off and adding a manual `Mortgage 2,429 / month` line reproduces the
+- [x] Switching Rent off and adding a manual `Mortgage 2,429 / month` line reproduces the
       spreadsheet: bills + mortgage ≈ $3,430.71, and against $4,802.86 income the remainder
       is ≈ $1,372.15. Each bill's monthly figure is rounded on its own, so the sum may sit a
       few cents either side; the spreadsheet's $1,372.16 is the same number.
-- [ ] `32.99 / week` reads $143.45 a month (`× 365.25 ÷ 7 ÷ 12` via `annualCents`), not
+- [x] `32.99 / week` reads $143.45 a month (`× 365.25 ÷ 7 ÷ 12` via `annualCents`), not
       `× 4`.
-- [ ] Repricing a bill on Bills changes it in every scenario that has not overridden it,
+- [x] Repricing a bill on Bills changes it in every scenario that has not overridden it,
       and leaves an overridden one alone.
-- [ ] Adding the first sub-line to a $250 line leaves the scenario total unchanged.
-- [ ] A line linked to a Supplies group picks up an item added to that group afterwards.
-- [ ] Renaming a Supplies group is one edit and no scenario line changes amount.
-- [ ] Every pre-migration `group_label` survives as a group with the same items.
-- [ ] A line linked to an envelope shows its 12-completed-month average; the current
+- [x] Adding the first sub-line to a $250 line leaves the scenario total unchanged.
+- [x] A line linked to a Supplies group picks up an item added to that group afterwards.
+- [x] Renaming a Supplies group is one edit and no scenario line changes amount.
+- [x] Every pre-migration `group_label` survives as a group with the same items.
+- [x] A line linked to an envelope shows its 12-completed-month average; the current
       partial month is excluded.
-- [ ] Seeding a fresh "Rent off, Mortgage on" scenario lands near the −$769 gap.
-- [ ] An envelope with spending last year and no line appears under Uncovered, and
+- [x] Seeding a fresh "Rent off, Mortgage on" scenario lands near the −$769 gap. _(Verified on
+      fixtures and the dev database; the −$769 figure itself needs Lee's production data and
+      was not reproduced here.)_
+- [x] An envelope with spending last year and no line appears under Uncovered, and
       disappears when a line links it or its group.
-- [ ] A second user cannot read, change, duplicate or delete the first user's scenario,
+- [x] A second user cannot read, change, duplicate or delete the first user's scenario,
       line, override or supply group, and cannot attach a line to the first user's
       envelope, group or supply item.
-- [ ] `get_scenario` returns the same remainder the page shows.
+- [x] `get_scenario` returns the same remainder the page shows.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                          | Why                                                                                                                                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Supply group names are unique per user **ignoring case and surrounding space** (`lower(name)` index), not just per user.                                                        | The Group cell is pick-or-create by what was typed; "pets" where "Pets" exists must mean the existing group. The backfill collapses labels that differ only by case.                                |
+| 2   | Supply group rename and delete exist as mutations and server actions, but the Supplies page has **no rename/delete-group control yet** — the Group cell is pick-or-create only. | The acceptance criterion ("renaming a group is one edit") is a property of the model and is tested; a UI for it was not in the page work. Follow-up.                                                |
+| 3   | Supply item rows keep a derived `groupLabel` beside the new `groupId`.                                                                                                          | Grid sort/filter, the merge preview and the pickers read a label; it is the group's name, so it cannot disagree with the id. `merge.ts` and `rows.ts` are unchanged.                                |
+| 4   | The scenario tables join their scenario through a **composite foreign key on `(scenario_id, user_id)`**.                                                                        | A line or override cannot name another user's scenario whatever a mutation forgets — a second guard beyond the ownership checks the plan required.                                                  |
+| 5   | A line whose supply item or group is later deleted becomes **source-less ($0)** rather than being deleted (`set null`, and the `sources` check allows no source).               | Deleting a Supplies item must not silently remove a scenario line.                                                                                                                                  |
+| 6   | Moving a line under a **leaf that has an amount** moves that amount onto a new sub-line named for the parent.                                                                   | Otherwise the move would drop what the parent was worth, breaking "splitting never changes the total". `moveLine` also gained a `beforeId` placement, which dropping above the first sibling needs. |
+| 7   | A bill or Regular income is edited in the **Monthly** cell (it sets the override amount); Amount and Cadence are blank on those rows.                                           | A bill's cadence and due date stay on the Bills page; the scenario stores only a monthly difference.                                                                                                |
+| 8   | Uncovered = **spending-kind** envelopes only; every bill, on or off, counts as accounted for.                                                                                   | D9 says a bill switched off is not uncovered; bills are never uncovered because the scenario lists all of them.                                                                                     |
+| 9   | Uncovered rows carry an **Add line** button that adds one linked monthly line.                                                                                                  | D9 named the action; this is it.                                                                                                                                                                    |
+| 10  | `annualCents` uses the Gregorian year (365.2425), not 365.25 as the plan's prose said.                                                                                          | It is the shared function bills use; `32.99 / week` still reads $143.45.                                                                                                                            |
+| 11  | The Compare-to control is a native `<select>` with Envelope / Budget group option groups.                                                                                       | The grid has no combined envelope-or-group picker, and a modal for one link would be heavier than the cell.                                                                                         |
+| 12  | Sub-lines are always expanded (no collapse), and a drag can only target another **line** row — not an empty section.                                                            | The grid's row-collapse is outline-specific; a section with no lines gets its first via New line.                                                                                                   |
+| 13  | `updateScenario` also edits `notes`; there is no notes control in the UI yet.                                                                                                   | The column was in the plan; writing it costs nothing, a UI was not scoped.                                                                                                                          |
 
 ## Task 1: Save spec documentation
 
@@ -266,6 +284,30 @@ Add both to `mcp.test.ts` and a `responseBudget.test.ts` case.
   frozen with the date; list follow-ups as new work.
 - Add the shipped entry to `agent-os/product/roadmap.md`.
 
-> While this spec is **active**, a material change to requirements, design or scope
-> (including feedback on what was built) updates the relevant sections and appends to
-> **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+## As built
+
+- **Schema:** `finance_supply_groups` (migration `0102`, data-transforming) and
+  `finance_scenarios` / `finance_scenario_lines` / `finance_scenario_overrides`
+  (`0103`, additive). Standards pinned at `866bae77`.
+- **Pure logic:** `src/lib/finances/scenarios/` — `amount`, `split`, `compose`, `actuals`,
+  `uncovered`, `seed`, `supplyAmounts`, `gridRows`, each with a test beside it.
+- **Reads and writes:** `queries.ts`, `mutations.ts`, and `workspace.ts` — the one place a
+  scenario meets the live bills (`billRows`), Regular income, Supplies and the Insights
+  history. The page, the picker's remainders and the agent tools all load through it.
+- **Page:** `/finances/scenarios`, `src/components/finances/scenarios/`.
+- **Agent:** `list_scenarios`, `get_scenario` (`src/lib/agent/scenarioTools.ts`).
+- **Verification:** `npm test` (365 unit + 79 integration files), lint, typecheck, the
+  production build, and `npm run smoke` (64 routes) all pass. The page was driven in a
+  browser on the dev database — seeding, Rent switched off, a sub-line split, the Uncovered
+  footer — and on the phone layout. The Task 2 backfill was run on a clone of the dev
+  database and on a second scratch database with case-colliding labels and two users.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Before deploying:** run the recovery gate (`backup:run`, `backup:status`, Neon recovery
+  point) and confirm the `0102` backfill against a copy of production data.
+- A rename / delete control for Supplies groups (the mutations and actions exist).
+- A notes field on a scenario.
+- Dropping a line into an empty section; collapsing sub-lines.
+- Checking the "Rent off, mortgage on" scenario against Lee's production numbers (the
+  −$769 gap).

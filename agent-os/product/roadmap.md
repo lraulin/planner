@@ -1418,6 +1418,18 @@ period)` so money already spent stops being held twice and only going over bites
      above; with splits in place, writing the budget from the sheet is no longer
      blocked on the model.
 
+     ✅ **Scenarios shipped 2026-10-04** —
+     `specs/2026-10-04-1937-finance-scenarios/`. A planning worksheet for a month that
+     does not exist yet — "will my income cover the life I am about to live?" — which the
+     envelope budget cannot answer because it only deals in money that exists. A scenario
+     is one steady-state month: Regular income and bills arrive **live** and switch off or
+     reprice for that scenario only (a repriced bill reaches every scenario that has not
+     overridden it), and lines cover the rest — at any cadence, from a live Supplies item or
+     group, with sub-lines that never change the total, and last year's actual beside the
+     plan. Seeding from spending and the Uncovered footer name what the scenario ignores.
+     Supplies groups became rows so a line can follow one by id. `list_scenarios` and
+     `get_scenario` are read-only. Nothing writes the budget.
+
 - **Eventually:** **Plaid** (or equivalent) remains a metered fallback if SimpleFIN
   staleness is unacceptable. Live bank sync shipped 2026-08-16 —
   `specs/2026-08-15-1315-live-bank-sync` — SimpleFIN setup-token paste, linked to

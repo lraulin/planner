@@ -1,6 +1,6 @@
 # Scenarios — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-10-04)
 
 ## Scope
 
