@@ -233,28 +233,57 @@ export function formatExportStamp(at: Date): ExportStamp {
 }
 
 /**
- * Title line, `Exported {iso}` line, blank line — then the unstamped table. JSON/YAML wrap
- * the payload as `{ exportedAt, title, rows }` so an empty grid is an envelope, not `[]`.
+ * What was narrowing the grid when it was exported, as a single line a reader can take in:
+ * the filter bar's own chip text joined with semicolons, or `none`. Without it a CSV of
+ * eight rows says nothing about the other seven thousand it left out.
+ */
+export function describeExportFilters(filters: readonly string[]): string {
+  return filters.length === 0 ? "none" : filters.join("; ");
+}
+
+/**
+ * Title line, `Exported {iso}` line, optional `Filters:` line, blank line — then the
+ * unstamped table. JSON/YAML wrap the payload as `{ exportedAt, title, filters, rows }` so
+ * an empty grid is an envelope, not `[]`.
+ *
+ * `filters` is the chip text for what was narrowing the view. Pass `[]` for an unfiltered
+ * grid so the document says so; leave it out for an export that has no filter concept
+ * (a catalog, a drawer), which then carries no line at all.
  *
  * `payload` is whatever `tableTo*` (or a document serializer) already wrote. This layer
  * does not re-quote cells.
  */
 export function stampExportBody(
   format: GridExportFormat,
-  options: { title: string; exportedAt: Date; payload: string },
+  options: {
+    title: string;
+    exportedAt: Date;
+    payload: string;
+    filters?: readonly string[];
+  },
 ): string {
   const { iso } = formatExportStamp(options.exportedAt);
+  const { filters } = options;
   if (format === "csv") {
     const exported = escapeCsvField(`Exported ${iso}`);
-    return `${escapeCsvField(options.title)}\n${exported}\n\n${options.payload}`;
+    const filtered = filters
+      ? `${escapeCsvField(`Filters: ${describeExportFilters(filters)}`)}\n`
+      : "";
+    return `${escapeCsvField(options.title)}\n${exported}\n${filtered}\n${options.payload}`;
   }
   if (format === "markdown") {
-    return `# ${options.title}\nExported ${iso}\n\n${options.payload}`;
+    const filtered = filters ? `Filters: ${describeExportFilters(filters)}\n` : "";
+    return `# ${options.title}\nExported ${iso}\n${filtered}\n${options.payload}`;
   }
   if (format === "json") {
     const rows = JSON.parse(options.payload) as unknown;
     return `${JSON.stringify(
-      { exportedAt: iso, title: options.title, rows },
+      {
+        exportedAt: iso,
+        title: options.title,
+        ...(filters ? { filters } : {}),
+        rows,
+      },
       null,
       2,
     )}\n`;
@@ -267,7 +296,12 @@ export function stampExportBody(
           .split("\n")
           .map((line) => (line === "" ? "" : `  ${line}`))
           .join("\n")}\n`;
-  return `exportedAt: ${yamlScalar(iso)}\ntitle: ${yamlScalar(options.title)}\n${rowsBlock}`;
+  const filtersBlock = !filters
+    ? ""
+    : filters.length === 0
+      ? "filters: []\n"
+      : `filters:\n${filters.map((filter) => `  - ${yamlScalar(filter)}\n`).join("")}`;
+  return `exportedAt: ${yamlScalar(iso)}\ntitle: ${yamlScalar(options.title)}\n${filtersBlock}${rowsBlock}`;
 }
 
 /**
@@ -379,7 +413,7 @@ export function serializeGridExport<TRow extends DepthExportRow>(
   format: GridExportFormat,
   columns: readonly ExportColumn<TRow>[],
   rows: readonly TRow[],
-  meta: { title: string; exportedAt: Date },
+  meta: { title: string; exportedAt: Date; filters?: readonly string[] },
 ): string {
   const payload =
     format === "csv"
@@ -393,6 +427,7 @@ export function serializeGridExport<TRow extends DepthExportRow>(
     title: meta.title,
     exportedAt: meta.exportedAt,
     payload,
+    filters: meta.filters,
   });
 }
 

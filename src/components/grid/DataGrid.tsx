@@ -26,6 +26,7 @@ import {
   type NodeGridRow,
 } from "./columns";
 import { ColumnHeaderRow } from "./ColumnHeader";
+import { useGridChips } from "./useGridChips";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { filterActive, rowPassesFilters, type ColumnFilter } from "@/lib/grid/filters";
 import {
@@ -784,9 +785,32 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * tripped `useRegisterCommands`' churn guard (Maximum update depth on Finances). The run
    * closure reads the latest snapshot from a ref instead — same shape as ViewPicker.
    */
-  const exportSnapshot = useRef({ columns, displayRows, ariaLabel, loadExportRows });
+  const filterChips = useGridChips({
+    columns: filterColumns,
+    distinctValues,
+    filters,
+    advancedFilter,
+    search,
+  });
+  const exportFilters = useMemo(
+    () => filterChips.map((chip) => chip.label),
+    [filterChips],
+  );
+  const exportSnapshot = useRef({
+    columns,
+    displayRows,
+    ariaLabel,
+    loadExportRows,
+    exportFilters,
+  });
   useEffect(() => {
-    exportSnapshot.current = { columns, displayRows, ariaLabel, loadExportRows };
+    exportSnapshot.current = {
+      columns,
+      displayRows,
+      ariaLabel,
+      loadExportRows,
+      exportFilters,
+    };
   });
   const exportCommands = useMemo(() => {
     const downloads = gridExportCommands(() => {}).map((command) => {
@@ -801,6 +825,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
               displayRows: shown,
               ariaLabel: label,
               loadExportRows: loadRows,
+              exportFilters: filtersApplied,
             } = exportSnapshot.current;
             const nodeRows = loadRows
               ? await loadRows()
@@ -811,6 +836,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
               serializeGridExport(format, exportableColumns(visible), nodeRows, {
                 title: label,
                 exportedAt,
+                filters: filtersApplied,
               }),
               exportMimeType(format),
             );
@@ -826,6 +852,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                 displayRows: shown,
                 ariaLabel: label,
                 loadExportRows: loadRows,
+                exportFilters: filtersApplied,
               } = exportSnapshot.current;
               const nodeRows = loadRows
                 ? await loadRows()
@@ -834,6 +861,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                 serializeGridExport(format, exportableColumns(visible), nodeRows, {
                   title: label,
                   exportedAt: new Date(),
+                  filters: filtersApplied,
                 }),
               );
             })();
@@ -853,6 +881,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
               displayRows: shown,
               ariaLabel: label,
               loadExportRows: loadRows,
+              exportFilters: filtersApplied,
             } = exportSnapshot.current;
             const nodeRows = loadRows
               ? await loadRows()
@@ -861,6 +890,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
               serializeGridExport(format, exportableColumns(visible), nodeRows, {
                 title: label,
                 exportedAt: new Date(),
+                filters: filtersApplied,
               }),
             );
           })();

@@ -364,6 +364,65 @@ describe("stampExportBody", () => {
     expect(markdown.startsWith("| Name | Note |")).toBe(true);
   });
 
+  it("records the filters that narrowed the view, or says there were none", () => {
+    const csv = tableToCsv(columns, rows);
+    const filters = ["Date: This month", 'Search "walmart; chewy"'];
+    expect(
+      stampExportBody("csv", {
+        title: "Register",
+        exportedAt: PINNED,
+        payload: csv,
+        filters,
+      }),
+    ).toBe(
+      `Register\nExported 2026-08-29T13:41:36-04:00\n"Filters: Date: This month; Search ""walmart; chewy"""\n\n${csv}`,
+    );
+    expect(
+      stampExportBody("markdown", {
+        title: "Register",
+        exportedAt: PINNED,
+        payload: tableToMarkdown(columns, rows),
+        filters: [],
+      })
+        .split("\n")
+        .slice(0, 4),
+    ).toEqual([
+      "# Register",
+      "Exported 2026-08-29T13:41:36-04:00",
+      "Filters: none",
+      "",
+    ]);
+
+    const json = JSON.parse(
+      stampExportBody("json", {
+        title: "Register",
+        exportedAt: PINNED,
+        payload: tableToJson(columns, rows),
+        filters,
+      }),
+    ) as { filters: string[] };
+    expect(json.filters).toEqual(filters);
+
+    expect(
+      stampExportBody("yaml", {
+        title: "Register",
+        exportedAt: PINNED,
+        payload: tableToYaml(columns, []),
+        filters: ["Date: This month"],
+      }),
+    ).toBe(
+      'exportedAt: "2026-08-29T13:41:36-04:00"\ntitle: Register\nfilters:\n  - "Date: This month"\nrows: []\n',
+    );
+    expect(
+      stampExportBody("yaml", {
+        title: "Register",
+        exportedAt: PINNED,
+        payload: tableToYaml(columns, []),
+        filters: [],
+      }),
+    ).toContain("filters: []\nrows: []");
+  });
+
   it("wraps JSON and YAML in an envelope; an empty grid is not a top-level array", () => {
     const json = JSON.parse(
       stampExportBody("json", {
