@@ -135,7 +135,10 @@ function offerOf(option: SupplyOptionRow): SupplyOffer {
 }
 
 /** One item and its offers, flattened. Offers never contribute to a total. */
-export function supplyItemRows(item: SupplyItemRow): SupplyGridRow[] {
+export function supplyItemRows(
+  item: SupplyItemRow,
+  { collapsed = false }: { collapsed?: boolean } = {},
+): SupplyGridRow[] {
   const rate = rateOf(item);
   const inUse = item.options.find((option) => option.inUse) ?? null;
   const head: SupplyItemGridRow = {
@@ -147,7 +150,12 @@ export function supplyItemRows(item: SupplyItemRow): SupplyGridRow[] {
     totals: inUse ? supplyTotals(rate, offerOf(inUse)) : null,
   };
 
-  const options = item.options.map<SupplyOptionGridRow>((option) => ({
+  // Collapsing hides the alternatives, not the offer that drives the totals: that row is what
+  // the item costs, so an item with no offer in use collapses to its bare item row.
+  const shown = collapsed
+    ? item.options.filter((option) => option.inUse)
+    : item.options;
+  const options = shown.map<SupplyOptionGridRow>((option) => ({
     kind: "option",
     id: option.id,
     item,

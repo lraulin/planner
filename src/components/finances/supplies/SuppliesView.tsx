@@ -146,6 +146,9 @@ export function SuppliesView({
   const [seenServerItems, setSeenServerItems] = useState(initialItems);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [collapsedItemIds, setCollapsedItemIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [suggesting, setSuggesting] = useState(false);
   const [pendingMerge, setPendingMerge] = useState<
     readonly { id: string; name: string }[] | null
@@ -195,7 +198,9 @@ export function SuppliesView({
           collapsed: false,
         },
         ...group.items.flatMap((head) =>
-          supplyItemRows(head.item).map((node, index) => ({
+          supplyItemRows(head.item, {
+            collapsed: collapsedItemIds.has(head.item.id),
+          }).map((node, index) => ({
             kind: "node" as const,
             id: node.id,
             node,
@@ -210,8 +215,27 @@ export function SuppliesView({
           })),
         ),
       ]),
-    [groups],
+    [groups, collapsedItemIds],
   );
+
+  const toggleItem = useCallback((itemId: string) => {
+    setCollapsedItemIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(itemId)) next.add(itemId);
+      return next;
+    });
+  }, []);
+
+  const withAlternatives = useMemo(
+    () =>
+      items
+        .filter((item) => item.options.some((option) => !option.inUse))
+        .map((i) => i.id),
+    [items],
+  );
+  const allCollapsed =
+    withAlternatives.length > 0 &&
+    withAlternatives.every((id) => collapsedItemIds.has(id));
 
   const columns = useMemo(() => suppliesColumns(), []);
   const distinctValues = useMemo(
@@ -278,10 +302,12 @@ export function SuppliesView({
       onPatchOption: (optionId, edit) =>
         commit(() => updateSupplyOptionAction(optionId, edit)),
       onSetInUse: (optionId) => commit(() => setSupplyOptionInUseAction(optionId)),
+      collapsedItemIds,
+      onToggleItem: toggleItem,
       onSetGroup: (itemId, name) =>
         commit(() => setSupplyItemGroupAction(itemId, name)),
     }),
-    [catalog, pending, commit],
+    [catalog, pending, commit, collapsedItemIds, toggleItem],
   );
 
   const requestMerge = useCallback(() => {
@@ -471,14 +497,28 @@ export function SuppliesView({
         views={views}
         commandCapabilities={commandCapabilities}
         right={
-          <button
-            type="button"
-            disabled={pending}
-            className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0 md:py-1.5"
-            onClick={() => setSuggesting(true)}
-          >
-            Suggest from Amazon
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={withAlternatives.length === 0}
+              className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink hover:bg-surface-raised disabled:opacity-50 md:min-h-0 md:py-1.5"
+              onClick={() =>
+                setCollapsedItemIds(
+                  allCollapsed ? new Set() : new Set(withAlternatives),
+                )
+              }
+            >
+              {allCollapsed ? "Show alternatives" : "Hide alternatives"}
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0 md:py-1.5"
+              onClick={() => setSuggesting(true)}
+            >
+              Suggest from Amazon
+            </button>
+          </div>
         }
       />
 

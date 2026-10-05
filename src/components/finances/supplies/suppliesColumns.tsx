@@ -39,6 +39,9 @@ export type SuppliesColumnCtx = {
   onPatchItem: (itemId: string, edit: SupplyItemEdit) => void;
   onPatchOption: (optionId: string, edit: SupplyOptionEdit) => void;
   onSetInUse: (optionId: string) => void;
+  /** Items whose alternative offers are folded away. */
+  collapsedItemIds: ReadonlySet<string>;
+  onToggleItem: (itemId: string) => void;
   /** Pick-or-create: an existing group's name picks it, a new name creates it, blank ungroups. */
   onSetGroup: (itemId: string, name: string) => void;
   /** Non-income envelopes the "funded from" picker offers, including hidden. */
@@ -88,6 +91,40 @@ function TextCell({
         if (event.target.value !== value) onCommit(event.target.value);
       }}
     />
+  );
+}
+
+/** Folds an item's alternative offers; invisible (but still spaced) when it has none. */
+function ItemToggle({
+  itemId,
+  alternatives,
+  collapsed,
+  onToggle,
+}: {
+  itemId: string;
+  alternatives: number;
+  collapsed: boolean;
+  onToggle: (itemId: string) => void;
+}) {
+  const label = collapsed ? "Show alternatives" : "Hide alternatives";
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      aria-expanded={!collapsed}
+      tabIndex={-1}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle(itemId);
+      }}
+      className={[
+        "mr-1 flex w-4 flex-none items-center justify-center text-[0.625rem] text-ink-faint",
+        alternatives > 0 ? "hover:text-ink" : "invisible",
+      ].join(" ")}
+    >
+      {collapsed ? "▶" : "▼"}
+    </button>
   );
 }
 
@@ -252,6 +289,14 @@ export function suppliesColumns(): ColumnDef<SuppliesColumnCtx, SupplyGridRow>[]
           className="flex w-full min-w-0 items-center"
           style={{ paddingLeft: `calc(${row.depth} * var(--indent-step))` }}
         >
+          {row.node.kind === "item" ? (
+            <ItemToggle
+              itemId={row.id}
+              alternatives={row.node.item.options.filter((o) => !o.inUse).length}
+              collapsed={ctx.collapsedItemIds.has(row.id)}
+              onToggle={ctx.onToggleItem}
+            />
+          ) : null}
           {row.node.kind === "item" ? (
             <TextCell
               value={row.node.item.name}

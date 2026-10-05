@@ -136,6 +136,26 @@ describe("supplyItemRows", () => {
     expect(head.kind === "item" && head.totals).toBeNull();
     expect(head.kind === "item" && head.inUse).toBeNull();
   });
+
+  it("collapses to the in-use offer, leaving the item's price untouched", () => {
+    const inUse = option({ inUse: true });
+    const rival = option({ vendor: "Chewy", qtyPerItem: 24, costPerOrderCents: 2399 });
+    const open = supplyItemRows(item({ options: [inUse, rival] }));
+    const folded = supplyItemRows(item({ options: [inUse, rival] }), {
+      collapsed: true,
+    });
+
+    expect(folded.map((row) => row.id)).toEqual([open[0].id, inUse.id]);
+    expect(folded[0].kind === "item" && folded[0].totals).toEqual(
+      open[0].kind === "item" && open[0].totals,
+    );
+  });
+
+  it("collapses an item with nothing in use to its bare item row", () => {
+    expect(
+      supplyItemRows(item({ options: [option()] }), { collapsed: true }),
+    ).toHaveLength(1);
+  });
 });
 
 describe("supplyGroups", () => {
