@@ -29,6 +29,7 @@ import {
   DATE_TOLERANCE_DAYS,
 } from "./liveFeedMatch";
 import { amountMatches } from "./amountMatch";
+import { shiftDateKey } from "@/lib/schedule/geometry";
 
 export type PairableRow = {
   id: string;
@@ -44,6 +45,30 @@ export type RowPairing = {
 };
 
 /**
+ * How many days before a hold's own day a successor may be dated. One, for the feed that
+ * stamps a charge with the previous evening in UTC; no more, because a posted row dated
+ * days *before* the purchase is a different purchase.
+ */
+export const SUCCESSOR_SLACK_DAYS = 1;
+
+/**
+ * Whether `candidate` could be what `hold` became. A hold is an authorization at the moment
+ * of purchase and its posted twin arrives later, so a row whose every date precedes the
+ * hold's day is an earlier charge that merely looks alike — Walmart $261.36 on 9/28 is not
+ * what the $200.84 Walmart alert of 10/4 turned into, and Tequila Grill $49.87 on 9/30 is
+ * nothing to do with a $51.29 Chewy alert (Lee's Capital One •••3448, 2026-10-04).
+ *
+ * Used for alert holds, whose day is the purchase day. A browser-page hold's date is the
+ * page's own idea of a day and is paired symmetrically.
+ */
+function couldSucceed(hold: PairableRow, candidate: PairableRow): boolean {
+  const latest = [candidate.transactionDate, candidate.postedDate ?? null]
+    .filter((key): key is string => key !== null)
+    .reduce((max, key) => (key > max ? key : max));
+  return latest >= shiftDateKey(hold.transactionDate, -SUCCESSOR_SLACK_DAYS);
+}
+
+/**
  * Pair browser rows against history-feed rows for one account.
  *
  * Occurrence-counted: each id, on either side, appears in at most one returned pairing. A
@@ -54,6 +79,7 @@ export function pairRows(
   browserRows: readonly PairableRow[],
   feedRows: readonly PairableRow[],
   descriptionsMatch: (a: string, b: string) => boolean = descriptionsOverlap,
+  successorsOnly = false,
 ): RowPairing[] {
   const candidates: { browser: PairableRow; feed: PairableRow; distance: number }[] =
     [];
@@ -61,6 +87,7 @@ export function pairRows(
   for (const browser of browserRows) {
     for (const feed of feedRows) {
       if (browser.amountCents !== feed.amountCents) continue;
+      if (successorsOnly && !couldSucceed(browser, feed)) continue;
       const distance = dateDistance(browser, feed);
       if (distance > DATE_TOLERANCE_DAYS) continue;
       if (!descriptionsMatch(browser.description, feed.description)) continue;
@@ -145,13 +172,19 @@ export type LostHoldResolution =
  * rows retire it only when exactly one of them also overlaps the hold's description — a
  * clear winner among plausible successors. Several with no clear winner keep the hold
  * rather than guess which one it became; the caller warns instead of removing it.
+ *
+ * `successorsOnly` drops candidates dated before the hold (`couldSucceed`). It is for a hold
+ * whose day is the purchase day, which is every alert hold, and it matters most when the
+ * alert has just landed: the only posted rows then in the register are older purchases.
  */
 export function resolveLostHold(
   hold: PairableRow,
   postedCandidates: readonly PairableRow[],
+  options: { successorsOnly?: boolean } = {},
 ): LostHoldResolution {
   const qualifying = postedCandidates.filter(
     (candidate) =>
+      (!options.successorsOnly || couldSucceed(hold, candidate)) &&
       dateDistance(hold, candidate) <= LOST_HOLD_TOLERANCE_DAYS &&
       (amountMatches(candidate.amountCents, hold.amountCents) ||
         (tippedFrom(candidate.amountCents, hold.amountCents) &&

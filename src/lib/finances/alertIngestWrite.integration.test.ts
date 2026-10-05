@@ -169,6 +169,60 @@ describeDb("alert holds", () => {
     expect(await rowsOf(userId)).toHaveLength(0);
   });
 
+  it("keeps a new alert hold when the only look-alike posted rows are earlier purchases", async () => {
+    // Lee's Capital One •••3448, 2026-10-04: Walmart, Chewy and Pizza Hut alerts each
+    // retired onto an older row (Walmart $261.36 on 9/28, Tequila Grill $49.87 on 9/30,
+    // Pizza Hut $12.71 on 9/28) and vanished from the register.
+    const userId = await makeUser();
+    await makeCard(userId);
+    const older = [
+      ["sf-walmart", "2026-09-28", "-261.36", "WAL-MART #1981"],
+      ["sf-tequila", "2026-09-30", "-49.87", "TEQUILA GRILL CANTIN"],
+      ["sf-pizza", "2026-09-28", "-12.71", "PIZZA HUT 036874"],
+    ] as const;
+    const accountId = (
+      await db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId))
+    )[0].id;
+    for (const [externalId, date, amount, description] of older) {
+      await addFeedRow(userId, accountId, { externalId, date, amount, description });
+    }
+
+    const results = [
+      await applyAlertEmail(userId, push("a-walmart", "Walmart", "$200.84", "Oct. 4")),
+      await applyAlertEmail(userId, push("a-chewy", "Chewy.com", "$51.29", "Oct. 4")),
+      await applyAlertEmail(userId, push("a-pizza", "Pizza Hut", "$12.71", "Oct. 2")),
+    ];
+
+    expect(results.map((r) => r.status)).toEqual(["inserted", "inserted", "inserted"]);
+    const holds = (await rowsOf(userId)).filter(
+      (r) => r.externalSource === "alert:capitalone",
+    );
+    expect(holds.map((r) => r.description).sort()).toEqual([
+      "Chewy.com",
+      "Pizza Hut",
+      "Walmart",
+    ]);
+    expect(holds.every((r) => r.pending && r.unlistedAt === null)).toBe(true);
+  });
+
+  it("still retires an alert hold onto the feed row that posts for it afterwards", async () => {
+    const userId = await makeUser();
+    const accountId = await makeCard(userId);
+    await applyAlertEmail(userId, push("a-chewy", "Chewy.com", "$51.29", "Oct. 4"));
+    await addFeedRow(userId, accountId, {
+      externalId: "sf-chewy",
+      date: "2026-10-05",
+      amount: "-51.29",
+      description: "CHEWY.COM",
+    });
+
+    const result = await retireAlertHolds(db, userId, accountId, "2026-10-06");
+
+    expect(result.retired).toBe(1);
+    const rows = await rowsOf(userId);
+    expect(rows.map((r) => r.externalSource)).toEqual(["api:simplefin"]);
+  });
+
   it("never lets a second user read, change or delete the first user's alert hold", async () => {
     const owner = await makeUser();
     const intruder = await makeUser();

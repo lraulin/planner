@@ -131,8 +131,14 @@ function toPairable(row: RetiringRow | ReplacementRow): PairableRow {
 function pairWithPostedFallback(
   retiring: readonly RetiringRow[],
   replacements: readonly ReplacementRow[],
+  successorsOnly: boolean,
 ): RowPairing[] {
-  const strict = pairRows(retiring.map(toPairable), replacements.map(toPairable));
+  const strict = pairRows(
+    retiring.map(toPairable),
+    replacements.map(toPairable),
+    undefined,
+    successorsOnly,
+  );
   const usedRetiring = new Set(strict.map((pair) => pair.browserId));
   const usedReplacement = new Set(strict.map((pair) => pair.feedId));
   const loose = pairRows(
@@ -141,6 +147,7 @@ function pairWithPostedFallback(
       .filter((row) => !row.pending && !usedReplacement.has(row.id))
       .map(toPairable),
     sharesBrandWord,
+    successorsOnly,
   );
   return [...strict, ...loose];
 }
@@ -155,10 +162,15 @@ function pairWithPostedFallback(
 export function planFeedHandover(
   retiring: readonly RetiringRow[],
   replacements: readonly ReplacementRow[],
+  options: { successorsOnly?: boolean } = {},
 ): FeedHandoverPlan {
   const retiringById = new Map(retiring.map((row) => [row.id, row]));
   const replacementById = new Map(replacements.map((row) => [row.id, row]));
-  const pairings = pairWithPostedFallback(retiring, replacements);
+  const pairings = pairWithPostedFallback(
+    retiring,
+    replacements,
+    options.successorsOnly ?? false,
+  );
 
   const steps: FeedHandoverStep[] = [];
   const warnings: string[] = [];

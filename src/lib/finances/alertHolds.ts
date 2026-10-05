@@ -48,7 +48,7 @@ export async function retireAlertHolds(
     userId,
     accountId,
     ALERT_FEEDS,
-    { pendingOnly: true },
+    { pendingOnly: true, successorsOnly: true },
   );
   const result: AlertHoldResult = {
     retired: exact.retired,
@@ -152,6 +152,7 @@ export async function retireAlertHolds(
             amountCents: numericStringToCents(hold.amount) ?? 0,
           },
           candidates,
+          { successorsOnly: true },
         );
 
     if (resolution.outcome === "carry") {

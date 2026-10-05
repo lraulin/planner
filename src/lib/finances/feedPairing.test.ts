@@ -17,6 +17,33 @@ function row(over: Partial<PairableRow> = {}): PairableRow {
   };
 }
 
+describe("pairRows successorsOnly", () => {
+  it("does not pair a hold with the same charge a few days before it", () => {
+    const hold = row({
+      id: "hold",
+      transactionDate: "2026-10-02",
+      postedDate: null,
+      amountCents: -1271,
+      description: "Pizza Hut",
+    });
+    const earlier = row({
+      id: "earlier",
+      transactionDate: "2026-10-01",
+      postedDate: "2026-10-01",
+      amountCents: -1271,
+      description: "PIZZA HUT 036874",
+    });
+    expect(pairRows([hold], [earlier])).toHaveLength(1);
+    expect(pairRows([hold], [earlier], undefined, true)).toHaveLength(1);
+    const wellBefore = {
+      ...earlier,
+      transactionDate: "2026-09-30",
+      postedDate: "2026-09-30",
+    };
+    expect(pairRows([hold], [wellBefore], undefined, true)).toEqual([]);
+  });
+});
+
 describe("pairRows", () => {
   it("does not pair ChatGPT with Claude just because the date and amount are close", () => {
     // Production case: scraped ChatGPT (Sep 7) with only SimpleFIN's Claude (Sep 9) on
@@ -152,6 +179,85 @@ describe("pairRows", () => {
 
 describe("resolveLostHold", () => {
   const hold = row({ id: "hold", amountCents: -2000, description: "Domino's" });
+
+  describe("successorsOnly", () => {
+    // Lee's Capital One •••3448, 2026-10-04: three alerts each retired onto an older,
+    // unrelated purchase that merely sat inside the band.
+    const alert = row({
+      id: "alert",
+      transactionDate: "2026-10-04",
+      postedDate: null,
+      amountCents: -5129,
+      description: "Chewy.com",
+    });
+    const earlier = row({
+      id: "tequila",
+      transactionDate: "2026-09-30",
+      postedDate: "2026-09-30",
+      amountCents: -4987,
+      description: "TEQUILA GRILL CANTIN",
+    });
+
+    it("is what stops a hold retiring onto an earlier look-alike purchase", () => {
+      expect(resolveLostHold(alert, [earlier])).toEqual({
+        outcome: "carry",
+        postedId: "tequila",
+      });
+      expect(resolveLostHold(alert, [earlier], { successorsOnly: true })).toEqual({
+        outcome: "none",
+      });
+    });
+
+    it("refuses a same-amount, same-merchant row from days earlier", () => {
+      const pizza = row({
+        id: "pizza",
+        transactionDate: "2026-10-02",
+        postedDate: null,
+        amountCents: -1271,
+        description: "Pizza Hut",
+      });
+      const lastWeek = row({
+        id: "last-week",
+        transactionDate: "2026-09-28",
+        postedDate: "2026-09-28",
+        amountCents: -1271,
+        description: "PIZZA HUT 036874",
+      });
+      expect(resolveLostHold(pizza, [lastWeek], { successorsOnly: true })).toEqual({
+        outcome: "none",
+      });
+    });
+
+    it("still carries to a row dated the hold's day, the day after, or one day before", () => {
+      for (const date of ["2026-10-03", "2026-10-04", "2026-10-06"]) {
+        const successor = row({
+          id: "successor",
+          transactionDate: date,
+          postedDate: date,
+          amountCents: -5129,
+          description: "CHEWY.COM",
+        });
+        expect(resolveLostHold(alert, [successor], { successorsOnly: true })).toEqual({
+          outcome: "carry",
+          postedId: "successor",
+        });
+      }
+    });
+
+    it("counts a row as a successor when only its posted date is late enough", () => {
+      const posted = row({
+        id: "late-post",
+        transactionDate: "2026-09-30",
+        postedDate: "2026-10-05",
+        amountCents: -5129,
+        description: "CHEWY.COM",
+      });
+      expect(resolveLostHold(alert, [posted], { successorsOnly: true })).toEqual({
+        outcome: "carry",
+        postedId: "late-post",
+      });
+    });
+  });
 
   it("carries the hold's state to the one posted row within the tip band", () => {
     const posted = row({

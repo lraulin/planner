@@ -74,7 +74,7 @@ export async function retireRowsOntoOtherSources(
   userId: string,
   accountId: string,
   retiringSources: readonly string[],
-  options: { pendingOnly: boolean },
+  options: { pendingOnly: boolean; successorsOnly?: boolean },
 ): Promise<FeedHandoverResult> {
   const stored = await executor
     .select({
@@ -178,7 +178,9 @@ export async function retireRowsOntoOtherSources(
     flowOverride: row.flowOverride,
   }));
 
-  const plan = planFeedHandover(retiring, replacements);
+  const plan = planFeedHandover(retiring, replacements, {
+    successorsOnly: options.successorsOnly,
+  });
   const storedById = new Map(stored.map((row) => [row.id, row]));
   const changes: FinanceAuditChange[] = [];
   let carried = 0;
