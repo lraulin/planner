@@ -27,7 +27,7 @@ export function managementBillRows(
 
 export function billGroupLabel(
   data: Pick<BudgetData, "groups">,
-  row: BudgetBillRow,
+  row: Pick<BudgetBillRow, "groupId">,
 ): string {
   return row.groupId === null
     ? "Ungrouped"

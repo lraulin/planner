@@ -97,6 +97,20 @@ import {
   listSupplyGroups,
   listSupplyItems,
 } from "@/lib/finances/supplies/queries";
+import {
+  createLine as createScenarioLine,
+  createScenario,
+  setOverride as setScenarioOverride,
+} from "@/lib/finances/scenarios/mutations";
+import {
+  listScenarios,
+  loadAllScenarios,
+  loadScenario,
+} from "@/lib/finances/scenarios/queries";
+import {
+  loadScenarioDetail,
+  loadScenarioSummaries,
+} from "@/lib/finances/scenarios/workspace";
 import { refreshCalendarLinks, setCalendarSyncEnabled } from "@/lib/google/mutations";
 import {
   enabledCalendarLinks,
@@ -251,6 +265,7 @@ type Owned = {
   financePayeeId: string;
   financeStatementId: string;
   billEnvelopeId: string;
+  scenarioId: string;
   paymentResolutionId: string;
   amazonItemId: string;
   amazonSubscriptionId: string;
@@ -412,6 +427,11 @@ async function seedOwner(): Promise<Owned> {
     groupId: await createSupplyGroup(userId, "Owner household"),
     rate: { rateBasis: "days_per_unit", daysPerUnitTenths: 70 },
   });
+  // A scenario reads the budget, Supplies and the history, so it is seeded with a line and an
+  // override: an intruder's read must come back empty from every one of those tables.
+  const scenarioId = await createScenario(userId, "Owner scenario");
+  await createScenarioLine(userId, scenarioId, { name: "Owner line", kind: "expense" });
+  await setScenarioOverride(userId, scenarioId, billEnvelope.id, { included: false });
   // Both Google surfaces keep their own per-user table, written here without any network:
   // `refreshCalendarLinks` and `applyGoogleContactSync` are ordinary writes that happen to
   // be fed by an API elsewhere. The mirror pass touches only `external_source = 'google'`
@@ -644,6 +664,7 @@ async function seedOwner(): Promise<Owned> {
     financePayeeId,
     financeStatementId: financeStatement.id,
     billEnvelopeId: billEnvelope.id,
+    scenarioId,
     paymentResolutionId: paymentResolution.id,
     amazonItemId: amazonItem.id,
     amazonSubscriptionId: amazonSubscription.id,
@@ -916,6 +937,13 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listMasterContexts(intruder)).toEqual([]);
     expect(await listSupplyItems(intruder)).toEqual([]);
     expect(await listSupplyGroups(intruder)).toEqual([]);
+    // The scenario reads: the list, the one the owner's id names, and the composed views that
+    // join a scenario to the live budget — each must come back as if it did not exist.
+    expect(await listScenarios(intruder)).toEqual([]);
+    expect(await loadAllScenarios(intruder)).toEqual([]);
+    expect(await loadScenario(intruder, owner.scenarioId)).toBeNull();
+    expect(await loadScenarioDetail(intruder, owner.scenarioId)).toBeNull();
+    expect(await loadScenarioSummaries(intruder)).toEqual([]);
     // Repeat purchases are a shopping history: ASIN, product name, how many times and how
     // recently. The owner's single seeded item qualifies through the Subscribe & Save arm of
     // the `having`, not the three-order one.
@@ -930,6 +958,9 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listMasterContexts(owner.userId)).length).toBeGreaterThan(0);
     expect((await listSupplyItems(owner.userId)).length).toBeGreaterThan(0);
     expect((await listSupplyGroups(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listScenarios(owner.userId)).length).toBeGreaterThan(0);
+    expect(await loadScenario(owner.userId, owner.scenarioId)).not.toBeNull();
+    expect((await loadScenarioSummaries(owner.userId)).length).toBeGreaterThan(0);
     expect((await listAmazonRepeatPurchases(owner.userId)).length).toBeGreaterThan(0);
     expect(await openingPositionFor(owner.userId, "2026-09-01")).not.toBe(0);
   });

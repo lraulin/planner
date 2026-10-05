@@ -140,6 +140,20 @@ export async function listBudgetEnvelopeOptions(
   };
 }
 
+/**
+ * The envelope and group structure with no fold behind it — for surfaces that need to know
+ * what envelopes exist and where they sit, not what they hold this month.
+ */
+export async function listBudgetStructure(
+  userId: string,
+): Promise<{ groups: BudgetGroupRow[]; categories: BudgetCategoryRow[] }> {
+  const [groups, categoryRows] = await Promise.all([
+    groupsOf(userId),
+    categoriesOf(userId),
+  ]);
+  return { groups, categories: parsedCategories(categoryRows) };
+}
+
 export type BudgetData = {
   /** False until setup has run. The page shows the preset chooser and nothing else. */
   configured: boolean;
