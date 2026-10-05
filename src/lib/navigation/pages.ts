@@ -249,6 +249,14 @@ const PAGES = {
         "recurring next charge due soon subscriptions commitments forecast review",
     },
     {
+      id: "scenarios",
+      label: "Scenarios",
+      segment: "scenarios",
+      status: "built",
+      keywords:
+        "what if plan month mortgage house move income cover remainder worksheet spending plan budget forecast projection",
+    },
+    {
       id: "supplies",
       label: "Supplies",
       segment: "supplies",

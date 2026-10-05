@@ -300,6 +300,13 @@ describeDb("scenario worksheet", () => {
         .sort((x, y) => (x.sortKey < y.sortKey ? -1 : 1))
         .map((line) => line.name);
       expect(order).toEqual(["B", "A", "C"]);
+
+      // Before the first sibling, which "after" alone cannot express.
+      await moveLine(owner, c, { parentId: null, beforeId: b });
+      const first = (await loadScenario(owner, id))?.lines
+        .sort((x, y) => (x.sortKey < y.sortKey ? -1 : 1))
+        .map((line) => line.name);
+      expect(first).toEqual(["C", "B", "A"]);
     });
 
     it("refuses to move a line beneath itself or under another section", async () => {

@@ -62,6 +62,7 @@ describe("hasPageBar", () => {
     expect(builtPagesForModule("finances").map((page) => page.id)).toEqual([
       "budget",
       "bills",
+      "scenarios",
       "supplies",
       "insights",
       "register",

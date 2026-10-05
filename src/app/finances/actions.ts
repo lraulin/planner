@@ -44,6 +44,25 @@ import {
   type SupplyOptionInput,
 } from "@/lib/finances/supplies/mutations";
 import {
+  clearOverride as clearScenarioOverride,
+  createLine as createScenarioLine,
+  createScenario,
+  deleteLine as deleteScenarioLine,
+  deleteScenario,
+  duplicateScenario,
+  moveLine as moveScenarioLine,
+  setOverride as setScenarioOverride,
+  updateLine as updateScenarioLine,
+  updateScenario,
+  type LineEdit,
+  type LineInput,
+} from "@/lib/finances/scenarios/mutations";
+import {
+  loadScenarioWorkspace,
+  seedScenarioFromSpending,
+  type ScenarioWorkspace,
+} from "@/lib/finances/scenarios/workspace";
+import {
   listAmazonRepeatPurchases,
   listSupplyItems,
   type SupplyItemRow,
@@ -694,6 +713,98 @@ export async function createSupplyItemFromSuggestionAction(
 ): Promise<ActionResult> {
   // `run` reports the new item's id, which is what the dialog selects on return.
   return run((userId) => createSupplyItemFromSuggestion(userId, input), {
+    revalidate: [],
+  });
+}
+
+/* ──────────────────────────────── Scenarios ──────────────────────────────── */
+
+/**
+ * The scenario worksheet is a grid the client holds and re-reads after each write, so these
+ * pass `revalidate: []` for the same reason the Supplies actions do: a layout revalidate would
+ * discard the grid state the user is mid-edit in.
+ */
+export async function loadScenarioWorkspaceAction(
+  requestedId: string | null,
+): Promise<QueryResult<ScenarioWorkspace>> {
+  return runQuery((userId) => loadScenarioWorkspace(userId, requestedId));
+}
+
+export async function createScenarioAction(name: string): Promise<ActionResult> {
+  return run((userId) => createScenario(userId, name), { revalidate: [] });
+}
+
+export async function updateScenarioAction(
+  scenarioId: string,
+  edit: { name?: string; notes?: string },
+): Promise<ActionResult> {
+  return run((userId) => updateScenario(userId, scenarioId, edit), { revalidate: [] });
+}
+
+export async function duplicateScenarioAction(
+  scenarioId: string,
+  name?: string,
+): Promise<ActionResult> {
+  return run((userId) => duplicateScenario(userId, scenarioId, name), {
+    revalidate: [],
+  });
+}
+
+export async function deleteScenarioAction(scenarioId: string): Promise<ActionResult> {
+  return run((userId) => deleteScenario(userId, scenarioId), { revalidate: [] });
+}
+
+export async function createScenarioLineAction(
+  scenarioId: string,
+  input: LineInput,
+): Promise<ActionResult> {
+  return run((userId) => createScenarioLine(userId, scenarioId, input), {
+    revalidate: [],
+  });
+}
+
+export async function updateScenarioLineAction(
+  lineId: string,
+  edit: LineEdit,
+): Promise<ActionResult> {
+  return run((userId) => updateScenarioLine(userId, lineId, edit), { revalidate: [] });
+}
+
+export async function moveScenarioLineAction(
+  lineId: string,
+  to: { parentId: string | null; afterId?: string | null; beforeId?: string },
+): Promise<ActionResult> {
+  return run((userId) => moveScenarioLine(userId, lineId, to), { revalidate: [] });
+}
+
+export async function deleteScenarioLineAction(lineId: string): Promise<ActionResult> {
+  return run((userId) => deleteScenarioLine(userId, lineId), { revalidate: [] });
+}
+
+export async function setScenarioOverrideAction(
+  scenarioId: string,
+  envelopeId: string,
+  value: { included: boolean; monthlyCents?: number | null },
+): Promise<ActionResult> {
+  return run((userId) => setScenarioOverride(userId, scenarioId, envelopeId, value), {
+    revalidate: [],
+  });
+}
+
+export async function clearScenarioOverrideAction(
+  scenarioId: string,
+  envelopeId: string,
+): Promise<ActionResult> {
+  return run((userId) => clearScenarioOverride(userId, scenarioId, envelopeId), {
+    revalidate: [],
+  });
+}
+
+/** Adds one linked line per uncovered spending envelope; reports how many it added. */
+export async function seedScenarioFromSpendingAction(
+  scenarioId: string,
+): Promise<DataActionResult<number>> {
+  return runWithData((userId) => seedScenarioFromSpending(userId, scenarioId), {
     revalidate: [],
   });
 }

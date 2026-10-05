@@ -25,6 +25,7 @@ import {
 } from "./compose";
 import { addSeedLines } from "./mutations";
 import { loadAllScenarios, loadScenario, type ScenarioRecords } from "./queries";
+import { listSupplyGroups } from "../supplies/queries";
 import { seedLines } from "./seed";
 import { supplyAmounts } from "./supplyAmounts";
 import { uncoveredEnvelopes, type UncoveredEnvelope } from "./uncovered";
@@ -200,16 +201,7 @@ export async function loadScenarioDetail(
     loadScenario(userId, scenarioId),
     live ?? loadLiveInputs(userId),
   ]);
-  if (!records) return null;
-  const composition = composeRecords(records, inputs);
-  return {
-    scenario: records.scenario,
-    composition,
-    uncovered: uncoveredFor(records, inputs),
-    actualMonths: inputs.actuals.months,
-    lineCount: flattenLines([...composition.incomeLines, ...composition.expenseLines])
-      .length,
-  };
+  return records ? detailOf(records, inputs) : null;
 }
 
 /**
@@ -227,4 +219,59 @@ export async function seedScenarioFromSpending(
   ]);
   if (!records) throw new Error("That scenario does not exist.");
   return addSeedLines(userId, scenarioId, seedLines(uncoveredFor(records, live)));
+}
+
+export type ScenarioWorkspace = {
+  summaries: ScenarioSummary[];
+  /** The scenario `detail` describes: the one asked for if it is the caller's, else the first. */
+  selectedId: string | null;
+  detail: ScenarioDetail | null;
+  /** What a line's amount can follow, for the Add from Supplies picker and source labels. */
+  supply: {
+    items: { id: string; name: string; groupLabel: string }[];
+    groups: { id: string; name: string }[];
+  };
+};
+
+function detailOf(records: ScenarioRecords, live: LiveInputs): ScenarioDetail {
+  const composition = composeRecords(records, live);
+  return {
+    scenario: records.scenario,
+    composition,
+    uncovered: uncoveredFor(records, live),
+    actualMonths: live.actuals.months,
+    lineCount: flattenLines([...composition.incomeLines, ...composition.expenseLines])
+      .length,
+  };
+}
+
+/**
+ * Everything the Scenarios page shows, from one read of the live inputs: every scenario's
+ * totals for the picker, and the selected one composed in full. Reading the live inputs once
+ * is what keeps a picker's remainder and the grid's remainder the same number.
+ */
+export async function loadScenarioWorkspace(
+  userId: string,
+  requestedId: string | null,
+): Promise<ScenarioWorkspace> {
+  const [all, live, supplyGroups] = await Promise.all([
+    loadAllScenarios(userId),
+    loadLiveInputs(userId),
+    listSupplyGroups(userId),
+  ]);
+  const selected =
+    all.find((records) => records.scenario.id === requestedId) ?? all[0] ?? null;
+  return {
+    summaries: all.map((records) => summaryOf(records, live)),
+    selectedId: selected?.scenario.id ?? null,
+    detail: selected ? detailOf(selected, live) : null,
+    supply: {
+      items: live.supplyItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        groupLabel: item.groupLabel,
+      })),
+      groups: supplyGroups,
+    },
+  };
 }

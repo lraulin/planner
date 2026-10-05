@@ -8,6 +8,7 @@ import {
   financeScenarios,
   financeSupplyGroups,
   financeSupplyItems,
+  SCENARIO_LINE_KINDS,
   type ScenarioLineKind,
 } from "@/db/schema";
 import { between, after, compare, first } from "@/lib/tree/sortKey";
@@ -167,6 +168,10 @@ async function requireSource(userId: string, source: LineAmountSource): Promise<
     }
     case "none":
       return;
+    default:
+      // A server action takes whatever the browser sends; an unknown source is refused here
+      // rather than reaching `sourceColumns` and writing nothing sensible.
+      throw new Error("That is not a source an amount can come from.");
   }
 }
 
@@ -391,6 +396,23 @@ async function sortKeyAfter(
   return between(rows[index].sortKey, rows[index + 1]?.sortKey ?? null);
 }
 
+/** A sort key landing just before `beforeId` among `parentId`'s children. */
+async function sortKeyBefore(
+  userId: string,
+  scenarioId: string,
+  parentId: string | null,
+  beforeId: string,
+  executor: Executor,
+  excluding?: string,
+): Promise<string> {
+  const rows = (await siblings(userId, scenarioId, parentId, executor)).filter(
+    (row) => row.id !== excluding,
+  );
+  const index = rows.findIndex((row) => row.id === beforeId);
+  if (index === -1) throw new Error(NOT_YOURS.line);
+  return between(rows[index - 1]?.sortKey ?? null, rows[index].sortKey);
+}
+
 async function hasChildren(
   userId: string,
   lineId: string,
@@ -472,7 +494,9 @@ export async function createLine(
       if (parent.scenarioId !== scenarioId) throw new Error(NOT_YOURS.line);
     }
     const kind = parent?.kind ?? input.kind;
-    if (!kind) throw new Error("A line needs to be income or an expense.");
+    if (!kind || !SCENARIO_LINE_KINDS.includes(kind)) {
+      throw new Error("A line needs to be income or an expense.");
+    }
     if (parent && input.kind && input.kind !== parent.kind) {
       throw new Error("A sub-line is the same kind as its parent.");
     }
@@ -585,7 +609,7 @@ async function isSelfOrDescendant(
 export async function moveLine(
   userId: string,
   lineId: string,
-  to: { parentId: string | null; afterId?: string | null },
+  to: { parentId: string | null; afterId?: string | null; beforeId?: string },
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const line = await requireLine(userId, lineId, tx);
@@ -600,8 +624,9 @@ export async function moveLine(
         throw new Error("A line cannot move beneath itself.");
       }
     }
-    if (to.afterId) {
-      const sibling = await requireLine(userId, to.afterId, tx);
+    for (const siblingId of [to.afterId, to.beforeId]) {
+      if (!siblingId) continue;
+      const sibling = await requireLine(userId, siblingId, tx);
       if ((sibling.parentId ?? null) !== (parent?.id ?? null)) {
         throw new Error(NOT_YOURS.line);
       }
@@ -631,14 +656,23 @@ export async function moveLine(
       }
     }
 
-    const sortKey = await sortKeyAfter(
-      userId,
-      line.scenarioId,
-      parent?.id ?? null,
-      to.afterId ?? null,
-      tx,
-      line.id,
-    );
+    const sortKey = to.beforeId
+      ? await sortKeyBefore(
+          userId,
+          line.scenarioId,
+          parent?.id ?? null,
+          to.beforeId,
+          tx,
+          line.id,
+        )
+      : await sortKeyAfter(
+          userId,
+          line.scenarioId,
+          parent?.id ?? null,
+          to.afterId ?? null,
+          tx,
+          line.id,
+        );
     await tx
       .update(financeScenarioLines)
       .set({ parentId: parent?.id ?? null, sortKey, updatedAt: new Date() })
