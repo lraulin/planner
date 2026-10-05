@@ -722,6 +722,13 @@
       "when": 1791159787136,
       "tag": "0102_open_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1791160105101,
+      "tag": "0103_panoramic_rawhide_kid",
+      "breakpoints": true
     }
   ]
 }

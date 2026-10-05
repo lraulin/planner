@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -4003,6 +4004,174 @@ export const financeSupplyOptions = pgTable(
 );
 
 /**
+ * ────────────────────────────────── Scenarios ──────────────────────────────────
+ *
+ * A planning worksheet for a month that does not exist yet — will income cover the life
+ * about to be lived? See `agent-os/specs/2026-10-04-1937-finance-scenarios/`.
+ *
+ * A scenario is one steady-state month. Bills and Regular income are **not copied** in: they
+ * arrive live from the budget, and a scenario stores only how it differs
+ * (`finance_scenario_overrides`) plus the free-form lines the budget has no row for. A bill
+ * repriced later therefore reaches every scenario that has not overridden it.
+ *
+ * Nothing here writes the budget. Every table carries `user_id`, and the composite foreign
+ * keys to `finance_scenarios (id, user_id)` mean a line or override cannot name a scenario
+ * belonging to someone else — the database refuses it whatever a mutation forgets.
+ */
+export const financeScenarios = pgTable(
+  "finance_scenarios",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    notes: text("notes").notNull().default(""),
+    sortKey: text("sort_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("finance_scenarios_user_sort_idx").on(table.userId, table.sortKey),
+    // The target of the composite foreign keys below.
+    unique("finance_scenarios_id_user_uq").on(table.id, table.userId),
+    check("finance_scenarios_name_present", sql`length(trim(${table.name})) > 0`),
+  ],
+);
+
+export const SCENARIO_LINE_KINDS = ["income", "expense"] as const;
+export type ScenarioLineKind = (typeof SCENARIO_LINE_KINDS)[number];
+
+/**
+ * One line of a scenario, in a tree: a line with sub-lines is a roll-up that shows the sum of
+ * its children and has no amount of its own.
+ *
+ * **A leaf's amount comes from at most one source** — a manual figure at a cadence, a supply
+ * item, or a supply group — and the `sources` check makes "which source" a fact of the row
+ * rather than a convention. A roll-up has none of the three; whether a source-less line has
+ * children is the one part a check cannot see, so the mutations that split and merge keep it.
+ * A supply item or group that is later deleted leaves its line source-less ($0) rather than
+ * taking the line with it.
+ *
+ * `(parent_id, scenario_id, kind)` is a composite foreign key onto the same table so a
+ * sub-line cannot sit in another scenario or flip a section from its parent's.
+ */
+export const financeScenarioLines = pgTable(
+  "finance_scenario_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    scenarioId: uuid("scenario_id").notNull(),
+    parentId: uuid("parent_id"),
+    kind: text("kind").$type<ScenarioLineKind>().notNull(),
+    sortKey: text("sort_key").notNull(),
+    name: text("name").notNull(),
+    /** Manual amount: cents per `cadence_n` `cadence_unit`s. All three, or none of them. */
+    amountCents: integer("amount_cents"),
+    cadenceUnit: text("cadence_unit").$type<"month" | "day">(),
+    cadenceN: smallint("cadence_n"),
+    supplyItemId: uuid("supply_item_id").references(() => financeSupplyItems.id, {
+      onDelete: "set null",
+    }),
+    supplyGroupId: uuid("supply_group_id").references(() => financeSupplyGroups.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * Which actual spending to show beside the plan — an envelope **or** a budget group, never
+     * both. Reference only: it takes no part in the amount.
+     */
+    envelopeId: uuid("envelope_id").references(() => financeBudgetCategories.id, {
+      onDelete: "set null",
+    }),
+    budgetGroupId: uuid("budget_group_id").references(() => financeCategoryGroups.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "finance_scenario_lines_scenario_user_fk",
+      columns: [table.scenarioId, table.userId],
+      foreignColumns: [financeScenarios.id, financeScenarios.userId],
+    }).onDelete("cascade"),
+    // The target of `parent_fk`. Includes `kind` so the parent's section is part of the key.
+    unique("finance_scenario_lines_id_scenario_kind_uq").on(
+      table.id,
+      table.scenarioId,
+      table.kind,
+    ),
+    foreignKey({
+      name: "finance_scenario_lines_parent_fk",
+      columns: [table.parentId, table.scenarioId, table.kind],
+      foreignColumns: [table.id, table.scenarioId, table.kind],
+    }).onDelete("cascade"),
+    index("finance_scenario_lines_scenario_idx").on(
+      table.userId,
+      table.scenarioId,
+      table.parentId,
+      table.sortKey,
+    ),
+    index("finance_scenario_lines_supply_item_idx").on(table.supplyItemId),
+    index("finance_scenario_lines_supply_group_idx").on(table.supplyGroupId),
+    check("finance_scenario_lines_name_present", sql`length(trim(${table.name})) > 0`),
+    check("finance_scenario_lines_kind", sql`${table.kind} in ('income', 'expense')`),
+    check(
+      "finance_scenario_lines_sources",
+      sql`(
+            ${table.amountCents} is not null and ${table.amountCents} >= 0
+            and ${table.cadenceUnit} in ('month', 'day')
+            and ${table.cadenceN} is not null and ${table.cadenceN} >= 1 and ${table.cadenceN} <= 200
+            and ${table.supplyItemId} is null and ${table.supplyGroupId} is null
+          ) or (
+            ${table.amountCents} is null and ${table.cadenceUnit} is null and ${table.cadenceN} is null
+            and ((${table.supplyItemId} is not null)::int + (${table.supplyGroupId} is not null)::int) <= 1
+          )`,
+    ),
+    check(
+      "finance_scenario_lines_one_actuals_link",
+      sql`${table.envelopeId} is null or ${table.budgetGroupId} is null`,
+    ),
+  ],
+);
+
+/**
+ * How one scenario differs from the budget for one envelope — a bill or a Regular income
+ * envelope. No row means "as it is today". `monthly_cents` replaces the monthly figure; null
+ * keeps the live one.
+ */
+export const financeScenarioOverrides = pgTable(
+  "finance_scenario_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    scenarioId: uuid("scenario_id").notNull(),
+    envelopeId: uuid("envelope_id")
+      .notNull()
+      .references(() => financeBudgetCategories.id, { onDelete: "cascade" }),
+    included: boolean("included").notNull().default(true),
+    monthlyCents: integer("monthly_cents"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "finance_scenario_overrides_scenario_user_fk",
+      columns: [table.scenarioId, table.userId],
+      foreignColumns: [financeScenarios.id, financeScenarios.userId],
+    }).onDelete("cascade"),
+    unique("finance_scenario_overrides_scenario_envelope_uq").on(
+      table.scenarioId,
+      table.envelopeId,
+    ),
+    check(
+      "finance_scenario_overrides_monthly_nonneg",
+      sql`${table.monthlyCents} is null or ${table.monthlyCents} >= 0`,
+    ),
+  ],
+);
+
+/**
  * Personal life history — the three tables behind Library's Timeline, Jobs and Residences.
  *
  * **Dates here are `date`, not `timestamptz` at UTC noon.** The rest of the app encodes a
@@ -4311,6 +4480,9 @@ export type AmazonChargeMatch = typeof amazonChargeMatches.$inferSelect;
 export type NewAmazonChargeMatch = typeof amazonChargeMatches.$inferInsert;
 export type AmazonReceiptAllocation = typeof amazonReceiptAllocations.$inferSelect;
 export type NewAmazonReceiptAllocation = typeof amazonReceiptAllocations.$inferInsert;
+export type FinanceScenario = typeof financeScenarios.$inferSelect;
+export type FinanceScenarioLine = typeof financeScenarioLines.$inferSelect;
+export type FinanceScenarioOverride = typeof financeScenarioOverrides.$inferSelect;
 export type FinanceSupplyGroup = typeof financeSupplyGroups.$inferSelect;
 export type FinanceSupplyItem = typeof financeSupplyItems.$inferSelect;
 export type NewFinanceSupplyItem = typeof financeSupplyItems.$inferInsert;
