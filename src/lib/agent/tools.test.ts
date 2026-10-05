@@ -163,6 +163,8 @@ describe("agent tool registry", () => {
       "save_subscription",
       "delete_subscription",
       "set_commitment_payees",
+      "list_scenarios",
+      "get_scenario",
     ]);
     expect(finances.tools.every((tool) => tool.domain === "finances")).toBe(true);
 

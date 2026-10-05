@@ -83,6 +83,7 @@ import {
   listHousesTool,
   updateHouseTool,
 } from "./houseTools";
+import { getScenarioTool, listScenariosTool } from "./scenarioTools";
 
 export const AGENT_CONTRACT_VERSION = 2 as const;
 const SYSTEM_TOOL_USER_ID = "00000000-0000-4000-8000-000000000000";
@@ -741,6 +742,34 @@ const definitions: AgentToolDefinition[] = [
     effects: safeWrite,
     exposure: "domain",
     handler: setCommitmentPayeesTool,
+  }),
+  defineTool("list_scenarios", {
+    domain: "finances",
+    summary:
+      "List the planning scenarios — each a steady-state month — with income, expenses and remainder.",
+    useWhen:
+      "Use to find a scenario by name, or to compare what each leaves over, before reading one.",
+    avoidWhen:
+      "Use get_scenario for the rows behind a remainder. These are hypothetical months, not the budget: use get_finance_overview for what actually happened.",
+    returns:
+      "A page of { id, name, incomeCents, expenseCents, remainderCents, incomplete } plus pageInfo. incomplete means a Regular income has no expected amount, so income is a floor.",
+    effects: read,
+    exposure: "domain",
+    handler: listScenariosTool,
+  }),
+  defineTool("get_scenario", {
+    domain: "finances",
+    summary:
+      "Read one scenario: live bills and income as it counts them, its own lines, and the remainder.",
+    useWhen:
+      "Use after list_scenarios to answer whether income covers a planned month, or which bill or line decides it.",
+    avoidWhen:
+      "Do not use it to change a scenario — there are no write tools. Do not treat a scenario as the budget or as a forecast of dates.",
+    returns:
+      "totals (income, bills, lines, expenses, remainder, incomplete), income and bill rows with included/overridden flags, lines as a tree via parentId with a source of manual, supply_item, supply_group or none, each line's last-12-completed-month actual, and uncovered spending no row accounts for. Every figure is a monthly equivalent in cents.",
+    effects: read,
+    exposure: "domain",
+    handler: getScenarioTool,
   }),
   defineTool("list_jobs", {
     domain: "history",

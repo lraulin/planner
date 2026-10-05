@@ -64,6 +64,8 @@ const REQUIRED = [
   "save_subscription",
   "delete_subscription",
   "set_commitment_payees",
+  "list_scenarios",
+  "get_scenario",
   "list_jobs",
   "get_job",
   "create_job",

@@ -1041,6 +1041,10 @@ export const inputSchemas = {
     id,
     payeeIds: z.array(id),
   }),
+  list_scenarios: z.strictObject(pageInputFields),
+  get_scenario: z.strictObject({
+    id: id.describe("Scenario id from list_scenarios."),
+  }),
   list_jobs: z.strictObject({
     currentOnly: z.boolean().default(false),
     ...historyListInputFields,
@@ -1112,6 +1116,69 @@ const captureOutput = z.union([
     results: z.array(captureResultSchema),
   }),
 ]);
+
+const scenarioSummarySchema = z.strictObject({
+  id,
+  name: z.string(),
+  incomeCents: cents,
+  expenseCents: cents,
+  remainderCents: cents.describe(
+    "Income minus expenses; negative means the plan overspends.",
+  ),
+  incomplete: z
+    .boolean()
+    .describe("A Regular income has no expected amount, so incomeCents is a floor."),
+});
+
+const scenarioDetailSchema = z.strictObject({
+  scenario: z.strictObject({ id, name: z.string(), notes: z.string() }),
+  totals: z.strictObject({
+    incomeCents: cents,
+    billsCents: cents,
+    linesCents: cents,
+    expenseCents: cents,
+    remainderCents: cents,
+    incomplete: z.boolean(),
+    incompleteNames: z.array(z.string()),
+  }),
+  income: z.array(
+    z.strictObject({
+      envelopeId: id,
+      name: z.string(),
+      included: z.boolean(),
+      monthlyCents: cents.nullable(),
+      overridden: z.boolean(),
+    }),
+  ),
+  bills: z.array(
+    z.strictObject({
+      envelopeId: id,
+      name: z.string(),
+      group: z.string(),
+      status: z.enum(["active", "paused", "cancelled"]),
+      included: z.boolean(),
+      monthlyCents: cents,
+      overridden: z.boolean(),
+      actualMonthlyCents: cents.nullable(),
+    }),
+  ),
+  lines: z.array(
+    z.strictObject({
+      id,
+      parentId: nullableId,
+      name: z.string(),
+      kind: z.enum(["income", "expense"]),
+      rollup: z.boolean(),
+      source: z.enum(["manual", "supply_item", "supply_group", "none"]),
+      monthlyCents: cents,
+      actualMonthlyCents: cents.nullable(),
+    }),
+  ),
+  uncovered: z.array(
+    z.strictObject({ envelopeId: id, name: z.string(), monthlyCents: cents }),
+  ),
+  actualMonths: z.number().int().min(0),
+});
 
 export const outputSchemas = {
   health: healthOutput,
@@ -1510,6 +1577,11 @@ export const outputSchemas = {
     name: z.string(),
   }),
   set_commitment_payees: z.strictObject({ commitment: commitmentSummarySchema }),
+  list_scenarios: z.strictObject({
+    scenarios: z.array(scenarioSummarySchema),
+    pageInfo: pageInfoSchema,
+  }),
+  get_scenario: scenarioDetailSchema,
   list_jobs: z.strictObject({
     jobs: z.array(jobSummarySchema),
     pageInfo: pageInfoSchema,

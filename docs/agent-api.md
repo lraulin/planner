@@ -815,6 +815,36 @@ Replace a commitment's complete stable-payee set.
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
 
+### `list_scenarios`
+
+List the planning scenarios — each a steady-state month — with income, expenses and remainder.
+
+- Use when: Use to find a scenario by name, or to compare what each leaves over, before reading one.
+- Avoid when: Use get_scenario for the rows behind a remainder. These are hypothetical months, not the budget: use get_finance_overview for what actually happened.
+- Returns: A page of { id, name, incomeCents, expenseCents, remainderCents, incomplete } plus pageInfo. incomplete means a Regular income has no expected amount, so income is a floor.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ offset=0, limit=50 }`
+- Output: `{ scenarios*, pageInfo* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `get_scenario`
+
+Read one scenario: live bills and income as it counts them, its own lines, and the remainder.
+
+- Use when: Use after list_scenarios to answer whether income covers a planned month, or which bill or line decides it.
+- Avoid when: Do not use it to change a scenario — there are no write tools. Do not treat a scenario as the budget or as a forecast of dates.
+- Returns: totals (income, bills, lines, expenses, remainder, incomplete), income and bill rows with included/overridden flags, lines as a tree via parentId with a source of manual, supply_item, supply_group or none, each line's last-12-completed-month actual, and uncovered spending no row accounts for. Every figure is a monthly equivalent in cents.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ id* }`
+- Output: `{ scenario*, totals*, income*, bills*, lines*, uncovered*, actualMonths* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
 ## History
 
 ### `list_jobs`

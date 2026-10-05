@@ -4,6 +4,11 @@ import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
 import type { StoredBill } from "@/lib/finances/recurringBills";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { outputSchemas } from "./contracts";
+import {
+  composeScenario,
+  type ScenarioLineInput,
+} from "@/lib/finances/scenarios/compose";
+import { scenarioDetailResponse } from "./scenarioTools";
 import { recurringBillsResponse } from "./financeTools";
 
 /**
@@ -142,5 +147,70 @@ describe("default response size", () => {
     expect(JSON.stringify(unpaged).indexOf('"upcoming"')).toBeLessThan(
       JSON.stringify(unpaged).indexOf('"bills"'),
     );
+  });
+
+  it("get_scenario", () => {
+    // Every bill Lee has declared, a few dozen lines with sub-lines, and a long Uncovered
+    // list: the largest scenario he is likely to build, not a toy one.
+    const lines: ScenarioLineInput[] = [];
+    for (let index = 0; index < 30; index++) {
+      lines.push({
+        id: crypto.randomUUID(),
+        parentId: index % 4 === 3 ? lines[index - 1].id : null,
+        kind: "expense",
+        sortKey: `a${String(index).padStart(3, "0")}1`,
+        name: `A line with a fairly long descriptive name number ${index}`,
+        source: {
+          type: "manual",
+          amountCents: 1000 + index * 311,
+          cadence: { unit: "month", n: 1 },
+        },
+        envelopeId: crypto.randomUUID(),
+        budgetGroupId: null,
+      });
+    }
+    const composition = composeScenario({
+      bills: BILL_NAMES.map((name, index) => ({
+        envelopeId: crypto.randomUUID(),
+        name,
+        groupLabel: index % 3 === 0 ? "Housing › Utilities" : "Subscriptions",
+        status: index % 7 === 6 ? ("cancelled" as const) : ("active" as const),
+        monthlyCents: 1000 + index * 137,
+      })),
+      income: [
+        {
+          envelopeId: crypto.randomUUID(),
+          name: "Paycheck",
+          expectedMonthlyCents: 480286,
+        },
+      ],
+      overrides: [],
+      lines,
+      supply: { itemMonthlyCents: new Map(), groupMonthlyCents: new Map() },
+      actuals: {
+        byEnvelope: new Map(lines.map((line) => [line.envelopeId ?? "", 12345])),
+        byGroup: new Map(),
+      },
+      billActuals: new Map(),
+    });
+    const response = scenarioDetailResponse({
+      scenario: {
+        id: crypto.randomUUID(),
+        name: "After closing",
+        notes: "",
+        sortKey: "a",
+      },
+      composition,
+      uncovered: Array.from({ length: 15 }, (_, index) => ({
+        envelopeId: crypto.randomUUID(),
+        name: `Uncovered envelope with a long name ${index}`,
+        monthlyCents: 5000 + index,
+      })),
+      actualMonths: 12,
+      lineCount: lines.length,
+    });
+
+    expect(outputSchemas.get_scenario.safeParse(response).success).toBe(true);
+    expect(bytes(response)).toBeLessThan(BUDGET_BYTES);
   });
 });
