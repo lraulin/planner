@@ -17,7 +17,9 @@ const CENTS_PER_DOLLAR = 100;
  * Read a money cell from a bank CSV into signed cents.
  *
  * Accepts what these exports actually contain plus what a person might paste: thousands
- * separators, a currency symbol, a leading `+`, and `(1.23)` for a negative. Returns `null`
+ * separators, a currency symbol, a leading `+`, and `(1.23)` for a negative. A leading U+2212
+ * minus or en dash reads as `-`: Chase prints card credits as `−$181.05` with U+2212, and a
+ * bank page is typeset text, not a CSV. Returns `null`
  * for blank or unparseable input so the caller can tell "the column was empty" (normal —
  * Capital One leaves one of Debit/Credit blank on every row) from "this row is broken".
  */
@@ -29,7 +31,7 @@ export function parseAmountCents(raw: string): number | null {
   const parenthesised = /^\((.*)\)$/.exec(trimmed);
   const body = parenthesised ? parenthesised[1] : trimmed;
 
-  const cleaned = body.replace(/[$,\s]/g, "");
+  const cleaned = body.replace(/^\s*[\u2212\u2013]/, "-").replace(/[$,\s]/g, "");
   if (!/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(cleaned)) return null;
 
   const negative = parenthesised !== null || cleaned.startsWith("-");

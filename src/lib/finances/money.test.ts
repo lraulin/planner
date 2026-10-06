@@ -28,6 +28,13 @@ describe("parseAmountCents", () => {
     expect(parseAmountCents("  7.50  ")).toBe(750);
   });
 
+  it("reads the typeset minus a bank page prints as a negative, not as a positive", () => {
+    // Chase renders a card payment as `−$181.05` with U+2212; dropping the sign flipped it.
+    expect(parseAmountCents("\u2212$181.05")).toBe(-18105);
+    expect(parseAmountCents("\u2013$1,000.00")).toBe(-100000);
+    expect(parseAmountCents("\u2212\u22125")).toBeNull();
+  });
+
   it("returns null for blank and for junk, so the caller can tell them apart from zero", () => {
     // Capital One leaves one of Debit/Credit empty on every single row, so blank is
     // normal input and must not read as $0.00.

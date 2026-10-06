@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Planner: copy Chase bank snapshot
 // @namespace    planner
-// @version      2.5
+// @version      2.6
 // @description  Copy Chase current-cycle posted and pending activity for Planner.
 // @match        https://secure.chase.com/*
 // @match        https://*.chase.com/*
@@ -18,7 +18,7 @@
   const BUTTON_ID = "planner-copy-chase-bank-snapshot";
   const LAST4_KEY = "planner-chase-last4";
   const KNOWN_LAST4 = "9910";
-  const AMOUNT = /(?:-?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\))/;
+  const AMOUNT = /(?:[-\u2212\u2013]?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\))/;
   const DATE = /(?:[A-Za-z]{3} \d{1,2}, \d{4}|\d{1,2}\/\d{1,2}\/\d{4})/;
   /**
    * The one period selection that makes the captured set complete for the current cycle.
@@ -163,7 +163,7 @@
     const direct = AMOUNT.exec(labeled?.textContent ?? "");
     if (direct) return direct[0];
     const nearby =
-      /Current balance[^$\n(\-]{0,60}((?:-?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\)))/i.exec(
+      /Current balance[^$\n(\-\u2212\u2013]{0,60}((?:[-\u2212\u2013]?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\)))/i.exec(
         pageText(),
       );
     return nearby?.[1] ?? "";

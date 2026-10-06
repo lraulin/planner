@@ -114,6 +114,28 @@ describe("parseBankBrowserSnapshot", () => {
     expect(result.snapshot.pending[0].amountCents).toBe(-1271);
   });
 
+  it("reads Chase\u0027s U+2212 payment minus as a credit, not a purchase", () => {
+    // Chase prints a card payment as `\u2212$181.05`; the 2026-10-01 capture lost the sign and
+    // stored it as a -$181.05 purchase.
+    const result = parseBankBrowserSnapshot(
+      text({
+        ...chase,
+        posted: [
+          {
+            transactionDate: "Oct 1, 2026",
+            postedDate: "Oct 1, 2026",
+            description: "Payment Thank You - Web",
+            category: "",
+            amount: "\u2212$181.05",
+          },
+        ],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.snapshot.posted[0].amountCents).toBe(18105);
+  });
+
   it("accepts complete empty posted and pending sections", () => {
     const result = parseBankBrowserSnapshot(
       text({ ...chase, currentBalance: "$0.00", posted: [], pending: [] }),

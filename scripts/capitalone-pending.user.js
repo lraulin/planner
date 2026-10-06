@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Planner: copy Capital One bank snapshot
 // @namespace    planner
-// @version      2.4
+// @version      2.5
 // @description  Copy Capital One current-cycle posted and pending activity for Planner.
 // @match        https://myaccounts.capitalone.com/*
 // @match        https://*.capitalone.com/*
@@ -14,7 +14,7 @@
   const BUTTON_ID = "planner-copy-capitalone-bank-snapshot";
   const LAST4_KEY = "planner-capone-last4";
   const KNOWN_LAST4 = "3448";
-  const AMOUNT = /(?:-?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\))/;
+  const AMOUNT = /(?:[-\u2212\u2013]?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\))/;
   const BANK_DATE = "[A-Za-z]{3}, [A-Za-z]{3} \\d{1,2}, \\d{4}";
 
   function clean(value) {
@@ -134,7 +134,7 @@
     const direct = AMOUNT.exec(accessible?.textContent ?? "");
     if (direct) return direct[0];
     const match =
-      /(?:Current Balance|Card Balance|Total Balance)[^$\n(\-]{0,80}((?:-?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\)))/i.exec(
+      /(?:Current Balance|Card Balance|Total Balance)[^$\n(\-\u2212\u2013]{0,80}((?:[-\u2212\u2013]?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\)))/i.exec(
         pageText(),
       );
     return match?.[1] ?? "";
