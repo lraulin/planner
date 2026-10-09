@@ -14,7 +14,7 @@ import { loadSchedule } from "@/lib/schedule/queries";
 import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
 import { weekRange } from "@/lib/schedule/range";
 import { createNodeOnce, moveNode } from "@/lib/tree/mutations";
-import type { Position } from "@/lib/tree/types";
+import type { OutlineNode, Position } from "@/lib/tree/types";
 import { formatNodePath, loadNodeChain } from "@/lib/tree/path";
 import { loadOutline } from "@/lib/tree/queries";
 import { parseCaptureArgs } from "./captureArgs";
@@ -51,18 +51,22 @@ function assertResultAreaLifecyclePatch(
   }
 }
 
-export async function getContext(userId: string, args: Record<string, unknown>) {
-  const weekStartsOn = optionalNumber(args, "weekStartsOn") ?? 0;
-  const now = new Date();
-  const outline = await loadOutline(userId);
-  const paths = buildPathMap(outline);
+/**
+ * Default `topOpenWork` length for get_context. Ten rows keep the briefing well under the
+ * client's response budget (`responseBudget.test.ts`); `topOpenWorkInfo` says when there is
+ * more, and search_nodes pages the rest.
+ */
+export const CONTEXT_OPEN_WORK_DEFAULT_LIMIT = 10;
 
+/** Focus and ranked open work for get_context. Pure, so the size guard can drive it. */
+export function contextWork(outline: readonly OutlineNode[], requestedLimit?: number) {
+  const paths = buildPathMap([...outline]);
   const focus = outline
     .filter((n) => n.focus && !isSettled(n.state))
     .map((n) => nodeSummary(n, paths));
 
   const topOpenWorkLimit = Math.min(
-    Math.max(optionalNumber(args, "topOpenWorkLimit") ?? 25, 1),
+    Math.max(requestedLimit ?? CONTEXT_OPEN_WORK_DEFAULT_LIMIT, 1),
     100,
   );
   const allOpenWork = outline
@@ -76,9 +80,27 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
       const letter = (x: typeof a) =>
         x.priorityLetter === "A" ? 0 : x.priorityLetter === "B" ? 1 : 2;
       return letter(a) - letter(b) || (a.priorityRank ?? 99) - (b.priorityRank ?? 99);
-    })
+    });
+  const openWork = allOpenWork
+    .slice(0, topOpenWorkLimit)
     .map((n) => nodeSummary(n, paths));
-  const openWork = allOpenWork.slice(0, topOpenWorkLimit);
+
+  return {
+    focus,
+    topOpenWork: openWork,
+    topOpenWorkInfo: {
+      returned: openWork.length,
+      total: allOpenWork.length,
+      hasMore: openWork.length < allOpenWork.length,
+    },
+  };
+}
+
+export async function getContext(userId: string, args: Record<string, unknown>) {
+  const weekStartsOn = optionalNumber(args, "weekStartsOn") ?? 0;
+  const now = new Date();
+  const outline = await loadOutline(userId);
+  const work = contextWork(outline, optionalNumber(args, "topOpenWorkLimit"));
 
   const weekStart = startOfWeek(now, weekStartsOn);
   const plan = await getWeeklyPlan(userId, weekStart, weekStartsOn);
@@ -89,13 +111,7 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
   return {
     asOf: now.toISOString(),
     weekStart: toDateKey(weekStart),
-    focus,
-    topOpenWork: openWork,
-    topOpenWorkInfo: {
-      returned: openWork.length,
-      total: allOpenWork.length,
-      hasMore: openWork.length < allOpenWork.length,
-    },
+    ...work,
     weeklyPlan: plan
       ? {
           id: plan.id,
