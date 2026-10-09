@@ -76,6 +76,7 @@ import {
   updateLifeEventTool,
   updateResidenceTool,
 } from "./historyTools";
+import { deleteTransactionTool, updatePayeeAliasesTool } from "./ledgerTools";
 import {
   createHouseTool,
   deleteHouseTool,
@@ -731,6 +732,48 @@ const definitions: AgentToolDefinition[] = [
     effects: destructiveWrite,
     exposure: "domain",
     handler: deleteSubscriptionTool,
+  }),
+  defineTool("delete_transaction", {
+    domain: "finances",
+    summary: "Permanently delete transactions, with an audited, restorable receipt.",
+    useWhen:
+      "Use after the user explicitly asks to delete specific rows: a stale duplicate, a test row, or a card-alert hold that will never post. Run with dryRun first to show what goes.",
+    avoidWhen:
+      "Do not use to recategorize or hide a real charge, or to delete one line of a split; a row whose feed still writes the account can come back on its next import.",
+    returns:
+      "Each deleted row with account, date, amount, source and category, the Ready to Assign change, the audit event id, and re-import warnings.",
+    effects: destructiveWrite,
+    exposure: "domain",
+    examples: [
+      {
+        title: "Preview deleting a duplicate hold",
+        arguments: { ids: ["00000000-0000-4000-8000-000000000001"], dryRun: true },
+      },
+    ],
+    handler: deleteTransactionTool,
+  }),
+  defineTool("update_payee_aliases", {
+    domain: "finances",
+    summary: "Add, move, or remove the merchant spellings a payee answers to.",
+    useWhen:
+      "Use when one merchant shows up under two spellings (an alert says YouTube, the bank says PP*GOOGLE YOUTUBE SUBSCRI) so both resolve to the same payee.",
+    avoidWhen:
+      "Do not use to set a category; a payee's envelope claim or default files its uncategorized rows on its own. Do not use to merge two claimed payees.",
+    returns:
+      "The payee's aliases after the edit, what was added, moved, removed or already there, how many rows changed payee or were filed, and a sample.",
+    effects: safeWrite,
+    exposure: "domain",
+    examples: [
+      {
+        title: "Teach a payee the alert spelling",
+        arguments: {
+          payeeId: "00000000-0000-4000-8000-000000000002",
+          add: ["YouTube"],
+          dryRun: true,
+        },
+      },
+    ],
+    handler: updatePayeeAliasesTool,
   }),
   defineTool("set_commitment_payees", {
     domain: "finances",

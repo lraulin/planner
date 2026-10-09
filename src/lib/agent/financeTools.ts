@@ -26,7 +26,7 @@ import {
   type Cadence,
 } from "@/lib/finances/recurringBills";
 import { deleteBudgetCategory } from "@/lib/finances/budget/mutations";
-import { upsertBillEnvelope } from "@/lib/finances/mutations";
+import { reclassifyTransactions, upsertBillEnvelope } from "@/lib/finances/mutations";
 import {
   addAlias,
   createPayee,
@@ -682,6 +682,7 @@ async function legacyPayeeIds(
   }
 
   const ids: string[] = [];
+  let aliasesChanged = false;
   for (const raw of matcherValues) {
     const trimmed = raw.trim();
     const alias = normalizeMerchant(trimmed);
@@ -689,6 +690,7 @@ async function legacyPayeeIds(
     let payee = byAlias.get(alias);
     if (!payee) {
       const id = await createPayee(userId, { name: trimmed, aliases: [alias] });
+      aliasesChanged = true;
       payee = {
         id,
         name: trimmed,
@@ -704,11 +706,15 @@ async function legacyPayeeIds(
       byAlias.set(alias, payee);
     } else if (!payee.aliases.includes(alias)) {
       await addAlias(userId, payee.id, alias);
+      aliasesChanged = true;
       payee.aliases.push(alias);
       byAlias.set(alias, payee);
     }
     ids.push(payee.id);
   }
+  // `payee_id` is recomputed from aliases; without this the bill's claim would file only
+  // the rows that already pointed at these payees, not the ones the new aliases cover.
+  if (aliasesChanged) await reclassifyTransactions(userId, { auditOrigin: "Agent" });
   return [...new Set(ids)];
 }
 
@@ -797,6 +803,7 @@ export async function listPayeesTool(userId: string, args: Record<string, unknow
       name: payee.name,
       aliases: payee.aliases,
       claim: payee.claim ? { id: payee.claim.id, name: payee.claim.name } : null,
+      transactionCount: payee.transactionCount,
     })),
     pageInfo: page.pageInfo,
   };
