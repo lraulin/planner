@@ -9,7 +9,7 @@ import {
   users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { AlertRejected, applyAlertEmail } from "./alertIngestWrite";
+import { AlertRejected, applyAlertEmail, type AlertPush } from "./alertIngestWrite";
 import { retireAlertHolds } from "./alertHolds";
 import { seedBudget } from "./budget/mutations";
 
@@ -60,6 +60,18 @@ function push(messageId: string, merchant: string, amount: string, day = "Oct. 2
   };
 }
 
+/**
+ * Ingest as of the week the alerts are dated in, not the day the suite runs. Ingest ends
+ * with a retirement pass that flags a hold once it is a week old, so against the wall clock
+ * every hold here turned "lost" on arrival from 2026-10-10 on and three tests began failing
+ * with no change to the code.
+ */
+const INGEST_DAY = "2026-10-04";
+
+function ingest(userId: string, alert: AlertPush) {
+  return applyAlertEmail(userId, alert, INGEST_DAY);
+}
+
 async function rowsOf(userId: string) {
   return db
     .select()
@@ -107,8 +119,8 @@ describeDb("alert holds", () => {
     const userId = await makeUser();
     const accountId = await makeCard(userId);
 
-    const first = await applyAlertEmail(userId, push("msg-1", "Pizza Hut", "$12.71"));
-    const again = await applyAlertEmail(userId, push("msg-1", "Pizza Hut", "$12.71"));
+    const first = await ingest(userId, push("msg-1", "Pizza Hut", "$12.71"));
+    const again = await ingest(userId, push("msg-1", "Pizza Hut", "$12.71"));
 
     expect(first.status).toBe("inserted");
     expect(again.status).toBe("duplicate");
@@ -128,8 +140,8 @@ describeDb("alert holds", () => {
   it("keeps two same-day same-amount charges apart by message id", async () => {
     const userId = await makeUser();
     await makeCard(userId);
-    await applyAlertEmail(userId, push("msg-a", "Pizza Hut", "$12.71"));
-    await applyAlertEmail(userId, push("msg-b", "Pizza Hut", "$12.71"));
+    await ingest(userId, push("msg-a", "Pizza Hut", "$12.71"));
+    await ingest(userId, push("msg-b", "Pizza Hut", "$12.71"));
     expect(await rowsOf(userId)).toHaveLength(2);
   });
 
@@ -137,7 +149,7 @@ describeDb("alert holds", () => {
     const userId = await makeUser();
     await makeCard(userId, { last4: "1111" });
     await expect(
-      applyAlertEmail(userId, push("msg-x", "Pizza Hut", "$12.71")),
+      ingest(userId, push("msg-x", "Pizza Hut", "$12.71")),
     ).rejects.toBeInstanceOf(AlertRejected);
     expect(await rowsOf(userId)).toHaveLength(0);
     const events = await db
@@ -158,10 +170,10 @@ describeDb("alert holds", () => {
     const userId = await makeUser();
     await makeCard(userId, { historySource: "bank_page" });
     await expect(
-      applyAlertEmail(userId, push("msg-y", "Pizza Hut", "$12.71")),
+      ingest(userId, push("msg-y", "Pizza Hut", "$12.71")),
     ).rejects.toBeInstanceOf(AlertRejected);
     await expect(
-      applyAlertEmail(userId, {
+      ingest(userId, {
         ...push("msg-z", "x", "$1.00"),
         plainText: "new wording",
       }),
@@ -188,9 +200,9 @@ describeDb("alert holds", () => {
     }
 
     const results = [
-      await applyAlertEmail(userId, push("a-walmart", "Walmart", "$200.84", "Oct. 4")),
-      await applyAlertEmail(userId, push("a-chewy", "Chewy.com", "$51.29", "Oct. 4")),
-      await applyAlertEmail(userId, push("a-pizza", "Pizza Hut", "$12.71", "Oct. 2")),
+      await ingest(userId, push("a-walmart", "Walmart", "$200.84", "Oct. 4")),
+      await ingest(userId, push("a-chewy", "Chewy.com", "$51.29", "Oct. 4")),
+      await ingest(userId, push("a-pizza", "Pizza Hut", "$12.71", "Oct. 2")),
     ];
 
     expect(results.map((r) => r.status)).toEqual(["inserted", "inserted", "inserted"]);
@@ -208,7 +220,7 @@ describeDb("alert holds", () => {
   it("still retires an alert hold onto the feed row that posts for it afterwards", async () => {
     const userId = await makeUser();
     const accountId = await makeCard(userId);
-    await applyAlertEmail(userId, push("a-chewy", "Chewy.com", "$51.29", "Oct. 4"));
+    await ingest(userId, push("a-chewy", "Chewy.com", "$51.29", "Oct. 4"));
     await addFeedRow(userId, accountId, {
       externalId: "sf-chewy",
       date: "2026-10-05",
@@ -228,13 +240,10 @@ describeDb("alert holds", () => {
     const intruder = await makeUser();
     const ownerCard = await makeCard(owner);
     const intruderCard = await makeCard(intruder);
-    await applyAlertEmail(owner, push("shared-id", "Pizza Hut", "$12.71"));
+    await ingest(owner, push("shared-id", "Pizza Hut", "$12.71"));
 
     // Same message id for another user is that user's own row, not a collision.
-    const theirs = await applyAlertEmail(
-      intruder,
-      push("shared-id", "Pizza Hut", "$12.71"),
-    );
+    const theirs = await ingest(intruder, push("shared-id", "Pizza Hut", "$12.71"));
     expect(theirs.status).toBe("inserted");
     expect(await rowsOf(owner)).toHaveLength(1);
     expect(await rowsOf(intruder)).toHaveLength(1);
@@ -274,7 +283,7 @@ describeDb("alert holds", () => {
     const userId = await makeUser();
     const accountId = await makeCard(userId);
     const categoryId = await envelopeFor(userId);
-    await applyAlertEmail(userId, push("msg-1", "Pizza Hut", "$12.71"));
+    await ingest(userId, push("msg-1", "Pizza Hut", "$12.71"));
     await db
       .update(financeTransactions)
       .set({ budgetCategoryId: categoryId, notes: "team lunch" })
@@ -306,14 +315,14 @@ describeDb("alert holds", () => {
   it("retires a hold onto a tipped posting and keeps an ambiguous one, flagged after a week", async () => {
     const userId = await makeUser();
     const accountId = await makeCard(userId);
-    await applyAlertEmail(userId, push("tip", "Kims Nails", "$50.00", "Sep. 19"));
+    await ingest(userId, push("tip", "Kims Nails", "$50.00", "Sep. 19"));
     await addFeedRow(userId, accountId, {
       externalId: "sf-tip",
       date: "2026-09-21",
       amount: "-60.00",
       description: "KIMS NAILS III",
     });
-    await applyAlertEmail(userId, push("amb", "Shell", "$40.00", "Sep. 20"));
+    await ingest(userId, push("amb", "Shell", "$40.00", "Sep. 20"));
     await addFeedRow(userId, accountId, {
       externalId: "sf-amb-1",
       date: "2026-09-22",
@@ -341,7 +350,7 @@ describeDb("alert holds", () => {
   it("does not flag a young unmatched hold, and never deletes it", async () => {
     const userId = await makeUser();
     const accountId = await makeCard(userId);
-    await applyAlertEmail(userId, push("young", "Pizza Hut", "$12.71", "Oct. 2"));
+    await ingest(userId, push("young", "Pizza Hut", "$12.71", "Oct. 2"));
     const result = await retireAlertHolds(db, userId, accountId, "2026-10-04");
     expect(result).toMatchObject({ retired: 0, flagged: 0 });
     const [hold] = await rowsOf(userId);

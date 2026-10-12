@@ -35,9 +35,16 @@ export type AlertIngestResult = {
 
 export class AlertRejected extends Error {}
 
+/**
+ * `todayKey` is the day the retirement pass ages holds against. It is a parameter because an
+ * alert carries its own date: a hold is "lost" once it is a week old with nothing posted for
+ * it, so ingesting a dated alert against the wall clock gives a different answer depending
+ * on the day it is run.
+ */
 export async function applyAlertEmail(
   userId: string,
   push: AlertPush,
+  todayKey: string = localDateKey(new Date()),
 ): Promise<AlertIngestResult> {
   const parsed = parseAlertEmail(push);
   const evidence = {
@@ -136,12 +143,7 @@ export async function applyAlertEmail(
     await reclassifyInsideTransaction(tx, userId);
     await autoFileNewRows(tx, userId, [inserted.id]);
     // A feed row may already hold this charge, if the sync outran the mail.
-    const holds = await retireAlertHolds(
-      tx,
-      userId,
-      account.id,
-      localDateKey(new Date()),
-    );
+    const holds = await retireAlertHolds(tx, userId, account.id, todayKey);
     const retired = holds.changes.some(
       (change) => change.entityIdentity === inserted.id && change.after === null,
     );
