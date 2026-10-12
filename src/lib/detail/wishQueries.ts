@@ -16,48 +16,48 @@ export {
  * always loads one node's lists.
  */
 export async function loadWishList(userId: string): Promise<WishListRow[]> {
-  const items = await db
-    .select({
-      id: nodeItems.id,
-      nodeId: nodeItems.nodeId,
-      kind: nodeItems.kind,
-      priorityLetter: nodeItems.priorityLetter,
-      priorityRank: nodeItems.priorityRank,
-      title: nodeItems.title,
-      description: nodeItems.description,
-      sortKey: nodeItems.sortKey,
-      ownerName: nodes.name,
-      ownerType: nodes.type,
-    })
-    .from(nodeItems)
-    .innerJoin(nodes, eq(nodes.id, nodeItems.nodeId))
-    .where(and(eq(nodeItems.userId, userId), inArray(nodeItems.kind, [...WISH_KINDS])))
-    .orderBy(asc(nodeItems.sortKey));
-
-  if (items.length === 0) return [];
-
-  const allNodes = await db
-    .select({
-      id: nodes.id,
-      parentId: nodes.parentId,
-      type: nodes.type,
-      name: nodes.name,
-    })
-    .from(nodes)
-    .where(eq(nodes.userId, userId));
+  // The owning result area is found by walking up from each wish's node, so the walk needs
+  // every node. The category rides along on the same read: `result_area_details` has no
+  // `user_id` of its own, and reading it through the user's nodes is what scopes it.
+  const [items, allNodes] = await Promise.all([
+    db
+      .select({
+        id: nodeItems.id,
+        nodeId: nodeItems.nodeId,
+        kind: nodeItems.kind,
+        priorityLetter: nodeItems.priorityLetter,
+        priorityRank: nodeItems.priorityRank,
+        title: nodeItems.title,
+        description: nodeItems.description,
+        sortKey: nodeItems.sortKey,
+        ownerName: nodes.name,
+        ownerType: nodes.type,
+      })
+      .from(nodeItems)
+      .innerJoin(nodes, eq(nodes.id, nodeItems.nodeId))
+      .where(
+        and(eq(nodeItems.userId, userId), inArray(nodeItems.kind, [...WISH_KINDS])),
+      )
+      .orderBy(asc(nodeItems.sortKey)),
+    db
+      .select({
+        id: nodes.id,
+        parentId: nodes.parentId,
+        type: nodes.type,
+        name: nodes.name,
+        category: resultAreaDetails.category,
+      })
+      .from(nodes)
+      .leftJoin(resultAreaDetails, eq(resultAreaDetails.nodeId, nodes.id))
+      .where(eq(nodes.userId, userId)),
+  ]);
 
   const byId = new Map(allNodes.map((n) => [n.id, n]));
-  const areas = await db
-    .select({
-      nodeId: resultAreaDetails.nodeId,
-      category: resultAreaDetails.category,
-    })
-    .from(resultAreaDetails);
-  const categoryByArea = new Map(areas.map((a) => [a.nodeId, a.category]));
 
   const rows: WishListRow[] = items.map((item) => {
     let resultAreaId: string | null = null;
     let resultAreaName: string | null = null;
+    let category: string | null = null;
     const seen = new Set<string>();
     let cur = byId.get(item.nodeId) ?? null;
     while (cur) {
@@ -66,6 +66,7 @@ export async function loadWishList(userId: string): Promise<WishListRow[]> {
       if (cur.type === "result_area") {
         resultAreaId = cur.id;
         resultAreaName = cur.name;
+        category = cur.category;
         break;
       }
       cur = cur.parentId ? (byId.get(cur.parentId) ?? null) : null;
@@ -83,7 +84,7 @@ export async function loadWishList(userId: string): Promise<WishListRow[]> {
       ownerType: item.ownerType,
       resultAreaId,
       resultAreaName,
-      category: resultAreaId ? (categoryByArea.get(resultAreaId) ?? null) : null,
+      category,
     };
   });
 
