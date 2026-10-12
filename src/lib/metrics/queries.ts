@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { metricEntries, metrics, nodes } from "@/db/schema";
 import { displayValue, normalizeMetricType } from "./derive";
@@ -33,39 +33,39 @@ function mapEntry(row: {
  * leave lying around next to a query layer where every other read scopes itself.
  */
 export async function listMetrics(userId: string): Promise<MetricListRow[]> {
-  const rows = await db
-    .select({
-      id: metrics.id,
-      ownerNodeId: metrics.ownerNodeId,
-      title: metrics.title,
-      category: metrics.category,
-      question: metrics.question,
-      units: metrics.units,
-      active: metrics.active,
-      priorityLetter: metrics.priorityLetter,
-      priorityRank: metrics.priorityRank,
-      metricType: metrics.metricType,
-      objectiveTarget: metrics.objectiveTarget,
-      sortKey: metrics.sortKey,
-      ownerName: nodes.name,
-    })
-    .from(metrics)
-    .leftJoin(nodes, and(eq(nodes.id, metrics.ownerNodeId), eq(nodes.userId, userId)))
-    .where(eq(metrics.userId, userId))
-    .orderBy(asc(metrics.sortKey));
-
-  if (rows.length === 0) return [];
-
-  const ids = rows.map((r) => r.id);
-  const entryRows = await db
-    .select({
-      id: metricEntries.id,
-      metricId: metricEntries.metricId,
-      entryDate: metricEntries.entryDate,
-      value: metricEntries.value,
-    })
-    .from(metricEntries)
-    .where(and(eq(metricEntries.userId, userId), inArray(metricEntries.metricId, ids)));
+  // Every entry the user has, rather than the entries of the metrics just read: they are
+  // the same rows, and asking for them by metric id means waiting for the metrics first.
+  const [rows, entryRows] = await Promise.all([
+    db
+      .select({
+        id: metrics.id,
+        ownerNodeId: metrics.ownerNodeId,
+        title: metrics.title,
+        category: metrics.category,
+        question: metrics.question,
+        units: metrics.units,
+        active: metrics.active,
+        priorityLetter: metrics.priorityLetter,
+        priorityRank: metrics.priorityRank,
+        metricType: metrics.metricType,
+        objectiveTarget: metrics.objectiveTarget,
+        sortKey: metrics.sortKey,
+        ownerName: nodes.name,
+      })
+      .from(metrics)
+      .leftJoin(nodes, and(eq(nodes.id, metrics.ownerNodeId), eq(nodes.userId, userId)))
+      .where(eq(metrics.userId, userId))
+      .orderBy(asc(metrics.sortKey)),
+    db
+      .select({
+        id: metricEntries.id,
+        metricId: metricEntries.metricId,
+        entryDate: metricEntries.entryDate,
+        value: metricEntries.value,
+      })
+      .from(metricEntries)
+      .where(eq(metricEntries.userId, userId)),
+  ]);
 
   const byMetric = new Map<
     string,

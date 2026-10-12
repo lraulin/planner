@@ -99,48 +99,32 @@ export async function getExercise(
 }
 
 export async function listSessions(userId: string): Promise<SessionSummary[]> {
-  const sessions = await db
-    .select()
-    .from(workoutSessions)
-    .where(eq(workoutSessions.userId, userId))
-    .orderBy(desc(workoutSessions.performedAt));
-
-  if (sessions.length === 0) return [];
-
-  const sessionIds = sessions.map((s) => s.id);
-
-  const seRows = await db
-    .select({
-      id: workoutSessionExercises.id,
-      sessionId: workoutSessionExercises.sessionId,
-      sortKey: workoutSessionExercises.sortKey,
-      exerciseName: exercises.name,
-    })
-    .from(workoutSessionExercises)
-    .innerJoin(exercises, eq(exercises.id, workoutSessionExercises.exerciseId))
-    .where(
-      and(
-        eq(workoutSessionExercises.userId, userId),
-        inArray(workoutSessionExercises.sessionId, sessionIds),
-      ),
-    )
-    .orderBy(asc(workoutSessionExercises.sortKey));
-
-  const seIds = seRows.map((r) => r.id);
-
-  const setRows =
-    seIds.length === 0
-      ? []
-      : await db
-          .select()
-          .from(workoutSets)
-          .where(
-            and(
-              eq(workoutSets.userId, userId),
-              inArray(workoutSets.sessionExerciseId, seIds),
-            ),
-          )
-          .orderBy(asc(workoutSets.setIndex));
+  // Each level is read by user rather than by the ids of the level above: every session's
+  // exercises and sets are wanted, so the three reads name the same rows either way, and
+  // reading by id made each one wait for the last.
+  const [sessions, seRows, setRows] = await Promise.all([
+    db
+      .select()
+      .from(workoutSessions)
+      .where(eq(workoutSessions.userId, userId))
+      .orderBy(desc(workoutSessions.performedAt)),
+    db
+      .select({
+        id: workoutSessionExercises.id,
+        sessionId: workoutSessionExercises.sessionId,
+        sortKey: workoutSessionExercises.sortKey,
+        exerciseName: exercises.name,
+      })
+      .from(workoutSessionExercises)
+      .innerJoin(exercises, eq(exercises.id, workoutSessionExercises.exerciseId))
+      .where(eq(workoutSessionExercises.userId, userId))
+      .orderBy(asc(workoutSessionExercises.sortKey)),
+    db
+      .select()
+      .from(workoutSets)
+      .where(eq(workoutSets.userId, userId))
+      .orderBy(asc(workoutSets.setIndex)),
+  ]);
 
   const setsBySe = new Map<string, WorkoutSetView[]>();
   for (const set of setRows) {
@@ -368,15 +352,32 @@ export async function latestSessionByTitle(
 }
 
 export async function listRepeatableTitles(userId: string): Promise<RepeatableTitle[]> {
-  const sessions = await db
-    .select({
-      id: workoutSessions.id,
-      title: workoutSessions.title,
-      performedAt: workoutSessions.performedAt,
-    })
-    .from(workoutSessions)
-    .where(eq(workoutSessions.userId, userId))
-    .orderBy(desc(workoutSessions.performedAt));
+  // Read by user, like `listSessions`: only the newest session of each title is reported,
+  // but which sessions those are is not known until the sessions are back, and counting
+  // every session's exercises costs less than a round trip spent waiting to name a few.
+  // Only unfinished sets are read — they are the only ones the answer looks at.
+  const [sessions, seRows, setRows] = await Promise.all([
+    db
+      .select({
+        id: workoutSessions.id,
+        title: workoutSessions.title,
+        performedAt: workoutSessions.performedAt,
+      })
+      .from(workoutSessions)
+      .where(eq(workoutSessions.userId, userId))
+      .orderBy(desc(workoutSessions.performedAt)),
+    db
+      .select({
+        id: workoutSessionExercises.id,
+        sessionId: workoutSessionExercises.sessionId,
+      })
+      .from(workoutSessionExercises)
+      .where(eq(workoutSessionExercises.userId, userId)),
+    db
+      .select({ sessionExerciseId: workoutSets.sessionExerciseId })
+      .from(workoutSets)
+      .where(and(eq(workoutSets.userId, userId), eq(workoutSets.completed, false))),
+  ]);
 
   const latestByTitle = new Map<string, (typeof sessions)[number]>();
   for (const session of sessions) {
@@ -388,37 +389,6 @@ export async function listRepeatableTitles(userId: string): Promise<RepeatableTi
   const latest = [...latestByTitle.values()];
   if (latest.length === 0) return [];
 
-  const sessionIds = latest.map((s) => s.id);
-  const seRows = await db
-    .select({
-      id: workoutSessionExercises.id,
-      sessionId: workoutSessionExercises.sessionId,
-    })
-    .from(workoutSessionExercises)
-    .where(
-      and(
-        eq(workoutSessionExercises.userId, userId),
-        inArray(workoutSessionExercises.sessionId, sessionIds),
-      ),
-    );
-
-  const seIds = seRows.map((r) => r.id);
-  const setRows =
-    seIds.length === 0
-      ? []
-      : await db
-          .select({
-            sessionExerciseId: workoutSets.sessionExerciseId,
-            completed: workoutSets.completed,
-          })
-          .from(workoutSets)
-          .where(
-            and(
-              eq(workoutSets.userId, userId),
-              inArray(workoutSets.sessionExerciseId, seIds),
-            ),
-          );
-
   const exerciseCount = new Map<string, number>();
   const seSession = new Map<string, string>();
   for (const se of seRows) {
@@ -428,7 +398,6 @@ export async function listRepeatableTitles(userId: string): Promise<RepeatableTi
 
   const incomplete = new Set<string>();
   for (const set of setRows) {
-    if (set.completed) continue;
     const sessionId = seSession.get(set.sessionExerciseId);
     if (sessionId) incomplete.add(sessionId);
   }
