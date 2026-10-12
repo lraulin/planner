@@ -10,7 +10,7 @@ export default async function FinancesInsightsPage() {
   const userId = await getCurrentUserId();
   const [rows, data, carryingCost, statements] = await Promise.all([
     loadInsightsRows(userId),
-    loadBudget(userId, null),
+    loadBudget(userId, null, undefined, { includeMovementEvents: false }),
     loadCarryingCost(userId),
     listStatements(userId),
   ]);

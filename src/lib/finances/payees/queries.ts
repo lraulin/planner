@@ -74,22 +74,19 @@ export async function listAliasRows(userId: string): Promise<AliasRow[]> {
  * until a payee has two aliases.
  */
 export async function listPayees(userId: string): Promise<PayeeRow[]> {
-  const payees = await db
-    .select({
-      id: financePayees.id,
-      name: financePayees.name,
-      notes: financePayees.notes,
-      autoCategoryMode: financePayees.autoCategoryMode,
-      defaultBudgetCategoryId: financePayees.defaultBudgetCategoryId,
-      budgetCategoryId: financePayees.claimedBudgetCategoryId,
-    })
-    .from(financePayees)
-    .where(eq(financePayees.userId, userId))
-    .orderBy(asc(sql`lower(${financePayees.name})`));
-
-  if (payees.length === 0) return [];
-
-  const [aliases, activity, envelopes] = await Promise.all([
+  const [payees, aliases, activity, envelopes] = await Promise.all([
+    db
+      .select({
+        id: financePayees.id,
+        name: financePayees.name,
+        notes: financePayees.notes,
+        autoCategoryMode: financePayees.autoCategoryMode,
+        defaultBudgetCategoryId: financePayees.defaultBudgetCategoryId,
+        budgetCategoryId: financePayees.claimedBudgetCategoryId,
+      })
+      .from(financePayees)
+      .where(eq(financePayees.userId, userId))
+      .orderBy(asc(sql`lower(${financePayees.name})`)),
     db
       .select({
         payeeId: financePayeeAliases.payeeId,

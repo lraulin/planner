@@ -1,5 +1,6 @@
 import { and, asc, eq, gte, isNotNull, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { oncePerRequest } from "@/lib/db/requestMemo";
 import {
   financeAccounts,
   financeBudgetAllocations,
@@ -16,9 +17,12 @@ import { localDateKey } from "@/lib/schedule/geometry";
 import { accountPoolCents } from "../accountPool";
 import type { FinanceExecutor } from "../dbExecutor";
 import { numericStringToCents } from "../money";
-import { listAccounts } from "../queries";
+import type { FinanceAccountRow } from "../types";
 import { accountBalanceView } from "../workingBalance";
-import { loadWorkingPendingSelection } from "../workingPendingQuery";
+import {
+  loadAccountsWithPending,
+  type WorkingPendingSelection,
+} from "../workingPendingQuery";
 import { lastChargeByEnvelope } from "../billLastCharge";
 import { billAnchor, type BillAnchor } from "../commitments";
 import type { StoredBill } from "../recurringBills";
@@ -209,7 +213,22 @@ export type BudgetData = {
   preStartActivity: ActivityPoint[];
 };
 
+/**
+ * The group and envelope lists sit under the budget, the envelope catalog and the bare
+ * structure, and one page often wants two of those; see `oncePerRequest`.
+ */
 function groupsOf(userId: string, executor: FinanceExecutor = db) {
+  return groupsOncePerRequest(executor, userId);
+}
+
+function categoriesOf(userId: string, executor: FinanceExecutor = db) {
+  return categoriesOncePerRequest(executor, userId);
+}
+
+const groupsOncePerRequest = oncePerRequest(readGroups);
+const categoriesOncePerRequest = oncePerRequest(readCategories);
+
+async function readGroups(executor: FinanceExecutor, userId: string) {
   return executor
     .select({
       id: financeCategoryGroups.id,
@@ -224,7 +243,7 @@ function groupsOf(userId: string, executor: FinanceExecutor = db) {
     .orderBy(asc(financeCategoryGroups.name));
 }
 
-function categoriesOf(userId: string, executor: FinanceExecutor = db) {
+async function readCategories(executor: FinanceExecutor, userId: string) {
   return executor
     .select({
       id: financeBudgetCategories.id,
@@ -390,16 +409,15 @@ export async function loadBudget(
   const todayKey = options.todayKey ?? localDateKey(new Date());
   const currentMonth = monthKeyOf(todayKey);
 
-  const [stored, groups, categoryRows, accounts] = await Promise.all([
+  const [stored, groups, categoryRows, { accounts, pending }] = await Promise.all([
     readSetting(userId, BUDGET_SCOPE, executor),
     groupsOf(userId, executor),
     categoriesOf(userId, executor),
-    listAccounts(userId, executor),
+    loadAccountsWithPending(userId, executor),
   ]);
   const categories = parsedCategories(categoryRows);
 
   const settings = parseBudget(stored);
-  const pending = await loadWorkingPendingSelection(userId, accounts, executor);
   const poolCents = accountPoolCents(accounts, pending.rows);
 
   const empty: BudgetData = {
@@ -425,10 +443,11 @@ export async function loadBudget(
   if (!startMonth) {
     return {
       ...empty,
-      prospectiveOpeningCents: await openingPositionFor(
+      prospectiveOpeningCents: await positionBefore(
         userId,
         currentMonth,
-        undefined,
+        accounts.filter((account) => !account.offBudget),
+        pending,
         executor,
       ),
     };
@@ -439,42 +458,51 @@ export async function loadBudget(
     BUDGET_HORIZON_MONTHS,
   );
 
-  const [allocations, bufferedRows, activity, backlog, accountOpenings, mismatch] =
-    await Promise.all([
-      executor
-        .select({
-          month: financeBudgetAllocations.month,
-          categoryId: financeBudgetAllocations.categoryId,
-          amountCents: financeBudgetAllocations.amountCents,
-          carryover: financeBudgetAllocations.carryover,
-          snoozed: financeBudgetAllocations.snoozed,
-          goalCents: financeBudgetAllocations.goalCents,
-        })
-        .from(financeBudgetAllocations)
-        .where(eq(financeBudgetAllocations.userId, userId)),
-      executor
-        .select({
-          month: financeBudgetMonths.month,
-          bufferedCents: financeBudgetMonths.bufferedCents,
-        })
-        .from(financeBudgetMonths)
-        .where(eq(financeBudgetMonths.userId, userId)),
-      activitySince(
-        userId,
-        shiftMonthKey(startMonth, -ASSIGN_AVERAGE_MONTHS),
-        pending.supersededTransactionIds,
-        executor,
-      ),
-      backlogSince(userId, startMonth, pending.supersededTransactionIds, executor),
-      executor
-        .select({
-          offBudget: financeAccounts.offBudget,
-          budgetOpeningCents: financeAccounts.budgetOpeningCents,
-        })
-        .from(financeAccounts)
-        .where(eq(financeAccounts.userId, userId)),
-      loadBudgetMismatch(userId, startMonth, executor),
-    ]);
+  // The movement log belongs to the month shown, and which month that is falls out of the
+  // fold below. It is almost always the one asked for, so that month's log is read beside
+  // the fold's inputs and only read again if the fold lands somewhere else.
+  const wanted = requestedMonth ?? currentMonth;
+  const includeMovementEvents = options.includeMovementEvents !== false;
+
+  const [
+    allocations,
+    bufferedRows,
+    activity,
+    backlog,
+    accountOpenings,
+    drift,
+    wantedMonthEvents,
+  ] = await Promise.all([
+    executor
+      .select({
+        month: financeBudgetAllocations.month,
+        categoryId: financeBudgetAllocations.categoryId,
+        amountCents: financeBudgetAllocations.amountCents,
+        carryover: financeBudgetAllocations.carryover,
+        snoozed: financeBudgetAllocations.snoozed,
+        goalCents: financeBudgetAllocations.goalCents,
+      })
+      .from(financeBudgetAllocations)
+      .where(eq(financeBudgetAllocations.userId, userId)),
+    executor
+      .select({
+        month: financeBudgetMonths.month,
+        bufferedCents: financeBudgetMonths.bufferedCents,
+      })
+      .from(financeBudgetMonths)
+      .where(eq(financeBudgetMonths.userId, userId)),
+    activitySince(
+      userId,
+      shiftMonthKey(startMonth, -ASSIGN_AVERAGE_MONTHS),
+      pending.supersededTransactionIds,
+      executor,
+    ),
+    backlogSince(userId, startMonth, pending.supersededTransactionIds, executor),
+    recordedOpeningsOf(userId, executor),
+    liveDriftSince(userId, startMonth, accounts, pending, executor),
+    includeMovementEvents ? listBudgetMovementAudit(userId, wanted, executor) : [],
+  ]);
+  const mismatch = budgetMismatchOf(accounts, accountOpenings, drift);
   const foldActivity = activity.filter((row) => row.month >= startMonth);
   const preStartActivity = activity.filter((row) => row.month < startMonth);
   const openingCents = effectiveOpeningCents(accountOpenings, settings.openingCents);
@@ -519,15 +547,14 @@ export async function loadBudget(
     }
   }
 
-  const wanted = requestedMonth ?? currentMonth;
   const month = findMonth(months, wanted)
     ? wanted
     : (months.find((entry) => entry.month >= wanted)?.month ??
       months[months.length - 1]?.month ??
       currentMonth);
   const movementEvents =
-    options.includeMovementEvents === false
-      ? []
+    !includeMovementEvents || month === wanted
+      ? wantedMonthEvents
       : await listBudgetMovementAudit(userId, month, executor);
 
   return {
@@ -560,20 +587,63 @@ export async function openingPositionFor(
   accountIds?: readonly string[],
   executor: FinanceExecutor = db,
 ): Promise<number> {
-  const asOfKey = monthEndKey(shiftMonthKey(month, -1));
-  const allAccounts = await listAccounts(userId, executor);
+  const { accounts: allAccounts, pending } = await loadAccountsWithPending(
+    userId,
+    executor,
+  );
   const accounts = allAccounts.filter((account) =>
     accountIds ? accountIds.includes(account.id) : !account.offBudget,
   );
+  return positionBefore(userId, month, accounts, pending, executor);
+}
+
+/** {@link openingPositionFor} for a caller that already holds the accounts and the pending. */
+async function positionBefore(
+  userId: string,
+  month: MonthKey,
+  accounts: readonly FinanceAccountRow[],
+  pending: WorkingPendingSelection,
+  executor: FinanceExecutor,
+): Promise<number> {
   if (accounts.length === 0) return 0;
+  const since = await movedSince(userId, month, pending, executor);
+  return accounts.reduce(
+    (total, account) => total + positionOf(account, pending, since),
+    0,
+  );
+}
 
-  const pending = await loadWorkingPendingSelection(userId, allAccounts, executor);
-  const known = new Set(accounts.map((account) => account.id));
+/** One account's working balance with everything dated after the cutoff walked back out. */
+function positionOf(
+  account: FinanceAccountRow,
+  pending: WorkingPendingSelection,
+  since: ReadonlyMap<string, number>,
+): number {
+  return (
+    accountBalanceView(account, pending.rows).workingCents -
+    (since.get(account.id) ?? 0)
+  );
+}
 
+/**
+ * Signed money per account dated in `month` or later — what has to be walked back out of a
+ * working balance to stand on the day before `month` began.
+ *
+ * Every account in one grouped read. Measuring the accounts one at a time, each with a read
+ * of its own, is what this replaced: the per-account drift check issued six queries for
+ * every seeded account, and all of them asked for the same rows.
+ */
+async function movedSince(
+  userId: string,
+  month: MonthKey,
+  pending: WorkingPendingSelection,
+  executor: FinanceExecutor,
+): Promise<Map<string, number>> {
+  const asOfKey = monthEndKey(shiftMonthKey(month, -1));
   const rows = await executor
     .select({
       accountId: financeTransactions.accountId,
-      amount: financeTransactions.amount,
+      amount: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
@@ -586,21 +656,12 @@ export async function openingPositionFor(
         notSupersededPending(pending.supersededTransactionIds),
         sql`${financeTransactions.transactionDate} > ${asOfKey}`,
       ),
-    );
+    )
+    .groupBy(financeTransactions.accountId);
 
-  const after = rows.reduce(
-    (total, row) =>
-      known.has(row.accountId)
-        ? total + (numericStringToCents(row.amount) ?? 0)
-        : total,
-    0,
+  return new Map(
+    rows.map((row) => [row.accountId, numericStringToCents(row.amount) ?? 0]),
   );
-
-  const working = accounts.reduce(
-    (total, account) => total + accountBalanceView(account, pending.rows).workingCents,
-    0,
-  );
-  return working - after;
 }
 
 export type AccountMismatch = {
@@ -637,66 +698,106 @@ export async function loadBudgetMismatch(
 ): Promise<BudgetMismatch> {
   if (!startMonth) return { accounts: [], unmatchedTransferCents: 0 };
 
-  const [accounts, openings] = await Promise.all([
-    listAccounts(userId, executor),
-    executor
-      .select({
-        id: financeAccounts.id,
-        offBudget: financeAccounts.offBudget,
-        budgetOpeningCents: financeAccounts.budgetOpeningCents,
-      })
-      .from(financeAccounts)
-      .where(eq(financeAccounts.userId, userId)),
-  ]);
-  const openingById = new Map(openings.map((row) => [row.id, row]));
-  const seeded = accounts.filter((account) => {
-    const opening = openingById.get(account.id);
-    return opening && !opening.offBudget && opening.budgetOpeningCents !== null;
-  });
-
-  const [accountMismatches, pending] = await Promise.all([
-    Promise.all(
-      seeded.map(async (account): Promise<AccountMismatch> => {
-        const livePositionCents = await openingPositionFor(
-          userId,
-          startMonth,
-          [account.id],
-          executor,
-        );
-        const openingCents = openingById.get(account.id)?.budgetOpeningCents ?? 0;
-        return {
-          accountId: account.id,
-          accountName: account.name,
-          mismatchCents: livePositionCents - openingCents,
-        };
-      }),
+  // The drift waits on the accounts and the pending decision, but not on the recorded
+  // openings — so those are read beside it rather than in front of it.
+  const loaded = loadAccountsWithPending(userId, executor);
+  const [{ accounts }, openings, drift] = await Promise.all([
+    loaded,
+    recordedOpeningsOf(userId, executor),
+    loaded.then(({ accounts, pending }) =>
+      liveDriftSince(userId, startMonth, accounts, pending, executor),
     ),
-    loadWorkingPendingSelection(userId, accounts, executor),
   ]);
+  return budgetMismatchOf(accounts, openings, drift);
+}
 
-  const transferRows = await executor
-    .select({ amount: financeTransactions.amount })
-    .from(financeTransactions)
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.offBudget, false),
-        moneyRows,
-        notSupersededPending(pending.supersededTransactionIds),
-        gte(financeTransactions.transactionDate, startMonth),
-        sql`(${financeTransactions.transferGroupId} is not null or coalesce(${financeTransactions.flowOverride}::text, ${financeTransactions.derivedFlow}::text, '') = 'internal_transfer')`,
+type RecordedOpening = {
+  id: string;
+  offBudget: boolean;
+  budgetOpeningCents: number | null;
+};
+
+function recordedOpeningsOf(
+  userId: string,
+  executor: FinanceExecutor,
+): Promise<RecordedOpening[]> {
+  return executor
+    .select({
+      id: financeAccounts.id,
+      offBudget: financeAccounts.offBudget,
+      budgetOpeningCents: financeAccounts.budgetOpeningCents,
+    })
+    .from(financeAccounts)
+    .where(eq(financeAccounts.userId, userId));
+}
+
+type LiveDrift = {
+  /** Each account's live position on the day before the start month, keyed by account id. */
+  positionByAccount: Map<string, number>;
+  unmatchedTransferCents: number;
+};
+
+/** The two reads {@link loadBudgetMismatch} is made of, for a caller holding the rest. */
+async function liveDriftSince(
+  userId: string,
+  startMonth: MonthKey,
+  accounts: readonly FinanceAccountRow[],
+  pending: WorkingPendingSelection,
+  executor: FinanceExecutor,
+): Promise<LiveDrift> {
+  const [since, transferRows] = await Promise.all([
+    movedSince(userId, startMonth, pending, executor),
+    executor
+      .select({ amount: financeTransactions.amount })
+      .from(financeTransactions)
+      .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeAccounts.userId, userId),
+          eq(financeAccounts.offBudget, false),
+          moneyRows,
+          notSupersededPending(pending.supersededTransactionIds),
+          gte(financeTransactions.transactionDate, startMonth),
+          sql`(${financeTransactions.transferGroupId} is not null or coalesce(${financeTransactions.flowOverride}::text, ${financeTransactions.derivedFlow}::text, '') = 'internal_transfer')`,
+        ),
       ),
-    );
+  ]);
 
   return {
-    accounts: accountMismatches,
+    positionByAccount: new Map(
+      accounts.map((account) => [account.id, positionOf(account, pending, since)]),
+    ),
     unmatchedTransferCents: unmatchedTransferCents(
       transferRows.map((row) => ({
         amountCents: numericStringToCents(row.amount) ?? 0,
       })),
     ),
+  };
+}
+
+function budgetMismatchOf(
+  accounts: readonly FinanceAccountRow[],
+  openings: readonly RecordedOpening[],
+  drift: LiveDrift,
+): BudgetMismatch {
+  const openingById = new Map(openings.map((row) => [row.id, row]));
+  return {
+    accounts: accounts.flatMap((account): AccountMismatch[] => {
+      const opening = openingById.get(account.id);
+      if (!opening || opening.offBudget || opening.budgetOpeningCents === null) {
+        return [];
+      }
+      return [
+        {
+          accountId: account.id,
+          accountName: account.name,
+          mismatchCents:
+            (drift.positionByAccount.get(account.id) ?? 0) - opening.budgetOpeningCents,
+        },
+      ];
+    }),
+    unmatchedTransferCents: drift.unmatchedTransferCents,
   };
 }
 
@@ -728,7 +829,18 @@ export async function loadBillAnchors(
   categories: readonly BudgetCategoryRow[],
   todayKey: string,
 ): Promise<Map<string, BillAnchor>> {
-  const lastCharge = await lastChargeByEnvelope(userId);
+  return billAnchorsOf(categories, await lastChargeByEnvelope(userId), todayKey);
+}
+
+/**
+ * {@link loadBillAnchors} for a page that reads the last charges beside the budget rather
+ * than after it — the categories are the only thing the anchors need the budget for.
+ */
+export function billAnchorsOf(
+  categories: readonly BudgetCategoryRow[],
+  lastCharge: ReadonlyMap<string, string>,
+  todayKey: string,
+): Map<string, BillAnchor> {
   const anchors = new Map<string, BillAnchor>();
 
   for (const category of categories) {

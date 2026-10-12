@@ -34,24 +34,23 @@ export type BankConnectionRow = {
 };
 
 export async function listConnections(userId: string): Promise<BankConnectionRow[]> {
-  const rows = await db
-    .select({
-      id: bankConnections.id,
-      label: bankConnections.label,
-      syncedThrough: bankConnections.syncedThrough,
-      lastSyncedAt: bankConnections.lastSyncedAt,
-      reauthRequiredAt: bankConnections.reauthRequiredAt,
-      unmatchedAccountCount: bankConnections.unmatchedAccountCount,
-    })
-    .from(bankConnections)
-    .where(eq(bankConnections.userId, userId));
-
-  if (rows.length === 0) return [];
-
-  const links = await db
-    .select({ connectionId: bankAccountLinks.connectionId })
-    .from(bankAccountLinks)
-    .where(eq(bankAccountLinks.userId, userId));
+  const [rows, links] = await Promise.all([
+    db
+      .select({
+        id: bankConnections.id,
+        label: bankConnections.label,
+        syncedThrough: bankConnections.syncedThrough,
+        lastSyncedAt: bankConnections.lastSyncedAt,
+        reauthRequiredAt: bankConnections.reauthRequiredAt,
+        unmatchedAccountCount: bankConnections.unmatchedAccountCount,
+      })
+      .from(bankConnections)
+      .where(eq(bankConnections.userId, userId)),
+    db
+      .select({ connectionId: bankAccountLinks.connectionId })
+      .from(bankAccountLinks)
+      .where(eq(bankAccountLinks.userId, userId)),
+  ]);
 
   const counts = new Map<string, number>();
   for (const link of links) {

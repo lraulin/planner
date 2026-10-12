@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lte, max, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { oncePerRequest } from "@/lib/db/requestMemo";
 import {
   financeAccounts,
   financeBudgetCategories,
@@ -93,50 +94,104 @@ const TRANSACTION_LIST_COLUMNS = {
 } as const;
 
 /** Accounts with their balance and row count, newest-named first for a stable picker. */
-export async function listAccounts(
+export function listAccounts(
   userId: string,
   executor: FinanceExecutor = db,
 ): Promise<FinanceAccountRow[]> {
-  const rows = await executor
-    .select({
-      id: financeAccounts.id,
-      name: financeAccounts.name,
-      kind: financeAccounts.kind,
-      institution: financeAccounts.institution,
-      url: financeAccounts.url,
-      externalSource: financeAccounts.externalSource,
-      externalKey: financeAccounts.externalKey,
-      closedAt: financeAccounts.closedAt,
-      offBudget: financeAccounts.offBudget,
-      historySource: financeAccounts.historySource,
-      // The two answers of D2 in one scan, which is where noticing they differ started:
-      // the balance is money and wants leaves, the count is bank rows and wants parents.
-      balance: sql<string>`coalesce(sum(${financeTransactions.amount}) filter (where ${moneyRows}), 0)`,
-      transactionCount: sql<number>`count(${financeTransactions.id}) filter (where ${bankRows})::int`,
-    })
-    .from(financeAccounts)
-    .leftJoin(
-      financeTransactions,
-      and(
-        eq(financeTransactions.accountId, financeAccounts.id),
-        // Redundant with the join on id, but it keeps the user scope on both sides of the
-        // join rather than trusting the foreign key to have been written correctly.
-        eq(financeTransactions.userId, userId),
-      ),
-    )
-    .where(eq(financeAccounts.userId, userId))
-    .groupBy(financeAccounts.id)
-    .orderBy(asc(financeAccounts.name));
+  return accountsOncePerRequest(executor, userId);
+}
 
-  const latestRows = await executor
+/**
+ * Nearly every finance loader starts from the account list, so one page asks for it several
+ * times over; see `oncePerRequest` for why sharing that answer is safe.
+ *
+ * The three reads are independent and go out together. The post-statement total used to
+ * wait for the statements to come back so it could name each account's cutoff date; it now
+ * joins to that cutoff instead, which is the same comparison made where the dates live.
+ */
+const accountsOncePerRequest = oncePerRequest(readAccounts);
+
+async function readAccounts(
+  executor: FinanceExecutor,
+  userId: string,
+): Promise<FinanceAccountRow[]> {
+  const latestStatement = executor
     .select({
       accountId: financeStatements.accountId,
-      periodEnd: financeStatements.periodEnd,
-      closingBalance: financeStatements.closingBalance,
+      periodEnd: max(financeStatements.periodEnd).as("latest_period_end"),
     })
     .from(financeStatements)
     .where(eq(financeStatements.userId, userId))
-    .orderBy(desc(financeStatements.periodEnd), desc(financeStatements.id));
+    .groupBy(financeStatements.accountId)
+    .as("latest_statement");
+
+  const [rows, latestRows, postRows] = await Promise.all([
+    executor
+      .select({
+        id: financeAccounts.id,
+        name: financeAccounts.name,
+        kind: financeAccounts.kind,
+        institution: financeAccounts.institution,
+        url: financeAccounts.url,
+        externalSource: financeAccounts.externalSource,
+        externalKey: financeAccounts.externalKey,
+        closedAt: financeAccounts.closedAt,
+        offBudget: financeAccounts.offBudget,
+        historySource: financeAccounts.historySource,
+        // The two answers of D2 in one scan, which is where noticing they differ started:
+        // the balance is money and wants leaves, the count is bank rows and wants parents.
+        balance: sql<string>`coalesce(sum(${financeTransactions.amount}) filter (where ${moneyRows}), 0)`,
+        transactionCount: sql<number>`count(${financeTransactions.id}) filter (where ${bankRows})::int`,
+        // A live balance from the bank outranks both the statement close and the ledger sum:
+        // it is what the bank's own app shows, read seconds ago. Nulls where an account has
+        // no live feed, which is every account until one is linked.
+        syncedBalanceCents: financeAccounts.balanceCents,
+        syncedBalanceAsOf: financeAccounts.balanceAsOf,
+        syncedBalanceSource: financeAccounts.balanceSource,
+      })
+      .from(financeAccounts)
+      .leftJoin(
+        financeTransactions,
+        and(
+          eq(financeTransactions.accountId, financeAccounts.id),
+          // Redundant with the join on id, but it keeps the user scope on both sides of the
+          // join rather than trusting the foreign key to have been written correctly.
+          eq(financeTransactions.userId, userId),
+        ),
+      )
+      .where(eq(financeAccounts.userId, userId))
+      .groupBy(financeAccounts.id)
+      .orderBy(asc(financeAccounts.name)),
+    executor
+      .select({
+        accountId: financeStatements.accountId,
+        periodEnd: financeStatements.periodEnd,
+        closingBalance: financeStatements.closingBalance,
+      })
+      .from(financeStatements)
+      .where(eq(financeStatements.userId, userId))
+      .orderBy(desc(financeStatements.periodEnd), desc(financeStatements.id)),
+    executor
+      .select({
+        accountId: financeTransactions.accountId,
+        total: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
+      })
+      .from(financeTransactions)
+      .innerJoin(
+        latestStatement,
+        eq(latestStatement.accountId, financeTransactions.accountId),
+      )
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          // Money: leaves. Splitting a row after the statement closed must not move the
+          // post-statement total, or the account's balance would jump for no reason.
+          moneyRows,
+          gt(financeTransactions.transactionDate, latestStatement.periodEnd),
+        ),
+      )
+      .groupBy(financeTransactions.accountId),
+  ]);
 
   const latestByAccount = new Map<
     string,
@@ -150,62 +205,10 @@ export async function listAccounts(
     });
   }
 
-  const postByAccount = new Map<string, number>();
-  const latestList = [...latestByAccount.entries()];
-  if (latestList.length > 0) {
-    const postRows = await executor
-      .select({
-        accountId: financeTransactions.accountId,
-        total: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
-      })
-      .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          // Money: leaves. Splitting a row after the statement closed must not move the
-          // post-statement total, or the account's balance would jump for no reason.
-          moneyRows,
-          or(
-            ...latestList.map(([accountId, latest]) =>
-              and(
-                eq(financeTransactions.accountId, accountId),
-                gt(financeTransactions.transactionDate, latest.periodEnd),
-              ),
-            ),
-          ),
-        ),
-      )
-      .groupBy(financeTransactions.accountId);
-    for (const row of postRows) {
-      postByAccount.set(row.accountId, numericStringToCents(row.total) ?? 0);
-    }
-  }
-
-  // A live balance from the bank outranks both the statement close and the ledger sum: it
-  // is what the bank's own app shows, read seconds ago. Nulls where an account has no live
-  // feed, which is every account until one is linked.
-  const syncedRows = await executor
-    .select({
-      accountId: financeAccounts.id,
-      balanceCents: financeAccounts.balanceCents,
-      balanceAsOf: financeAccounts.balanceAsOf,
-      source: financeAccounts.balanceSource,
-    })
-    .from(financeAccounts)
-    .where(eq(financeAccounts.userId, userId));
-
-  const syncedByAccount = new Map(
-    syncedRows
-      .filter((row) => row.balanceCents !== null && row.balanceAsOf !== null)
-      .map((row) => [
-        row.accountId,
-        {
-          cents: row.balanceCents as number,
-          asOf: row.balanceAsOf as Date,
-          source: row.source,
-        },
-      ]),
+  const postByAccount = new Map(
+    postRows.map((row) => [row.accountId, numericStringToCents(row.total) ?? 0]),
   );
+
   return rows.map((row) => {
     const ledgerBalanceCents = numericStringToCents(row.balance) ?? 0;
     const latest = latestByAccount.get(row.id);
@@ -214,7 +217,14 @@ export async function listAccounts(
       ? latest.closingCents + postCents
       : ledgerBalanceCents;
 
-    const synced = syncedByAccount.get(row.id);
+    const synced =
+      row.syncedBalanceCents !== null && row.syncedBalanceAsOf !== null
+        ? {
+            cents: row.syncedBalanceCents,
+            asOf: row.syncedBalanceAsOf,
+            source: row.syncedBalanceSource,
+          }
+        : null;
     const balanceCents = synced ? synced.cents : statementAnchored;
 
     return {

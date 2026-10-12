@@ -15,11 +15,12 @@ export const dynamic = "force-dynamic";
 /** Catalog of register accounts — rename, reclassify, bank URL, close, delete. */
 export default async function FinancesAccountsPage() {
   const userId = await getCurrentUserId();
-  const startMonth = parseBudget(await readSetting(userId, BUDGET_SCOPE)).startMonth;
   const [data, links, mismatch] = await Promise.all([
     loadDashboard(userId),
     listLinks(userId),
-    loadBudgetMismatch(userId, startMonth),
+    readSetting(userId, BUDGET_SCOPE).then((stored) =>
+      loadBudgetMismatch(userId, parseBudget(stored).startMonth),
+    ),
   ]);
 
   return (

@@ -43,9 +43,10 @@ import {
 import { regularIncomePlan } from "./budget/incomePlan";
 import { activeBillTotals } from "./commitmentRows";
 import { numericStringToCents } from "./money";
-import { listAccounts } from "./queries";
+import { oncePerRequest } from "@/lib/db/requestMemo";
+import type { FinanceExecutor } from "./dbExecutor";
 import type { FinanceAccountRow } from "./types";
-import { loadWorkingPendingSelection } from "./workingPendingQuery";
+import { loadAccountsWithPending } from "./workingPendingQuery";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { budgetContributionSql } from "./budget/contributionSql";
 import type { EnvelopeReportRow } from "./reports";
@@ -84,13 +85,28 @@ function scopeConditions(userId: string, filter: InsightsFilter) {
 }
 
 /** Every classified transaction, oldest first — the one read the whole dashboard runs on. */
-export async function loadInsightsRows(
+export function loadInsightsRows(
   userId: string,
   filter: InsightsFilter = {},
 ): Promise<EnvelopeReportRow[]> {
-  const accounts = await listAccounts(userId);
-  const pending = await loadWorkingPendingSelection(userId, accounts);
-  const rows = await db
+  return insightsRowsOncePerRequest(db, userId, filter.from, filter.to);
+}
+
+/**
+ * The largest read in the module, and the forecast, the review list and the dashboard each
+ * ask for it; see `oncePerRequest`. The window is passed as two strings rather than as the
+ * filter object so that two callers asking for the same window share one answer.
+ */
+const insightsRowsOncePerRequest = oncePerRequest(readInsightsRows);
+
+async function readInsightsRows(
+  executor: FinanceExecutor,
+  userId: string,
+  from: string | undefined,
+  to: string | undefined,
+): Promise<EnvelopeReportRow[]> {
+  const { pending } = await loadAccountsWithPending(userId, executor);
+  const rows = await executor
     .select({
       id: financeTransactions.id,
       accountId: financeTransactions.accountId,
@@ -139,7 +155,7 @@ export async function loadInsightsRows(
         pending.supersededTransactionIds.length
           ? notInArray(financeTransactions.id, pending.supersededTransactionIds)
           : undefined,
-        ...scopeConditions(userId, filter),
+        ...scopeConditions(userId, { from, to }),
       ),
     )
     .orderBy(asc(financeTransactions.transactionDate), asc(financeTransactions.id));
@@ -196,9 +212,18 @@ export async function unclassifiedCount(userId: string): Promise<number> {
  * behaviour depend on a decision it could not see; the ones that must exclude them — the
  * accrual, the forecast — check `status` themselves and say so.
  */
-export async function loadRecurringBills(userId: string): Promise<StoredBillRow[]> {
+export function loadRecurringBills(userId: string): Promise<StoredBillRow[]> {
+  return recurringBillsOncePerRequest(db, userId);
+}
+
+const recurringBillsOncePerRequest = oncePerRequest(readRecurringBills);
+
+async function readRecurringBills(
+  executor: FinanceExecutor,
+  userId: string,
+): Promise<StoredBillRow[]> {
   const [rows, payees] = await Promise.all([
-    db
+    executor
       .select({
         id: financeBudgetCategories.id,
         name: financeBudgetCategories.name,
@@ -222,7 +247,7 @@ export async function loadRecurringBills(userId: string): Promise<StoredBillRow[
         ),
       )
       .orderBy(asc(financeBudgetCategories.name)),
-    db
+    executor
       .select({
         id: financePayees.id,
         name: financePayees.name,
@@ -281,9 +306,19 @@ export async function loadBillForecast(
   userId: string,
   todayKey: string,
 ): Promise<BillForecast> {
-  const [rows, bills] = await Promise.all([
+  const [rows, bills, incomeRows] = await Promise.all([
     loadInsightsRows(userId),
     loadRecurringBills(userId),
+    db
+      .select({
+        id: financeBudgetCategories.id,
+        name: financeBudgetCategories.name,
+        kind: financeBudgetCategories.kind,
+        incomeRole: financeBudgetCategories.incomeRole,
+        expectedMonthlyIncomeCents: financeBudgetCategories.expectedMonthlyIncomeCents,
+      })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId)),
   ]);
   const envelopes = billEnvelopeIndex(bills);
   const flatCharges: BillCharge[] = [];
@@ -298,16 +333,6 @@ export async function loadBillForecast(
     chargesByName.set(ref.id, list);
   }
 
-  const incomeRows = await db
-    .select({
-      id: financeBudgetCategories.id,
-      name: financeBudgetCategories.name,
-      kind: financeBudgetCategories.kind,
-      incomeRole: financeBudgetCategories.incomeRole,
-      expectedMonthlyIncomeCents: financeBudgetCategories.expectedMonthlyIncomeCents,
-    })
-    .from(financeBudgetCategories)
-    .where(eq(financeBudgetCategories.userId, userId));
   const incomePlan = regularIncomePlan(incomeRows);
   const rowsOut = billRowsOf(bills, flatCharges, todayKey);
   return {
@@ -373,8 +398,14 @@ export type DashboardData = {
 
 export async function loadDashboard(userId: string): Promise<DashboardData> {
   const loadedAtMs = Date.now();
-  const [accounts, rows, bills, connections, dismissedPayeeIds] = await Promise.all([
-    listAccounts(userId),
+  const [
+    { accounts, pending: pendingSelection },
+    rows,
+    bills,
+    connections,
+    dismissedPayeeIds,
+  ] = await Promise.all([
+    loadAccountsWithPending(userId),
     loadInsightsRows(userId),
     loadRecurringBills(userId),
     listConnections(userId),
@@ -385,8 +416,6 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
         and(eq(financePayees.userId, userId), eq(financePayees.notACommitment, true)),
       ),
   ]);
-  const pendingSelection = await loadWorkingPendingSelection(userId, accounts);
-
   // A bill's charges are what is filed to its envelope; a payee claim is how they get
   // there. Routing by `budgetCategoryId` keeps the dashboard, the 12-month projection,
   // and the grid on one answer. The claim index is still the route from a bank string
@@ -529,35 +558,39 @@ export async function loadCarryingCost(
   if (filter.from) conditions.push(gte(financeStatements.periodEnd, filter.from));
   if (filter.to) conditions.push(lte(financeStatements.periodEnd, filter.to));
 
-  const rows = await db
-    .select({
-      accountId: financeStatements.accountId,
-      accountName: financeAccounts.name,
-      periodEnd: financeStatements.periodEnd,
-      interestCharged: financeStatements.interestCharged,
-      feesCharged: financeStatements.feesCharged,
-      creditLimit: financeStatements.creditLimit,
-      closingBalance: financeStatements.closingBalance,
-    })
-    .from(financeStatements)
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeStatements.accountId))
-    .where(and(...conditions))
-    .orderBy(asc(financeStatements.accountId), asc(financeStatements.periodEnd));
-
-  // One APR per account: the newest one on record. An APR history is a different panel, and
-  // the question this one answers is "what is it costing me now".
-  const rates = await db
-    .select({
-      accountId: financeStatements.accountId,
-      aprPercent: financeStatementRates.aprPercent,
-    })
-    .from(financeStatementRates)
-    .innerJoin(
-      financeStatements,
-      eq(financeStatements.id, financeStatementRates.statementId),
-    )
-    .where(eq(financeStatementRates.userId, userId))
-    .orderBy(desc(financeStatements.periodEnd), desc(financeStatementRates.aprPercent));
+  const [rows, rates] = await Promise.all([
+    db
+      .select({
+        accountId: financeStatements.accountId,
+        accountName: financeAccounts.name,
+        periodEnd: financeStatements.periodEnd,
+        interestCharged: financeStatements.interestCharged,
+        feesCharged: financeStatements.feesCharged,
+        creditLimit: financeStatements.creditLimit,
+        closingBalance: financeStatements.closingBalance,
+      })
+      .from(financeStatements)
+      .innerJoin(financeAccounts, eq(financeAccounts.id, financeStatements.accountId))
+      .where(and(...conditions))
+      .orderBy(asc(financeStatements.accountId), asc(financeStatements.periodEnd)),
+    // One APR per account: the newest one on record. An APR history is a different panel,
+    // and the question this one answers is "what is it costing me now".
+    db
+      .select({
+        accountId: financeStatements.accountId,
+        aprPercent: financeStatementRates.aprPercent,
+      })
+      .from(financeStatementRates)
+      .innerJoin(
+        financeStatements,
+        eq(financeStatements.id, financeStatementRates.statementId),
+      )
+      .where(eq(financeStatementRates.userId, userId))
+      .orderBy(
+        desc(financeStatements.periodEnd),
+        desc(financeStatementRates.aprPercent),
+      ),
+  ]);
 
   const aprByAccount = new Map<string, number>();
   for (const rate of rates) {

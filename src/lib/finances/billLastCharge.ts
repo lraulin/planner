@@ -1,5 +1,7 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
+import { oncePerRequest } from "@/lib/db/requestMemo";
 import {
   amazonCharges,
   amazonReceiptAllocations,
@@ -19,24 +21,38 @@ const outflows = sql`${financeTransactions.amount}::numeric < 0`;
  * a split parent holds no envelope. Outflows only: a refund is not the charge being waited
  * for. The Amazon-receipt union is unchanged.
  */
-export async function lastChargeByEnvelope(
+export function lastChargeByEnvelope(userId: string): Promise<Map<string, string>> {
+  return lastChargeOncePerRequest(db, userId);
+}
+
+/**
+ * The bill anchors, the bill snapshots and the Bills page itself each want this map; see
+ * `oncePerRequest`. Sharing a `Map` means nobody may write to the one they are handed.
+ */
+const lastChargeOncePerRequest = oncePerRequest(readLastChargeByEnvelope);
+
+async function readLastChargeByEnvelope(
+  executor: DbExecutor,
   userId: string,
 ): Promise<Map<string, string>> {
-  const rows = await db
-    .select({
-      envelopeId: financeTransactions.budgetCategoryId,
-      lastChargeKey: sql<string>`max(${financeTransactions.transactionDate})`,
-    })
-    .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        isNotNull(financeTransactions.budgetCategoryId),
-        moneyRows,
-        outflows,
-      ),
-    )
-    .groupBy(financeTransactions.budgetCategoryId);
+  const [rows, fromReceipts] = await Promise.all([
+    executor
+      .select({
+        envelopeId: financeTransactions.budgetCategoryId,
+        lastChargeKey: sql<string>`max(${financeTransactions.transactionDate})`,
+      })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          isNotNull(financeTransactions.budgetCategoryId),
+          moneyRows,
+          outflows,
+        ),
+      )
+      .groupBy(financeTransactions.budgetCategoryId),
+    receiptLastChargeByEnvelope(userId, executor),
+  ]);
 
   const fromEnvelopes = new Map(
     rows
@@ -45,7 +61,6 @@ export async function lastChargeByEnvelope(
       )
       .map((row) => [row.envelopeId, row.lastChargeKey]),
   );
-  const fromReceipts = await receiptLastChargeByEnvelope(userId);
   for (const [envelopeId, dateKey] of fromReceipts) {
     const current = fromEnvelopes.get(envelopeId);
     if (!current || dateKey > current) fromEnvelopes.set(envelopeId, dateKey);
@@ -61,21 +76,23 @@ export async function lastChargeOnBill(
   userId: string,
   envelopeId: string,
 ): Promise<string | null> {
-  const [row] = await db
-    .select({
-      lastChargeKey: sql<string | null>`max(${financeTransactions.transactionDate})`,
-    })
-    .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        eq(financeTransactions.budgetCategoryId, envelopeId),
-        moneyRows,
-        outflows,
+  const [[row], fromReceipt] = await Promise.all([
+    db
+      .select({
+        lastChargeKey: sql<string | null>`max(${financeTransactions.transactionDate})`,
+      })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.budgetCategoryId, envelopeId),
+          moneyRows,
+          outflows,
+        ),
       ),
-    );
+    receiptLastChargeOnBill(userId, envelopeId),
+  ]);
   const fromEnvelope = row?.lastChargeKey ?? null;
-  const fromReceipt = await receiptLastChargeOnBill(userId, envelopeId);
   if (!fromEnvelope) return fromReceipt;
   if (!fromReceipt) return fromEnvelope;
   return fromReceipt > fromEnvelope ? fromReceipt : fromEnvelope;
@@ -83,8 +100,9 @@ export async function lastChargeOnBill(
 
 async function receiptLastChargeByEnvelope(
   userId: string,
+  executor: DbExecutor,
 ): Promise<Map<string, string>> {
-  const rows = await db
+  const rows = await executor
     .select({
       envelopeId: amazonReceiptAllocations.billId,
       lastChargeKey: sql<string>`max(${amazonCharges.paymentDate})`,

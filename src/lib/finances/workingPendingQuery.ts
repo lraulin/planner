@@ -7,9 +7,12 @@
 
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
+import { oncePerRequest } from "@/lib/db/requestMemo";
 import type { FinanceExecutor } from "./dbExecutor";
 import { financeTransactions } from "@/db/schema";
 import { numericStringToCents } from "./money";
+import { listAccounts } from "./queries";
+import type { FinanceAccountRow } from "./types";
 import type { PendingRow } from "./workingBalance";
 import { selectWorkingPending, type WorkingPendingAccount } from "./workingPending";
 
@@ -42,6 +45,44 @@ export async function loadWorkingPendingSelection(
   accounts: readonly WorkingPendingAccount[],
   executor: FinanceExecutor = db,
 ): Promise<WorkingPendingSelection> {
+  return workingPendingSelection(
+    await pendingCandidatesOncePerRequest(executor, userId),
+    accounts,
+  );
+}
+
+/**
+ * The account list and the pending decision made against it, read together.
+ *
+ * Almost every money reader needs both, and the decision only needs the accounts once the
+ * candidate rows are already back — so the two reads have no reason to queue behind each
+ * other, which is what loading the accounts and then asking for the selection did.
+ */
+export async function loadAccountsWithPending(
+  userId: string,
+  executor: FinanceExecutor = db,
+): Promise<{ accounts: FinanceAccountRow[]; pending: WorkingPendingSelection }> {
+  const [accounts, candidates] = await Promise.all([
+    listAccounts(userId, executor),
+    pendingCandidatesOncePerRequest(executor, userId),
+  ]);
+  return { accounts, pending: workingPendingSelection(candidates, accounts) };
+}
+
+type WorkingPendingCandidate = {
+  id: string;
+  accountId: string;
+  amountCents: number;
+  source: string;
+};
+
+/** Every pending row the rule could count, before it chooses between the sources. */
+const pendingCandidatesOncePerRequest = oncePerRequest(readPendingCandidates);
+
+async function readPendingCandidates(
+  executor: FinanceExecutor,
+  userId: string,
+): Promise<WorkingPendingCandidate[]> {
   const pendingRows = await executor
     .select({
       id: financeTransactions.id,
@@ -63,12 +104,18 @@ export async function loadWorkingPendingSelection(
       ),
     );
 
-  const candidates = pendingRows.map((row) => ({
+  return pendingRows.map((row) => ({
     id: row.id,
     accountId: row.accountId,
     amountCents: numericStringToCents(row.amount) ?? 0,
     source: row.source ?? "",
   }));
+}
+
+function workingPendingSelection(
+  candidates: readonly WorkingPendingCandidate[],
+  accounts: readonly WorkingPendingAccount[],
+): WorkingPendingSelection {
   const selected = selectWorkingPending(candidates, accounts);
   const selectedIds = new Set(selected.map((row) => row.id));
 
