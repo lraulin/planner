@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateFallsInHole, reconcileAccounts } from "./reconcile";
+import { checkStatements, dateFallsInHole, reconcileAccounts } from "./reconcile";
 import type { ReconcileStatement, ReconcileTransaction } from "./reconcile";
 
 function tx(
@@ -345,6 +345,60 @@ describe("reconcileAccounts", () => {
       ],
     );
     expect(report.unpairedTransfers.map((row) => row.id)).toEqual(["marked"]);
+  });
+});
+
+describe("checkStatements", () => {
+  it("returns the caller's newest-first order with each period's own check", () => {
+    // The grid lists newest first; the chain walk sorts oldest first. A row matched to its
+    // check by position rather than by id would swap these two.
+    const { rows, holes } = checkStatements(
+      [
+        snap({
+          id: "mar",
+          periodStart: "2026-03-01",
+          periodEnd: "2026-03-31",
+          openingBalanceCents: -1000,
+          closingBalanceCents: -1700,
+        }),
+        snap({ id: "jan", openingBalanceCents: 0, closingBalanceCents: -1000 }),
+      ],
+      [
+        tx({ id: "jan-buy", amountCents: -1000 }),
+        tx({ id: "mar-buy", transactionDate: "2026-03-31", amountCents: -500 }),
+      ],
+    );
+
+    expect(rows.map((row) => row.id)).toEqual(["mar", "jan"]);
+    expect(rows[0]).toMatchObject({
+      registerSumCents: -500,
+      registerDeltaCents: 200,
+      rowCount: 1,
+    });
+    expect(rows[1]).toMatchObject({
+      registerSumCents: -1000,
+      registerDeltaCents: 0,
+      rowCount: 1,
+    });
+    expect(holes).toEqual([
+      expect.objectContaining({
+        afterPeriodEnd: "2026-01-31",
+        beforePeriodStart: "2026-03-01",
+      }),
+    ]);
+  });
+
+  it("reports a period with no register rows as its whole movement, not as a match", () => {
+    const { rows } = checkStatements(
+      [snap({ id: "jan", openingBalanceCents: 0, closingBalanceCents: -1000 })],
+      [],
+    );
+
+    expect(rows[0]).toMatchObject({
+      registerSumCents: 0,
+      registerDeltaCents: 1000,
+      rowCount: 0,
+    });
   });
 });
 

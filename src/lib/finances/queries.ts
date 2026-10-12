@@ -12,11 +12,14 @@ import {
 } from "@/db/schema";
 import type { FinanceExecutor } from "./dbExecutor";
 import { numericStringToCents } from "./money";
+import { checkStatements, type ReconcileTransaction } from "./reconcile";
 import { bankRows, moneyRows } from "./splitRows";
 import type {
   FinanceAccountRow,
   ParsedStatementRate,
   StatementListRow,
+  StatementPeriodRow,
+  StatementsView,
   TransactionFilter,
   TransactionListRow,
 } from "./types";
@@ -527,6 +530,98 @@ export async function listSplitChildren(
     .orderBy(asc(financeTransactions.createdAt), asc(financeTransactions.id));
 
   return rows.map(toTransactionListRow);
+}
+
+/**
+ * The Statements page: every snapshot with its register check, and the coverage holes.
+ *
+ * Reconciled here rather than in the browser. The check reads the whole register, and
+ * sending that to the client to compute a couple of hundred sums was 5 MB of page.
+ */
+export async function loadStatementsView(userId: string): Promise<StatementsView> {
+  const [statements, transactions] = await Promise.all([
+    listStatements(userId),
+    listReconcileRows(userId),
+  ]);
+  return checkStatements(statements, transactions);
+}
+
+/**
+ * The register as the reconcile arithmetic needs it: one bank row, its account and day, and
+ * the amount. The register's own list read carries twenty more columns and three joins.
+ */
+async function listReconcileRows(userId: string): Promise<ReconcileTransaction[]> {
+  const rows = await db
+    .select({
+      id: financeTransactions.id,
+      accountId: financeTransactions.accountId,
+      accountName: financeAccounts.name,
+      transactionDate: financeTransactions.transactionDate,
+      amount: financeTransactions.amount,
+    })
+    .from(financeTransactions)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .where(and(bankRows, eq(financeTransactions.userId, userId)));
+
+  return rows.map((row) => ({
+    id: row.id,
+    accountId: row.accountId,
+    accountName: row.accountName,
+    transactionDate: row.transactionDate,
+    amountCents: numericStringToCents(row.amount) ?? 0,
+  }));
+}
+
+/**
+ * The register rows inside one statement's period, newest first — the rows whose sum is
+ * that statement's `registerSumCents`.
+ *
+ * Takes the statement rather than an account and two dates so the period is read from the
+ * stored row, not from whatever the caller sends. Same membership as `reconcile.ts`: bank
+ * rows on the statement's account, both period ends inclusive.
+ */
+export async function listStatementPeriodRows(
+  userId: string,
+  statementId: string,
+): Promise<StatementPeriodRow[]> {
+  const rows = await db
+    .select({
+      id: financeTransactions.id,
+      transactionDate: financeTransactions.transactionDate,
+      description: financeTransactions.description,
+      amount: financeTransactions.amount,
+    })
+    .from(financeStatements)
+    .innerJoin(
+      financeTransactions,
+      and(
+        eq(financeTransactions.accountId, financeStatements.accountId),
+        // The statement is already the user's, but the rows are scoped on their own column
+        // too rather than trusting that an account's rows all share its owner.
+        eq(financeTransactions.userId, userId),
+        gte(financeTransactions.transactionDate, financeStatements.periodStart),
+        lte(financeTransactions.transactionDate, financeStatements.periodEnd),
+      ),
+    )
+    .where(
+      and(
+        eq(financeStatements.id, statementId),
+        eq(financeStatements.userId, userId),
+        bankRows,
+      ),
+    )
+    .orderBy(
+      desc(financeTransactions.transactionDate),
+      desc(financeTransactions.createdAt),
+      asc(financeTransactions.id),
+    );
+
+  return rows.map((row) => ({
+    id: row.id,
+    transactionDate: row.transactionDate,
+    description: row.description,
+    amountCents: numericStringToCents(row.amount) ?? 0,
+  }));
 }
 
 /** Statement snapshots, newest period first. Always scoped by userId. */

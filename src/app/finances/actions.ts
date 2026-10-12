@@ -129,6 +129,7 @@ import {
   getTransaction,
   listAccounts,
   listSplitChildren,
+  listStatementPeriodRows,
   loadRegisterBlock,
   loadRegisterExportRows,
   loadRegisterPrepared,
@@ -149,7 +150,11 @@ import { loadWorkingPendingSelection } from "@/lib/finances/workingPendingQuery"
 import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { parseBudget } from "@/lib/settings/finances";
-import type { FinanceAccountRow, TransactionListRow } from "@/lib/finances/types";
+import type {
+  FinanceAccountRow,
+  StatementPeriodRow,
+  TransactionListRow,
+} from "@/lib/finances/types";
 import {
   applyAmazonSnapshotText,
   approveAmazonChargeMatch,
@@ -257,6 +262,16 @@ export async function loadRegisterBlockAction(
     .filter((id) => typeof id === "string")
     .slice(0, REGISTER_BLOCK_SIZE);
   return runQuery((userId) => loadRegisterBlock(userId, capped));
+}
+
+/** The register rows inside one statement's period, fetched when the statement is opened. */
+export async function loadStatementPeriodAction(
+  statementId: string,
+): Promise<QueryResult<StatementPeriodRow[]>> {
+  if (typeof statementId !== "string") {
+    return { ok: false, error: "Select a statement" };
+  }
+  return runQuery((userId) => listStatementPeriodRows(userId, statementId));
 }
 
 export async function loadRegisterExportAction(

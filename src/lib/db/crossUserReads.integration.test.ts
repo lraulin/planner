@@ -142,9 +142,11 @@ import {
   listPaymentResolutions,
   listSplitChildren,
   loadRegisterBlock,
+  listStatementPeriodRows,
   listStatements,
   listTransactions,
   listTransactionsByIds,
+  loadStatementsView,
   transactionTotalCents,
 } from "@/lib/finances/queries";
 import {
@@ -713,6 +715,10 @@ describeDb("a second user reads none of the first user's rows", () => {
     );
     expect((await listAmazonItems(owner.userId)).length).toBeGreaterThan(0);
     expect((await listStatements(owner.userId)).length).toBeGreaterThan(0);
+    expect((await loadStatementsView(owner.userId)).rows.length).toBeGreaterThan(0);
+    expect(
+      (await listStatementPeriodRows(owner.userId, owner.financeStatementId)).length,
+    ).toBeGreaterThan(0);
     expect((await listPaymentResolutions(owner.userId)).length).toBeGreaterThan(0);
     expect((await loadInsightsRows(owner.userId)).length).toBeGreaterThan(0);
     expect(await getWeeklyPlanById(owner.userId, owner.planId)).toBeTruthy();
@@ -877,6 +883,11 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listAccounts(intruder)).toEqual([]);
     expect(await listTransactions(intruder)).toEqual([]);
     expect(await listStatements(intruder)).toEqual([]);
+    expect(await loadStatementsView(intruder)).toEqual({ rows: [], holes: [] });
+    // The period read takes a statement id the intruder can guess.
+    expect(await listStatementPeriodRows(intruder, owner.financeStatementId)).toEqual(
+      [],
+    );
     expect(await getTransaction(intruder, owner.financeTransactionId)).toBeNull();
     expect(await listPaymentResolutions(intruder)).toEqual([]);
     expect(await getPaymentResolution(intruder, owner.paymentResolutionId)).toBeNull();

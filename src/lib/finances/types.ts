@@ -1,4 +1,5 @@
 import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
+import type { CoverageHole, RegisterCheck } from "./reconcile";
 
 /**
  * Which feed a row came from. A string union rather than a database enum because adding a
@@ -335,8 +336,19 @@ export type StatementListRow = {
 };
 
 /** One stored statement plus the register check for that period. */
-export type StatementViewRow = StatementListRow & {
-  registerSumCents: number;
-  registerDeltaCents: number;
-  rowCount: number;
+export type StatementViewRow = StatementListRow & RegisterCheck;
+
+/** Everything the Statements page renders before a period is opened. */
+export type StatementsView = {
+  rows: StatementViewRow[];
+  holes: CoverageHole[];
+};
+
+/** One register row inside a statement's period, as the period panel lists it. */
+export type StatementPeriodRow = {
+  id: string;
+  /** `YYYY-MM-DD`. */
+  transactionDate: string;
+  description: string;
+  amountCents: number;
 };

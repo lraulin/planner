@@ -234,6 +234,43 @@ export function reconcileAccounts(
   };
 }
 
+/** The register side of one stored statement: what the Statements grid adds to a row. */
+export type RegisterCheck = {
+  registerSumCents: number;
+  registerDeltaCents: number;
+  rowCount: number;
+};
+
+/**
+ * Each statement beside its register check, in the order given, plus the coverage holes.
+ *
+ * The order is the caller's because the grid's is newest-first while the chain walk above
+ * needs oldest-first per account. Runs on the server: the answer is a couple of hundred
+ * small rows, and the input is the whole register.
+ */
+export function checkStatements<Statement extends ReconcileStatement>(
+  statements: readonly Statement[],
+  transactions: readonly ReconcileTransaction[],
+): { rows: (Statement & RegisterCheck)[]; holes: CoverageHole[] } {
+  const report = reconcileAccounts(statements, transactions);
+  const byId = new Map(report.statements.map((row) => [row.statementId, row]));
+  return {
+    rows: statements.map((statement) => {
+      const check = byId.get(statement.id);
+      // Every statement passed in is reconciled, so a miss is a broken report. Zeros here
+      // would render as "this period matches", which is the one thing it must not claim.
+      if (!check) throw new Error(`Statement ${statement.id} was not reconciled`);
+      return {
+        ...statement,
+        registerSumCents: check.registerSumCents,
+        registerDeltaCents: check.registerDeltaCents,
+        rowCount: check.rowCount,
+      };
+    }),
+    holes: report.holes,
+  };
+}
+
 /** True when `dateKey` falls strictly between two statement bookends. */
 export function dateFallsInHole(dateKey: string, hole: CoverageHole): boolean {
   return dateKey > hole.afterPeriodEnd && dateKey < hole.beforePeriodStart;

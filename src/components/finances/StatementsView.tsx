@@ -3,16 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GridRow } from "@/lib/tree/slice";
 import { formatUsd } from "@/lib/finances/money";
-import { reconcileAccounts } from "@/lib/finances/reconcile";
+import type { CoverageHole } from "@/lib/finances/reconcile";
 import {
   STATEMENT_GROUP_BY_VALUES,
   groupStatements,
 } from "@/lib/finances/statementGrouping";
-import type {
-  StatementListRow,
-  StatementViewRow,
-  TransactionListRow,
-} from "@/lib/finances/types";
+import type { StatementViewRow } from "@/lib/finances/types";
 import { DateText } from "@/components/date/DateText";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { FileImportHost } from "@/components/import/FileImportHost";
@@ -25,6 +21,7 @@ import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
 import { statementColumns, type StatementColumnCtx } from "./statementColumns";
+import { useStatementPeriod } from "./useStatementPeriod";
 
 const STATEMENT_VIEWS = [{ id: "all", label: "All Statements" }] as const;
 
@@ -36,53 +33,20 @@ function viewDefaults(): GridDefaults {
   };
 }
 
-function toViewRows(
-  statements: readonly StatementListRow[],
-  transactions: readonly TransactionListRow[],
-): { rows: StatementViewRow[]; holes: ReturnType<typeof reconcileAccounts>["holes"] } {
-  const report = reconcileAccounts(statements, transactions);
-  const byId = new Map(report.statements.map((row) => [row.statementId, row]));
-  return {
-    rows: statements.map((statement) => {
-      const check = byId.get(statement.id);
-      return {
-        ...statement,
-        registerSumCents: check?.registerSumCents ?? 0,
-        registerDeltaCents: check?.registerDeltaCents ?? 0,
-        rowCount: check?.rowCount ?? 0,
-      };
-    }),
-    holes: report.holes,
-  };
-}
-
+/**
+ * `rows` and `holes` arrive reconciled (`loadStatementsView`); an import refreshes the route
+ * and they arrive again. The register itself never comes to the browser — only the rows of
+ * the one period that is open.
+ */
 export function StatementsView({
-  initialStatements,
-  initialTransactions,
+  rows,
+  holes,
 }: {
-  initialStatements: StatementListRow[];
-  initialTransactions: TransactionListRow[];
+  rows: StatementViewRow[];
+  holes: CoverageHole[];
 }) {
-  const [statements, setStatements] = useState(initialStatements);
-  const [transactions, setTransactions] = useState(initialTransactions);
-  const [seenStatements, setSeenStatements] = useState(initialStatements);
-  const [seenTransactions, setSeenTransactions] = useState(initialTransactions);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
-
-  if (initialStatements !== seenStatements) {
-    setSeenStatements(initialStatements);
-    setStatements(initialStatements);
-  }
-  if (initialTransactions !== seenTransactions) {
-    setSeenTransactions(initialTransactions);
-    setTransactions(initialTransactions);
-  }
-
-  const { rows, holes } = useMemo(
-    () => toViewRows(statements, transactions),
-    [statements, transactions],
-  );
 
   const views = useModuleViews({
     moduleId: "finance-statements",
@@ -128,17 +92,7 @@ export function StatementsView({
   }, [move]);
 
   const selected = rows.find((row) => row.id === selectedId) ?? null;
-  const periodRows = useMemo(() => {
-    if (!selected) return [];
-    return transactions
-      .filter(
-        (row) =>
-          row.accountId === selected.accountId &&
-          row.transactionDate >= selected.periodStart &&
-          row.transactionDate <= selected.periodEnd,
-      )
-      .sort((left, right) => right.transactionDate.localeCompare(left.transactionDate));
-  }, [selected, transactions]);
+  const period = useStatementPeriod(selected);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -237,7 +191,7 @@ export function StatementsView({
               </tr>
             </thead>
             <tbody>
-              {periodRows.map((row) => (
+              {period.rows?.map((row) => (
                 <tr key={row.id} className="border-t border-rule">
                   <td className="py-1 pr-3">
                     <DateText dateKey={row.transactionDate} />
@@ -256,7 +210,13 @@ export function StatementsView({
               ))}
             </tbody>
           </table>
-          {periodRows.length === 0 ? (
+          {period.error ? (
+            <p role="alert" className="py-2 text-priority-a">
+              {period.error}
+            </p>
+          ) : period.rows === null ? (
+            <p className="py-2 text-ink-muted">Loading…</p>
+          ) : period.rows.length === 0 ? (
             <p className="py-2 text-ink-muted">No imported rows in this period.</p>
           ) : null}
         </div>
