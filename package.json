@@ -22,6 +22,8 @@
     "backup:restore-test": "tsx scripts/backup.ts restore-test",
     "backup:uninstall": "tsx scripts/backup.ts uninstall",
     "smoke": "node scripts/smoke.mjs",
+    "dev:latency": "DATABASE_URL=postgresql://planner:planner@127.0.0.1:5433/planner next dev -p 3047",
+    "perf:routes": "node scripts/route-round-trips.mjs",
     "smoke:agent": "node --env-file=.env.local scripts/smoke-agent.mjs",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run --project unit --no-isolate",
