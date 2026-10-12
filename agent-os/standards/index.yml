@@ -25,6 +25,8 @@ components:
 database:
   migrations:
     description: Generate migrations, never hand-write one without its snapshot; direct connection not the pooler; production migrates during the build gated on VERCEL_ENV; a destructive/data-transforming migration needs a fresh verified backup and a Neon recovery point first; db:push and db:seed are destructive
+  read-latency:
+    description: A page costs one network round trip per query that waits on another, and local Postgres hides it — independent reads in one Promise.all, no children read by the ids just fetched, dependent reads chained off the promise rather than gating the wave, oncePerRequest for reads several loaders share (db executor only, render only, never something the render writes), and `npm run perf:routes` to count sequential round trips per route
 
 development:
   clean-code:
