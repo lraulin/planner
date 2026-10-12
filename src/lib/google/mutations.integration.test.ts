@@ -16,7 +16,7 @@ import {
   isGoogleLinked,
   listCalendarLinks,
   pushTargetCalendarId,
-  syncIsStale,
+  mirrorFreshness,
 } from "./queries";
 
 /**
@@ -258,11 +258,14 @@ describeDb("pushTargetCalendarId", () => {
   });
 });
 
-describeDb("syncIsStale", () => {
+describeDb("mirrorFreshness", () => {
+  const freshness = async (userId: string) =>
+    mirrorFreshness(await listCalendarLinks(userId), 5 * 60_000);
+
   it("is stale when an enabled calendar has never synced", async () => {
     const userId = await makeUser();
     await refreshCalendarLinks(userId, [entry({ primary: true })]);
-    expect(await syncIsStale(userId, 5 * 60_000)).toBe(true);
+    expect(await freshness(userId)).toBe("stale");
   });
 
   it("is fresh right after a sync and stale once the window passes", async () => {
@@ -270,16 +273,16 @@ describeDb("syncIsStale", () => {
     await refreshCalendarLinks(userId, [entry({ id: "a@x", primary: true })]);
 
     await markCalendarsSynced(userId, ["a@x"], new Date());
-    expect(await syncIsStale(userId, 5 * 60_000)).toBe(false);
+    expect(await freshness(userId)).toBe("fresh");
 
     await markCalendarsSynced(userId, ["a@x"], new Date(Date.now() - 10 * 60_000));
-    expect(await syncIsStale(userId, 5 * 60_000)).toBe(true);
+    expect(await freshness(userId)).toBe("stale");
   });
 
-  it("is fresh with no enabled calendars, so /schedule skips the network", async () => {
+  it("is off with no enabled calendars, so /schedule skips the network", async () => {
     const userId = await makeUser();
     await refreshCalendarLinks(userId, [entry({ id: "a@x" })]);
-    expect(await syncIsStale(userId, 5 * 60_000)).toBe(false);
+    expect(await freshness(userId)).toBe("off");
   });
 });
 

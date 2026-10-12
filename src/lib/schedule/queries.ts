@@ -4,11 +4,7 @@ import { appointments, timeChartAreas, timeCharts } from "@/db/schema";
 import { eventColorHex } from "@/lib/google/eventColors";
 import { syncWindowFor } from "@/lib/google/mirror";
 import { SYNC_MAX_AGE_MS, syncWindow, type SyncStatus } from "@/lib/google/sync";
-import {
-  enabledCalendarLinks,
-  listCalendarLinks,
-  syncIsStale,
-} from "@/lib/google/queries";
+import { listCalendarLinks, mirrorFreshness } from "@/lib/google/queries";
 import {
   appointmentToRecurrenceInput,
   expandRecurrence,
@@ -154,6 +150,9 @@ export type SchedulePayload = {
   sync: SyncStatus;
 };
 
+/** What the toolbar is told when nothing forced a pull: a fresh mirror was simply skipped. */
+const MIRROR_STATE = { off: "off", stale: "stale", fresh: "skipped" } as const;
+
 export async function loadSchedule(
   userId: string,
   options: {
@@ -175,43 +174,43 @@ export async function loadSchedule(
    * client after paint (`state: "stale"`). Manual force-sync still awaits Google so the
    * Refresh button means what it says. Never let a revoked token 500 the route.
    */
-  let sync: SyncStatus = { state: "off" };
-  // Wider than the visible range, and independent of the day count — see `syncWindowFor`.
-  const window = syncWindowFor(range);
-  try {
-    if (options.forceSync) {
-      sync = await syncWindow(userId, window);
-    } else {
-      const links = await enabledCalendarLinks(userId);
-      if (links.length === 0) {
-        sync = { state: "off" };
-      } else if (await syncIsStale(userId, SYNC_MAX_AGE_MS)) {
-        sync = { state: "stale" };
-      } else {
-        sync = { state: "skipped" };
-      }
+  let forced: SyncStatus | null = null;
+  if (options.forceSync) {
+    try {
+      // Wider than the visible range, and independent of the day count — see `syncWindowFor`.
+      forced = await syncWindow(userId, syncWindowFor(range));
+    } catch (error) {
+      forced = {
+        state: "failed",
+        message:
+          error instanceof Error ? error.message : "Google Calendar sync failed.",
+      };
     }
-  } catch (error) {
-    sync = {
-      state: "failed",
-      message: error instanceof Error ? error.message : "Google Calendar sync failed.",
-    };
   }
 
   // Local reads run together — they never waited on Google once paint is local-first.
-  const [charts, appts, calendarLinks] = await Promise.all([
+  // Areas are read for every chart because which chart is selected depends on the chart
+  // list, and a read that waits for that list is a second round trip for a handful of rows.
+  const [charts, appts, calendarLinks, allAreas] = await Promise.all([
     listTimeCharts(userId),
     listAppointmentsInRange(userId, rangeStart, rangeEnd),
     listCalendarLinks(userId),
+    db
+      .select()
+      .from(timeChartAreas)
+      .where(eq(timeChartAreas.userId, userId))
+      .orderBy(asc(timeChartAreas.startMinute)),
   ]);
+  const sync: SyncStatus = forced ?? {
+    state: MIRROR_STATE[mirrorFreshness(calendarLinks, SYNC_MAX_AGE_MS)],
+  };
+
   let selectedChartId = options.timeChartId ?? charts[0]?.id ?? null;
   if (selectedChartId && !charts.some((c) => c.id === selectedChartId)) {
     selectedChartId = charts[0]?.id ?? null;
   }
 
-  const areas = selectedChartId
-    ? await listTimeChartAreas(userId, selectedChartId)
-    : [];
+  const areas = allAreas.filter((area) => area.timeChartId === selectedChartId);
 
   const keys = serializeRange(range);
   const backgroundEvents = expandTimeChartAreas(

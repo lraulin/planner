@@ -84,19 +84,18 @@ export async function loadDay(
     await forwardOpenItems(userId, today);
   }
 
-  const rows = await db
-    .select(itemColumns)
-    .from(dailyItems)
-    .leftJoin(nodes, eq(nodes.id, dailyItems.nodeId))
-    .leftJoin(parent, eq(parent.id, nodes.parentId))
-    .where(and(eq(dailyItems.userId, userId), eq(dailyItems.day, day)))
-    .orderBy(asc(dailyItems.sortKey));
+  const [rows, journal] = await Promise.all([
+    db
+      .select(itemColumns)
+      .from(dailyItems)
+      .leftJoin(nodes, eq(nodes.id, dailyItems.nodeId))
+      .leftJoin(parent, eq(parent.id, nodes.parentId))
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.day, day)))
+      .orderBy(asc(dailyItems.sortKey)),
+    loadJournal(userId, day),
+  ]);
 
-  return {
-    day,
-    items: sortDayItems(rows.map(toView)),
-    journal: await loadJournal(userId, day),
-  };
+  return { day, items: sortDayItems(rows.map(toView)), journal };
 }
 
 /** Seven days of rows for the week grid, keyed by day. Never forwards — reads only. */

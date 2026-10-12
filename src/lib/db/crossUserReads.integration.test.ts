@@ -115,8 +115,8 @@ import { refreshCalendarLinks, setCalendarSyncEnabled } from "@/lib/google/mutat
 import {
   enabledCalendarLinks,
   listCalendarLinks,
+  mirrorFreshness,
   pushTargetCalendarId,
-  syncIsStale,
 } from "@/lib/google/queries";
 import { applyGoogleContactSync } from "@/lib/google/contacts/mutations";
 import {
@@ -972,9 +972,9 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await enabledCalendarLinks(intruder)).toEqual([]);
     expect(await pushTargetCalendarId(intruder)).toBeNull();
     expect(await getGoogleContactSync(intruder)).toBeNull();
-    // Both staleness helpers answer `false` for a user with no state at all, so they say
-    // nothing on their own — asserted next to the reads they wrap rather than alone.
-    expect(await syncIsStale(intruder, 0)).toBe(false);
+    // Both staleness answers are the quiet one for a user with no state at all, so they
+    // say nothing on their own — asserted next to the reads they rest on rather than alone.
+    expect(mirrorFreshness(await listCalendarLinks(intruder), 0)).toBe("off");
     expect(await googleContactSyncIsStale(intruder, 0)).toBe(false);
 
     expect(
@@ -982,7 +982,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     ).toEqual([OWNER_CALENDAR_ID]);
     expect((await enabledCalendarLinks(owner.userId)).length).toBe(1);
     expect(await pushTargetCalendarId(owner.userId)).toBe(OWNER_CALENDAR_ID);
-    expect(await syncIsStale(owner.userId, 0)).toBe(true);
+    expect(mirrorFreshness(await listCalendarLinks(owner.userId), 0)).toBe("stale");
     expect(await getGoogleContactSync(owner.userId)).not.toBeNull();
     expect(await googleContactSyncIsStale(owner.userId, 0)).toBe(true);
   });

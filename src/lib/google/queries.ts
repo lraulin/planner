@@ -57,17 +57,26 @@ export async function pushTargetCalendarId(userId: string): Promise<string | nul
 }
 
 /**
- * True when no enabled calendar has been synced within `maxAgeMs`.
+ * Whether the mirrored calendars need pulling again: `off` with nothing enabled, `stale`
+ * when an enabled calendar has not synced within `maxAgeMs`, otherwise `fresh`.
  *
  * A calendar that has never synced (`lastSyncedAt` null) is stale by definition. With no
- * enabled calendars there is nothing to fetch, so it reports fresh and `/schedule` skips
- * the network entirely.
+ * enabled calendars there is nothing to fetch, so `/schedule` skips the network entirely.
+ *
+ * Takes the links rather than reading them: the schedule already loads every link for its
+ * colours, and asking again here — twice, once to count and once to date — put two round
+ * trips in front of everything else the page reads.
  */
-export async function syncIsStale(userId: string, maxAgeMs: number): Promise<boolean> {
-  const links = await enabledCalendarLinks(userId);
-  if (links.length === 0) return false;
+export function mirrorFreshness(
+  links: readonly GoogleCalendarLink[],
+  maxAgeMs: number,
+): "off" | "stale" | "fresh" {
+  const enabled = links.filter((link) => link.syncEnabled);
+  if (enabled.length === 0) return "off";
   const cutoff = Date.now() - maxAgeMs;
-  return links.some(
+  return enabled.some(
     (link) => !link.lastSyncedAt || link.lastSyncedAt.getTime() < cutoff,
-  );
+  )
+    ? "stale"
+    : "fresh";
 }

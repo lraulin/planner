@@ -209,19 +209,25 @@ export async function loadWeeklyPlanPayload(
   const weekStartsOn = options.weekStartsOn ?? 0;
   const weekStart = startOfWeek(options.weekStart, weekStartsOn);
 
-  const plan = await getWeeklyPlan(userId, weekStart, weekStartsOn);
+  // Only the entries and the schedule's chart depend on the plan row; the rest is read
+  // beside it rather than once it is back.
+  const planRead = getWeeklyPlan(userId, weekStart, weekStartsOn);
 
-  const [entries, outline, schedule, reviews, previous, resources] = await Promise.all([
-    plan ? listPlanEntries(userId, plan.id) : Promise.resolve([]),
-    loadOutline(userId),
-    loadSchedule(userId, {
-      range: weekRange(weekStart, weekStartsOn),
-      timeChartId: plan?.timeChartId ?? null,
-    }),
-    loadResultAreaReviews(userId),
-    loadPreviousRewrites(userId, weekStart),
-    listResources(userId),
-  ]);
+  const [plan, entries, outline, schedule, reviews, previous, resources] =
+    await Promise.all([
+      planRead,
+      planRead.then((row) => (row ? listPlanEntries(userId, row.id) : [])),
+      loadOutline(userId),
+      planRead.then((row) =>
+        loadSchedule(userId, {
+          range: weekRange(weekStart, weekStartsOn),
+          timeChartId: row?.timeChartId ?? null,
+        }),
+      ),
+      loadResultAreaReviews(userId),
+      loadPreviousRewrites(userId, weekStart),
+      listResources(userId),
+    ]);
 
   return {
     plan,
