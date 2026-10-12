@@ -65,22 +65,25 @@ const ITEM_LIST_COLUMNS = {
  * the full set.
  */
 export async function listAmazonItems(userId: string): Promise<AmazonItemListRow[]> {
-  const rows = await db
-    .select(ITEM_LIST_COLUMNS)
-    .from(amazonOrderItems)
-    .innerJoin(
-      amazonOrders,
-      and(
-        eq(amazonOrders.id, amazonOrderItems.orderId),
-        eq(amazonOrders.userId, userId),
-      ),
-    )
-    .where(eq(amazonOrderItems.userId, userId))
-    .orderBy(desc(amazonOrders.orderDate), desc(amazonOrderItems.amazonOrderId));
-  const refunds = await refundCountsByOrder(userId);
+  const [rows, refunds, evidence] = await Promise.all([
+    db
+      .select(ITEM_LIST_COLUMNS)
+      .from(amazonOrderItems)
+      .innerJoin(
+        amazonOrders,
+        and(
+          eq(amazonOrders.id, amazonOrderItems.orderId),
+          eq(amazonOrders.userId, userId),
+        ),
+      )
+      .where(eq(amazonOrderItems.userId, userId))
+      .orderBy(desc(amazonOrders.orderDate), desc(amazonOrderItems.amazonOrderId)),
+    refundCountsByOrder(userId),
+    loadItemEvidence(userId),
+  ]);
   return stampItemEvidence(
-    userId,
     rows.map((row) => toListRow(row, refunds)),
+    evidence,
   );
 }
 
@@ -91,26 +94,28 @@ export async function listAmazonItemsByIds(
 ): Promise<AmazonItemListRow[]> {
   const wanted = [...new Set(ids)].slice(0, AMAZON_BLOCK_SIZE);
   if (wanted.length === 0) return [];
-  const rows = await db
-    .select(ITEM_LIST_COLUMNS)
-    .from(amazonOrderItems)
-    .innerJoin(
-      amazonOrders,
-      and(
-        eq(amazonOrders.id, amazonOrderItems.orderId),
-        eq(amazonOrders.userId, userId),
+  // The refund counts are read for every order rather than for this block's: naming the
+  // block's orders means waiting for its rows first, and a block is fetched on every scroll.
+  const [rows, refunds, evidence] = await Promise.all([
+    db
+      .select(ITEM_LIST_COLUMNS)
+      .from(amazonOrderItems)
+      .innerJoin(
+        amazonOrders,
+        and(
+          eq(amazonOrders.id, amazonOrderItems.orderId),
+          eq(amazonOrders.userId, userId),
+        ),
+      )
+      .where(
+        and(eq(amazonOrderItems.userId, userId), inArray(amazonOrderItems.id, wanted)),
       ),
-    )
-    .where(
-      and(eq(amazonOrderItems.userId, userId), inArray(amazonOrderItems.id, wanted)),
-    );
-  const refunds = await refundCountsByOrder(
-    userId,
-    rows.map((row) => row.amazonOrderId),
-  );
-  const stamped = await stampItemEvidence(
-    userId,
+    refundCountsByOrder(userId),
+    loadItemEvidence(userId),
+  ]);
+  const stamped = stampItemEvidence(
     rows.map((row) => toListRow(row, refunds)),
+    evidence,
   );
   const byId = new Map(stamped.map((row) => [row.id, row]));
   return wanted.flatMap((id) => {
@@ -148,25 +153,14 @@ export async function loadAmazonExportRows(
   });
 }
 
-async function refundCountsByOrder(
-  userId: string,
-  amazonOrderIds?: readonly string[],
-): Promise<Map<string, number>> {
-  if (amazonOrderIds && amazonOrderIds.length === 0) return new Map();
+async function refundCountsByOrder(userId: string): Promise<Map<string, number>> {
   const rows = await db
     .select({
       amazonOrderId: amazonRefunds.amazonOrderId,
       n: sql<number>`count(*)::int`,
     })
     .from(amazonRefunds)
-    .where(
-      amazonOrderIds
-        ? and(
-            eq(amazonRefunds.userId, userId),
-            inArray(amazonRefunds.amazonOrderId, [...new Set(amazonOrderIds)]),
-          )
-        : eq(amazonRefunds.userId, userId),
-    )
+    .where(eq(amazonRefunds.userId, userId))
     .groupBy(amazonRefunds.amazonOrderId);
   return new Map(rows.map((row) => [row.amazonOrderId, row.n]));
 }
@@ -235,11 +229,12 @@ function toListRow(
   };
 }
 
-async function stampItemEvidence(
-  userId: string,
-  rows: (AmazonItemListRow & { lineId: string })[],
-): Promise<AmazonItemListRow[]> {
-  if (rows.length === 0) return rows;
+/**
+ * What links an order line to the rest of the module: its bill, its charges, their register
+ * rows. All of it is per user and none of it depends on which lines are being shown, so it
+ * is read beside the lines rather than after them.
+ */
+async function loadItemEvidence(userId: string) {
   const [subscriptions, charges, links, matches, allocations, bills] =
     await Promise.all([
       db
@@ -294,6 +289,14 @@ async function stampItemEvidence(
         .from(financeBudgetCategories)
         .where(eq(financeBudgetCategories.userId, userId)),
     ]);
+  return { subscriptions, charges, links, matches, allocations, bills };
+}
+
+function stampItemEvidence(
+  rows: (AmazonItemListRow & { lineId: string })[],
+  evidence: Awaited<ReturnType<typeof loadItemEvidence>>,
+): AmazonItemListRow[] {
+  const { subscriptions, charges, links, matches, allocations, bills } = evidence;
   const billNameById = new Map(bills.map((row) => [row.id, row.name]));
   const billByAsin = new Map<string, string>();
   const asinCounts = new Map<string, number>();
