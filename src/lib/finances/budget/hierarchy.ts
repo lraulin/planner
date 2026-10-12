@@ -23,6 +23,12 @@ type StructureItem = BudgetStructureRef & {
   sortKey: string;
 };
 
+/** Pinned to `en`, unlike the shared collators, and built once rather than per comparison. */
+const BUDGET_NAME_ORDER = new Intl.Collator("en", {
+  sensitivity: "base",
+  numeric: true,
+});
+
 /**
  * Case-insensitive, numeric-aware English name order.
  *
@@ -32,7 +38,7 @@ type StructureItem = BudgetStructureRef & {
  * bottom of an otherwise alphabetical list.
  */
 export function compareBudgetNames(left: string, right: string): number {
-  return left.localeCompare(right, "en", { sensitivity: "base", numeric: true });
+  return BUDGET_NAME_ORDER.compare(left, right);
 }
 
 /**

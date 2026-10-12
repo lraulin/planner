@@ -1,5 +1,6 @@
 import type { GridRow } from "@/lib/tree/slice";
 import { parseDepthForest, type ForestNode } from "./forest";
+import { naturalOrder } from "@/lib/text/collate";
 
 /**
  * Sorting a prepared `GridRow[]` without destroying its group structure or its outline
@@ -40,7 +41,7 @@ export function compareSortValues(a: SortValue, b: SortValue): number {
   if (a == null) return 1;
   if (b == null) return -1;
   if (typeof a === "number" && typeof b === "number") return a - b;
-  return String(a).localeCompare(String(b), undefined, { numeric: true });
+  return naturalOrder.compare(String(a), String(b));
 }
 
 type NodeRow<T> = Extract<GridRow<T>, { kind: "node" }>;

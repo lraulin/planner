@@ -1,4 +1,5 @@
 import type { RecurringMerchant } from "./analytics";
+import { alphabeticalFolded } from "@/lib/text/collate";
 
 export const REVIEW_SORT_COLUMNS = [
   "merchant",
@@ -50,7 +51,7 @@ export function compareReviewItems(
   const delta =
     typeof a === "number" && typeof b === "number"
       ? a - b
-      : String(a).localeCompare(String(b), undefined, { sensitivity: "base" });
+      : alphabeticalFolded.compare(String(a), String(b));
   if (delta !== 0) return sort.direction === "asc" ? delta : -delta;
   return left.merchant.localeCompare(right.merchant);
 }

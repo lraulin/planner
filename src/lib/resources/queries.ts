@@ -4,6 +4,7 @@ import { resources } from "@/db/schema";
 import { loadContactOptions } from "@/lib/contacts/queries";
 import { weeklyAvailableMinutes, weeklyWorkingMinutes } from "./capacity";
 import type { ResourceDetail, ResourceListRow } from "./types";
+import { alphabeticalFolded } from "@/lib/text/collate";
 
 function numberValue(value: string): number {
   const parsed = Number(value);
@@ -56,9 +57,7 @@ export async function listResources(userId: string): Promise<ResourceListRow[]> 
         weeklyAvailableMinutes: weeklyAvailableMinutes(detail),
       };
     })
-    .sort((a, b) =>
-      a.shortName.localeCompare(b.shortName, undefined, { sensitivity: "base" }),
-    );
+    .sort((a, b) => alphabeticalFolded.compare(a.shortName, b.shortName));
 }
 
 /** One resource, scoped to the signed-in user. */

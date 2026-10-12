@@ -8,6 +8,7 @@ import {
   type SupplyTotals,
 } from "./cost";
 import type { SupplyItemRow, SupplyOptionRow } from "./queries";
+import { naturalOrderFolded } from "@/lib/text/collate";
 
 /**
  * The worksheet as rows: an item, then its offers beneath it, grouped by label.
@@ -208,7 +209,7 @@ export function supplyGroups(items: readonly SupplyItemRow[]): SupplyGroup[] {
       // Ungrouped last: a blank header at the top would read as the page failing to load.
       if (a === "") return 1;
       if (b === "") return -1;
-      return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+      return naturalOrderFolded.compare(a, b);
     })
     .map(([label, rows]) => {
       const envelopeIds = new Set(rows.map((row) => row.item.envelopeId));

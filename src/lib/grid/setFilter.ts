@@ -1,5 +1,6 @@
 import { NONE_OPTION_ID } from "./customFilter";
 import type { ColumnValues } from "./distinct";
+import { naturalOrderFolded } from "@/lib/text/collate";
 
 /**
  * The set filter: the checkbox list of the values a column actually holds, the way AG Grid
@@ -75,9 +76,7 @@ export function buildSetFilterEntries({
     selected: showAll || selected.has(valueOptionId(value)),
   }));
 
-  entries.sort((a, b) =>
-    a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" }),
-  );
+  entries.sort((a, b) => naturalOrderFolded.compare(a.label, b.label));
 
   if (values.blanks > 0) {
     entries.push({

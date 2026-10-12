@@ -12,6 +12,7 @@ import type {
   ChooserSettings,
   ChooserViewId,
 } from "./types";
+import { naturalOrder } from "@/lib/text/collate";
 
 /**
  * Which items the Task Chooser considers, how each view weights them, and the date bands
@@ -317,7 +318,7 @@ function compareItems(a: ChooserItem, b: ChooserItem): number {
   const bDue = b.effectiveDeadline?.getTime() ?? Infinity;
   if (aDue !== bDue) return aDue - bDue;
 
-  return a.node.name.localeCompare(b.node.name, undefined, { numeric: true });
+  return naturalOrder.compare(a.node.name, b.node.name);
 }
 
 /**

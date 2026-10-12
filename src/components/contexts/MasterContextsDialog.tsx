@@ -8,6 +8,7 @@ import {
 import { ModalShell } from "@/components/detail/ModalShell";
 import type { MasterContextOption } from "@/lib/contexts/queries";
 import { isComposingKey } from "@/lib/keyboard";
+import { alphabeticalFolded } from "@/lib/text/collate";
 
 export const MASTER_CONTEXTS_CHANGED_EVENT = "planner:master-contexts-changed";
 
@@ -41,7 +42,7 @@ export function MasterContextsDialog({
     if (createdId && !contexts.some((context) => context.id === createdId)) {
       setContexts((current) =>
         [...current, { id: createdId, name: name.trim() }].sort((a, b) =>
-          a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+          alphabeticalFolded.compare(a.name, b.name),
         ),
       );
     }

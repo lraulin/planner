@@ -7,6 +7,8 @@
  * universe now that Notes can group by calendar parts too.
  */
 
+import { naturalOrder, naturalOrderFolded } from "@/lib/text/collate";
+
 export type TreeGroupBy =
   | "category"
   | "resultArea"
@@ -114,11 +116,7 @@ export const MAX_GROUP_LEVELS = 3;
  * a difference the reader has to explain to themselves.
  */
 export function compareGroupText(left: string, right: string): number {
-  const readable = left.localeCompare(right, undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
-  return readable || left.localeCompare(right, undefined, { numeric: true });
+  return naturalOrderFolded.compare(left, right) || naturalOrder.compare(left, right);
 }
 
 /** Narrow persisted strings to dimensions the caller actually knows how to render. */

@@ -5,6 +5,7 @@ import {
   scalarFilterValues,
   type GridFilterValue,
 } from "./filterValue";
+import { accentSensitive, naturalOrderFolded } from "@/lib/text/collate";
 
 /**
  * Achieve-style custom column filters: multi-condition And/Or with operators restricted
@@ -253,7 +254,7 @@ function equals(cell: string, operand: string, kind: FilterKind | undefined): bo
     return left !== null && right !== null && left === right;
   }
   // Case-fold so a typed "ns" matches "NS" on enum columns; accents still distinguish.
-  return cell.localeCompare(operand, undefined, { sensitivity: "accent" }) === 0;
+  return accentSensitive.compare(cell, operand) === 0;
 }
 
 function includesInsensitive(cell: string, operand: string): boolean {
@@ -310,10 +311,7 @@ function compare(
   }
 
   // Text / enum fallback: locale order with numeric awareness ("A2" < "A10").
-  const order = cell.localeCompare(operand, undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
+  const order = naturalOrderFolded.compare(cell, operand);
   return applyCompare(order, 0, op);
 }
 

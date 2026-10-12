@@ -5,6 +5,7 @@ import type {
   ScenarioIncomeRow,
   ScenarioLineNode,
 } from "./compose";
+import { naturalOrderFolded } from "@/lib/text/collate";
 
 /**
  * A scenario as the flat row list `DataGrid` renders: three sections, bills grouped under
@@ -104,7 +105,7 @@ export function scenarioGridRows(
   const labels = [...byGroup.keys()].sort((a, b) => {
     if (a === "Ungrouped") return 1;
     if (b === "Ungrouped") return -1;
-    return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+    return naturalOrderFolded.compare(a, b);
   });
   for (const label of labels) {
     const bills = byGroup.get(label) ?? [];

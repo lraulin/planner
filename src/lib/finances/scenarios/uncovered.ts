@@ -1,6 +1,7 @@
 import { descendantEnvelopeIds } from "../budget/hierarchy";
 import type { BudgetCategoryRow, BudgetGroupRow } from "../budget/queries";
 import { averageOver, type SpendingActuals } from "./actuals";
+import { alphabeticalFolded } from "@/lib/text/collate";
 
 /**
  * The spending a scenario does not account for.
@@ -50,7 +51,6 @@ export function uncoveredEnvelopes(input: {
     })
     .sort(
       (a, b) =>
-        b.monthlyCents - a.monthlyCents ||
-        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+        b.monthlyCents - a.monthlyCents || alphabeticalFolded.compare(a.name, b.name),
     );
 }

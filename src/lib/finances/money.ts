@@ -89,6 +89,16 @@ export function numericStringToCents(value: string | null): number | null {
 }
 
 /**
+ * Built once. `toLocaleString` with an options object builds a new `Intl.NumberFormat` on
+ * every call, fourteen microseconds against a third of one — and this is called for every
+ * amount on every row. It was 71% of the server time spent preparing the Register.
+ */
+const DOLLARS_AND_CENTS = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/**
  * Display a ledger amount: `-$10.59`, `$481.20`, `$0.00`.
  *
  * Deliberately not `formatMoney` from `src/lib/tree/format.ts`. That one serves the cost
@@ -100,10 +110,7 @@ export function formatUsd(cents: number | null): string {
   if (cents === null || !Number.isFinite(cents)) return "";
   const negative = cents < 0;
   const dollars = Math.abs(cents) / CENTS_PER_DOLLAR;
-  return `${negative ? "-" : ""}$${dollars.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return `${negative ? "-" : ""}$${DOLLARS_AND_CENTS.format(dollars)}`;
 }
 
 /**

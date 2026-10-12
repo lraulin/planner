@@ -67,13 +67,16 @@ export function formatEffort(minutes: number | null): string {
     : `${hours}:${String(remainder).padStart(2, "0")} h`;
 }
 
+/** Built once: `toLocaleString` with options builds a formatter per call, per cell. */
+const DOLLARS_AND_CENTS = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 /** Dollar display for the cost fields Planner currently models. */
 export function formatMoney(amount: number | null): string {
   if (amount === null || !Number.isFinite(amount)) return "";
-  return `$${amount.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return `$${DOLLARS_AND_CENTS.format(amount)}`;
 }
 
 /**

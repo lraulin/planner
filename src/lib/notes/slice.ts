@@ -1,4 +1,5 @@
 import type { NoteNode, NoteSummary } from "./types";
+import { naturalOrderFolded } from "@/lib/text/collate";
 
 /** List rows are summaries; detail rows keep a body. Slice only needs shared fields. */
 type SliceNote = NoteNode | NoteSummary;
@@ -41,7 +42,7 @@ function compareTitles(a: SliceNote, b: SliceNote): number {
   // An untitled note sorts last either way rather than leading the list as "".
   if (left === "" && right !== "") return 1;
   if (right === "" && left !== "") return -1;
-  return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+  return naturalOrderFolded.compare(left, right);
 }
 
 function compareDates(a: SliceNote, b: SliceNote): number {

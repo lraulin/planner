@@ -11,6 +11,7 @@ import { STATE_LABELS, STATE_ORDER } from "./hierarchy";
 import { ownEffectiveState, shelfHolds } from "./shelving";
 import type { OutlineNode } from "./types";
 import { walkUp } from "./walkUp";
+import { naturalOrder } from "@/lib/text/collate";
 
 /**
  * Context a grid row inherits from its ancestors — the nearest result area (and that
@@ -289,7 +290,7 @@ function compareCategories(a: string, b: string): number {
   const aSortsLast = a.startsWith("~");
   const bSortsLast = b.startsWith("~");
   if (aSortsLast !== bSortsLast) return aSortsLast ? 1 : -1;
-  return a.localeCompare(b, undefined, { numeric: true });
+  return naturalOrder.compare(a, b);
 }
 
 /**
