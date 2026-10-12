@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Worktrees the Claude desktop app makes for background sessions. Each is a whole
+    // checkout with its own `.next/`, which the `.next/**` above does not reach, so linting
+    // from the root walked another session's build output and ran out of heap.
+    ".claude/worktrees/**",
   ]),
 
   // Type-aware linting. Scoped to TS only — the loose .mjs config/scripts aren't in
