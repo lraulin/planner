@@ -86,6 +86,12 @@ describe("extractTextField — YAML flow scalars", () => {
     );
   });
 
+  it("still reads a plain scalar as flow when the key follows a closed nested mapping", () => {
+    expect(extractTextField(`{Cat: {a: 1}, text: one two\n    three}`)).toBe(
+      "one two three",
+    );
+  });
+
   it("folds a wrapped plain scalar in block style and stops at the next key", () => {
     const chunk = `\n  text: one two\n    three\n  Cat: {a: 1}\n`;
     expect(extractTextField(chunk)).toBe("one two three");

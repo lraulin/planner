@@ -291,7 +291,7 @@ export function extractTextField(chunk: string): string | null {
 
   // Plain scalar. Flow if the key sits inside an open `{`, else block.
   const before = cleaned.slice(0, textKey.index);
-  const flow = before.lastIndexOf("{") > before.lastIndexOf("}");
+  const flow = (before.match(/\{/g)?.length ?? 0) > (before.match(/\}/g)?.length ?? 0);
   const plain = readPlain(after, flow);
   return plain === "" ? null : plain;
 }
