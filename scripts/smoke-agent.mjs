@@ -128,13 +128,22 @@ const checks = [
     },
   },
   {
-    name: "MCP tools/list is the 55-tool chat catalog",
+    // Two views of one registry must agree: MCP lists every tool HTTP discovery lists, less
+    // the discovery pair itself. A literal count here went stale the first time a tool was
+    // added and made this check fail for a reason that was not a regression.
+    name: "MCP tools/list is every discoverable tool but the discovery pair",
     run: async () => {
       const result = await mcp(2, "tools/list");
       const names = result.payload?.result?.tools?.map((tool) => tool.name) ?? [];
+      const discovered = await call("list_tools", { domain: "all" });
+      const expected = (discovered.payload?.data?.tools ?? [])
+        .map((tool) => tool.name)
+        .filter((name) => name !== "health" && name !== "list_tools");
       return (
         result.status === 200 &&
-        names.length === 55 &&
+        expected.length > 0 &&
+        names.length === expected.length &&
+        expected.every((name) => names.includes(name)) &&
         names.includes("get_context") &&
         names.includes("get_finance_overview") &&
         names.includes("search_transactions") &&
@@ -152,10 +161,18 @@ const checks = [
     run: async () => {
       const result = await call("list_tools", { domain: "finances" });
       const names = result.payload?.data?.tools?.map((tool) => tool.name) ?? [];
+      // The full listing is the other authority: the domain filter must return exactly the
+      // tools it labels `finances`, so a tool added to the domain needs no edit here.
+      const discovered = await call("list_tools", { domain: "all" });
+      const labelled = (discovered.payload?.data?.tools ?? [])
+        .filter((tool) => tool.domain === "finances")
+        .map((tool) => tool.name);
       return (
         result.status === 200 &&
         result.payload?.ok === true &&
-        names.length === 12 &&
+        names.length > 0 &&
+        names.length === labelled.length &&
+        labelled.every((name) => names.includes(name)) &&
         names.includes("get_finance_overview") &&
         names.includes("get_cash_flow") &&
         names.includes("search_transactions")
