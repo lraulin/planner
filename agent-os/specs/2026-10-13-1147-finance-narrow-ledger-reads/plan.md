@@ -1,0 +1,288 @@
+# Finance pages read what they use, not the ledger
+
+**Status: active**
+Spec folder: `agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/`
+
+> Shaped 2026-10-13; nothing here is built yet. Implementation starts in a fresh session at
+> Task 2.
+
+## Spec relationships
+
+- **Extends:** `agent-os/specs/2026-08-24-1945-register-prepared-rows/` — compact index plus
+  100-row blocks, virtualization, and the unit-tested JS pipeline as the authority on filter,
+  search, sort, group and collapse.
+- **Supersedes:** `2026-08-24-1945-register-prepared-rows` — "The server loads the user's
+  ledger" for _every_ index (now only for unbounded queries and the derived views), and the
+  index "returns … facets" (now on demand, D10). Change #1 stands as a requirement
+  (assignability is a whole-ledger fact); its mechanism changes (D9).
+- **Supersedes:** `agent-os/specs/2026-09-03-1307-register-date-presets/` D6 — "No SQL date
+  window." Its own `shape.md` named a DB window as "a later delta"; this is it. D1–D5, D7, D8
+  carry forward: the band still _matches_ in `prepareRegister`.
+- **Supersedes:** `agent-os/specs/2026-08-16-1338-finances-dashboard-available/` change #6 —
+  "`loadDashboard` is one composed read." The page it served no longer reads most of it.
+- **Extends:** `agent-os/specs/2026-08-12-2031-finances-insights-dashboard/` change #7 — the
+  Insights page still loads the whole history. Reaffirmed, not changed (D5).
+- **Extends:** `agent-os/specs/2026-09-06-1427-bill-anchor-retires/` D4 and
+  `agent-os/specs/2026-08-23-2313-one-budget/` D8 — a bill's charges are what is filed to its
+  envelope; the forecast panels stay.
+- **Extends:** `agent-os/specs/2026-08-14-1012-recurring-bill-cadences/` change #4 — a
+  declared bill's amount reads the whole history.
+- **Extends:** `agent-os/specs/2026-09-05-1642-bills-open-record/` — "Discover recurring
+  charges" stays a page command; only its count goes (D4).
+- **Sibling, independent:** `agent-os/specs/2026-10-12-2001-node-postgres-driver/` (active).
+  That one removes round trips; this one removes rows.
+- **Sibling, independent:** `agent-os/specs/2026-10-13-1155-immediate-navigation-and-page-cache/`
+  (active, shaped the same hour). It makes a click respond at once and caches Budget, Accounts
+  and Bills in the browser; it puts server render time out of its own scope. Both edit the
+  finance `page.tsx` files (it moves `AppShell` into a layout), so whichever lands second
+  rebases. Its cache makes a _revisit_ cheap; the first visit, and every Register load (which
+  it never caches), still cost what this spec measures.
+
+## Context
+
+Measured 2026-10-12, signed-in browser on production, server RSC response: Accounts 305 ms,
+Budget 337 ms, Bills 510 ms, Register 384–956 ms (870–1,580 ms to settle). A production round
+trip is about 4.5 ms and accounts for 30–45 ms of each. The rest is fetching and reducing
+rows: `listTransactions` (~70 ms locally) and `loadInsightsRows` (~40 ms), each over all
+7,100 rows, 2–3× slower in production.
+
+Precedent, same day (`437ad77d`): Budget loaded every row to derive paydays. `loadPaydays`
+now reads the income rows alone (66 ms → 12 ms) and shares its row scope with the full read
+through `countedRows`.
+
+### What shaping found (local ledger, 2026-10-13, read-only)
+
+| Fact                                                                    | Evidence                                                                                        |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Accounts uses none of the ledger-derived fields                         | `AccountsView` reads only `operations.pending` and `operations.connections`                     |
+| The forecast no longer uses paydays                                     | `loadBillForecast` never calls `paydaysFrom`; its doc comment is stale                          |
+| Review needs nearly every row                                           | 5,906 spend charges of 7,099 money rows; narrowing rows alone is 14 ms → 9 ms                   |
+| Two-thirds of `listTransactions`' database time is the split subqueries | psql: 45 ms as written, 15 ms without them; the ledger has one split parent                     |
+| A date window alone does not remove the full read                       | `facets`, `total`, `notBudgetedIds` and the collapsed-year list are defined over the whole view |
+| A SQL date bound from the Date column filter is a safe superset         | `passingRows` ANDs column filters, the cross filter and search                                  |
+| This month is 9 rows locally; trailing 12 months is 1,276               | counts by `transaction_date`                                                                    |
+| The local ledger cannot prove the forecast                              | it ends 2026-09-05: 5 bills, **one** row filed to a bill envelope                               |
+| The Register's second request may be a full reload caused by a date key | page uses the server process's `localDateKey` (UTC on Vercel); client uses the browser's day    |
+
+The last row is a hypothesis, not a finding. Task 7 confirms or replaces it before anything
+is designed around it.
+
+## Decisions
+
+**D1 — A narrow read is a superset bound, and the pure function still decides.** SQL may
+drop only rows the existing pure function provably never keeps, argued from that function's
+own code (as `loadPaydays` argued from `effectiveFlow`'s fallback). The function still runs
+over what was read. No JS rule is restated in SQL as the authority. Row scope comes from one
+place: `countedRows` for money reads, `bankRows` plus the user for register reads. A read
+disappears entirely only when nothing consumes its result.
+
+**D2 — Accounts reads no ledger rows.** The page calls `loadAccountsWithPending` and
+`listConnections` beside its existing `listLinks` and `loadBudgetMismatch`. `AccountsView`
+takes `{ pending, connections }` instead of `DashboardData`. `loadDashboard` and
+`DashboardData` are retired. The five agent tools that called it take the narrow read each
+needs: `loadRecurringBills` (three of them need only `bills`), `loadBillCharges` (D3),
+`loadMerchantNames`, `loadReviewCandidates`.
+
+- _Read:_ accounts (three queries, already shared), pending candidates, connections.
+- _Minimum because:_ those are the only fields the view reads.
+- _Equality:_ dump `{ accounts, pending, connections }` before and after.
+
+`loadMerchantNames` reads distinct `(description, payee name)` over `countedRows` and applies
+`effectiveMerchant` in JS: distinct inputs give the same set as distinct outputs.
+
+**D3 — The bill forecast reads only rows filed to a bill envelope.** `loadBillCharges(userId)`:
+`countedRows`, inner join to this user's `kind = 'bill'` categories, the five columns the loop
+reads (`budgetCategoryId`, `transactionDate`, `amount`, `derivedFlow`, `flowOverride`), ordered
+by date then id as the full read is. `spendCentsOf(row) > 0` stays in JS.
+
+- _Minimum because:_ the loop skips every row whose envelope is not in `bills`, and `bills`
+  is exactly this user's `kind = 'bill'` categories.
+- _Equality:_ dump `loadBillForecast` (Maps as ordered entry arrays) before and after on the
+  refreshed ledger; integration test compares against the derivation from `loadInsightsRows`.
+
+**D4 — Review candidates load when the drawer opens.** The Bills page stops calling
+`loadReviewCandidates`. The button and command read "Discover recurring charges" with no
+count. Opening the drawer calls a server action; after a save the drawer refetches. The read
+behind it narrows to spend charges: `amount < 0` and
+`coalesce(flow_override, derived_flow, 'spend')` in `spend | interest_fee | refund`, with the
+eight columns detection reads.
+
+- _Minimum because:_ `recurringMerchants` and `spendCandidates` see rows only through
+  `chargesByMerchant` / `chargesByPayee`, both of which keep `spendCentsOf(row) > 0`. That is
+  positive exactly when the flow is a spending flow and the amount is negative (a positive
+  `interest_fee` returns 0; a null flow with a negative amount falls back to `spend`).
+- _Equality:_ dump the action's result against today's `loadReviewCandidates` output.
+
+**D5 — Insights keeps the whole history, on purpose.** It is the one page whose job is to
+re-slice every row in the browser. Unchanged row set. Two tidy-ups: drop the `notes` column
+`readInsightsRows` selects and never returns, and correct the module comment ("three thousand
+rows is a few hundred kilobytes" is now 7,100 rows and ~5 MB). The comment names the trigger
+for a windowing spec and what that spec must solve first: the balance and asset/debt series
+need opening balances, and declared-bill amounts need the whole history.
+
+**D6 — Split-child totals come from one aggregate join.** `TRANSACTION_LIST_COLUMNS` reads
+`splitChildCount` and `splitChildTotal` from a join to
+`select parent_id, count(*), sum(amount) … group by parent_id` scoped to the user, not two
+correlated subqueries per row. One definition, shared by `listTransactions`,
+`listTransactionsByIds` and `getTransaction`. Same columns, same values.
+
+**D7 — The Register's second request is identified before it is fixed.** Task 7 logs the
+server's query key and the client's first key and records the difference in **Changes from
+original plan**. Requirement whatever the cause: with default grid state, no index request
+fires on load, at any hour. If the cause is the date key, the page computes today in the
+reader's zone (`zonedDateKey`; see `development/dates.md`) so both sides agree.
+
+**D8 — The Register reads the Date filter's window when it is bounded.**
+`registerDateBound(query)` is a pure function beside `prepareRegister`. It returns
+`{ from, to }` only when `viewId === "all"`, `today` is known, and `filters.date` is a
+calendar band or a custom comparison with a finite bound. Anything else returns null and the
+read is the whole ledger, as today. `prepareRegister` is unchanged and still applies the date
+filter to what was read.
+
+- _Minimum because:_ the Date column filter is ANDed with everything else, so no row outside
+  its bound can reach `matched`.
+- _Not narrowed, on purpose:_ Uncategorized, Activity and Report views (their base set is
+  derived from the whole ledger by eligibility and contribution rules), Date = All, and any
+  query whose only date condition sits in the advanced (cross-column) filter.
+
+**D9 — Whole-view facts stop riding on the windowed rows.** In the `all` view:
+
+- `total` is the count of bank rows.
+- `notBudgetedIds`, and `categoryAssignable` on every block row, come from the
+  **assignability subset**: off-budget account rows, rows with a `transfer_group_id`, and rows
+  whose stored flow is `internal_transfer`, read narrow and in ledger order, through the same
+  `categoryAssignableIds`. A row outside all three is always assignable, and transfer partners
+  share a group id so both are in the subset.
+- **Never annotate the window.** A transfer whose other leg falls outside it would be judged
+  without its partner — the bug prepared-rows change #1 fixed.
+- The page's collapsed-year default comes from distinct years, folded into the same query as
+  the count so the wave stays within `read-latency.md`'s ten.
+
+**D10 — Facets load on demand.** `RegisterIndex.facets` is removed. A facets action runs
+`collectDistinctValues` over the view's base rows (a full read, the same function) the first
+time a column menu or filter dialog opens, and the client keeps the answer per view until
+`reload()`. No facets request fires on load.
+
+**D11 — Left alone, and why.** Export (complete by definition). Track-as-bill draft and
+Scenarios (full reads behind a dialog and a secondary page; follow-ups). Agent analysis and
+search tools (whole-history questions). Budget (done 2026-10-12).
+
+**D12 — No budget number changes.** Nothing in `envelope.ts`, `base.ts` or
+`budgetContributionSql` is touched or restated. `contributesToBudget` stays on
+`loadInsightsRows`.
+
+**D13 — How equality is proven.** For every loader changed:
+
+1. On the refreshed local ledger (Task 2), dump the loader's output to JSON at the base commit
+   and again after the change; `cmp` must report no difference. Maps and Sets are written as
+   arrays in iteration order, because order is part of the output. Byte size and sha256 go in
+   the commit body and the verification table.
+2. An integration test seeds the edge cases the argument in D1 depends on and compares the
+   narrow read with the derivation from the full read: a refund and a positive `interest_fee`
+   on a bill envelope, a null-flow row, a flow decided only by override, a split child filed
+   to a bill, a superseded pending hold, a transfer whose partner is outside the window, an
+   off-budget account.
+3. In the same test a second user gets nothing from every new or changed read and action,
+   and passing the first user's ids changes that at no step.
+
+## Acceptance criteria
+
+- [ ] Local ledger refreshed from a production backup; row counts recorded here.
+- [ ] `/finances/accounts` issues no query selecting transaction rows beyond `listAccounts`
+      and the pending candidates; `loadDashboard` no longer exists.
+- [ ] `/finances/bills` reads only rows filed to bill envelopes; the review list loads on
+      drawer open and again after a save.
+- [ ] Insights output is byte-identical; `notes` is no longer selected.
+- [ ] With default grid state, `/finances/register` reads the month's rows, the assignability
+      subset and one count/years query — not the ledger — and fires no index or facets request
+      on load, checked at an hour when the UTC date differs from the local one.
+- [ ] Changing sort, search or a non-date filter while Date is bounded reads the window only.
+- [ ] Date = All, Uncategorized, Activity and Report still return exactly what they do today.
+- [ ] Every dump in D13 is byte-identical; the facets action equals the old `index.facets`.
+- [ ] `registerDateBound` is unit-tested per band, custom bounds, unknown today, non-`all`
+      views and an advanced-filter-only date condition (all three of the last return null).
+- [ ] Second-user integration tests pass with no skip warning.
+- [ ] `npm run perf:routes -- finances`: no route's longest chain grows.
+- [ ] Lint, typecheck, `npm test`, build, `npm run smoke` with the dev server up.
+- [ ] Production RSC timings for Accounts, Bills and Register re-measured after deploy and
+      recorded beside the 2026-10-12 figures.
+
+## Verification
+
+Filled as each task lands (D13). One row per loader.
+
+| Loader | Rows before → after | Dump bytes | sha256 before = after | Local ms before → after |
+| ------ | ------------------- | ---------- | --------------------- | ----------------------- |
+|        |                     |            |                       |                         |
+
+Production RSC response, signed-in browser:
+
+| Page     | 2026-10-12 | After |
+| -------- | ---------- | ----- |
+| Accounts | 305 ms     |       |
+| Bills    | 510 ms     |       |
+| Register | 384–956 ms |       |
+
+## Changes from original plan
+
+| #   | Change                      | Why |
+| --- | --------------------------- | --- |
+|     | _(filled during implement)_ |     |
+
+## Task 1: Save spec documentation
+
+This folder: `plan.md`, `shape.md` (scope, the four decisions made in shaping, rejected
+alternatives), `standards.md` (references pinned at `5f665924`), `references.md` (governing
+specs and the narrow-read exemplars). No visuals. Done 2026-10-13.
+
+## Task 2: Refresh the ledger and capture "before"
+
+Restoring a production backup over the local dev database overwrites it: Lee runs it or
+approves it in that session. Then, at the base commit and before any change: record row
+counts (total, filed to bills, spend charges, this month), dump every loader named in D13
+plus `prepareRegister` for a fixed query set (This Month, Last Month, Last 30 Days, This
+Year, a custom range, This Month + search, This Month sorted by amount, Date = All,
+Uncategorized), time each loader, and run `perf:routes -- finances`.
+
+## Task 3: Accounts, and retire `loadDashboard` (D2)
+
+`src/app/finances/accounts/page.tsx`, `AccountsView.tsx`, `dashboardQueries.ts`,
+`src/lib/agent/financeTools.ts`, `dashboardQueries.integration.test.ts`.
+
+## Task 4: Bills forecast (D3)
+
+`loadBillCharges` in `dashboardQueries.ts`; `loadBillForecast` and the agent tool use it.
+
+## Task 5: Review on open (D4)
+
+Narrow spend-charge read; server action in `src/app/finances/actions.ts`; `BillsView` /
+`ReviewDrawer` fetch on open; `bills/page.tsx` drops the call.
+
+## Task 6: Insights tidy (D5) and split aggregate (D6)
+
+`dashboardQueries.ts`; `TRANSACTION_LIST_COLUMNS` in `src/lib/finances/queries.ts`.
+
+## Task 7: Identify and remove the Register's second request (D7)
+
+`register/page.tsx`, `FinancesView.tsx`, `useRegisterSource.ts`. Record the cause first.
+
+## Task 8: Register window and whole-view facts (D8, D9)
+
+`registerDateBound` (+ tests) in `registerQuery.ts`; `loadRegisterPrepared` and the page in
+`queries.ts` / `register/page.tsx`; the assignability subset and count/years reads.
+
+## Task 9: Facets on demand (D10)
+
+`RegisterIndex`, a facets action, `useRegisterSource.ts`, the column menu's first open.
+
+## Task 10: Verify, freeze, update roadmap
+
+Run D13 in full; fill the verification table; re-measure production; mark frozen; note under
+Financial planning in `agent-os/product/roadmap.md`. Follow-ups: Track-as-bill draft,
+Scenarios, Insights windowing.
+
+One commit per task, pushed to `master`.
+
+> While this spec is **active**, a material change to requirements, design or scope updates
+> the relevant section and appends to **Changes from original plan**. Skip pure
+> implementation detail. Freeze when verified.
