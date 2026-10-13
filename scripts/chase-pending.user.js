@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Planner: copy Chase bank snapshot
 // @namespace    planner
-// @version      2.6
+// @version      2.7
 // @description  Copy Chase current-cycle posted and pending activity for Planner.
 // @match        https://secure.chase.com/*
 // @match        https://*.chase.com/*
@@ -19,6 +19,8 @@
   const LAST4_KEY = "planner-chase-last4";
   const KNOWN_LAST4 = "9910";
   const AMOUNT = /(?:[-\u2212\u2013]?\$[\d,]+(?:\.\d{2})?|\(\$[\d,]+(?:\.\d{2})?\))/;
+  /** `AMOUNT` for scanning a string that holds several amounts. */
+  const ANY_AMOUNT = new RegExp(AMOUNT.source, "g");
   const DATE = /(?:[A-Za-z]{3} \d{1,2}, \d{4}|\d{1,2}\/\d{1,2}\/\d{4})/;
   /**
    * The one period selection that makes the captured set complete for the current cycle.
@@ -223,7 +225,9 @@
   function rowFromValues(row, pending) {
     const raw = row.getAttribute("data-values") ?? "";
     const date = DATE.exec(raw)?.[0] ?? "";
-    const amountMatches = [...raw.matchAll(/-?\$[\d,]+(?:\.\d{2})?/g)];
+    // The same pattern as the cell reader, not a second copy: a copy that only knew the ASCII
+    // hyphen read Chase's typeset "−$181.05" as a purchase of $181.05.
+    const amountMatches = [...raw.matchAll(ANY_AMOUNT)];
     const amount = amountMatches.at(-1)?.[0] ?? "";
     if (!date || !amount) return null;
     const between = raw
