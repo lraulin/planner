@@ -86,6 +86,10 @@ export function asMap<T>(
 
   const out: Record<string, T> = {};
   for (const [key, raw] of Object.entries(record)) {
+    // `JSON.parse` makes `"__proto__"` an ordinary own key, and assigning it onto a plain
+    // object sets that object's prototype instead of adding an entry — after which every
+    // lookup for a column that is not in the map falls through to a value the blob chose.
+    if (key === "__proto__") continue;
     const parsed = readEntry(raw);
     if (parsed !== null) out[key] = parsed;
   }

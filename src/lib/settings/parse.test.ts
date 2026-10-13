@@ -84,4 +84,16 @@ describe("asMap", () => {
     expect(asMap(["a"], () => 1)).toEqual({});
     expect(asMap(null, () => 1)).toEqual({});
   });
+
+  it("does not let a __proto__ key from a stored blob become the map's prototype", () => {
+    // `JSON.parse` yields a real own `__proto__` key; assigning it would re-parent the result.
+    const blob: unknown = JSON.parse(
+      '{"__proto__": {"width": 999}, "name": {"width": 10}}',
+    );
+    const widths = asMap(blob, (entry) => entry);
+
+    expect(Object.keys(widths)).toEqual(["name"]);
+    expect(Object.getPrototypeOf(widths)).toBe(Object.prototype);
+    expect(widths.width).toBeUndefined();
+  });
 });
