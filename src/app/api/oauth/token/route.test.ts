@@ -82,4 +82,20 @@ describe("OAuth token endpoint", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: "invalid_grant" });
   });
+
+  it("answers a body that is not usable JSON with a 400, not a server error", async () => {
+    // This endpoint is public, so whatever a stranger posts has to be an OAuth error rather
+    // than an unhandled throw: `{` fails to parse and `null` has no entries to read.
+    for (const body of ["{", "null", "[1]", '"x"', ""]) {
+      const response = await POST(
+        new Request("https://planner.example/api/oauth/token", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+        }),
+      );
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect(await response.json()).toMatchObject({ error: "invalid_request" });
+    }
+  });
 });

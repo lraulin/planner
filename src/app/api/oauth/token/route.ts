@@ -13,10 +13,23 @@ export function OPTIONS() {
   return corsOptions();
 }
 
-async function readTokenParams(request: Request): Promise<Record<string, string>> {
+/**
+ * The request's parameters as strings, or null when the body is not something this endpoint
+ * can read: JSON that does not parse, or JSON that is not an object. The endpoint is public,
+ * so either one is an OAuth `invalid_request` for the caller, not a throw.
+ */
+async function readTokenParams(
+  request: Request,
+): Promise<Record<string, string> | null> {
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
-    const body = (await request.json()) as Record<string, unknown>;
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return null;
+    }
+    if (body === null || typeof body !== "object" || Array.isArray(body)) return null;
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(body)) {
       if (typeof value === "string") out[key] = value;
@@ -30,6 +43,12 @@ async function readTokenParams(request: Request): Promise<Record<string, string>
 export async function POST(request: Request) {
   const origin = publicOrigin(request);
   const params = await readTokenParams(request);
+  if (!params) {
+    return oauthError(
+      "invalid_request",
+      "Body must be form-encoded or a JSON object of string parameters",
+    );
+  }
   const grant = params.grant_type;
 
   if (grant === "refresh_token") {
