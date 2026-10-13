@@ -8,7 +8,7 @@ import { THIS_MONTH_DATE_FILTER } from "@/lib/finances/registerFields";
 import { parseRegisterQuery, prepareRegister } from "@/lib/finances/registerQuery";
 import { listBudgetEnvelopeOptions } from "@/lib/finances/budget/queries";
 import { listPayees } from "@/lib/finances/payees/queries";
-import { localDateKey } from "@/lib/schedule/geometry";
+import { readerTodayKey } from "@/lib/schedule/readerZone";
 import { FinancesView } from "@/components/finances/FinancesView";
 import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
@@ -24,7 +24,12 @@ export const dynamic = "force-dynamic";
  */
 export default async function FinancesRegisterPage() {
   const userId = await getCurrentUserId();
-  const todayKey = localDateKey(new Date());
+  // The reader's day, not the process's: the browser sends its own `today` in the query, and
+  // this page's first query is only kept when the two keys are equal. On Vercel the process
+  // zone is UTC, so for four evening hours a day `localDateKey` named tomorrow and the
+  // server's work was discarded for a second request
+  // (`agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/` D7).
+  const todayKey = readerTodayKey();
   const [transactions, accounts, bills, envelopeCatalog, storedBudget, payees] =
     await Promise.all([
       listTransactions(userId),

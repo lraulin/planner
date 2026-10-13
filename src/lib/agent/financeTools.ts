@@ -68,18 +68,16 @@ import type { FinanceAccountRow } from "@/lib/finances/types";
 import { accountBalanceView, type PendingRow } from "@/lib/finances/workingBalance";
 import { loadWorkingPendingSelection } from "@/lib/finances/workingPendingQuery";
 import { searchTransactions } from "@/lib/finances/transactionSearch";
-import { zonedDateKey } from "@/lib/schedule/geometry";
+import { readerTodayKey } from "@/lib/schedule/readerZone";
 import type { InsightsAxis } from "@/lib/settings/finances";
 import type { FinanceFlowKind } from "@/db/schema";
 import { AgentError } from "./errors";
 import { optionalNumber, optionalString } from "./parse";
 import { pageBounds, paginate } from "./pagination";
 
-/** Lee's zone. The tools run on Vercel (UTC), where the process clock's day ends at 8 PM here. */
-const AGENT_TIME_ZONE = "America/New_York";
-
+/** The tools run on Vercel (UTC), where the process clock's day ends at 8 PM Eastern. */
 function agentToday(): string {
-  return zonedDateKey(new Date(), AGENT_TIME_ZONE);
+  return readerTodayKey();
 }
 
 const EMPTY_INCOME = {
