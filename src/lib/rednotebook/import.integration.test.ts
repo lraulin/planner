@@ -90,6 +90,33 @@ With //italic// and #tag1'}
     );
   });
 
+  it("treats a day imported with wrap artifacts as the same text, not a change", async () => {
+    // Before the parser folded YAML line breaks, a wrapped entry was stored with the wrap and
+    // its indentation in it. Re-importing the month must not read that as an edit and append.
+    const [existing] = await db
+      .insert(notes)
+      .values({
+        userId,
+        title: "2018-06-04",
+        subject: REDNOTEBOOK_SUBJECT,
+        body: "one two\n    three",
+        noteDate: new Date("2018-06-04T12:00:00Z"),
+        sortKey: "m",
+      })
+      .returning({ id: notes.id });
+
+    const result = await importRedNotebookFiles({
+      userId,
+      files: [{ name: "2018-06.txt", text: `4: {text: 'one two\n    three'}` }],
+    });
+
+    expect(result.created).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.updated).toBe(0);
+    const [row] = await db.select().from(notes).where(eq(notes.id, existing.id));
+    expect(row.body).toBe("one two\n    three");
+  });
+
   it("appends when the same date already has different Rednotebook text", async () => {
     await importRedNotebookFiles({
       userId,

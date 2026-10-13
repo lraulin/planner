@@ -60,9 +60,42 @@ function stripYamlTags(s: string): string {
   return s.replace(/!!python\/\w+\s*/g, "");
 }
 
+const isBreak = (ch: string | undefined): boolean => ch === "\n" || ch === "\r";
+const isBlank = (ch: string | undefined): boolean => ch === " " || ch === "\t";
+
+/**
+ * Read the line break at `s[at]` and everything that folds with it, as YAML does inside a
+ * flow scalar: one break is a single space, and a run of `n` breaks (empty lines between
+ * them) is `n - 1` newlines. Leading indentation on the continuation line is not content.
+ *
+ * PyYAML wraps a long scalar at the first space past column 80 and indents the continuation,
+ * so this is not an edge: any entry longer than a line is stored with these breaks in it.
+ */
+function foldBreak(s: string, at: number): { text: string; next: number } {
+  let i = at;
+  let breaks = 0;
+  while (i < s.length) {
+    if (s[i] === "\r" && s[i + 1] === "\n") i += 2;
+    else if (isBreak(s[i])) i += 1;
+    else break;
+    breaks += 1;
+    while (isBlank(s[i])) i += 1;
+    if (!isBreak(s[i])) break;
+  }
+  return { text: breaks === 1 ? " " : "\n".repeat(breaks - 1), next: i };
+}
+
+/** Drop whitespace written before a fold, but never whitespace an escape produced. */
+function trimRaw(out: string, protectedLength: number): string {
+  let end = out.length;
+  while (end > protectedLength && isBlank(out[end - 1])) end -= 1;
+  return out.slice(0, end);
+}
+
 /**
  * Unquote a YAML single-quoted scalar starting at `s[0] === "'"`.
- * `''` is an escaped quote. Returns the value and index after the closing quote.
+ * `''` is an escaped quote, and a line break folds (see `foldBreak`). Returns the value and
+ * the index after the closing quote.
  */
 function unquoteSingle(
   s: string,
@@ -71,14 +104,23 @@ function unquoteSingle(
   if (s[start] !== "'") return null;
   let i = start + 1;
   let out = "";
+  let protectedLength = 0;
   while (i < s.length) {
     if (s[i] === "'") {
       if (s[i + 1] === "'") {
         out += "'";
+        protectedLength = out.length;
         i += 2;
         continue;
       }
       return { value: out, end: i + 1 };
+    }
+    if (isBreak(s[i])) {
+      const fold = foldBreak(s, i);
+      out = trimRaw(out, protectedLength) + fold.text;
+      protectedLength = out.length;
+      i = fold.next;
+      continue;
     }
     out += s[i];
     i++;
@@ -86,8 +128,35 @@ function unquoteSingle(
   return null;
 }
 
+/** The single-character escapes of YAML 1.1 double-quoted scalars. */
+const SIMPLE_ESCAPES: Record<string, string> = {
+  "0": "\0",
+  a: "\x07",
+  b: "\b",
+  t: "\t",
+  "\t": "\t",
+  n: "\n",
+  v: "\v",
+  f: "\f",
+  r: "\r",
+  e: "\x1b",
+  " ": " ",
+  '"': '"',
+  "/": "/",
+  "\\": "\\",
+  N: "\u0085",
+  _: " ",
+  L: " ",
+  P: " ",
+};
+
+const HEX_ESCAPE_LENGTH: Record<string, number> = { x: 2, u: 4, U: 8 };
+
 /**
- * Unquote a double-quoted scalar. Supports common escapes (`\n`, `\\`, `\"`).
+ * Unquote a double-quoted scalar: the YAML escape set (including the `\xNN`, `\uNNNN` and
+ * `\UNNNNNNNN` PyYAML writes for non-ASCII text when it is not told to allow Unicode), an
+ * escaped line break (joins the lines with nothing between), and the same folding as a
+ * single-quoted scalar. An escape that is not valid is kept as written.
  */
 function unquoteDouble(
   s: string,
@@ -96,21 +165,94 @@ function unquoteDouble(
   if (s[start] !== '"') return null;
   let i = start + 1;
   let out = "";
+  let protectedLength = 0;
   while (i < s.length) {
-    if (s[i] === "\\") {
+    const ch = s[i];
+    if (ch === "\\") {
       const next = s[i + 1];
       if (next === undefined) return null;
-      if (next === "n") out += "\n";
-      else if (next === "t") out += "\t";
-      else out += next;
+
+      if (isBreak(next)) {
+        // Escaped break: drop it and the next line's indentation, add nothing.
+        i += next === "\r" && s[i + 2] === "\n" ? 3 : 2;
+        while (isBlank(s[i])) i += 1;
+        protectedLength = out.length;
+        continue;
+      }
+
+      const hexLength = HEX_ESCAPE_LENGTH[next];
+      if (hexLength !== undefined) {
+        const digits = s.slice(i + 2, i + 2 + hexLength);
+        const code = /^[0-9a-fA-F]+$/.test(digits) ? Number.parseInt(digits, 16) : NaN;
+        if (
+          digits.length === hexLength &&
+          code <= 0x10ffff &&
+          !(code >= 0xd800 && code <= 0xdfff)
+        ) {
+          out += String.fromCodePoint(code);
+          i += 2 + hexLength;
+        } else {
+          out += `\\${next}`;
+          i += 2;
+        }
+        protectedLength = out.length;
+        continue;
+      }
+
+      out += SIMPLE_ESCAPES[next] ?? next;
+      protectedLength = out.length;
       i += 2;
       continue;
     }
-    if (s[i] === '"') return { value: out, end: i + 1 };
-    out += s[i];
+    if (ch === '"') return { value: out, end: i + 1 };
+    if (isBreak(ch)) {
+      const fold = foldBreak(s, i);
+      out = trimRaw(out, protectedLength) + fold.text;
+      protectedLength = out.length;
+      i = fold.next;
+      continue;
+    }
+    out += ch;
     i++;
   }
   return null;
+}
+
+/**
+ * A plain (unquoted) scalar, folded the same way. It ends at a `,` or `}` in a flow mapping.
+ * In block style a continuation line is an indented line that does not open a new `key:` —
+ * a plain scalar cannot contain `: `, so a line that does is the next entry, not more text.
+ * (The day header's own `\s*` has already eaten the key's indentation, so "deeper than the
+ * key" is not something this can measure; "indented, and not a key" is.)
+ */
+function readPlain(after: string, flow: boolean): string {
+  let out = "";
+  let i = 0;
+  while (i < after.length) {
+    const ch = after[i];
+    if (flow && (ch === "," || ch === "}")) break;
+    if (isBreak(ch)) {
+      const fold = foldBreak(after, i);
+      if (!continuesPlain(after, fold.next, flow)) break;
+      out = out.replace(/[ \t]+$/, "") + fold.text;
+      i = fold.next;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return out.trim();
+}
+
+function continuesPlain(s: string, at: number, flow: boolean): boolean {
+  if (at >= s.length) return false;
+  if (flow) return true;
+  let lineStart = at;
+  while (lineStart > 0 && !isBreak(s[lineStart - 1])) lineStart -= 1;
+  if (at === lineStart) return false; // not indented
+  let lineEnd = at;
+  while (lineEnd < s.length && !isBreak(s[lineEnd])) lineEnd += 1;
+  return !/^[^\s:,{}[\]#][^:]*:(\s|$)/.test(s.slice(at, lineEnd));
 }
 
 /**
@@ -147,9 +289,11 @@ export function extractTextField(chunk: string): string | null {
     return body.join("\n").replace(/\n$/, "");
   }
 
-  // Bare scalar until comma/closing brace/newline.
-  const bare = /^([^,}\n]+)/.exec(after);
-  return bare ? bare[1].trim() : null;
+  // Plain scalar. Flow if the key sits inside an open `{`, else block.
+  const before = cleaned.slice(0, textKey.index);
+  const flow = before.lastIndexOf("{") > before.lastIndexOf("}");
+  const plain = readPlain(after, flow);
+  return plain === "" ? null : plain;
 }
 
 /**

@@ -86,7 +86,7 @@ export async function importRedNotebookFiles(params: {
       if (existing) {
         const current = normalizeBody(existing.body);
 
-        if (current === incoming) {
+        if (sameWords(current, incoming)) {
           const mergedContexts = mergeContexts(existing.contexts, day.contexts);
           if (contextsChanged(existing.contexts, mergedContexts)) {
             await tx
@@ -100,7 +100,7 @@ export async function importRedNotebookFiles(params: {
           continue;
         }
 
-        if (current.includes(incoming) && incoming.length > 0) {
+        if (incoming.length > 0 && sameWords(current, incoming, "contains")) {
           skipped++;
           continue;
         }
@@ -148,6 +148,23 @@ export async function importRedNotebookFiles(params: {
 
     return { created, updated, skipped, warnings };
   });
+}
+
+/**
+ * Whether two bodies are the same text once whitespace is ignored, or (`"contains"`) whether
+ * `b` is inside `a`.
+ *
+ * A day imported before the parser folded YAML line breaks properly holds the same words with
+ * extra blank lines and wrap indentation in them. Compared literally, re-importing the same
+ * month would read as a change and append a second copy beside the first.
+ */
+function sameWords(
+  a: string,
+  b: string,
+  mode: "equal" | "contains" = "equal",
+): boolean {
+  const words = (text: string) => text.replace(/\s+/g, " ").trim();
+  return mode === "equal" ? words(a) === words(b) : words(a).includes(words(b));
 }
 
 function mergeContexts(existing: string[], incoming: string[]): string[] {
