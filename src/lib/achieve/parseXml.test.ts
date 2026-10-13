@@ -56,4 +56,52 @@ describe("parseAchXml", () => {
     const doc = parseAchXml(xml);
     expect(tableRows(doc, "Tasks")[0]?.Name).toBe("A & B <C>");
   });
+
+  it("decodes numeric character references, which .NET writes for a carriage return", () => {
+    // A .NET XML writer entitizes the CR of a Windows line break, so a multi-line description
+    // can arrive as `line one&#xD;\nline two`. Left undecoded it imports with the literal
+    // text `&#xD;` in the middle of it.
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <Tasks>
+    <TaskId>aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</TaskId>
+    <ProjectId>11111111-2222-3333-4444-555555555555</ProjectId>
+    <Name>one&#xD;
+two &#169; &#x1F600; &#65;&#X42;</Name>
+    <Priority>1</Priority>
+  </Tasks>
+</AchieveDB>`;
+    const doc = parseAchXml(xml);
+    expect(tableRows(doc, "Tasks")[0]?.Name).toBe("one\r\ntwo \u00a9 \u{1F600} AB");
+  });
+
+  it("decodes in one pass, so an escaped ampersand is not decoded twice", () => {
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <Tasks>
+    <TaskId>aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</TaskId>
+    <ProjectId>11111111-2222-3333-4444-555555555555</ProjectId>
+    <Name>&amp;lt; &amp;#65; &amp;amp;</Name>
+    <Priority>1</Priority>
+  </Tasks>
+</AchieveDB>`;
+    const doc = parseAchXml(xml);
+    expect(tableRows(doc, "Tasks")[0]?.Name).toBe("&lt; &#65; &amp;");
+  });
+
+  it("leaves a reference that is not a character as it was written", () => {
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <Tasks>
+    <TaskId>aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</TaskId>
+    <ProjectId>11111111-2222-3333-4444-555555555555</ProjectId>
+    <Name>&#0; &#xD800; &#x110000; &#xZZ; &nbsp;</Name>
+    <Priority>1</Priority>
+  </Tasks>
+</AchieveDB>`;
+    const doc = parseAchXml(xml);
+    expect(tableRows(doc, "Tasks")[0]?.Name).toBe(
+      "&#0; &#xD800; &#x110000; &#xZZ; &nbsp;",
+    );
+  });
 });

@@ -183,13 +183,41 @@ function stripNestedTags(raw: string): string {
   return raw.replace(/<[^>]+>/g, "");
 }
 
+const NAMED_ENTITIES: Record<string, string> = {
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  amp: "&",
+};
+
+/** `&lt;`, `&#10;` or `&#xD;` — one alternative each, so a single pass decodes all three. */
+const ENTITY = /&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|(lt|gt|quot|apos|amp));/g;
+
+/**
+ * Decode XML character data: the five named entities and numeric character references.
+ *
+ * Numeric references are not exotic here. Achieve is a .NET program, and a .NET XML writer
+ * writes the carriage return of a Windows line break as `&#xD;`, so a multi-line description
+ * can arrive as `first line&#xD;\nsecond line` (the XML spec requires it, or a parser's line
+ * ending normalisation would eat the CR). One pass, so `&amp;lt;` is `&lt;` and not `<`.
+ * A reference that cannot be a character (NUL, a surrogate, past U+10FFFF) is left as written
+ * rather than turned into a replacement character nobody typed.
+ */
 function decodeEntities(text: string): string {
-  return text
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&");
+  if (!text.includes("&")) return text;
+  return text.replace(
+    ENTITY,
+    (whole, decimal?: string, hex?: string, named?: string) => {
+      if (named !== undefined) return NAMED_ENTITIES[named];
+      const code =
+        decimal !== undefined ? Number(decimal) : Number.parseInt(hex ?? "", 16);
+      const isSurrogate = code >= 0xd800 && code <= 0xdfff;
+      if (!Number.isInteger(code) || code < 1 || code > 0x10ffff || isSurrogate)
+        return whole;
+      return String.fromCodePoint(code);
+    },
+  );
 }
 
 /** Convenience: rows for a table, or empty array. */
