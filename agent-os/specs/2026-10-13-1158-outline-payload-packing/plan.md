@@ -151,14 +151,126 @@ trip, stop and report rather than build.
       `npm run smoke` all pass.
 - [ ] If measured tab-switch time does not improve, the plan says so in plain words.
 
+## Measurements
+
+Filled during implementation. Every figure below comes from a **production build**
+(`next build` + `next start`, signed in through the login form as a local account), a
+Chrome driven over CDP, the same dataset and the same machine, and **a hard load of a hub
+page followed by one soft navigation per sample** — so these are first visits, never a
+revisit that a client cache could answer. Five samples per route after one discarded
+warm-up; the table shows the median.
+
+- **Dataset: synthetic, 789 nodes, not a restored backup.** The real backups are encrypted
+  with a passphrase held in the Keychain, and reading it is not something an unattended run
+  may do. The scratch database `planner_oppbench` holds 6 result areas, 12 goals, 42
+  projects and 729 tasks (22% completed, notes on ~20%, priorities on ~30%, deadlines on
+  ~20%), built by a throwaway script kept outside the repo. It is somewhat larger than
+  production's ~600 nodes; it serialises to 1,416 B per node, inside the 1.3–1.5 kB measured
+  on production, so the byte figures are comparable and the millisecond figures are the
+  ones to treat as indicative. Rows carry realistic names, notes, dates and rollups; they do
+  not carry Lee's real mix of empty and filled fields, which is the one thing a restored
+  backup would have added.
+- **Columns.** _raw_ and _gzip_ are `decodedBodySize` and `encodedBodySize` of the RSC
+  navigation response (`?_rsc=`) from the Resource Timing API — gzip is what `next start`
+  actually sent. _fetch_ is request start to response end, over loopback: server render and
+  serialisation, with no network, so on a phone it is a floor, not a figure. _settled_ is
+  click to the last DOM mutation before a 500 ms quiet period. Navigations are real mouse
+  clicks at a link's coordinates (or a double-click on the row that opens the route), never
+  `router.push`.
+- **Load.** The Mac was shared with two other agents building and testing; load average
+  ranged 8–34 during these runs. Treat differences under ~15 ms as noise. Paired
+  before/after comparisons below were taken back to back in one timing-lock window.
+
+### Baseline (Task 2, `master` at `6d5e23c4`)
+
+| Route                            | Group | Raw B     | Gzip B | Fetch ms | Settled ms |
+| -------------------------------- | ----- | --------- | ------ | -------- | ---------- |
+| `/plan/outline`                  | tree  | 1,117,186 | 65,142 | 39       | 207        |
+| `/plan/tasks`                    | tree  | 1,117,198 | 65,158 | 36       | 282        |
+| `/plan/projects`                 | tree  | 1,117,190 | 65,145 | 37       | 165        |
+| `/plan/goals`                    | tree  | 1,117,177 | 65,140 | 37       | 146        |
+| `/plan/result-areas`             | tree  | 1,117,205 | 65,157 | 42       | 147        |
+| `/plan/overview`                 | tree  | 1,113,800 | 64,940 | 50       | 144        |
+| `/chooser`                       | tree  | 1,117,868 | 65,212 | 41       | 81         |
+| `/organize`                      | tree  | 1,114,486 | 65,018 | 42       | 53         |
+| `/schedule/week-plan`            | tree  | 1,114,069 | 65,026 | 39       | 63         |
+| `/schedule/plan`                 | tree  | 1,123,931 | 66,102 | 39       | 58         |
+| `/metrics`                       | slice | 28,599    | 4,236  | 28       | 90         |
+| `/schedule/time-chart/[chartId]` | slice | 1,116,532 | 65,453 | 54       | 94         |
+| `/notes/grid`                    | slice | 1,116,872 | 65,274 | 47       | 66         |
+| `/plan/wishes`                   | slice | 1,122,527 | 66,392 | 50       | 148        |
+| `/schedule/calendar`             | slice | 1,124,391 | 66,002 | 44       | 82         |
+| `/schedule/agenda`               | slice | 1,124,383 | 65,997 | 52       | 77         |
+| inline edit on `/plan/outline`   | —     | 1,120,498 | 66,352 | 47       | 205        |
+
+Two things the table corrected:
+
+- **`/metrics` was never carrying the whole outline.** Its page already filters to goals, so
+  it ships 12 goals' worth of full rows (~17 kB) plus the metrics themselves, 28.6 kB in
+  all. The "at most 5% of baseline" criterion cannot hold for a page whose non-outline
+  payload is already ~40% of it; see the Task 6 table for what that criterion becomes.
+- **Settled time is mostly rendering, not payload.** The Plan grids settle in 145–280 ms
+  and the pages that draw no 650-row grid in 55–95 ms, against a 36–54 ms fetch. Packing
+  cannot touch the render, only the fetch and the parse.
+
+### Go / no-go (D6, Task 2)
+
+Two experiments, each paired and back to back, on this build and dataset.
+
+**1. Outline emptied** (`loadOutline` still queries and derives, then returns `[]`; a
+throwaway patch, not committed). This is the upper bound on what the outline costs a click,
+render included:
+
+| Route                 | Fetch ms, full → empty | Settled ms, full → empty |
+| --------------------- | ---------------------- | ------------------------ |
+| `/plan/outline`       | 50 → 30                | 228 → 52                 |
+| `/plan/tasks`         | 43 → 27                | 299 → 45                 |
+| `/organize`           | 42 → 31                | 56 → 41                  |
+| `/schedule/week-plan` | 43 → 40                | 70 → 53                  |
+| `/schedule/calendar`  | 45 → 26                | 92 → 66                  |
+
+Read that carefully: the 175–250 ms on the Plan tabs is almost all row rendering, which
+packing leaves exactly as it is. The part packing can recover is the fetch (3–20 ms) plus
+the client's parse of the payload, which the non-grid pages show to be about 5–15 ms.
+
+**2. The codec prototyped on two pages** (`/plan/outline` and `/organize`, the real codec
+from Task 3), alternating baseline and packed builds twice, five samples each:
+
+| Measure                    | Baseline  | Packed        |
+| -------------------------- | --------- | ------------- |
+| `/plan/outline` raw B      | 1,117,186 | 224,117 (20%) |
+| `/plan/outline` gzip B     | 65,139    | 42,147 (65%)  |
+| `/plan/outline` fetch ms   | 45, 51    | 32, 30        |
+| `/plan/outline` settled ms | 216, 239  | 196, 197      |
+| `/organize` fetch ms       | 58, 43    | 28, 34        |
+| `/organize` settled ms     | 64, 55    | 40, 45        |
+| inline edit raw B          | 1,120,500 | 227,431 (20%) |
+| inline edit fetch ms       | 61, 56    | 43, 46        |
+| inline edit settled ms     | 225, 213  | 208, 212      |
+
+**Decision: go.** The rule was to stop if the outline's share is under ~20 ms of a tab
+switch _and_ of an inline-edit round trip. A tab switch recovers 15–40 ms here (more on
+the Plan tabs, whose payload is the same but whose fetch is longer); an inline edit
+recovers 13–17 ms of fetch and 5–13 ms settled. That is not under 20 ms on both counts,
+and it is on a loopback connection with no network and a laptop CPU. It is also not much
+more than that, and the plan says so in plain words: **on this machine packing makes a tab
+switch 15–40 ms faster and an inline edit about 10 ms faster, and removes 80% of the raw
+bytes and 35% of the gzip bytes of every one of them.** The remaining 150–250 ms of a Plan
+tab switch is rendering ~650 rows and is not addressed here. The iPhone, where Lee
+validates, has a slower parse and a real network on the other side of those 23 kB, which is
+where the larger share of this is expected to land; only the post-deploy production
+re-measurement (Task 6) can say.
+
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                   | Why                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Task 2's dataset is a synthetic 789-node outline in a scratch database, not "a restored backup".                         | The backups are encrypted with a passphrase in the Keychain; an unattended run does not read that. Sizes land inside production's measured per-node range. |
+| 2   | Task 2's go/no-go ran two experiments (outline emptied; codec prototyped on two pages), not only the first.              | The emptied outline measures rendering as much as payload, so on its own it cannot say what packing recovers. Result and decision are under Measurements.  |
+| 3   | The "`/metrics` … at most 5% of baseline" criterion rests on a premise the baseline disproved; it is restated at Task 6. | `/metrics` already sent only goals: 28.6 kB, of which the metrics themselves are ~40%. The criterion assumed the page carried the whole outline.           |
 
 ## Task 1: Save Spec Documentation
 
