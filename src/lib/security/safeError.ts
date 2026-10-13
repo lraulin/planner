@@ -1,3 +1,5 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
+
 /**
  * What an error is allowed to say to the browser.
  *
@@ -6,18 +8,25 @@
  * and the drawers lose their inline validation. The dangerous messages are the ones nobody
  * wrote:
  *
- * - `postgres` query failures (`PostgresError`) quote table, column and constraint names,
- *   and a constraint violation can quote the offending **row values** — which for the
- *   finance tables is a bank description and an amount.
- * - The driver's connection failures embed the database **host and port**
+ * - A failed query. Drizzle wraps every one in a `DrizzleQueryError` whose message is the
+ *   whole SQL statement plus a `params:` list, and a constraint violation underneath can
+ *   quote the offending **row values** — which for the finance tables is a bank description
+ *   and an amount.
+ * - The driver's connection failures, which can embed the database **host and port**
  *   (`write CONNECT_TIMEOUT ep-xyz.neon.tech:5432`).
- * - Node system errors embed absolute filesystem paths.
+ * - Node system errors, which embed absolute filesystem paths.
  *
- * The distinguishing feature of all three is a `code` property. Nothing this codebase throws
- * on purpose has one — deliberate throws are plain `new Error("A sentence.")`. So `code` is
- * the tell, and treating anything that carries one as internal errs in the safe direction:
- * an over-redacted third-party message costs a round trip to the server log, while an
- * under-redacted one is on screen forever.
+ * Two tells, because the driver does not give one: a `DrizzleQueryError` anywhere in the
+ * chain, and a string `code`. Nothing this codebase throws on purpose is either — deliberate
+ * throws are plain `new Error("A sentence.")`. Treating anything that is as internal errs in
+ * the safe direction: an over-redacted third-party message costs a round trip to the server
+ * log, while an under-redacted one is on screen forever.
+ *
+ * **Not the driver's error class.** The first version of this keyed on postgres.js's
+ * `PostgresError`; node-postgres calls its own `DatabaseError` with `name: "error"`, and its
+ * connect timeout and dropped connection carry no `code` at any depth. Detecting the driver
+ * would have meant a silent hole the day the driver changed. A query failure is recognised
+ * by who wrapped it, which is Drizzle on both.
  *
  * (`AgentError` also carries a `code`, but it never reaches here — the agent API has its own
  * boundary in `@/lib/agent/errors`, which redacts unexpected errors the same way.)
@@ -32,16 +41,16 @@ export const GENERIC_ERROR_MESSAGE = "Something went wrong.";
 const MAX_CAUSE_DEPTH = 3;
 
 /**
- * Did this come from the database driver, the network stack, or the filesystem — as opposed
- * to being a sentence we wrote?
+ * Did this come from the database, the network stack, or the filesystem — as opposed to
+ * being a sentence we wrote?
  *
- * **The `cause` chain has to be walked, not just the top error.** Drizzle wraps every query
- * failure in a `DrizzleQueryError` whose `name` is plain `"Error"`, which carries no `code`,
- * and whose `message` is the full SQL plus a `params:` list — with the real `PostgresError`
- * tucked into `cause`. Checking only the outer error therefore passed the entire statement
- * and its parameter values straight through to the browser. For the finance tables those
- * parameters are descriptions and amounts, which is exactly what this module exists to keep
- * off the screen.
+ * **The `cause` chain has to be walked, not just the top error.** A `DrizzleQueryError`
+ * has `name: "Error"` and no `code`, so checking only for those passed the entire statement
+ * and its parameter values straight through to the browser. Finding one anywhere in the
+ * chain is sufficient: it is the wrapper that carries the SQL, whatever it wraps.
+ *
+ * The `code` rule is what still catches errors that were never wrapped — a Node system
+ * error (`ENOENT`, `ECONNREFUSED`) thrown from a file read or a `fetch`.
  */
 export function isInternalError(error: unknown): boolean {
   if (!(error instanceof Error)) return true;
@@ -49,7 +58,7 @@ export function isInternalError(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth <= MAX_CAUSE_DEPTH; depth++) {
     if (!(current instanceof Error)) break;
-    if (current.name === "PostgresError") return true;
+    if (current instanceof DrizzleQueryError) return true;
     if (typeof (current as { code?: unknown }).code === "string") return true;
     current = (current as { cause?: unknown }).cause;
   }

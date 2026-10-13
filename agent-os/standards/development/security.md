@@ -62,16 +62,23 @@ is set.
 ## Errors: messages we wrote are user-facing; messages the database wrote are not
 
 Deliberate throws (`new Error("Transaction not found.")`) are the inline validation the
-drawers render. Driver errors are not. `postgres` quotes table, column, and constraint
-names, and a constraint violation can quote the offending **row values** — which for
-the finance tables is a bank description and an amount. Connection failures embed the
+drawers render. Driver errors are not. A failed query's message is the whole statement and
+its parameters; a constraint violation can quote the offending **row values** — which for
+the finance tables is a bank description and an amount. Connection failures can embed the
 database host.
 
-The tell is a `code` property, or `name === "PostgresError"`. Nothing this codebase
-throws on purpose has a `code`. The check lives in `src/lib/security/safeError.ts` and
-runs at every client boundary: `actionErrorMessage` in `src/app/actionResult.ts`, and
-the import/export route catches. Log the real error before replacing it, or the next
-Neon timeout becomes "Something went wrong." with no way to find out why.
+There are two tells: a `DrizzleQueryError` anywhere in the `cause` chain, and a string
+`code` property. Nothing this codebase throws on purpose is either. The check lives in
+`src/lib/security/safeError.ts` and runs at every client boundary: `actionErrorMessage` in
+`src/app/actionResult.ts`, and the import/export route catches. Log the real error before
+replacing it, or the next Neon timeout becomes "Something went wrong." with no way to find
+out why.
+
+**Do not detect the driver's own error class or name.** postgres.js named its error
+`PostgresError`; node-postgres names its own `DatabaseError` with `name: "error"`, and its
+connect timeout and dropped connection have no `code` at any depth. A check shaped like one
+driver is a silent hole when the driver changes. The wrapper is Drizzle's, so it is the same
+on both.
 
 Do not start a `UserFacingError` hierarchy to "do this properly." One hundred and fifty
 deliberate sentences would have to be reclassified, and a missed one would become

@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GENERIC_ERROR_MESSAGE, isInternalError, safeErrorMessage } from "./safeError";
 
@@ -8,20 +9,47 @@ import { GENERIC_ERROR_MESSAGE, isInternalError, safeErrorMessage } from "./safe
  * deliberate message must not be swallowed.
  */
 
-/** What `postgres` actually throws for a failed query. */
-function postgresError(message: string, code = "23505"): Error {
+/**
+ * What node-postgres throws for a failed query: `name` is "error", not a class name anyone
+ * could match on, and `detail` quotes the row.
+ */
+function databaseError(message: string, code = "23505"): Error {
   const error = new Error(message);
-  error.name = "PostgresError";
-  return Object.assign(error, { code, table: "finance_transactions" });
+  error.name = "error";
+  return Object.assign(error, {
+    code,
+    table: "finance_transactions",
+    constraint: "finance_transactions_fingerprint_uq",
+    detail: "Key (fingerprint)=(SBARRO,-6.59) already exists.",
+  });
 }
 
-/** What it throws when it cannot reach the database at all. */
+/** What Node's network stack throws when it cannot reach the database at all. */
 function connectionError(): Error {
   return Object.assign(new Error("write CONNECT_TIMEOUT ep-secret.neon.tech:5432"), {
     code: "CONNECT_TIMEOUT",
     errno: "CONNECT_TIMEOUT",
     address: "ep-secret.neon.tech",
   });
+}
+
+/**
+ * node-postgres's connect timeout and dropped connection: a plain `Error` with no `code` at
+ * any depth, so nothing about the error itself says it came from the database.
+ */
+function codelessPgError(
+  message = "Connection terminated due to connection timeout",
+): Error {
+  return new Error(message);
+}
+
+/** A query failure as it reaches a caller: Drizzle's wrapper, the driver's error in `cause`. */
+function failedQuery(cause?: Error): DrizzleQueryError {
+  return new DrizzleQueryError(
+    'insert into "finance_transactions" ("description", "amount") values ($1, $2)',
+    ["SBARRO", "-6.59"],
+    cause,
+  );
 }
 
 beforeEach(() => {
@@ -34,7 +62,7 @@ afterEach(() => {
 
 describe("isInternalError", () => {
   it("classifies driver, network and filesystem errors as internal", () => {
-    expect(isInternalError(postgresError('duplicate key value violates "uq"'))).toBe(
+    expect(isInternalError(databaseError('duplicate key value violates "uq"'))).toBe(
       true,
     );
     expect(isInternalError(connectionError())).toBe(true);
@@ -59,7 +87,7 @@ describe("isInternalError", () => {
 
 describe("safeErrorMessage", () => {
   it("never lets a Postgres error's table, column or values reach the client", () => {
-    const error = postgresError(
+    const error = databaseError(
       'duplicate key value violates unique constraint "finance_transactions_fingerprint_uq"',
     );
     expect(safeErrorMessage(error, "test")).toBe(GENERIC_ERROR_MESSAGE);
@@ -78,7 +106,7 @@ describe("safeErrorMessage", () => {
   });
 
   it("logs the real error so redaction does not cost diagnosability", () => {
-    const error = postgresError('column "notes" does not exist');
+    const error = databaseError('column "notes" does not exist', "42703");
     safeErrorMessage(error, "updateTransaction");
 
     expect(console.error).toHaveBeenCalledWith("[updateTransaction]", error);
@@ -91,7 +119,7 @@ describe("safeErrorMessage", () => {
 
   it("uses a caller fallback only when the real message is redacted", () => {
     expect(
-      safeErrorMessage(postgresError("duplicate key"), "import", "Import failed."),
+      safeErrorMessage(databaseError("duplicate key"), "import", "Import failed."),
     ).toBe("Import failed.");
     expect(
       safeErrorMessage(new Error("Transaction not found."), "import", "Import failed."),
@@ -100,21 +128,43 @@ describe("safeErrorMessage", () => {
 });
 
 describe("wrapped driver errors", () => {
-  it("redacts a Drizzle query error, whose PostgresError hides in cause", () => {
+  it("redacts a Drizzle query error, whose driver error hides in cause", () => {
     // The real shape, from a foreign-key violation: the wrapper is a plain `Error` with no
     // `code`, and its message is the whole statement plus a `params:` list. Checking only
     // the outer error let that reach the browser verbatim.
-    const pg = new Error("insert violates foreign key constraint");
-    pg.name = "PostgresError";
-    (pg as unknown as { code: string }).code = "23503";
-
-    const wrapper = new Error(
-      'Failed query: insert into "finance_transactions" ... params: SBARRO,-6.59',
-      { cause: pg },
+    const wrapper = failedQuery(
+      databaseError("violates foreign key constraint", "23503"),
     );
+
+    expect(wrapper.message).toContain("SBARRO");
+    expect(isInternalError(wrapper)).toBe(true);
+    expect(safeErrorMessage(wrapper, "test")).toBe(GENERIC_ERROR_MESSAGE);
+  });
+
+  it.each([
+    ["a connect timeout", "Connection terminated due to connection timeout"],
+    ["a dropped connection", "Connection terminated unexpectedly"],
+  ])("redacts %s, which has no code at any depth", (_name, message) => {
+    // The case a driver-shaped check missed: nothing on the cause says "database", so the
+    // statement and its parameters were handed to the browser.
+    const wrapper = failedQuery(codelessPgError(message));
 
     expect(isInternalError(wrapper)).toBe(true);
     expect(safeErrorMessage(wrapper, "test")).toBe(GENERIC_ERROR_MESSAGE);
+  });
+
+  it("redacts a Drizzle query error with no cause at all", () => {
+    // The wrapper is the tell, not what is inside it.
+    expect(isInternalError(failedQuery())).toBe(true);
+  });
+
+  it("redacts a Drizzle query error that a deliberate wrapper re-threw", () => {
+    const outer = new Error("Could not save the transaction.", {
+      cause: failedQuery(codelessPgError()),
+    });
+
+    expect(isInternalError(outer)).toBe(true);
+    expect(safeErrorMessage(outer, "test")).toBe(GENERIC_ERROR_MESSAGE);
   });
 
   it("still lets a deliberate sentence through when its cause is also ours", () => {

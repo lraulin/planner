@@ -4,7 +4,7 @@
  * **The `cause` chain has to be walked, not just the top error** — the same trap
  * `src/lib/security/safeError.ts` documents, for the same reason. Drizzle wraps every query
  * failure in a `DrizzleQueryError` whose `message` is the SQL and its parameters, and tucks
- * the real `PostgresError` — the one carrying `code` — into `cause`. A check against the
+ * the driver's own error — the one carrying `code` — into `cause`. A check against the
  * outer error's `code` therefore never matches, and the sentence written for the user is
  * skipped in favour of the driver's, which `safeErrorMessage` then has to redact wholesale.
  *

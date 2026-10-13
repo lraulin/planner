@@ -186,6 +186,10 @@ describes only as a total across routes, not per route.
 Lands on postgres.js; it is correct under both drivers. Unit tests gain the two no-`code`
 shapes and pg's `DatabaseError` fixture.
 
+Done 2026-10-12 (`safeError.ts`, `safeError.test.ts`, `driverErrors.integration.test.ts`,
+and the `security.md` section it described, which moved here from Task 9). The pool-`connect`
+half of D4 — the one error Drizzle never wraps — is pg-specific and lands with Task 4.
+
 ## Task 4: Swap the driver (D1, D2, D3, D6)
 
 `package.json`, `src/db/index.ts`, the `.rows` readers, both probes, the replay script. Read
