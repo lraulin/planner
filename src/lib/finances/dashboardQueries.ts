@@ -54,8 +54,21 @@ import { bankRows, moneyRows } from "./splitRows";
  * each rule, unit-tested without a database.
  *
  * The arithmetic stays exact because it stays in integer cents — the same reason the importer
- * parses to cents at the edge. Three thousand rows is a few hundred kilobytes; if this ever
- * outgrows that, the fix is the date window this already takes, not a scattering of `sum()`.
+ * parses to cents at the edge.
+ *
+ * **Insights keeps the whole history, on purpose**
+ * (`agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/` D5). It is the one page whose
+ * job is to re-slice every row in the browser, so it reads every row: about 7,500 of them
+ * today, roughly 5 MB of payload. The earlier "three thousand rows is a few hundred
+ * kilobytes" figure is stale and the date window below is not the fix it names.
+ *
+ * What a windowing spec has to solve before this can shrink, and why a `from`/`to` here is
+ * not enough: the balance and the asset/debt series are running sums that need the opening
+ * balances before the first visible month, a trailing-12 average needs the twelve buckets
+ * before the first visible one, and a declared bill's amount reads the whole history
+ * (`2026-08-14-1012-recurring-bill-cadences` change #4). The trigger for taking that on is
+ * the payload, not the query: when a page this size is slow to *arrive* rather than to
+ * compute. A compact columnar payload is the alternative that needs none of those answers.
  */
 
 export type InsightsFilter = {
@@ -145,9 +158,11 @@ export function loadInsightsRows(
 }
 
 /**
- * The largest read in the module, and the forecast, the review list and the dashboard each
- * ask for it; see `oncePerRequest`. The window is passed as two strings rather than as the
- * filter object so that two callers asking for the same window share one answer.
+ * The largest read in the module. Insights, Scenarios and the agent's analysis tools ask for
+ * it, and no page that does not re-slice the whole history does: the forecast, the review
+ * list and the Accounts page each read the rows they use instead. See `oncePerRequest`. The
+ * window is passed as two strings rather than as the filter object so that two callers
+ * asking for the same window share one answer.
  */
 const insightsRowsOncePerRequest = oncePerRequest(readInsightsRows);
 
@@ -180,7 +195,6 @@ async function readInsightsRows(
       incomeRole: financeBudgetCategories.incomeRole,
       accountOffBudget: financeAccounts.offBudget,
       contributesToBudget: sql<boolean>`coalesce((${budgetContributionSql(userId, pending.supersededTransactionIds)}), false)`,
-      notes: financeTransactions.notes,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
