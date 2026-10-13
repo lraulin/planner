@@ -71,71 +71,67 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
     ORDER BY t.path
   `);
 
-  const rows: OutlineRow[] = (result as unknown as Record<string, unknown>[]).map(
-    (r) => ({
-      id: r.id as string,
-      parentId: (r.parent_id as string | null) ?? null,
-      type: r.type as OutlineRow["type"],
-      name: r.name as string,
-      sortKey: r.sort_key as string,
-      priorityLetter: (r.priority_letter as OutlineRow["priorityLetter"]) ?? null,
-      priorityRank: r.priority_rank === null ? null : Number(r.priority_rank),
-      tcPriorityLetter:
-        (r.tc_priority_letter as OutlineRow["tcPriorityLetter"]) ?? null,
-      tcPriorityRank: r.tc_priority_rank === null ? null : Number(r.tc_priority_rank),
-      state: r.state as OutlineRow["state"],
-      deadline: r.deadline ? new Date(r.deadline as string) : null,
-      focus: Boolean(r.focus),
-      collapsed: Boolean(r.collapsed),
-      notes: (r.notes as string) ?? "",
-      isInbox: Boolean(r.is_inbox),
-      completedAt: r.completed_at ? new Date(r.completed_at as string) : null,
-      dateCompleted: r.date_completed ? new Date(r.date_completed as string) : null,
-      createdAt: new Date(r.created_at as string),
-      updatedAt: new Date(r.updated_at as string),
-      depth: Number(r.depth),
-      effortMinutes: r.effort_minutes === null ? null : Number(r.effort_minutes),
-      effortLeftMinutes:
-        r.effort_left_minutes === null ? null : Number(r.effort_left_minutes),
-      actualEffortMinutes:
-        r.actual_effort_minutes === null ? null : Number(r.actual_effort_minutes),
-      percentComplete: r.percent_complete === null ? null : Number(r.percent_complete),
-      contexts: (r.contexts as string[] | null) ?? [],
-      actualStartDate: r.actual_start_date
-        ? new Date(r.actual_start_date as string)
-        : null,
-      description: (r.description as string | null) ?? "",
-      effortDriven:
-        r.effort_driven === null || r.effort_driven === undefined
-          ? null
-          : Boolean(r.effort_driven),
-      leadTimeMinutes:
-        r.lead_time_minutes === null ? null : Number(r.lead_time_minutes),
-      deadlineLeadTimeMinutes:
-        r.deadline_lead_time_minutes === null
-          ? null
-          : Number(r.deadline_lead_time_minutes),
-      place: (r.place as string | null) ?? "",
-      expectedCost: r.expected_cost === null ? null : Number(r.expected_cost),
-      costLow: r.cost_low === null ? null : Number(r.cost_low),
-      costHigh: r.cost_high === null ? null : Number(r.cost_high),
-      costToDate: r.cost_to_date === null ? null : Number(r.cost_to_date),
-      deferredDate: r.deferred_date ? new Date(r.deferred_date as string) : null,
-      recurrenceFrequency:
-        (r.recurrence_frequency as OutlineRow["recurrenceFrequency"]) ?? "none",
-      color: (r.color as string | null) ?? null,
-      category: (r.category as string | null) ?? null,
-      importance: r.importance === null ? null : Number(r.importance),
-      targetStart: r.target_start ? new Date(r.target_start as string) : null,
-      targetEnd: r.target_end ? new Date(r.target_end as string) : null,
-      purpose: (r.purpose as string | null) ?? "",
-      assignedTo: (r.assigned_to as string | null) ?? "",
-      definition: (r.definition as string | null) ?? "",
-      range: (r.range as string | null) ?? "",
-      isDream: Boolean(r.is_dream),
-      contactId: (r.contact_id as string | null) ?? null,
-    }),
-  );
+  const rows: OutlineRow[] = result.rows.map((r) => ({
+    id: r.id as string,
+    parentId: (r.parent_id as string | null) ?? null,
+    type: r.type as OutlineRow["type"],
+    name: r.name as string,
+    sortKey: r.sort_key as string,
+    priorityLetter: (r.priority_letter as OutlineRow["priorityLetter"]) ?? null,
+    priorityRank: r.priority_rank === null ? null : Number(r.priority_rank),
+    tcPriorityLetter: (r.tc_priority_letter as OutlineRow["tcPriorityLetter"]) ?? null,
+    tcPriorityRank: r.tc_priority_rank === null ? null : Number(r.tc_priority_rank),
+    state: r.state as OutlineRow["state"],
+    deadline: r.deadline ? new Date(r.deadline as string) : null,
+    focus: Boolean(r.focus),
+    collapsed: Boolean(r.collapsed),
+    notes: (r.notes as string) ?? "",
+    isInbox: Boolean(r.is_inbox),
+    completedAt: r.completed_at ? new Date(r.completed_at as string) : null,
+    dateCompleted: r.date_completed ? new Date(r.date_completed as string) : null,
+    createdAt: new Date(r.created_at as string),
+    updatedAt: new Date(r.updated_at as string),
+    depth: Number(r.depth),
+    effortMinutes: r.effort_minutes === null ? null : Number(r.effort_minutes),
+    effortLeftMinutes:
+      r.effort_left_minutes === null ? null : Number(r.effort_left_minutes),
+    actualEffortMinutes:
+      r.actual_effort_minutes === null ? null : Number(r.actual_effort_minutes),
+    percentComplete: r.percent_complete === null ? null : Number(r.percent_complete),
+    contexts: (r.contexts as string[] | null) ?? [],
+    actualStartDate: r.actual_start_date
+      ? new Date(r.actual_start_date as string)
+      : null,
+    description: (r.description as string | null) ?? "",
+    effortDriven:
+      r.effort_driven === null || r.effort_driven === undefined
+        ? null
+        : Boolean(r.effort_driven),
+    leadTimeMinutes: r.lead_time_minutes === null ? null : Number(r.lead_time_minutes),
+    deadlineLeadTimeMinutes:
+      r.deadline_lead_time_minutes === null
+        ? null
+        : Number(r.deadline_lead_time_minutes),
+    place: (r.place as string | null) ?? "",
+    expectedCost: r.expected_cost === null ? null : Number(r.expected_cost),
+    costLow: r.cost_low === null ? null : Number(r.cost_low),
+    costHigh: r.cost_high === null ? null : Number(r.cost_high),
+    costToDate: r.cost_to_date === null ? null : Number(r.cost_to_date),
+    deferredDate: r.deferred_date ? new Date(r.deferred_date as string) : null,
+    recurrenceFrequency:
+      (r.recurrence_frequency as OutlineRow["recurrenceFrequency"]) ?? "none",
+    color: (r.color as string | null) ?? null,
+    category: (r.category as string | null) ?? null,
+    importance: r.importance === null ? null : Number(r.importance),
+    targetStart: r.target_start ? new Date(r.target_start as string) : null,
+    targetEnd: r.target_end ? new Date(r.target_end as string) : null,
+    purpose: (r.purpose as string | null) ?? "",
+    assignedTo: (r.assigned_to as string | null) ?? "",
+    definition: (r.definition as string | null) ?? "",
+    range: (r.range as string | null) ?? "",
+    isDream: Boolean(r.is_dream),
+    contactId: (r.contact_id as string | null) ?? null,
+  }));
 
   return derive(rows);
 }

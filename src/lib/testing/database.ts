@@ -1,4 +1,4 @@
-import postgres from "postgres";
+import pg from "pg";
 
 /**
  * Whether the local Postgres from `npm run db:up` is actually reachable.
@@ -6,8 +6,8 @@ import postgres from "postgres";
  * Integration tests used to gate on `Boolean(process.env.DATABASE_URL)`, which never
  * worked: `.env.local` sets the variable whether or not the container is running, so a
  * stopped container produced 52 connection errors rather than a skip. Ping the server
- * instead — postgres.js opens connections lazily, so importing `@/db` is harmless and
- * only a real query proves anything.
+ * instead — the pool opens connections lazily, so importing `@/db` is harmless and only a
+ * real query proves anything.
  *
  * Note the two failure modes stay deliberately different. An *unreachable* database
  * skips, because "Docker isn't running" should never block a commit. An *unset*
@@ -23,13 +23,17 @@ export async function databaseReachable(): Promise<boolean> {
   const url = process.env.DATABASE_URL;
   if (!url) return false;
 
-  const probe = postgres(url, {
-    max: 1,
-    connect_timeout: 2,
-    onnotice: () => {},
+  const probe = new pg.Client({
+    connectionString: url,
+    connectionTimeoutMillis: 2000,
+    query_timeout: 2000,
   });
+  // A connection dropped after it was established is an `error` event; unhandled it would
+  // be an uncaught exception in the test worker rather than "not reachable".
+  probe.on("error", () => {});
   try {
-    await probe`select 1`;
+    await probe.connect();
+    await probe.query("select 1");
     return true;
   } catch (cause) {
     if (process.env.CI) {
@@ -42,7 +46,7 @@ export async function databaseReachable(): Promise<boolean> {
     }
     return false;
   } finally {
-    await probe.end({ timeout: 1 });
+    await probe.end().catch(() => {});
   }
 }
 

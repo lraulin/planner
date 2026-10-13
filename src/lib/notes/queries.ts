@@ -59,7 +59,7 @@ export async function loadNote(
     LIMIT 1
   `);
 
-  const raw = (result as unknown as Record<string, unknown>[])[0];
+  const raw = result.rows[0];
   if (!raw) return null;
 
   const childCount = Number(raw.child_count);
@@ -182,7 +182,7 @@ export async function loadNotesForNode(
     ORDER BY n.updated_at DESC
   `);
 
-  return mapFlatNoteRows(result);
+  return mapFlatNoteRows(result.rows);
 }
 
 /** Every note filed against one contact, newest first. Direct SQL — not a full-tree scan. */
@@ -203,7 +203,7 @@ export async function loadNotesForContact(
     ORDER BY n.updated_at DESC
   `);
 
-  return mapFlatNoteRows(result);
+  return mapFlatNoteRows(result.rows);
 }
 
 function toSummary(note: NoteNode): NoteSummary {
@@ -246,7 +246,7 @@ async function loadNoteRows(userId: string): Promise<NoteRow[]> {
     ORDER BY t.path
   `);
 
-  return (result as unknown as Record<string, unknown>[]).map(mapTreeRow);
+  return result.rows.map(mapTreeRow);
 }
 
 function mapTreeRow(r: Record<string, unknown>): NoteRow {
@@ -272,8 +272,8 @@ function mapTreeRow(r: Record<string, unknown>): NoteRow {
   };
 }
 
-function mapFlatNoteRows(rows: unknown): NoteNode[] {
-  return (rows as Record<string, unknown>[]).map((r) => {
+function mapFlatNoteRows(rows: Record<string, unknown>[]): NoteNode[] {
+  return rows.map((r) => {
     const row = mapTreeRow({ ...r, depth: 0 });
     return {
       ...row,

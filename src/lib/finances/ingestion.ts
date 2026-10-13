@@ -5,8 +5,10 @@ import { sql } from "drizzle-orm";
 
 /** Database-clock watermark taken before an ingestion begins. */
 export async function transactionIngestionWatermark(): Promise<Date> {
-  const result = await db.execute(sql`select clock_timestamp() as at`);
-  const row = (result as unknown as Array<{ at: Date | string }>)[0];
+  const result = await db.execute<{ at: Date | string }>(
+    sql`select clock_timestamp() as at`,
+  );
+  const row = result.rows[0];
   if (!row) throw new Error("Could not read the transaction ingestion watermark");
   return row.at instanceof Date ? row.at : new Date(row.at);
 }

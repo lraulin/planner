@@ -12,8 +12,8 @@
  */
 
 import { and, eq, gte, inArray, isNull, lte, notInArray, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
 import {
   financeAccounts,
   financeAuditChanges,
@@ -117,13 +117,16 @@ function fromSnapshotFields(id: string, fields: Json): TrackedScrape | null {
 
 async function main(): Promise<number> {
   const { databaseUrl } = await readBackupSecrets();
-  const client = postgres(databaseUrl, { max: 1, ssl: "require", prepare: false });
+  // One client, not a pool: the read-only transaction below lives on a single session.
+  // `ssl: true` verifies the server certificate; postgres.js's `ssl: "require"` did not.
+  const client = new pg.Client({ connectionString: databaseUrl, ssl: true });
   const db = drizzle(client);
   const secrets = [databaseUrl];
 
   try {
-    await client`SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`;
-    await client`BEGIN READ ONLY`;
+    await client.connect();
+    await client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+    await client.query("BEGIN READ ONLY");
 
     const accounts = await db
       .select({
@@ -548,7 +551,7 @@ async function main(): Promise<number> {
       failed += 1;
     }
 
-    await client`ROLLBACK`;
+    await client.query("ROLLBACK");
     return failed === 0 ? 0 : 1;
   } catch (error) {
     const message =
@@ -556,7 +559,7 @@ async function main(): Promise<number> {
     console.error(redactSecrets(message, secrets));
     return 1;
   } finally {
-    await client.end({ timeout: 5 });
+    await client.end().catch(() => {});
   }
 }
 

@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import postgres from "postgres";
+import pg from "pg";
 
 /**
  * Exit 0 and print where (credential-free) when the database the test suite is about to use
@@ -27,15 +27,23 @@ config({ path: ".env.local", quiet: true });
 const url = process.env.DATABASE_URL;
 if (!url) process.exit(1);
 
-const sql = postgres(url, { max: 1, connect_timeout: 2, onnotice: () => {} });
+const client = new pg.Client({
+  connectionString: url,
+  connectionTimeoutMillis: 2000,
+  query_timeout: 2000,
+});
+// A server that drops the connection after it was established is an `error` event, and an
+// event with no listener is an uncaught exception rather than "no".
+client.on("error", () => {});
 let reachable = false;
 try {
-  await sql`select 1`;
+  await client.connect();
+  await client.query("select 1");
   reachable = true;
 } catch {
   // Not reachable, or not usable with these credentials: the caller starts the container.
 } finally {
-  await sql.end({ timeout: 1 });
+  await client.end().catch(() => {});
 }
 if (!reachable) process.exit(1);
 

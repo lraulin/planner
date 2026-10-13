@@ -8,7 +8,7 @@ function drizzleWrapped(code: string): Error {
     new Error("duplicate key value violates unique constraint"),
     {
       code,
-      name: "PostgresError",
+      name: "error",
     },
   );
   return Object.assign(

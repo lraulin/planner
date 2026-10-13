@@ -57,7 +57,7 @@ export async function loadNodeChain(
     ORDER BY dist DESC
   `);
 
-  const rows = result as unknown as Record<string, unknown>[];
+  const { rows } = result;
   if (rows.length === 0) return null;
 
   return rows.map((r) => ({

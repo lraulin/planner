@@ -1,5 +1,7 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { attachDatabasePool } from "@vercel/functions";
+import { drizzle } from "drizzle-orm/node-postgres";
+import type pg from "pg";
+import { createPool } from "./pool";
 import * as schema from "./schema";
 
 function connectionString(): string {
@@ -11,16 +13,19 @@ function connectionString(): string {
 }
 
 // Next.js discards module state on hot reload, which would leak a connection pool per
-// edit. Cache the client on globalThis so development reuses one pool.
-const globalForDb = globalThis as unknown as {
-  pgClient?: ReturnType<typeof postgres>;
-};
+// edit. Cache the pool on globalThis so development reuses one.
+const globalForDb = globalThis as unknown as { pgPool?: pg.Pool };
 
-const client = globalForDb.pgClient ?? postgres(connectionString());
+function sharedPool(): pg.Pool {
+  if (globalForDb.pgPool) return globalForDb.pgPool;
 
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.pgClient = client;
+  const pool = createPool({ connectionString: connectionString() });
+  // Keeps a Vercel function instance alive until the pool's idle clients have closed, so
+  // none are left open across a suspension. Returns immediately anywhere else.
+  attachDatabasePool(pool);
+  if (process.env.NODE_ENV !== "production") globalForDb.pgPool = pool;
+  return pool;
 }
 
-export const db = drizzle(client, { schema });
+export const db = drizzle(sharedPool(), { schema });
 export { schema };

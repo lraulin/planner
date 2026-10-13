@@ -47,8 +47,8 @@ afterAll(async () => {
       const archive = await tx.execute(
         sql`SELECT fields FROM report_retirement_archive WHERE user_id=${owner.id}`,
       );
-      expect(archive).toHaveLength(2);
-      expect(archive.map((row) => row.fields)).toContainEqual({
+      expect(archive.rows).toHaveLength(2);
+      expect(archive.rows.map((row) => row.fields)).toContainEqual({
         excludeFromBaseline: true,
         eventLabel: "House purchase",
         notes: "Keep receipt",
@@ -56,21 +56,25 @@ afterAll(async () => {
       const notes = await tx.execute(
         sql`SELECT notes FROM report_retirement_fixture WHERE user_id=${owner.id}`,
       );
-      expect(notes.map((row) => row.notes)).toEqual(
+      expect(notes.rows.map((row) => row.notes)).toEqual(
         expect.arrayContaining(["Keep receipt\nEvent: House purchase", ""]),
       );
       expect(
-        await tx.execute(
-          sql`SELECT fields FROM report_retirement_archive WHERE user_id=${other.id}`,
-        ),
+        (
+          await tx.execute(
+            sql`SELECT fields FROM report_retirement_archive WHERE user_id=${other.id}`,
+          )
+        ).rows,
       ).toHaveLength(1);
       await tx.execute(
         sql`DELETE FROM report_retirement_fixture WHERE user_id=${owner.id}`,
       );
       expect(
-        await tx.execute(
-          sql`SELECT fields FROM report_retirement_archive WHERE user_id=${owner.id}`,
-        ),
+        (
+          await tx.execute(
+            sql`SELECT fields FROM report_retirement_archive WHERE user_id=${owner.id}`,
+          )
+        ).rows,
       ).toHaveLength(2);
       await tx.execute(sql`DROP TABLE report_retirement_archive`);
     });
