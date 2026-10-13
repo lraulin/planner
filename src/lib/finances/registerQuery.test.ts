@@ -8,6 +8,7 @@ import {
   parseRegisterQuery,
   prepareRegister,
   REGISTER_BLOCK_SIZE,
+  registerFacets,
   registerQueryKey,
   type RegisterQuery,
   type RegisterQueryContext,
@@ -243,7 +244,15 @@ describe("prepareRegister", () => {
       EMPTY_CTX,
     );
     expect(prepared.index.nodeIds).toEqual(["a"]);
-    expect(prepared.index.facets.payee.sort()).toEqual(["Geico", "Walmart"]);
+    // The filter keeps one row; the list for the column still offers both, so ticking a value
+    // does not shrink the list it was ticked from.
+    expect(
+      registerFacets(
+        ledger,
+        query({ groupBy: [], filters: { payee: optionsFilter(["value:Walmart"]) } }),
+        EMPTY_CTX,
+      ).payee.sort(),
+    ).toEqual(["Geico", "Walmart"]);
   });
 
   it("keeps equal date rows in input order under a secondary account sort", () => {
@@ -383,10 +392,9 @@ describe("prepareRegister", () => {
       unpaired: false,
       "historical-spend": true,
     });
-    expect(prepared.index.facets.category.sort()).toEqual([
-      "Not budgeted",
-      "Uncategorized",
-    ]);
+    expect(registerFacets(ledger, query({ groupBy: [] }), ctx).category.sort()).toEqual(
+      ["Not budgeted", "Uncategorized"],
+    );
 
     const notBudgeted = prepareRegister(
       ledger,

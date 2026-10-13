@@ -37,6 +37,7 @@ export function ColumnHeaderRow({
   filters,
   onFilterChange,
   distinctValues,
+  onDistinctValuesNeeded,
   columnValues,
   enableFilters = false,
   onResize,
@@ -61,6 +62,11 @@ export function ColumnHeaderRow({
   onFilterChange?: (columnId: string, filter: ColumnFilter) => void;
   /** Distinct filter values per column id, from the unfiltered row set. */
   distinctValues?: Record<string, string[]>;
+  /**
+   * Called when a column menu opens, for a host that fetches `distinctValues` on demand.
+   * The menu is what lists them, so this is the first moment they are wanted.
+   */
+  onDistinctValuesNeeded?: () => void;
   /** The same values with per-value row counts, for the set filter's list. */
   columnValues?: Record<string, ColumnValues>;
   enableFilters?: boolean;
@@ -79,7 +85,11 @@ export function ColumnHeaderRow({
 }) {
   // One at a time: a second open menu beside the first is two popovers claiming to describe
   // the column under the cursor.
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuIdState] = useState<string | null>(null);
+  const setOpenMenuId = (id: string | null) => {
+    if (id !== null) onDistinctValuesNeeded?.();
+    setOpenMenuIdState(id);
+  };
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   /** Slot the drop would land in (0…columns.length), measured against the current order. */

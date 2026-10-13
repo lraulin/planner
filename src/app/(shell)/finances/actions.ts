@@ -132,6 +132,7 @@ import {
   listStatementPeriodRows,
   loadRegisterBlock,
   loadRegisterExportRows,
+  loadRegisterFacets,
   loadRegisterPrepared,
   loadTrackAsBillDraft,
 } from "@/lib/finances/queries";
@@ -254,6 +255,18 @@ export async function loadRegisterIndexAction(
 ): Promise<QueryResult<RegisterPrepared>> {
   return runQuery(async (userId) =>
     loadRegisterPrepared(userId, query, await registerContext(userId, query)),
+  );
+}
+
+/**
+ * The distinct values for the Register's filter lists. A read, run the first time a column
+ * menu or filter dialog opens for a view; see `loadRegisterFacets`.
+ */
+export async function loadRegisterFacetsAction(
+  query: unknown,
+): Promise<QueryResult<Record<string, string[]>>> {
+  return runQuery(async (userId) =>
+    loadRegisterFacets(userId, query, await registerContext(userId, query)),
   );
 }
 

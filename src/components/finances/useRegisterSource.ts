@@ -5,6 +5,7 @@ import {
   listSplitChildrenAction,
   loadRegisterBlockAction,
   loadRegisterExportAction,
+  loadRegisterFacetsAction,
   loadRegisterIndexAction,
 } from "@/app/(shell)/finances/actions";
 import type { TransactionListRow } from "@/lib/finances/types";
@@ -18,6 +19,23 @@ import {
 } from "@/lib/finances/registerQuery";
 import type { GridRow } from "@/lib/tree/slice";
 import type { NodeGridRow } from "@/components/grid/columns";
+
+/** Stable identity while the lists have not arrived, so nothing downstream re-renders. */
+const NO_FACETS: Record<string, string[]> = {};
+
+/**
+ * What decides a view's filter lists: the view itself, not the filters on it. A set filter
+ * lists every value the view's rows hold, so the lists are the same for every filter, sort
+ * and search over one view.
+ */
+function viewKeyOf(query: RegisterQuery): string {
+  return JSON.stringify([
+    query.viewId,
+    query.report ?? null,
+    query.category,
+    query.month,
+  ]);
+}
 
 function placeholder(id: string): TransactionListRow {
   return {
@@ -63,9 +81,16 @@ function asRegisterRow(
 export function useRegisterSource({
   initial,
   query,
+  wantFacets = false,
 }: {
   initial: RegisterPrepared;
   query: RegisterQuery;
+  /**
+   * Fetch the filter lists now, because something on screen is drawn from them (a chip for a
+   * ticked value). Otherwise they load the first time a menu or dialog asks, through the
+   * returned `ensureFacets`.
+   */
+  wantFacets?: boolean;
 }) {
   const [seenInitial, setSeenInitial] = useState(initial);
   const [index, setIndex] = useState(initial.index);
@@ -84,6 +109,16 @@ export function useRegisterSource({
   const [expandedSplitIds, setExpandedSplitIds] = useState<Set<string>>(
     () => new Set(),
   );
+  /**
+   * The filter lists, for one view, fetched on demand (D10 of
+   * `agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/`). They are not in the
+   * index any more, so no load pays for them. Kept until `reload()` or a new server render.
+   */
+  const [facets, setFacets] = useState<{
+    viewKey: string;
+    values: Record<string, string[]>;
+  } | null>(null);
+  const facetsAsked = useRef<string | null>(null);
   const queryRef = useRef(query);
   const requestId = useRef(0);
   const inFlight = useRef<Set<string>>(new Set());
@@ -91,10 +126,33 @@ export function useRegisterSource({
     setSeenInitial(initial);
     setIndex(initial.index);
     setCache(cacheFrom(initial));
+    setFacets(null);
   }
   useEffect(() => {
     queryRef.current = query;
   });
+  useEffect(() => {
+    // A new server render means the rows may have changed under the lists.
+    facetsAsked.current = null;
+  }, [initial]);
+
+  const ensureFacets = useCallback(() => {
+    const asked = queryRef.current;
+    const viewKey = viewKeyOf(asked);
+    if (facetsAsked.current === viewKey) return;
+    facetsAsked.current = viewKey;
+    void loadRegisterFacetsAction(asked).then((result) => {
+      // `reload()` or a new server render in the meantime means this answer may predate the
+      // rows; it is dropped and the next menu asks again.
+      if (facetsAsked.current !== viewKey) return;
+      if (!result.ok) {
+        facetsAsked.current = null;
+        setError(result.error);
+        return;
+      }
+      setFacets({ viewKey, values: result.data });
+    });
+  }, []);
 
   const loadSplitChildren = useCallback(async (parentId: string) => {
     const result = await listSplitChildrenAction(parentId);
@@ -124,6 +182,10 @@ export function useRegisterSource({
   );
 
   const key = registerQueryKey(query);
+  const viewKey = viewKeyOf(query);
+  useEffect(() => {
+    if (wantFacets) ensureFacets();
+  }, [wantFacets, viewKey, ensureFacets]);
   const notBudgetedIds = useMemo(
     () => new Set(index.notBudgetedIds),
     [index.notBudgetedIds],
@@ -277,6 +339,9 @@ export function useRegisterSource({
     setError(null);
     setIndex(result.data.index);
     setCache(cacheFrom(result.data));
+    // The rows behind the lists may have changed; the next menu asks again.
+    facetsAsked.current = null;
+    setFacets(null);
   }, []);
 
   const loadExportRows = useCallback(async (): Promise<
@@ -336,7 +401,8 @@ export function useRegisterSource({
     childrenByParent,
     refreshSplitChildren: loadSplitChildren,
     counts: { shown: index.shown, total: index.total },
-    distinctValues: index.facets,
+    distinctValues: facets?.viewKey === viewKey ? facets.values : NO_FACETS,
+    ensureFacets,
     groupIds: index.groupIds,
   };
 }

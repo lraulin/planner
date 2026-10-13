@@ -84,7 +84,6 @@ export type RegisterIndex = {
   shown: number;
   total: number;
   groupIds: string[];
-  facets: Record<string, string[]>;
 };
 
 export type RegisterTransactionRow = TransactionListRow & {
@@ -227,6 +226,36 @@ function viewRows(
   return [...ledger];
 }
 
+/**
+ * Every distinct value each column holds in the view's rows, for the filter lists.
+ *
+ * Over the view's **base** rows, not the matched ones: a set filter that offered only what
+ * the current filters leave would shrink its own list as you ticked it. That is also why this
+ * cannot be read from a date window: the answer is the whole view. It left the index
+ * (`agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/` D10) because the list is
+ * needed only when a column menu or a filter dialog opens, and the browser asks for it then.
+ *
+ * Same rows, same function as the index used to carry: the view is decided by `viewId`,
+ * `report`, `category` and `month` alone, so the answer is the same for every filter, sort
+ * and search over that view.
+ */
+export function registerFacets(
+  ledger: readonly TransactionListRow[],
+  query: RegisterQuery,
+  ctx: RegisterQueryContext,
+): Record<string, string[]> {
+  const preparedLedger = annotateCategoryAssignability(ledger, ctx.offBudgetAccountIds);
+  return collectDistinctValues(
+    REGISTER_FIELDS.map((field) => ({
+      id: field.id,
+      filterValue: field.filterValue
+        ? (row: TransactionListRow) => field.filterValue!(row)
+        : undefined,
+    })),
+    viewRows(preparedLedger, query, ctx),
+  );
+}
+
 export function prepareRegister(
   ledger: readonly TransactionListRow[],
   query: RegisterQuery,
@@ -234,15 +263,6 @@ export function prepareRegister(
 ): RegisterPrepared {
   const preparedLedger = annotateCategoryAssignability(ledger, ctx.offBudgetAccountIds);
   const base = viewRows(preparedLedger, query, ctx);
-  const facets = collectDistinctValues(
-    REGISTER_FIELDS.map((field) => ({
-      id: field.id,
-      filterValue: field.filterValue
-        ? (row: TransactionListRow) => field.filterValue!(row)
-        : undefined,
-    })),
-    base,
-  );
   const matched = passingRows(base, query, registerFilterValues, FIELD_KINDS);
   const grouped = groupTransactions(matched, query.groupBy);
   const collapsed = applyGroupCollapse(grouped, new Set(query.collapsedGroups));
@@ -291,7 +311,6 @@ export function prepareRegister(
     shown: matched.length,
     total: base.length,
     groupIds,
-    facets,
   };
   return {
     index,

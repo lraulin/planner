@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useImperativeHandle,
   useMemo,
   useState,
@@ -105,6 +106,7 @@ export function GridToolbar({
   gridLabel,
   allColumns,
   distinctValues,
+  onDistinctValuesNeeded,
   groupDimensions = EMPTY_GROUP_DIMENSIONS,
   groupIds = EMPTY_GROUP_IDS,
   switches = EMPTY_SWITCHES,
@@ -125,6 +127,11 @@ export function GridToolbar({
   /** Every column the tab defines, visible or not. */
   allColumns: ColumnMeta[];
   distinctValues: Record<string, string[]>;
+  /**
+   * Called when something that lists `distinctValues` is about to open (the filter dialog),
+   * for a host that fetches them on demand. Hosts that hold the values already omit it.
+   */
+  onDistinctValuesNeeded?: () => void;
   /**
    * Dimensions this tab offers in Group by. Empty hides the control entirely — the Day and
    * Wish List grids have nothing meaningful to group by.
@@ -183,6 +190,11 @@ export function GridToolbar({
   toolbarRef?: Ref<GridToolbarHandle>;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
+  // Stable, because it sits in the dependency lists of the memoised command set below.
+  const openFilter = useCallback(() => {
+    onDistinctValuesNeeded?.();
+    setFilterOpen(true);
+  }, [onDistinctValuesNeeded]);
   const [fieldsOpen, setFieldsOpen] = useState(false);
 
   // A grid scope may outlive a dimension. Keep only dimensions this tab currently offers,
@@ -235,7 +247,7 @@ export function GridToolbar({
     if (!commandScope) {
       list.push(
         ...gridViewLayoutCommands({
-          openFilter: () => setFilterOpen(true),
+          openFilter,
           clearFilters,
           openFields: () => setFieldsOpen(true),
           reset: resetGrid,
@@ -284,6 +296,7 @@ export function GridToolbar({
     allCollapsed,
     revertView,
     commandScope,
+    openFilter,
   ]);
 
   useRegisterCommands(commands);
@@ -291,12 +304,12 @@ export function GridToolbar({
   useImperativeHandle(
     toolbarRef,
     () => ({
-      openFilter: () => setFilterOpen(true),
+      openFilter,
       openFields: () => setFieldsOpen(true),
       reset: resetGrid,
       clearFilters,
     }),
-    [resetGrid, clearFilters],
+    [openFilter, resetGrid, clearFilters],
   );
 
   return (
@@ -327,7 +340,7 @@ export function GridToolbar({
         <GridSearchBox value={grid.search} onChange={grid.setSearch} />
 
         <ToolbarButton
-          onClick={() => setFilterOpen(true)}
+          onClick={openFilter}
           title="Filter on any column, including ones this view is not showing"
         >
           Filter{grid.advancedFilter ? " ●" : "…"}

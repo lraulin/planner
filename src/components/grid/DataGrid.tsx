@@ -216,6 +216,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   advancedFilter = null,
   search = "",
   distinctValues: providedDistinctValues,
+  onDistinctValuesNeeded,
   onCountsChange,
   widths,
   onResizeColumn,
@@ -349,6 +350,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * derives its own.
    */
   distinctValues?: Record<string, string[]>;
+  /**
+   * Called when a column menu opens. For a host whose `distinctValues` are fetched on demand
+   * rather than derived from the rows it holds (the Register's filter lists).
+   */
+  onDistinctValuesNeeded?: () => void;
   /**
    * Reports how many node rows survive narrowing, and how many there were to begin with, so
    * the host can render "Showing 47 of 312" beside its filter chips. Group headers are not
@@ -1271,6 +1277,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                 filters={filters}
                 onFilterChange={handleFilterChange}
                 distinctValues={distinctValues}
+                onDistinctValuesNeeded={onDistinctValuesNeeded}
                 columnValues={columnValues}
                 onResize={onResizeColumn}
                 onResetWidth={onResetColumnWidth}

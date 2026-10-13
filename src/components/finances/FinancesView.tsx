@@ -62,7 +62,7 @@ import {
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
-import { optionsFilter } from "@/lib/grid/customFilter";
+import { filterActive, optionsFilter } from "@/lib/grid/customFilter";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { idsForFieldEdit } from "@/lib/grid/selection";
@@ -403,9 +403,26 @@ export function FinancesView({
       todayKey,
     ],
   );
+  // A ticked value in a set filter is drawn as a chip from the column's value list, so
+  // those lists are fetched at once when one is active. With no such filter (the default
+  // layout: Date only) they wait for the first column menu or filter dialog to open.
+  const wantFacets = useMemo(
+    () =>
+      financeColumns.some((column) => {
+        const filter = gridState.filters[column.id];
+        return (
+          column.filterKind === "enum" &&
+          filter !== undefined &&
+          filter.mode === "options" &&
+          filterActive(filter)
+        );
+      }),
+    [gridState.filters],
+  );
   const register = useRegisterSource({
     initial: initialPrepared,
     query: registerQuery,
+    wantFacets,
   });
   const {
     index,
@@ -413,6 +430,7 @@ export function FinancesView({
     queryPending,
     pendingRowIds,
     distinctValues,
+    ensureFacets,
     counts,
     groupIds,
     error: registerError,
@@ -740,6 +758,7 @@ export function FinancesView({
         gridLabel="Transactions"
         allColumns={financeColumns}
         distinctValues={distinctValues}
+        onDistinctValuesNeeded={ensureFacets}
         counts={counts}
         error={error ?? registerError}
         views={views}
@@ -790,6 +809,7 @@ export function FinancesView({
         advancedFilter={gridState.advancedFilter}
         search={gridState.search}
         distinctValues={distinctValues}
+        onDistinctValuesNeeded={ensureFacets}
         preparedCounts={counts}
         preparedDisplay
         virtualize={isClient}

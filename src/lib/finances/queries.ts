@@ -41,6 +41,7 @@ import {
   parseRegisterQuery,
   prepareRegister,
   REGISTER_BLOCK_SIZE,
+  registerFacets,
   type RegisterPrepared,
   type RegisterQueryContext,
   type RegisterRowBlock,
@@ -439,6 +440,30 @@ export async function loadRegisterPrepared(
       : undefined,
   );
   return prepareRegister(ledger, query, ctx);
+}
+
+/**
+ * The distinct values behind a Register query's filter lists. Read when the browser first
+ * opens a column menu or a filter dialog for a view, not with the index (D10).
+ *
+ * The whole ledger, on purpose: the lists are defined over the view's base rows, which no
+ * window of dates can stand in for. Same read as `loadRegisterPrepared` makes for the same
+ * view, so the two cannot disagree about which rows a view holds.
+ */
+export async function loadRegisterFacets(
+  userId: string,
+  rawQuery: unknown,
+  ctx: RegisterQueryContext,
+): Promise<Record<string, string[]>> {
+  const query = parseRegisterQuery(rawQuery);
+  const ledger = await listTransactions(
+    userId,
+    {},
+    query.viewId === "activity" || query.viewId === "report"
+      ? { rowSet: "money" }
+      : undefined,
+  );
+  return registerFacets(ledger, query, ctx);
 }
 
 export async function loadRegisterBlock(
