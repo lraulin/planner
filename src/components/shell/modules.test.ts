@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { builtPagesForModule } from "@/lib/navigation/pages";
-import { destinationLabel, documentTitle, modulePages } from "./modules";
+import {
+  BUILT_MODULES,
+  destinationLabel,
+  documentTitle,
+  moduleDefaultPageHref,
+  moduleEntryHref,
+  modulePages,
+} from "./modules";
 
 describe("modulePages", () => {
   it("returns registry order when no permutation is stored", () => {
@@ -21,6 +28,31 @@ describe("modulePages", () => {
       "wishes",
       "result-areas",
     ]);
+  });
+});
+
+describe("moduleEntryHref", () => {
+  it("points at the remembered page, so a link skips the redirect", () => {
+    expect(moduleEntryHref("plan", "goals")).toBe("/plan/goals");
+    expect(moduleEntryHref("finances", "register")).toBe("/finances/register");
+  });
+
+  it("falls back to the default page for nothing remembered or a page no longer built", () => {
+    for (const remembered of [undefined, null, "a-page-that-was-renamed"]) {
+      expect(moduleEntryHref("plan", remembered)).toBe(moduleDefaultPageHref("plan"));
+    }
+  });
+
+  it("leaves a module with no pages on its own path, which is a real page", () => {
+    expect(moduleEntryHref("find", undefined)).toBe("/find");
+    expect(moduleEntryHref("find", "anything")).toBe("/find");
+  });
+
+  it("never links to a bare path that would only redirect", () => {
+    for (const entry of BUILT_MODULES) {
+      const landing = moduleDefaultPageHref(entry.id);
+      expect(moduleEntryHref(entry.id, undefined)).toBe(landing ?? entry.href);
+    }
   });
 });
 

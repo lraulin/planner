@@ -4,6 +4,7 @@ import {
   builtPageById,
   builtPagesForModule,
   defaultPageFor,
+  entryPageFor,
   hasPageBar,
   pageForPathname,
   pageHref,
@@ -247,6 +248,28 @@ export function moduleDefaultPageHref(id: ModuleId): string | null {
   const entry = moduleById(id);
   const page = defaultPageFor(id);
   return entry && page ? pageHref(entry.href, page) : null;
+}
+
+/**
+ * Where a link to a module should point: the page its bare path would send you to.
+ *
+ * `/finances` is not a page; it redirects to the one you were last on (`moduleEntry.ts`).
+ * That redirect is right for a typed or bookmarked URL, but a link the app renders already
+ * knows the answer — the shell settings are in the first HTML — and following the bare path
+ * anyway spends a whole extra request finding it out: 100–250 ms on every module switch,
+ * measured in production. Both go through `entryPageFor`, so a link and the redirect cannot
+ * land in different places.
+ *
+ * A module with no pages keeps its own path, which is a real page.
+ */
+export function moduleEntryHref(
+  id: ModuleId,
+  rememberedPageId: string | null | undefined,
+): string {
+  const entry = moduleById(id);
+  if (!entry) throw new Error(`Unknown module "${id}"`);
+  const page = entryPageFor(id, rememberedPageId ?? null);
+  return page ? pageHref(entry.href, page) : entry.href;
 }
 
 /** Every declared page, reserved included. For settings and diagnostics, not for rendering. */

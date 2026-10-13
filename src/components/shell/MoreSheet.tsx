@@ -5,8 +5,14 @@ import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { MoreIcon } from "./navIcons";
-import { BUILT_MODULES, primaryDestinations, type ModuleId } from "./modules";
+import {
+  BUILT_MODULES,
+  moduleEntryHref,
+  primaryDestinations,
+  type ModuleId,
+} from "./modules";
 import { NavLink } from "./NavLink";
+import { useShellSettings } from "./useShellSettings";
 
 /**
  * The rest of the app, one tap below the bottom nav.
@@ -28,6 +34,7 @@ export function MoreSheet({ active }: { active: ModuleId | null }) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const pathname = usePathname();
+  const { lastPage } = useShellSettings().value;
 
   /*
    * "More" is where you are whenever the bar itself is not showing it — and that is now a
@@ -69,7 +76,7 @@ export function MoreSheet({ active }: { active: ModuleId | null }) {
             {BUILT_MODULES.map((entry) => (
               <NavLink
                 key={entry.id}
-                href={entry.href}
+                href={moduleEntryHref(entry.id, lastPage[entry.id])}
                 onClick={() => setOpen(false)}
                 aria-current={entry.id === active ? "page" : undefined}
                 className={`flex min-h-tap items-center rounded px-3 text-[0.9375rem] ${

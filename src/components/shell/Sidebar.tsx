@@ -9,7 +9,7 @@ import { parseShellSettings, serializeShellSettings } from "@/lib/settings/shell
 import { SHELL_SCOPE } from "@/lib/settings/scopes";
 import { ChevronIcon, OrganizeIcon, SettingsIcon } from "./navIcons";
 import { openCommandPalette } from "./commandEvent";
-import { BUILT_MODULES, type ModuleId } from "./modules";
+import { BUILT_MODULES, moduleEntryHref, type ModuleId } from "./modules";
 import { NavLink } from "./NavLink";
 
 const PALETTE_CHORD = formatBindings(OPEN_PALETTE) ?? "⌘K";
@@ -110,7 +110,7 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
           return (
             <NavLink
               key={entry.id}
-              href={entry.href}
+              href={moduleEntryHref(entry.id, value.lastPage[entry.id])}
               aria-current={isActive ? "page" : undefined}
               title={collapsed ? entry.label : undefined}
               className={`flex items-center gap-2 rounded px-2 py-1 text-[0.8125rem] leading-6 ${

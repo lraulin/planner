@@ -7,7 +7,7 @@ import { signOut } from "@/lib/auth/client";
 import { OPEN_FIND, QUICK_CAPTURE } from "@/lib/commands/chords";
 import { FILE_COMMAND_PLACEMENTS, FILE_MENU } from "@/lib/commands/fileCommands";
 import type { Command } from "@/lib/commands/registry";
-import { BUILT_MODULES, modulePages } from "./modules";
+import { BUILT_MODULES, moduleEntryHref, modulePages } from "./modules";
 import { useShellSettings } from "./useShellSettings";
 
 /**
@@ -29,7 +29,7 @@ import { useShellSettings } from "./useShellSettings";
  */
 export function useGlobalCommands(): readonly Command[] {
   const router = useRouter();
-  const pageOrder = useShellSettings().value.pageOrder;
+  const { pageOrder, lastPage } = useShellSettings().value;
 
   return useMemo(() => {
     const go: Command[] = BUILT_MODULES.flatMap((entry) => {
@@ -45,7 +45,7 @@ export function useGlobalCommands(): readonly Command[] {
         // it prints the same one. Find is reached from anywhere mid-task, which is what
         // earns it a key; the other destinations are a click in the sidebar.
         bindings: entry.id === "find" ? OPEN_FIND : undefined,
-        run: () => router.push(entry.href),
+        run: () => router.push(moduleEntryHref(entry.id, lastPage[entry.id])),
       };
 
       // A module with one page has no bar, and a second entry naming it would be the same
@@ -96,7 +96,7 @@ export function useGlobalCommands(): readonly Command[] {
      */
 
     return [...go, ...app];
-  }, [router, pageOrder]);
+  }, [router, pageOrder, lastPage]);
 }
 
 /** The five File-menu verbs, identity-stable with `useGlobalCommands`. */
