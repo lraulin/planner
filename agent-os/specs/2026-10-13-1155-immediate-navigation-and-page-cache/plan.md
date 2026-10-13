@@ -226,6 +226,35 @@ what carries over is the shape — one request per click, active look = arrival.
 Prefetch requests per fresh view: **not measurable on a dev server** (Next prefetches only in
 production). Production count from 2026-10-12 shaping: ~35 per view, 60–90 ms each.
 
+### Task 6 — cache mechanism proof (production build)
+
+Next 16.3.8, `next build` + `next start`, **a scratch two-page app, not the planner** (the planner
+cannot be signed in to on a production build here; change 1). Pages `a` and `b` are
+`force-dynamic` with `export const unstable_dynamicStaleTime = 60` and **no** `staleTimes` flag;
+`c` is `force-dynamic` with no export. The layout holds a Link per page and three buttons: a server
+action that calls `revalidatePath("/", "layout")`, a server action that revalidates nothing (what
+`revalidate: []` produces), and `router.refresh()`. RSC page requests counted over the DevTools
+protocol, prefetches excluded; the render id is a random string drawn in the page.
+
+| Step                                                    | Page requests   | Result                         |
+| ------------------------------------------------------- | --------------- | ------------------------------ |
+| a → b (first visit)                                     | 1               | fetched                        |
+| b → a, inside 60 s                                      | **0**           | same render id: from the cache |
+| a → c, then c → a, then a → c again (`c` has no export) | 1, 0, **1**     | `c` is refetched every time    |
+| c → b, inside 60 s                                      | **0**           | same render id                 |
+| silent action, then b → a, a → b                        | 0, **0**, **0** | nothing emptied                |
+| revalidating action (on b), then b → a                  | **1**           | new render id: cache emptied   |
+| router.refresh() (on a), then a → b                     | **1**           | new render id: cache emptied   |
+| a → b, 62 s after the last fetch of b                   | **1**           | window lapsed                  |
+
+All four mechanism claims hold with the per-page export alone, so decision 15's fallback
+(`staleTimes.dynamic` plus explicit zeros) is **not** taken. Two things the proof also showed, both
+on the safe side: the page re-rendered by a revalidating action is _not_ kept as a fresh entry
+(leaving it and coming back fetches again), while the page re-rendered by `router.refresh()` is (it
+revisits with no request) — which is why the arrival rule in Task 8 does not rely on either. The
+server sends the stale time on dynamic renders in `next dev` too (`app-render.js`), so the planner's
+own rows can be exercised on a dev server (Task 9).
+
 ### After (Task 9)
 
 _(filled in Task 9)_
