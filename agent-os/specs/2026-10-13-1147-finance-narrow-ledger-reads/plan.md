@@ -3,8 +3,9 @@
 **Status: active**
 Spec folder: `agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/`
 
-> Shaped 2026-10-13; nothing here is built yet. Implementation starts in a fresh session at
-> Task 2.
+> Shaped 2026-10-13. Task 1 (this folder) and Task 2 (ledger refreshed, baseline captured)
+> are done; implementation continues at Task 3. Progress is in **Changes from original plan**
+> and **Verification**.
 
 ## Spec relationships
 
@@ -187,7 +188,8 @@ search tools (whole-history questions). Budget (done 2026-10-12).
 
 ## Acceptance criteria
 
-- [ ] Local ledger refreshed from a production backup; row counts recorded here.
+- [x] Local ledger refreshed from a production backup; row counts recorded here (Verification,
+      "Baseline").
 - [ ] `/finances/accounts` issues no query selecting transaction rows beyond `listAccounts`
       and the pending candidates; `loadDashboard` no longer exists.
 - [ ] `/finances/bills` reads only rows filed to bill envelopes; the review list loads on
@@ -209,7 +211,91 @@ search tools (whole-history questions). Budget (done 2026-10-12).
 
 ## Verification
 
-Filled as each task lands (D13). One row per loader.
+### Baseline (Task 2, base commit `6d5e23c4`, 2026-10-13)
+
+**The ledger.** Production archive `planner-production_2026-10-12T18-44-29Z.dump.gpg`
+(3,330,499 encrypted bytes, sha256 `4660cec8…c105ee`, verified against its sidecar) restored
+into a separate local database, one user. The archive is PostgreSQL 18.6; the local server is
+17.10 and took it with `--exit-on-error`. 104 of 104 migrations were already applied.
+
+| Count                                           | Rows  |
+| ----------------------------------------------- | ----- |
+| `finance_transactions` (money rows = bank rows) | 7,459 |
+| split children / split parents                  | 0 / 0 |
+| rows filed to a `kind = 'bill'` envelope        | 905   |
+| bill envelopes                                  | 35    |
+| spend charges (D4's predicate)                  | 6,232 |
+| transfer legs (`transfer_group_id` set)         | 702   |
+| pending                                         | 0     |
+| this month (2026-10-01 to 10-11)                | 34    |
+| trailing twelve months                          | 1,323 |
+| calendar years / users                          | 7 / 1 |
+
+This ledger ends 2026-10-11, not 2026-09-05, and it is the first one on which D3 compares
+something: 905 rows reach a bill envelope, against **one** in the shaping ledger. It holds no
+split parent, so D6's equality is trivially true here and the split cases are the
+integration test's job.
+
+**Loader times, local, median of 11 after two warm-ups** (`timing.mts`, taken under the
+shared timing lock, load average 23 on 12 CPUs, so read the ratios, not the milliseconds):
+
+| Loader                                       | Median ms |
+| -------------------------------------------- | --------- |
+| `loadDashboard` (Accounts page, today)       | 70.3      |
+| Accounts page, the narrow reads (D2)         | 4.5       |
+| `loadBillForecast`                           | 55.8      |
+| `loadReviewCandidates`                       | 64.8      |
+| `loadInsightsRows`                           | 53.3      |
+| `listTransactions` (whole bank ledger)       | 52.3      |
+| Register, This Month, `loadRegisterPrepared` | 67.3      |
+| Register, Date = All, `loadRegisterPrepared` | 70.2      |
+| `loadPaydays` / `loadBudget` (untouched)     | 6.8 / 8.8 |
+
+The Accounts "after" row was timed at the base commit by composing the reads D2 names
+(`loadAccountsWithPending` plus `listConnections`); it is what the page will do.
+
+**`perf:routes -- finances`** at the base commit (10 ms one way; longest chain / queries /
+unslowed ms): accounts 7 / 17 / 130, activity 5 / 3 / 185, bills 5 / 27 / 168, budget 9 /
+24 / 91, insights 6 / 21 / 401, orders 4 / 10 / 125, payees 5 / 8 / 114, register 5 / 15 /
+128, scenarios 9 / 17 / 111, statements 6 / 5 / 101, supplies 6 / 6 / 49.
+
+**Dumps** (`dump.mts`, a throwaway driver kept outside the repo because its output is a
+private ledger; "now" pinned to 2026-10-13T16:00Z, `today` 2026-10-13). Name, bytes, sha256
+prefix. Byte-identical across two runs at the base commit.
+
+```text
+accounts-page                    3,871  746b72dee709
+bills                           13,893  36c64d619a2a
+bill-charges (by envelope name) 54,168  b04d59bffdfe
+merchants                       16,822  50fe065549d0
+review-candidates               54,528  da547f9e4c63
+paydays                         10,292  a47d271f4ae1
+bill-forecast                   89,809  e911bcb9ae3a
+insights-rows                4,735,382  23c7248d52b2
+carrying-cost                    1,247  ade94f5fd3a5
+register-list (bank rows)    5,219,150  c4289bd4def0
+register-by-ids (first 100)    69,315  753949e7d794
+register-window (Oct 2026)      23,550  3c98e4de22d5
+register-facets (every query)  200,732  c7db31594f1f   (activity 941, report 23,653,
+                                                       uncategorized 157)
+register-this-month             64,607  f8d79b96183c
+register-last-month             97,453  8ec8f76c3c3e
+register-last-30-days           98,290  962eaec5453e
+register-this-year             209,056  cf14d41d8d68
+register-custom-range          131,086  8b20ee99b378
+register-this-month-search      37,639  81a2b4ae53ec
+register-this-month-amount-asc  64,609  200e35d622aa
+register-date-all              856,797  d26db9636756
+register-uncategorized          36,500  6ac991dda483
+register-activity               46,670  1a7f35f96067
+register-report                190,580  2c4a62b63959
+```
+
+(The full list also carries last-7-days, this-year-search, this-year-uncategorized-flow,
+uncategorized-this-month, unknown-today and collapsed-years; their hashes are in the commit
+body of the task that first compares them.)
+
+Per-task results, one row per loader (filled as each task lands, D13):
 
 | Loader | Rows before → after | Dump bytes | sha256 before = after | Local ms before → after |
 | ------ | ------------------- | ---------- | --------------------- | ----------------------- |
@@ -225,9 +311,10 @@ Production RSC response, signed-in browser:
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                                                                 | Why                                                                                                                                                                                                                   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Task 2 restored the backup into a **separate database** (`planner_narrow_reads` in the same container), not over the dev `planner` database. The archive was decrypted by streaming `gpg` into `pg_restore` with the project's own `decryptToCommand`; no plaintext dump touched disk. | Two other implementers were using the dev database at the same time, and a restore over it would have wiped their tests' fixtures. D13's equality proof only needs a ledger of the right shape, not the dev database. |
+| 2   | The refreshed ledger is not the shaping ledger: 7,459 rows ending 2026-10-11, **905 rows filed to 35 bill envelopes** (shaping saw one), and **no split parent**.                                                                                                                      | The forecast comparison (D3) now compares something. Split-child totals (D6) and any split-child-on-a-bill case cannot be proven from this ledger, so the integration tests seed them, as D13.2 already required.     |
 
 ## Task 1: Save spec documentation
 
