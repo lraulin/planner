@@ -134,12 +134,79 @@ Both arrive wrapped in a `DrizzleQueryError` (`name: "Error"`, no `code`, messag
 - `Promise.all` over a transaction's client prints `DeprecationWarning: Calling client.query()
 when the client is already executing a query is deprecated and will be removed in pg@9.0`.
 
+### Baseline: round trips per route on postgres.js (Task 2)
+
+`npm run perf:routes` against `npm run dev:latency`, master `5f665924` (spec commits on top
+change no code), 2026-10-12, 10 ms each way, dev login bypass as the seeded `test@example.com`,
+dev database at 142 outline nodes. 44 static routes, run twice back to back with the server
+warm. `Queries` is the statement count per load and is identical in both runs. `Run 1` and
+`Run 2` are the longest chain of sequential round trips; on postgres.js every query counts
+twice, so these are roughly double the number of waits.
+
+| Route                                                                                       | Queries | Run 1 | Run 2 |
+| ------------------------------------------------------------------------------------------- | ------- | ----- | ----- |
+| `/chooser`                                                                                  | 4       | 4     | 4     |
+| `/finances/accounts`                                                                        | 17      | 7     | 7     |
+| `/finances/activity`                                                                        | 3       | 5     | 4     |
+| `/finances/bills`                                                                           | 27      | 7     | 8     |
+| `/finances/budget`                                                                          | 24      | 7     | 7     |
+| `/finances/insights`                                                                        | 21      | 7     | 8     |
+| `/finances/orders`                                                                          | 10      | 4     | 5     |
+| `/finances/payees`                                                                          | 8       | 5     | 4     |
+| `/finances/register`                                                                        | 15      | 4     | 5     |
+| `/finances/scenarios`                                                                       | 17      | 9     | 10    |
+| `/finances/statements`                                                                      | 5       | 7     | 6     |
+| `/finances/supplies`                                                                        | 6       | 5     | 5     |
+| `/find`                                                                                     | 2       | 5     | 5     |
+| `/fitness/exercises`                                                                        | 9       | 5     | 5     |
+| `/fitness/exercises/new`                                                                    | 9       | 5     | 5     |
+| `/fitness/log`                                                                              | 9       | 5     | 5     |
+| `/fitness/sessions`                                                                         | 9       | 5     | 5     |
+| `/library/contacts`                                                                         | 6       | 5     | 5     |
+| `/library/houses`                                                                           | 3       | 5     | 5     |
+| `/library/jobs`                                                                             | 3       | 5     | 5     |
+| `/library/residences`                                                                       | 3       | 5     | 5     |
+| `/library/resources`                                                                        | 7       | 5     | 5     |
+| `/library/timeline`                                                                         | 5       | 5     | 5     |
+| `/login`                                                                                    | 2       | 5     | 5     |
+| `/metrics`                                                                                  | 5       | 5     | 5     |
+| `/notes/grid`                                                                               | 6       | 8     | 7     |
+| `/notes/journal`                                                                            | 3       | 5     | 5     |
+| `/oauth/authorize`                                                                          | 2       | 5     | 6     |
+| `/organize`                                                                                 | 3       | 5     | 5     |
+| `/plan/goals`                                                                               | 3       | 5     | 6     |
+| `/plan/outline`                                                                             | 3       | 5     | 5     |
+| `/plan/overview`                                                                            | 4       | 5     | 5     |
+| `/plan/projects`                                                                            | 3       | 5     | 5     |
+| `/plan/result-areas`                                                                        | 3       | 5     | 6     |
+| `/plan/tasks`                                                                               | 5       | 5     | 5     |
+| `/plan/wishes`                                                                              | 5       | 5     | 5     |
+| `/schedule/agenda`                                                                          | 7       | 7     | 7     |
+| `/schedule/calendar`                                                                        | 7       | 7     | 7     |
+| `/schedule/day`                                                                             | 9       | 7     | 7     |
+| `/schedule/plan`                                                                            | 15      | 7     | 7     |
+| `/schedule/time-charts`                                                                     | 3       | 5     | 5     |
+| `/schedule/week-plan`                                                                       | 4       | 5     | 5     |
+| `/settings`                                                                                 | 13      | 8     | 7     |
+| `/signup`                                                                                   | 2       | 5     | 5     |
+| Totals: 329 statements, **329 of 329 made a describe trip before binding**. Longest chains: |
+| `/finances/scenarios` 9–10, `/finances/bills` 7–8, `/finances/insights` 7–8, `/notes/grid`  |
+| 7–8, `/settings` 7–8. The floor is 4 (`/chooser` in both runs; `/finances/activity`,        |
+| `/finances/orders`, `/finances/payees`, `/finances/register` in one run or the other) and   |
+| most routes sit at 5.                                                                       |
+
+**The "in sequence" figure is noisy by one trip.** 11 of 44 routes moved by exactly 1
+between two identical runs, none by more. It is a difference of two best-of-three timings
+divided by 20 ms and rounded. Compare the statement count exactly and the chain length with a
+tolerance of 1. The "350 of 353" reported at `56e43be3` came out at 329 of 329 here, on
+identical page code (only `src/lib/agent/financeTools*` changed in between). Not
+investigated; the dev database's contents are the likely difference, which is a reason to
+re-measure Task 7 against this same database state rather than against the earlier figure.
+
 ### Not measured
 
 - Anything against Neon: TLS with `sslmode=require`, SCRAM through the pooler, the pooled
   endpoint's transaction mode, and the reconnect cost. Task 8 covers these.
-- Per-route round trips on the app itself. Task 2 records the baseline with
-  `npm run perf:routes`; the "about 7" figure is from the brief and from `read-latency.md`.
 
 ## Context
 

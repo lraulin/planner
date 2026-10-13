@@ -138,9 +138,10 @@ NULL inside `text[]` is `null` rather than postgres.js's `"NULL"`.
 
 - [ ] `postgres` is not in `package.json` and nothing imports it or `drizzle-orm/postgres-js`.
 - [ ] `npm run perf:routes` reports no describe trips on any route.
-- [ ] Every route's longest chain is no higher than its recorded baseline, and the floor falls
-      (about 4 under the dev bypass, about 7 signed in, today). Before and after numbers are in
-      **As built**.
+- [ ] Every route's statement count equals its recorded baseline exactly, and its longest chain
+      is no higher than the larger of its two baseline runs (identical runs differ by 1). The
+      floor falls (4–5 under the dev bypass, about 7 signed in, today). Before and after numbers
+      are in **As built**.
 - [ ] `npm test` passes with the integration suite **not skipped**, and with pg's
       queued-query warning treated as a failure.
 - [ ] `npm run smoke` passes against a dev server on the new driver.
@@ -162,9 +163,9 @@ NULL inside `text[]` is `null` rather than postgres.js's `"NULL"`.
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                              | Why                                                                                                                                                                     |
+| --- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Acceptance compares statement counts exactly and chain length with a tolerance of 1 | Task 2 ran the measurement twice: statement counts were identical, chain lengths differed by 1 on 11 of 44 routes. "No higher than baseline" would fail on noise alone. |
 
 ## Task 1: Save spec documentation
 
@@ -176,6 +177,9 @@ Create `agent-os/specs/2026-10-12-2001-node-postgres-driver/` with `plan.md`, `s
 The proxy and the measurement already exist on master (`scripts/pg-latency-proxy.mjs`,
 `scripts/route-round-trips.mjs`). Run `npm run perf:routes` against `npm run dev:latency` on
 postgres.js and keep the per-route output: longest chain, statements, describes.
+
+Done 2026-10-12: two runs, recorded in `shape.md` under **Baseline**. The script prints
+describes only as a total across routes, not per route.
 
 ## Task 3: Make redaction structural (D4)
 
