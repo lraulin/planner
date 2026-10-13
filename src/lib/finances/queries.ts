@@ -1,4 +1,16 @@
-import { and, asc, desc, eq, gt, gte, inArray, lte, max, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  lte,
+  max,
+  sql,
+} from "drizzle-orm";
 import { db } from "@/db";
 import { oncePerRequest } from "@/lib/db/requestMemo";
 import {
@@ -61,40 +73,90 @@ function scopeConditions(userId: string, filter: TransactionFilter) {
   return conditions;
 }
 
-const TRANSACTION_LIST_COLUMNS = {
-  id: financeTransactions.id,
-  accountId: financeTransactions.accountId,
-  accountName: financeAccounts.name,
-  accountKind: financeAccounts.kind,
-  transactionDate: financeTransactions.transactionDate,
-  postedDate: financeTransactions.postedDate,
-  pending: financeTransactions.pending,
-  unlistedAt: financeTransactions.unlistedAt,
-  description: financeTransactions.description,
-  amount: financeTransactions.amount,
-  sourceCategory: financeTransactions.sourceCategory,
-  externalSource: financeTransactions.externalSource,
-  derivedFlow: financeTransactions.derivedFlow,
-  transferGroupId: financeTransactions.transferGroupId,
-  flowOverride: financeTransactions.flowOverride,
-  notes: financeTransactions.notes,
-  balanceAfter: financeTransactions.balanceAfter,
-  budgetCategoryId: financeTransactions.budgetCategoryId,
-  budgetCategoryName: financeBudgetCategories.name,
-  payeeId: financeTransactions.payeeId,
-  payeeName: financePayees.name,
-  parentId: financeTransactions.parentId,
-  // Correlated rather than a join: the register reads parents only, splits are rare, and a
-  // join would have to be grouped away again on every one of these columns.
-  splitChildCount: sql<number>`(
-    select count(*) from ${financeTransactions} as child
-     where child.parent_id = ${financeTransactions.id}
-  )::int`,
-  splitChildTotal: sql<string>`(
-    select coalesce(sum(child.amount), 0) from ${financeTransactions} as child
-     where child.parent_id = ${financeTransactions.id}
-  )`,
-} as const;
+/**
+ * What each split parent's children add up to, one row per parent, read once.
+ *
+ * A join to this aggregate rather than two correlated subqueries per row: the count and the
+ * total are the same two facts, and a correlated subquery runs once per listed row, which on
+ * a whole-ledger read was two thirds of the database time
+ * (`agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/` D6). Scoped by user on its
+ * own side of the join. A row that is not a parent has no entry here, and the columns below
+ * turn that into zero.
+ */
+function splitChildTotals(userId: string) {
+  return db
+    .select({
+      parentId: financeTransactions.parentId,
+      childCount: sql<number>`count(*)::int`.as("child_count"),
+      childTotal: sql<string>`sum(${financeTransactions.amount})`.as("child_total"),
+    })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        isNotNull(financeTransactions.parentId),
+      ),
+    )
+    .groupBy(financeTransactions.parentId)
+    .as("split_totals");
+}
+
+/**
+ * The one definition of a register row's columns and joins, for every read that returns
+ * `TransactionListRow`s: the ledger list, a block by ids, one transaction, a split's
+ * children. They differ only in their `where` and `orderBy`, so those are what the caller
+ * adds; the columns and the split-child totals cannot drift apart between them.
+ */
+function transactionListQuery(userId: string) {
+  const split = splitChildTotals(userId);
+  return (
+    db
+      .select({
+        id: financeTransactions.id,
+        accountId: financeTransactions.accountId,
+        accountName: financeAccounts.name,
+        accountKind: financeAccounts.kind,
+        transactionDate: financeTransactions.transactionDate,
+        postedDate: financeTransactions.postedDate,
+        pending: financeTransactions.pending,
+        unlistedAt: financeTransactions.unlistedAt,
+        description: financeTransactions.description,
+        amount: financeTransactions.amount,
+        sourceCategory: financeTransactions.sourceCategory,
+        externalSource: financeTransactions.externalSource,
+        derivedFlow: financeTransactions.derivedFlow,
+        transferGroupId: financeTransactions.transferGroupId,
+        flowOverride: financeTransactions.flowOverride,
+        notes: financeTransactions.notes,
+        balanceAfter: financeTransactions.balanceAfter,
+        budgetCategoryId: financeTransactions.budgetCategoryId,
+        budgetCategoryName: financeBudgetCategories.name,
+        payeeId: financeTransactions.payeeId,
+        payeeName: financePayees.name,
+        parentId: financeTransactions.parentId,
+        splitChildCount: sql<number>`coalesce(${split.childCount}, 0)::int`,
+        splitChildTotal: sql<string>`coalesce(${split.childTotal}, 0)`,
+      })
+      .from(financeTransactions)
+      .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+      // Left, not inner: most rows have no envelope, and an inner join would silently empty
+      // the register for anyone who has not set a budget up.
+      .leftJoin(
+        financeBudgetCategories,
+        eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
+      )
+      // Left for the same reason: a row imported since the last pass has no payee yet.
+      .leftJoin(
+        financePayees,
+        and(
+          eq(financePayees.id, financeTransactions.payeeId),
+          eq(financePayees.userId, userId),
+        ),
+      )
+      // Left: only a split parent has an entry.
+      .leftJoin(split, eq(split.parentId, financeTransactions.id))
+  );
+}
 
 /** Accounts with their balance and row count, newest-named first for a stable picker. */
 export function listAccounts(
@@ -269,24 +331,7 @@ export async function listTransactions(
   options?: { rowSet?: "bank" | "money" },
 ): Promise<TransactionListRow[]> {
   const rowSet = options?.rowSet === "money" ? moneyRows : bankRows;
-  const rows = await db
-    .select(TRANSACTION_LIST_COLUMNS)
-    .from(financeTransactions)
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-    // Left, not inner: most rows have no envelope, and an inner join would silently empty
-    // the register for anyone who has not set a budget up.
-    .leftJoin(
-      financeBudgetCategories,
-      eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
-    )
-    // Left for the same reason: a row imported since the last pass has no payee yet.
-    .leftJoin(
-      financePayees,
-      and(
-        eq(financePayees.id, financeTransactions.payeeId),
-        eq(financePayees.userId, userId),
-      ),
-    )
+  const rows = await transactionListQuery(userId)
     // Bank rows for the ordinary register (split children are reached through their
     // parent, D8). Money leaves for the Activity view, whose contributing set is the
     // children, not the parent (`2026-08-28-1356-budget-activity-register-links` D3).
@@ -367,27 +412,12 @@ export async function listTransactionsByIds(
 ): Promise<TransactionListRow[]> {
   const wanted = [...new Set(ids)].slice(0, 100);
   if (wanted.length === 0) return [];
-  const rows = await db
-    .select(TRANSACTION_LIST_COLUMNS)
-    .from(financeTransactions)
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-    .leftJoin(
-      financeBudgetCategories,
-      eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
-    )
-    .leftJoin(
-      financePayees,
-      and(
-        eq(financePayees.id, financeTransactions.payeeId),
-        eq(financePayees.userId, userId),
-      ),
-    )
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        inArray(financeTransactions.id, wanted),
-      ),
-    );
+  const rows = await transactionListQuery(userId).where(
+    and(
+      eq(financeTransactions.userId, userId),
+      inArray(financeTransactions.id, wanted),
+    ),
+  );
   const byId = new Map(rows.map((row) => [row.id, toTransactionListRow(row)]));
   return wanted.flatMap((id) => {
     const row = byId.get(id);
@@ -468,22 +498,7 @@ export async function getTransaction(
   userId: string,
   transactionId: string,
 ): Promise<TransactionListRow | null> {
-  const [row] = await db
-    .select(TRANSACTION_LIST_COLUMNS)
-    .from(financeTransactions)
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-    .leftJoin(
-      financeBudgetCategories,
-      eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
-    )
-    // Left for the same reason: a row imported since the last pass has no payee yet.
-    .leftJoin(
-      financePayees,
-      and(
-        eq(financePayees.id, financeTransactions.payeeId),
-        eq(financePayees.userId, userId),
-      ),
-    )
+  const [row] = await transactionListQuery(userId)
     .where(
       and(
         eq(financeTransactions.id, transactionId),
@@ -506,21 +521,7 @@ export async function listSplitChildren(
   userId: string,
   parentId: string,
 ): Promise<TransactionListRow[]> {
-  const rows = await db
-    .select(TRANSACTION_LIST_COLUMNS)
-    .from(financeTransactions)
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-    .leftJoin(
-      financeBudgetCategories,
-      eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
-    )
-    .leftJoin(
-      financePayees,
-      and(
-        eq(financePayees.id, financeTransactions.payeeId),
-        eq(financePayees.userId, userId),
-      ),
-    )
+  const rows = await transactionListQuery(userId)
     .where(
       and(
         eq(financeTransactions.userId, userId),
