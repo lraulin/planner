@@ -84,6 +84,68 @@ function scopeConditions(userId: string, filter: InsightsFilter) {
   return conditions;
 }
 
+/**
+ * Which rows an analytics read counts, for a query that joins `finance_accounts`.
+ *
+ * Money: leaves. Every rollup downstream sums these by flow, and a parent beside its
+ * children would double each split in the burn rate. The other source's pending holds are
+ * left out for the reason `loadWorkingPendingSelection` gives. One definition, so a narrow
+ * read like {@link loadPaydays} cannot count a row the full read would not.
+ */
+function countedRows(userId: string, supersededPendingIds: readonly string[]) {
+  return and(
+    moneyRows,
+    eq(financeAccounts.userId, userId),
+    supersededPendingIds.length
+      ? notInArray(financeTransactions.id, [...supersededPendingIds])
+      : undefined,
+  );
+}
+
+/**
+ * The paydays, from the income rows alone.
+ *
+ * The Budget page wants only this from the ledger, and was loading every classified
+ * transaction — seven thousand rows across three joins — to throw away all but the income.
+ * `paydaysFrom` keeps a row when its effective flow is income, and the fallback in
+ * `effectiveFlow` never produces income, so "override, else derived, is income" selects
+ * exactly the rows it would have kept. Same order as the full read, because the cadence
+ * test walks the deposits in date order.
+ */
+export async function loadPaydays(userId: string): Promise<Payday[]> {
+  const { pending } = await loadAccountsWithPending(userId);
+  const rows = await db
+    .select({
+      id: financeTransactions.id,
+      transactionDate: financeTransactions.transactionDate,
+      description: financeTransactions.description,
+      amount: financeTransactions.amount,
+      derivedFlow: financeTransactions.derivedFlow,
+      flowOverride: financeTransactions.flowOverride,
+    })
+    .from(financeTransactions)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .where(
+      and(
+        countedRows(userId, pending.supersededTransactionIds),
+        eq(financeTransactions.userId, userId),
+        sql`coalesce(${financeTransactions.flowOverride}, ${financeTransactions.derivedFlow}) = 'income'`,
+      ),
+    )
+    .orderBy(asc(financeTransactions.transactionDate), asc(financeTransactions.id));
+
+  return paydaysFrom(
+    rows.map((row) => ({
+      id: row.id,
+      transactionDate: row.transactionDate,
+      description: row.description,
+      amountCents: numericStringToCents(row.amount) ?? 0,
+      derivedFlow: row.derivedFlow,
+      flowOverride: row.flowOverride,
+    })),
+  );
+}
+
 /** Every classified transaction, oldest first — the one read the whole dashboard runs on. */
 export function loadInsightsRows(
   userId: string,
@@ -146,15 +208,9 @@ async function readInsightsRows(
         eq(financeBudgetCategories.userId, userId),
       ),
     )
-    // Money: leaves. Every analytics rollup downstream sums these by flow, and a parent
-    // beside its children would double each split in the burn rate.
     .where(
       and(
-        moneyRows,
-        eq(financeAccounts.userId, userId),
-        pending.supersededTransactionIds.length
-          ? notInArray(financeTransactions.id, pending.supersededTransactionIds)
-          : undefined,
+        countedRows(userId, pending.supersededTransactionIds),
         ...scopeConditions(userId, { from, to }),
       ),
     )

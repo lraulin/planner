@@ -1,13 +1,14 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeTransactions, users } from "@/db/schema";
+import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { effectiveCategory, effectiveFlow } from "./analytics";
+import { effectiveCategory, effectiveFlow, paydaysFrom } from "./analytics";
 import {
   loadCarryingCost,
   loadDashboard,
   loadInsightsRows,
+  loadPaydays,
   unclassifiedCount,
 } from "./dashboardQueries";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
@@ -125,6 +126,63 @@ describeDb("loadInsightsRows", () => {
       to: "2026-03-31",
     });
     expect(rows).toHaveLength(2);
+  });
+});
+
+describeDb("loadPaydays", () => {
+  let userId: string;
+
+  /** Biweekly deposits on the seeded account, with the flow columns set as given. */
+  async function deposit(
+    transactionDate: string,
+    flow: {
+      derivedFlow: "income" | "refund" | "spend";
+      flowOverride?: "income" | "refund";
+    },
+  ): Promise<void> {
+    const [account] = await db
+      .select({ id: financeAccounts.id })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.userId, userId));
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId: account.id,
+      transactionDate,
+      description: "ACME CORP PAYROLL",
+      amount: "2000.00",
+      ...flow,
+    });
+  }
+
+  beforeEach(async () => {
+    userId = await makeUser();
+    await seed(userId);
+    for (const day of ["2026-01-02", "2026-01-16", "2026-01-30", "2026-02-27"]) {
+      await deposit(day, { derivedFlow: "income" });
+    }
+    // Income only because the user said so: the narrow read has to honour an override.
+    await deposit("2026-02-13", { derivedFlow: "refund", flowOverride: "income" });
+    // And not income because the user said so, whatever the classifier derived.
+    await deposit("2026-03-13", { derivedFlow: "income", flowOverride: "refund" });
+  });
+
+  it("finds the paydays the full ledger read finds, from the income rows alone", async () => {
+    const paydays = await loadPaydays(userId);
+
+    expect(paydays.map((payday) => payday.dateKey)).toEqual([
+      "2026-01-02",
+      "2026-01-16",
+      "2026-01-30",
+      "2026-02-13",
+      "2026-02-27",
+    ]);
+    expect(paydays).toEqual(paydaysFrom(await loadInsightsRows(userId)));
+  });
+
+  it("does not hand a second user another user's paydays", async () => {
+    const intruderId = await makeUser();
+    expect(await loadPaydays(intruderId)).toEqual([]);
+    expect((await loadPaydays(userId)).length).toBe(5);
   });
 });
 

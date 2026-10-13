@@ -92,6 +92,13 @@ export type FlowFields = {
   amountCents: number;
 };
 
+/** What {@link paydaysFrom} reads off a row — narrow so a read can fetch only this. */
+export type PaydayRow = FlowFields & {
+  id: string;
+  transactionDate: string;
+  description: string;
+};
+
 /** The fields that decide a category, on the same terms as {@link FlowFields}. */
 export type CategoryFields = {
   derivedCategory?: string | null;
@@ -304,7 +311,7 @@ export function monthBuckets(range: DateRange): Bucket[] {
  * and having one implementation of that rule is what stops the dashboard and the classifier
  * disagreeing about what a paycheck is.
  */
-export function paydaysFrom(rows: readonly AnalyticsRow[]): Payday[] {
+export function paydaysFrom(rows: readonly PaydayRow[]): Payday[] {
   const income = rows
     .filter((row) => effectiveFlow(row) === "income")
     .map((row) => ({

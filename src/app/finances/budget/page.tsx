@@ -7,8 +7,7 @@ import { monthKeyFromParam } from "@/lib/finances/budget/envelope";
 import { billAnchorsOf, loadBudget } from "@/lib/finances/budget/queries";
 import { lastChargeByEnvelope } from "@/lib/finances/billLastCharge";
 import type { BillAnchor } from "@/lib/finances/commitments";
-import { loadInsightsRows } from "@/lib/finances/dashboardQueries";
-import { paydaysFrom } from "@/lib/finances/analytics";
+import { loadPaydays } from "@/lib/finances/dashboardQueries";
 import { listPayees } from "@/lib/finances/payees/queries";
 
 export const dynamic = "force-dynamic";
@@ -27,10 +26,10 @@ export default async function FinancesBudgetPage({
 }) {
   const userId = await getCurrentUserId();
   const { month } = await searchParams;
-  const [data, payees, incomeRows, lastCharges] = await Promise.all([
+  const [data, payees, paydays, lastCharges] = await Promise.all([
     loadBudget(userId, monthKeyFromParam(month ?? null)),
     listPayees(userId),
-    loadInsightsRows(userId),
+    loadPaydays(userId),
     lastChargeByEnvelope(userId),
   ]);
   const anchors = data.configured
@@ -49,7 +48,7 @@ export default async function FinancesBudgetPage({
               name,
               budgetCategoryId: claim?.id ?? null,
             }))}
-            paydays={paydaysFrom(incomeRows)}
+            paydays={paydays}
           />
         ) : (
           <div className="min-h-0 flex-1 overflow-auto p-3">
