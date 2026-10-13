@@ -12,7 +12,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 import type { Command } from "@/lib/commands/registry";
 import { moduleById, modulePages } from "./modules";
 import type { ModuleId } from "./modules";
-import { useActiveModule } from "./useActiveModule";
+import { usePresentedPathname } from "./pendingNavigation";
+import { useCurrentModule } from "./useActiveModule";
 import { movePage, placePage } from "@/lib/navigation/pageOrder";
 import { pageForPathname } from "@/lib/navigation/pages";
 import { useRegisterCommands } from "./CommandProvider";
@@ -58,7 +59,9 @@ const TAB_LABEL =
  */
 export function PageBar() {
   const pathname = usePathname();
-  const active = useActiveModule();
+  // The module on screen, not the one being opened: the tabs describe the content below them.
+  const active = useCurrentModule();
+  const presented = usePresentedPathname();
   /*
    * Carried across the switch, because the query is *where you are looking* and the page is
    * *how it is drawn*: flipping Calendar → Agenda must not throw away the week you had scrolled
@@ -74,6 +77,12 @@ export function PageBar() {
   const pages = active ? modulePages(active, stored) : [];
   const current =
     active && entry ? pageForPathname(active, entry.href, pathname) : null;
+
+  // Lit tab: the destination's, so a tab click is acknowledged at once. A destination in
+  // another module or a focused flow is in none of these pages, which lights none — the tab
+  // you are leaving stops looking current. `current` stays the address bar's, for remembering.
+  const litPage =
+    active && entry ? pageForPathname(active, entry.href, presented) : null;
 
   useRememberPage(active, current?.id ?? null);
 
@@ -339,12 +348,13 @@ export function PageBar() {
       className="relative flex flex-none items-stretch gap-1 overflow-x-auto border-b border-rule bg-surface px-3 md:z-50 md:overflow-x-visible"
     >
       {pages.map(({ page, href }) => {
-        const isActive = page.id === current?.id;
+        const isActive = page.id === litPage?.id;
 
         return (
           <div key={page.id} className="relative flex items-stretch">
             <NavLink
               href={search ? `${href}?${search}` : href}
+              activeLook
               aria-current={isActive ? "page" : undefined}
               // Anchors are draggable by default in HTML, and a tab outside rearrange mode is
               // only ever a link — omitting the attribute would still start a URL drag.

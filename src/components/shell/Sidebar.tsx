@@ -113,6 +113,7 @@ export function Sidebar() {
             <NavLink
               key={entry.id}
               href={moduleEntryHref(entry.id, value.lastPage[entry.id])}
+              activeLook
               aria-current={isActive ? "page" : undefined}
               title={collapsed ? entry.label : undefined}
               className={`flex items-center gap-2 rounded px-2 py-1 text-[0.8125rem] leading-6 ${

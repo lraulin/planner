@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { isFocusedFlow } from "@/lib/navigation/pages";
 import { destinationLabel } from "./modules";
 import { OverflowMenu } from "./OverflowMenu";
+import { usePresentedPathname } from "./pendingNavigation";
 
 /**
  * The phone's "you are here".
@@ -22,12 +23,14 @@ import { OverflowMenu } from "./OverflowMenu";
  */
 export function MobileHeader() {
   const pathname = usePathname();
+  // The title acknowledges a tap like the nav does; the `⋯` menu belongs to the page on screen.
+  const presented = usePresentedPathname();
 
   return (
     <header className="pt-safe flex-none border-b border-rule bg-shell md:hidden">
       <div className="flex h-11 items-center gap-2 px-3">
         <h1 className="min-w-0 flex-1 truncate text-[0.9375rem] font-semibold tracking-tight text-ink">
-          {destinationLabel(pathname, "Planner")}
+          {destinationLabel(presented, "Planner")}
         </h1>
         {!isFocusedFlow(pathname) && <OverflowMenu label="More commands" />}
       </div>

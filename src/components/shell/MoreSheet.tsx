@@ -1,12 +1,12 @@
 "use client";
 
 import { useId, useState } from "react";
-import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { MoreIcon } from "./navIcons";
 import { BUILT_MODULES, moduleEntryHref, primaryDestinations } from "./modules";
 import { NavLink } from "./NavLink";
+import { usePresentedPathname } from "./pendingNavigation";
 import { useActiveModule } from "./useActiveModule";
 import { useShellSettings } from "./useShellSettings";
 
@@ -30,7 +30,7 @@ export function MoreSheet() {
   const active = useActiveModule();
   const [open, setOpen] = useState(false);
   const titleId = useId();
-  const pathname = usePathname();
+  const pathname = usePresentedPathname();
   const { lastPage } = useShellSettings().value;
 
   /*
@@ -74,6 +74,7 @@ export function MoreSheet() {
               <NavLink
                 key={entry.id}
                 href={moduleEntryHref(entry.id, lastPage[entry.id])}
+                activeLook
                 onClick={() => setOpen(false)}
                 aria-current={entry.id === active ? "page" : undefined}
                 className={`flex min-h-tap items-center rounded px-3 text-[0.9375rem] ${

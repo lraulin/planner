@@ -1,11 +1,11 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { requestQuickCapture } from "@/components/capture/event";
 import { MoreSheet } from "./MoreSheet";
 import { CaptureIcon, OrganizeIcon } from "./navIcons";
 import { primaryDestinations } from "./modules";
 import { NavLink } from "./NavLink";
+import { usePresentedPathname } from "./pendingNavigation";
 
 /**
  * Phone navigation: a bottom tab bar, standing in for the desktop `Sidebar` below `md`.
@@ -26,7 +26,8 @@ import { NavLink } from "./NavLink";
  * above it ends where the bar begins and the last row is never hidden underneath.
  */
 export function MobileNav() {
-  const pathname = usePathname();
+  // The presented pathname, so a tap lights its slot before the page arrives.
+  const pathname = usePresentedPathname();
 
   return (
     <nav
@@ -82,6 +83,7 @@ function TabLink({
   return (
     <NavLink
       href={href}
+      activeLook
       aria-current={active ? "page" : undefined}
       className={`flex min-h-tap flex-1 flex-col items-center justify-center gap-0.5 py-1.5 ${
         active ? "text-select-edge" : "text-ink-muted"

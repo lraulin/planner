@@ -10,6 +10,7 @@ import { RowClipboardProvider } from "@/components/grid/RowClipboardProvider";
 import { CommandsPanel } from "./CommandsPanel";
 import { MobileHeader } from "./MobileHeader";
 import { MobileNav } from "./MobileNav";
+import { NavigationSurface } from "./NavigationSurface";
 import { Sidebar } from "./Sidebar";
 
 /**
@@ -75,11 +76,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Suspense>
 
             {/*
-              `relative` is the drawer's containing block above `md` (`Drawer` is
-              `md:absolute` here). That is what keeps the form tabs below the menu and
-              page bar instead of painting under their z-50 stacking.
+              The content area. Owns the drawer's containing block and the slow-navigation bar
+              (`NavigationSurface`); the page is its only child.
             */}
-            <div className="relative flex min-h-0 flex-1 flex-col">{children}</div>
+            <NavigationSurface>{children}</NavigationSurface>
 
             <MobileNav />
           </div>

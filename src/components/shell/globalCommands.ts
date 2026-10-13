@@ -8,6 +8,7 @@ import { OPEN_FIND, QUICK_CAPTURE } from "@/lib/commands/chords";
 import { FILE_COMMAND_PLACEMENTS, FILE_MENU } from "@/lib/commands/fileCommands";
 import type { Command } from "@/lib/commands/registry";
 import { BUILT_MODULES, moduleEntryHref, modulePages } from "./modules";
+import { useNavigate } from "./useNavigate";
 import { useShellSettings } from "./useShellSettings";
 
 /**
@@ -29,6 +30,8 @@ import { useShellSettings } from "./useShellSettings";
  */
 export function useGlobalCommands(): readonly Command[] {
   const router = useRouter();
+  // Go-to commands acknowledge themselves like a click on the same destination does.
+  const navigate = useNavigate();
   const { pageOrder, lastPage } = useShellSettings().value;
 
   return useMemo(() => {
@@ -45,7 +48,7 @@ export function useGlobalCommands(): readonly Command[] {
         // it prints the same one. Find is reached from anywhere mid-task, which is what
         // earns it a key; the other destinations are a click in the sidebar.
         bindings: entry.id === "find" ? OPEN_FIND : undefined,
-        run: () => router.push(moduleEntryHref(entry.id, lastPage[entry.id])),
+        run: () => navigate(moduleEntryHref(entry.id, lastPage[entry.id])),
       };
 
       // A module with one page has no bar, and a second entry naming it would be the same
@@ -59,16 +62,16 @@ export function useGlobalCommands(): readonly Command[] {
           label: `${entry.label}: ${page.label}`,
           group: "go" as const,
           keywords: [GO_KEYWORDS[entry.id], page.keywords].filter(Boolean).join(" "),
-          run: () => router.push(href),
+          run: () => navigate(href),
         })),
       ];
     });
 
     const runs: Record<string, () => void> = {
       "app.capture": requestQuickCapture,
-      "app.process-inbox": () => router.push("/organize"),
-      "app.plan-week": () => router.push("/schedule/plan"),
-      "app.settings": () => router.push("/settings"),
+      "app.process-inbox": () => navigate("/organize"),
+      "app.plan-week": () => navigate("/schedule/plan"),
+      "app.settings": () => navigate("/settings"),
       "app.sign-out": () => {
         void signOut().then(() => {
           router.replace("/login");
@@ -96,7 +99,7 @@ export function useGlobalCommands(): readonly Command[] {
      */
 
     return [...go, ...app];
-  }, [router, pageOrder, lastPage]);
+  }, [router, navigate, pageOrder, lastPage]);
 }
 
 /** The five File-menu verbs, identity-stable with `useGlobalCommands`. */
