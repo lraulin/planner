@@ -11,10 +11,11 @@ import {
 } from "@/lib/finances/budget/mutations";
 import {
   reclassifyTransactions,
+  splitTransaction,
   updateTransaction,
   upsertBillEnvelope,
 } from "@/lib/finances/mutations";
-import { listTransactions } from "@/lib/finances/queries";
+import { listTransactions, loadStatementsView } from "@/lib/finances/queries";
 import { createPayee } from "@/lib/finances/payees/mutations";
 import { dispatchAgentTool } from "./tools";
 
@@ -257,6 +258,49 @@ describeDb("finance agent tools", () => {
     };
     expect(debt.carryingCost.interestCents).toBe(1245);
     expect(debt.carryingCost.byAccount[0].statementCount).toBe(1);
+  });
+
+  it("checks each statement against the same register rows as the Statements page", async () => {
+    const groceries = (await listTransactions(ownerId)).find((row) =>
+      row.description.includes("WM SUPERCENTER"),
+    );
+    if (!groceries) throw new Error("expected the seed to import the grocery charge");
+    await splitTransaction(ownerId, groceries.id, [
+      { amountCents: -8000, budgetCategoryId: null },
+      { amountCents: -412, budgetCategoryId: null },
+    ]);
+
+    const tool = (await dispatchAgentTool("list_statements", {}, ownerId)) as {
+      statements: {
+        id: string;
+        registerSumCents: number;
+        registerDeltaCents: number;
+        rowCount: number;
+      }[];
+      holes: unknown[];
+    };
+    const page = await loadStatementsView(ownerId);
+
+    // 02/19–03/18 holds the grocery charge, one SimpliSafe and the gift. The bank moved
+    // money three times; the split says where one charge went, so it is not a fourth row.
+    expect(tool.statements).toHaveLength(1);
+    expect(tool.statements[0]).toMatchObject({ registerSumCents: 38117, rowCount: 3 });
+    expect(
+      tool.statements.map((row) => ({
+        id: row.id,
+        registerSumCents: row.registerSumCents,
+        registerDeltaCents: row.registerDeltaCents,
+        rowCount: row.rowCount,
+      })),
+    ).toEqual(
+      page.rows.map((row) => ({
+        id: row.id,
+        registerSumCents: row.registerSumCents,
+        registerDeltaCents: row.registerDeltaCents,
+        rowCount: row.rowCount,
+      })),
+    );
+    expect(tool.holes).toEqual(page.holes);
   });
 
   it("does not let a second user read the first user's finances", async () => {
