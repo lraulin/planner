@@ -161,9 +161,72 @@ What shaping found (Next 16.3.8, read from `node_modules/next/dist`):
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                                                                    | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Task 2's baseline is a warmed dev server, not a production build.** The numbers below are real but are not the production numbers the acceptance criteria name; the production columns stay empty until someone with a signed-in production build runs `scripts/navigation-timing.mjs`. | `next start` cannot use the dev login bypass (`dev-bypass.ts` is gated on `NODE_ENV`), and the local `test@example.com` account in the shared `planner` database no longer accepts the documented seed password. Minting a session or a second database was declined by the permission system, so nothing authenticated could be driven against a production build in this implementation session. The dev server shares the page code, the router and the database; it differs in compile-on-demand (warmed away here), no minification, and **no link prefetch at all**, so the prefetch gate (decision 6) cannot be evaluated on it. |
+| 2   | **Task 2 adds `scripts/navigation-timing.mjs`**, committed, so the procedure is one command rather than prose.                                                                                                                                                                            | The plan asked for "the exact procedure so Task 9 repeats it". A script is the only form of that which cannot drift.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+
+## Measurements
+
+### Procedure (repeat verbatim for every "after")
+
+1. `npx next build`, then `next start -p 3077` with `DATABASE_URL`, `BETTER_AUTH_SECRET`,
+   `BETTER_AUTH_URL=http://localhost:3077` exported (production: signs in through the login form
+   with `PLANNER_EMAIL` / `PLANNER_PASSWORD`). A dev server with `AUTH_DEV_BYPASS=true` needs no
+   sign-in; use it only to compare the same server before and after.
+2. Warm every route once (`PLANNER_URL=http://localhost:3077 npm run smoke`).
+3. Hold the shared timing lock, then, from the repo root:
+   `PLANNER_URL=http://localhost:3077 node scripts/navigation-timing.mjs --runs 5 --group plan`
+   and `... --group finances`, and for the prefetch count `... --group prefetch`
+   (production only — dev never prefetches).
+4. Write down `uptime` beside each table.
+
+Each run starts from a cold full load of `/plan/overview`, so the client cache is empty. The
+script clicks real links (sidebar module row, page-bar tab), observes the DOM, and counts RSC
+requests over the DevTools protocol:
+
+- **Active** — click → the clicked link carries `aria-current="page"` (the active look).
+- **Done** — click → the last DOM mutation before 500 ms of quiet.
+- **Server** — the navigation's RSC request, start → last byte. `-` when no request was made.
+- **Page requests** — RSC page requests the click made, prefetches excluded.
+
+"Revisit" is the same tab clicked a second time inside the same run, within the minute.
+
+### Before (Task 2) — warmed dev server, local Postgres, commit `6d5e23c4`
+
+Load average 22–35 (the machine was shared with two other builds); medians of 5.
+
+| Step                              | Visit   | Active ms | Done ms | Server ms | Page requests |
+| --------------------------------- | ------- | --------- | ------- | --------- | ------------- |
+| Plan: Tasks                       | visit   | 149       | 168     | 39        | 1             |
+| Plan: Outline                     | visit   | 210       | 250     | 42        | 1             |
+| Plan: Goals                       | visit   | 182       | 217     | 37        | 1             |
+| Plan: Tasks                       | revisit | 70        | 78      | 36        | 1             |
+| Plan: Outline                     | revisit | 237       | 267     | 36        | 1             |
+| Plan: Goals                       | revisit | 70        | 84      | 35        | 1             |
+| Finances: module switch           | visit   | 204       | 211     | 74        | 1             |
+| Finances: Budget                  | visit   | 148       | 171     | 55        | 1             |
+| Finances: Accounts                | visit   | 185       | 214     | 109       | 1             |
+| Finances: Bills                   | visit   | 210       | 231     | 124       | 1             |
+| Finances: Budget                  | revisit | 132       | 156     | 46        | 1             |
+| Finances: Accounts                | revisit | 149       | 156     | 101       | 1             |
+| Finances: Bills                   | revisit | 188       | 200     | 107       | 1             |
+| Finances: Register                | visit   | 203       | 223     | 152       | 1             |
+| Finances: Bills (after Register)  | revisit | 192       | 203     | 112       | 1             |
+| Finances: Register                | revisit | 197       | 208     | 148       | 1             |
+| Finances: Budget (after Register) | revisit | 136       | 160     | 52        | 1             |
+
+Reading: today a revisit costs what a first visit costs (a request every click) and the active
+look arrives with the page (Active ≈ Done). Local Postgres and a warm dev compile make every
+server figure smaller than production's (Budget 337 ms, Register 384–956 ms measured 2026-10-12);
+what carries over is the shape — one request per click, active look = arrival.
+
+Prefetch requests per fresh view: **not measurable on a dev server** (Next prefetches only in
+production). Production count from 2026-10-12 shaping: ~35 per view, 60–90 ms each.
+
+### After (Task 9)
+
+_(filled in Task 9)_
 
 ## Task 1: Save spec documentation
 
