@@ -10,7 +10,6 @@ import {
 import type { BudgetData } from "@/lib/finances/budget/queries";
 import type { BudgetBillRow } from "@/lib/finances/budget/rows";
 import type { BillForecast } from "@/lib/finances/dashboardQueries";
-import type { RecurringMerchant } from "@/lib/finances/analytics";
 import {
   managementBillRows,
   billGroupLabel,
@@ -78,14 +77,12 @@ export function BillsView({
   data,
   anchors,
   forecast,
-  review,
   payees,
   lastCharges,
 }: {
   data: BudgetData;
   anchors: ReadonlyMap<string, BillAnchor>;
   forecast: BillForecast;
-  review: readonly RecurringMerchant[];
   payees: readonly { id: string; name: string; budgetCategoryId: string | null }[];
   lastCharges: ReadonlyMap<string, string>;
 }) {
@@ -231,7 +228,7 @@ export function BillsView({
           },
           {
             id: "bills.review",
-            label: `Discover recurring charges (${review.length})`,
+            label: "Discover recurring charges",
             group: "view",
             menu: "tools",
             keywords: "review recurring detect",
@@ -240,7 +237,7 @@ export function BillsView({
         ],
       };
     },
-    [rows, create, setDetail, selectAll, review.length],
+    [rows, create, setDetail, selectAll],
   );
   const commandCapabilities = useMemo(
     () => capabilitiesFor(selectedId, selectedIds.size),
@@ -327,7 +324,7 @@ export function BillsView({
           + Bill
         </button>
         <button type="button" onClick={() => setReviewing(true)}>
-          Discover recurring charges · {review.length}
+          Discover recurring charges
         </button>
       </div>
       <GridToolbar
@@ -560,7 +557,6 @@ export function BillsView({
       </Drawer>
       {reviewing ? (
         <ReviewDrawer
-          review={review}
           todayKey={data.todayKey}
           onClose={() => setReviewing(false)}
           onSaved={() => router.refresh()}

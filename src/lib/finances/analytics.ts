@@ -82,6 +82,28 @@ export type AnalyticsRow = {
 };
 
 /**
+ * What the recurring-charge detectors read off a row, and nothing else.
+ *
+ * Narrow so the review read can fetch eight columns for the rows it needs instead of the
+ * twenty-odd an `AnalyticsRow` carries. Everything {@link recurringMerchants} and
+ * {@link spendCandidates} do to a row goes through one of these: the cost test
+ * (`amountCents` and the two flow columns), the merchant (`description`, `payeeName`), the
+ * payee claim (`payeeId`), the order (`transactionDate`, `id`) and the reference they hand back
+ * (`id`).
+ */
+export type RecurringChargeRow = Pick<
+  AnalyticsRow,
+  | "id"
+  | "transactionDate"
+  | "description"
+  | "amountCents"
+  | "derivedFlow"
+  | "flowOverride"
+  | "payeeId"
+  | "payeeName"
+>;
+
+/**
  * The three fields that decide a flow. Structural rather than `AnalyticsRow` so the register
  * can resolve the same value from its own row type — one implementation of the rule, which
  * is the whole point of it being a rule.
@@ -628,12 +650,12 @@ function activeBills(bills: readonly DeclaredBill[]): DeclaredBill[] {
   return bills.filter((bill) => billStatusOf(bill) === "active");
 }
 
-function chargesForBill(
-  byPayee: Map<string, AnalyticsRow[]>,
+function chargesForBill<Row extends RecurringChargeRow>(
+  byPayee: Map<string, Row[]>,
   bill: DeclaredBill,
-): AnalyticsRow[] {
+): Row[] {
   const seen = new Set<string>();
-  const rows: AnalyticsRow[] = [];
+  const rows: Row[] = [];
   for (const id of billPayeeIds(bill)) {
     for (const row of byPayee.get(id) ?? []) {
       if (seen.has(row.id)) continue;
@@ -1156,8 +1178,8 @@ function standardDeviation(values: readonly number[]): number {
  * Annualizing is the point of the panel: $34.71 a month is invisible and $416 a year is a
  * decision.
  */
-export function recurringMerchants(
-  rows: readonly AnalyticsRow[],
+export function recurringMerchants<Row extends RecurringChargeRow>(
+  rows: readonly Row[],
   bills: readonly DeclaredBill[] = [],
   /**
    * Where a **declared** bill's charges are read from, when that is not the same set the
@@ -1169,7 +1191,7 @@ export function recurringMerchants(
    * Amounts and the last charge come from here; `chargeCount` still counts `rows`, so it
    * means the same thing on a declared row as on a detected one.
    */
-  billRows: readonly AnalyticsRow[] = rows,
+  billRows: readonly Row[] = rows,
 ): RecurringEntry[] {
   const byMerchant = chargesByMerchant(rows);
   const byPayeeForBills = chargesByPayee(billRows);
@@ -1266,8 +1288,10 @@ export function recurringMerchants(
 }
 
 /** Spending charges grouped by effective merchant, each group in date order. */
-function chargesByMerchant(rows: readonly AnalyticsRow[]): Map<string, AnalyticsRow[]> {
-  const byMerchant = new Map<string, AnalyticsRow[]>();
+function chargesByMerchant<Row extends RecurringChargeRow>(
+  rows: readonly Row[],
+): Map<string, Row[]> {
+  const byMerchant = new Map<string, Row[]>();
   for (const row of rows) {
     if (spendCentsOf(row) <= 0) continue;
     const merchant = effectiveMerchant(row);
@@ -1285,8 +1309,10 @@ function chargesByMerchant(rows: readonly AnalyticsRow[]): Map<string, Analytics
 }
 
 /** Spending charges grouped by stable payee id; unassigned rows cannot satisfy a claim. */
-function chargesByPayee(rows: readonly AnalyticsRow[]): Map<string, AnalyticsRow[]> {
-  const byPayee = new Map<string, AnalyticsRow[]>();
+function chargesByPayee<Row extends RecurringChargeRow>(
+  rows: readonly Row[],
+): Map<string, Row[]> {
+  const byPayee = new Map<string, Row[]>();
   for (const row of rows) {
     if (!row.payeeId || spendCentsOf(row) <= 0) continue;
     const bucket = byPayee.get(row.payeeId);
@@ -1302,7 +1328,9 @@ function chargesByPayee(rows: readonly AnalyticsRow[]): Map<string, AnalyticsRow
 }
 
 /** Days between consecutive charges. Empty for a single charge, which has no cadence. */
-function gapsBetween(ordered: readonly AnalyticsRow[]): number[] {
+function gapsBetween(
+  ordered: readonly Pick<AnalyticsRow, "transactionDate">[],
+): number[] {
   const gaps: number[] = [];
   for (let index = 1; index < ordered.length; index++) {
     gaps.push(
@@ -1352,7 +1380,7 @@ const MIN_SPEND_COVERAGE = 0.75;
  * will show once it exists.
  */
 export function spendCandidates(
-  rows: readonly AnalyticsRow[],
+  rows: readonly RecurringChargeRow[],
   options: {
     todayKey: string;
     suppressMerchants?: readonly string[];
@@ -1421,7 +1449,7 @@ export function spendCandidates(
  * median for the same reason: a fortnight away is part of what a week costs on average.
  */
 function coverageOf(
-  past: readonly AnalyticsRow[],
+  past: readonly RecurringChargeRow[],
   period: Period,
   todayKey: string,
 ): { period: Period; coverage: number; typicalCents: number } | null {

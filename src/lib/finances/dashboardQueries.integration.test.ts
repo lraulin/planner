@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
@@ -19,8 +19,11 @@ import {
   loadPaydays,
   loadRecurringBills,
   loadReviewCandidates,
+  reviewCandidates,
   unclassifiedCount,
 } from "./dashboardQueries";
+import { payeeClaimIndex } from "./commitments";
+import { localDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import { billChargesOf } from "./billCharges";
 import { listConnections } from "@/lib/banksync/queries";
 import { loadAccountsWithPending } from "./workingPendingQuery";
@@ -273,6 +276,123 @@ describeDb("insights user isolation", () => {
     // the seed silently failed.
     expect((await loadInsightsRows(ownerId)).length).toBe(3);
     expect((await loadCarryingCost(ownerId)).interestCents).toBe(1245);
+  });
+});
+
+describeDb("loadReviewCandidates", () => {
+  /**
+   * A ledger where both detectors find something, and where each row the narrow read drops
+   * is one the detectors would have dropped themselves: a refund, a positive interest_fee,
+   * a flow decided to be income by override, a transfer, and a charge that is a spend only
+   * because it was never classified. Dates hang off today because `spendCandidates` measures
+   * its lookback from it.
+   */
+  async function seedRecurring(userId: string) {
+    await seed(userId);
+    const today = localDateKey(new Date());
+    const [account] = await db
+      .select({ id: financeAccounts.id })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.userId, userId));
+    const rows: (typeof financeTransactions.$inferInsert)[] = [];
+    const add = (
+      description: string,
+      daysAgo: number,
+      amount: string,
+      extra: Partial<typeof financeTransactions.$inferInsert> = {},
+    ) =>
+      rows.push({
+        userId,
+        accountId: account.id,
+        transactionDate: shiftDateKey(today, -daysAgo),
+        description,
+        amount,
+        ...extra,
+      });
+    // Bill-shaped: monthly, same amount.
+    for (let month = 1; month <= 8; month++)
+      add("STREAMCO MONTHLY", month * 30, "-12.99");
+    // Spend-shaped: most weeks, an amount that swings.
+    for (let week = 1; week <= 20; week++) {
+      add(
+        "CORNERSHOP GROCERY",
+        week * 7 + 1,
+        `-${(20 + ((week * 17) % 60)).toFixed(2)}`,
+      );
+    }
+    // Rows the detectors must see as non-charges.
+    add("STREAMCO MONTHLY", 12, "5.00");
+    add("STREAMCO MONTHLY", 14, "3.00");
+    // Same amount as the real charges, so a wrongly kept row would move the typical amount,
+    // the count and the gaps rather than hide inside the variance.
+    add("STREAMCO MONTHLY", 16, "-12.99");
+    add("STREAMCO MONTHLY", 18, "-12.99");
+    add("STREAMCO MONTHLY", 20, "-12.99");
+    // A negative amount flowing as refund is still a cost to the detectors (`spendCentsOf`
+    // is positive for it), so the narrow read has to keep it.
+    add("STREAMCO MONTHLY", 22, "-12.99");
+    add("CORNERSHOP GROCERY", 3, "-9.00");
+    await db.insert(financeTransactions).values(rows);
+    await reclassifyTransactions(userId);
+
+    // Set the flow columns after classification, which would otherwise re-derive them.
+    const byAmount = async (amount: string, daysAgo: number) => {
+      const [row] = await db
+        .select({ id: financeTransactions.id })
+        .from(financeTransactions)
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            eq(financeTransactions.amount, amount),
+            eq(financeTransactions.transactionDate, shiftDateKey(today, -daysAgo)),
+          ),
+        );
+      return row.id;
+    };
+    const set = (
+      id: string,
+      values: Partial<typeof financeTransactions.$inferInsert>,
+    ) =>
+      db.update(financeTransactions).set(values).where(eq(financeTransactions.id, id));
+    await set(await byAmount("5.00", 12), { derivedFlow: "refund" });
+    await set(await byAmount("3.00", 14), { derivedFlow: "interest_fee" });
+    await set(await byAmount("-12.99", 16), { derivedFlow: null, flowOverride: null });
+    await set(await byAmount("-12.99", 18), { flowOverride: "income" });
+    await set(await byAmount("-12.99", 20), { derivedFlow: "internal_transfer" });
+    await set(await byAmount("-12.99", 22), { derivedFlow: "refund" });
+  }
+
+  it("finds the candidates the full ledger finds, from spend charges alone", async () => {
+    const userId = await makeUser();
+    await seedRecurring(userId);
+
+    const narrow = await loadReviewCandidates(userId);
+    const bills = await loadRecurringBills(userId);
+    const expected = reviewCandidates(
+      await loadInsightsRows(userId),
+      bills,
+      payeeClaimIndex(bills),
+      new Set(),
+    );
+
+    expect(narrow).toEqual(expected);
+    // Neither side is empty, so the equality is not two blank lists, and each detector
+    // contributed.
+    expect(narrow.map((entry) => [entry.merchant, entry.shape])).toEqual(
+      expect.arrayContaining([
+        ["STREAMCO MONTHLY", "bill"],
+        ["CORNERSHOP GROCERY", "spend"],
+      ]),
+    );
+  });
+
+  it("hands a second user none of the first user's candidates", async () => {
+    const ownerId = await makeUser();
+    const intruderId = await makeUser();
+    await seedRecurring(ownerId);
+
+    expect(await loadReviewCandidates(intruderId)).toEqual([]);
+    expect((await loadReviewCandidates(ownerId)).length).toBeGreaterThan(0);
   });
 });
 

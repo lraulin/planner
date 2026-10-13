@@ -1,7 +1,8 @@
 "use client";
 
-import { useId, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, useTransition } from "react";
 import {
+  loadReviewCandidatesAction,
   setPayeeNotACommitmentAction,
   trackTransactionAsBillAction,
 } from "@/app/finances/actions";
@@ -42,13 +43,16 @@ function proposedCadence(entry: RecurringMerchant): Cadence {
  * it as — an irregular grocery run is still funded by its own cadence once tracked, exactly
  * like Rent.
  */
+type ReviewList =
+  | { status: "loading" }
+  | { status: "failed"; message: string }
+  | { status: "ready"; review: readonly RecurringMerchant[] };
+
 export function ReviewDrawer({
-  review,
   todayKey,
   onClose,
   onSaved,
 }: {
-  review: readonly RecurringMerchant[];
   todayKey: string;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -56,19 +60,56 @@ export function ReviewDrawer({
   const titleId = useId();
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [list, setList] = useState<ReviewList>({ status: "loading" });
+
+  const accept = useCallback(
+    (result: Awaited<ReturnType<typeof loadReviewCandidatesAction>>) =>
+      setList(
+        result.ok
+          ? { status: "ready", review: result.data }
+          : { status: "failed", message: result.error },
+      ),
+    [],
+  );
+
+  // The list is read when the drawer opens, because detection runs over every spend charge
+  // and nothing else on the Bills page uses it. The drawer mounts only while it is open, so
+  // mounting is "opening".
+  useEffect(() => {
+    let live = true;
+    void loadReviewCandidatesAction().then((result) => {
+      if (live) accept(result);
+    });
+    return () => {
+      live = false;
+    };
+  }, [accept]);
+
+  // A save changes what is claimed, so the list is read again rather than patched: the
+  // server is the only place that knows which merchants are left.
+  const saved = (message: string) => {
+    onSaved(message);
+    void loadReviewCandidatesAction().then(accept);
+  };
 
   return (
     <Drawer open onClose={onClose} labelledBy={titleId}>
       <DrawerHeader titleId={titleId} title="Review" onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-4">
         {error && <p className="mb-3 text-[0.75rem] text-priority-a">{error}</p>}
-        {review.length === 0 ? (
+        {list.status === "loading" ? (
+          <p className="text-[0.8125rem] text-ink-muted" role="status">
+            Looking for recurring charges…
+          </p>
+        ) : list.status === "failed" ? (
+          <p className="text-[0.8125rem] text-priority-a">{list.message}</p>
+        ) : list.review.length === 0 ? (
           <p className="text-[0.8125rem] text-ink-muted">
             Nothing waiting on review — every regular merchant is already claimed.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {review.map((entry) => (
+            {list.review.map((entry) => (
               <li key={entry.merchant} className="rounded border border-rule px-3 py-2">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                   <span className="text-[0.875rem] font-medium text-ink">
@@ -92,7 +133,7 @@ export function ReviewDrawer({
                     onCancel={() => setOpen(null)}
                     onSaved={(message) => {
                       setOpen(null);
-                      onSaved(message);
+                      saved(message);
                     }}
                     onError={setError}
                   />
@@ -108,7 +149,7 @@ export function ReviewDrawer({
                     >
                       Track as bill…
                     </button>
-                    <DismissButton entry={entry} onSaved={onSaved} onError={setError} />
+                    <DismissButton entry={entry} onSaved={saved} onError={setError} />
                   </div>
                 )}
               </li>

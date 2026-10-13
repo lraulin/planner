@@ -136,6 +136,8 @@ import {
   loadTrackAsBillDraft,
 } from "@/lib/finances/queries";
 import type { TrackAsBillDraft } from "@/lib/finances/registerBillDraft";
+import { loadReviewCandidates } from "@/lib/finances/dashboardQueries";
+import type { RecurringMerchant } from "@/lib/finances/analytics";
 import {
   listFinanceAuditEvents,
   loadFinanceAuditEvent,
@@ -280,6 +282,18 @@ export async function loadRegisterExportAction(
   return runQuery(async (userId) =>
     loadRegisterExportRows(userId, query, await registerContext(userId, query)),
   );
+}
+
+/**
+ * The Bills page's Review list. A read, run when the drawer opens and again after a save,
+ * rather than with the page: detection runs over every spend charge, and nothing else on
+ * the page uses the result
+ * (`agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/` D4).
+ */
+export async function loadReviewCandidatesAction(): Promise<
+  QueryResult<RecurringMerchant[]>
+> {
+  return runQuery((userId) => loadReviewCandidates(userId));
 }
 
 export async function loadTrackAsBillDraftAction(

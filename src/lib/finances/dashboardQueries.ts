@@ -13,7 +13,7 @@ import {
   paydaysFrom,
   recurringMerchants,
   spendCandidates,
-  type AnalyticsRow,
+  type RecurringChargeRow,
   type RecurringMerchant,
 } from "./analytics";
 import { billChargesOf, type BillChargeRow } from "./billCharges";
@@ -490,13 +490,78 @@ export async function loadMerchantNames(userId: string): Promise<string[]> {
 }
 
 /**
+ * The spend charges the recurring-charge detectors can see, oldest first, with the eight
+ * columns they read.
+ *
+ * `recurringMerchants` and `spendCandidates` meet a row only through `chargesByMerchant` and
+ * `chargesByPayee`, and both of those keep `spendCentsOf(row) > 0`. That is positive exactly
+ * when the effective flow is a spending flow and the amount is negative: a refund or a
+ * positive `interest_fee` is a credit and returns 0 or a negative cost, and an effective flow
+ * that is `income`, a transfer or anything else is not spending at all. `effectiveFlow` falls
+ * back to `spend` for a null flow with a negative amount, which is the `coalesce` below. So
+ * the predicate selects the rows the detectors would have kept and drops the ones they
+ * would have thrown away, and the detectors still run over what is read.
+ *
+ * Never narrowed by date: a declared bill's amount is read from the whole history
+ * (`agent-os/specs/2026-08-14-1012-recurring-bill-cadences/` change #4). Row scope and order
+ * are the full read's, `countedRows` then date and id.
+ */
+async function readReviewCharges(userId: string): Promise<RecurringChargeRow[]> {
+  const { pending } = await loadAccountsWithPending(userId);
+  const rows = await db
+    .select({
+      id: financeTransactions.id,
+      transactionDate: financeTransactions.transactionDate,
+      description: financeTransactions.description,
+      amount: financeTransactions.amount,
+      derivedFlow: financeTransactions.derivedFlow,
+      flowOverride: financeTransactions.flowOverride,
+      payeeId: financeTransactions.payeeId,
+      payeeName: financePayees.name,
+    })
+    .from(financeTransactions)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .leftJoin(
+      financePayees,
+      and(
+        eq(financePayees.id, financeTransactions.payeeId),
+        eq(financePayees.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        countedRows(userId, pending.supersededTransactionIds),
+        eq(financeTransactions.userId, userId),
+        sql`${financeTransactions.amount} < 0`,
+        sql`coalesce(${financeTransactions.flowOverride}, ${financeTransactions.derivedFlow}, 'spend') in ('spend', 'interest_fee', 'refund')`,
+      ),
+    )
+    .orderBy(asc(financeTransactions.transactionDate), asc(financeTransactions.id));
+
+  return rows.map((row) => ({
+    id: row.id,
+    transactionDate: row.transactionDate,
+    description: row.description,
+    amountCents: numericStringToCents(row.amount) ?? 0,
+    derivedFlow: row.derivedFlow,
+    flowOverride: row.flowOverride,
+    payeeId: row.payeeId,
+    payeeName: row.payeeName,
+  }));
+}
+
+/**
  * Review candidates: recurring merchants no envelope has claimed. Propose, never apply.
+ *
+ * Loaded when the Review drawer opens, not with the Bills page: the drawer is the only
+ * consumer, and the count it used to put on the button is what forced five thousand rows
+ * onto every Bills load.
  */
 export async function loadReviewCandidates(
   userId: string,
 ): Promise<RecurringMerchant[]> {
   const [rows, bills, dismissedPayeeIds] = await Promise.all([
-    loadInsightsRows(userId),
+    readReviewCharges(userId),
     loadRecurringBills(userId),
     db
       .select({ id: financePayees.id })
@@ -522,8 +587,8 @@ export async function loadReviewCandidates(
  * figure anyone reads. Use `localDateKey` anyway: `toDateKey(new Date())` is already
  * tomorrow after ~8pm in the Americas.
  */
-function reviewCandidates(
-  rows: readonly AnalyticsRow[],
+export function reviewCandidates(
+  rows: readonly RecurringChargeRow[],
   bills: readonly StoredBillRow[],
   index: ReturnType<typeof payeeClaimIndex>,
   dismissed: ReadonlySet<string>,
