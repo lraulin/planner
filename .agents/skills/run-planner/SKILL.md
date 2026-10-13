@@ -18,7 +18,8 @@ All paths below are relative to the repo root.
 
 Already satisfied on this machine; needed on a clean one:
 
-- Node 26 (the driver uses the built-in `WebSocket` and `fetch` — no polyfills)
+- Node 22 or newer — the repo pins 24 in `.nvmrc` (the driver uses the built-in `WebSocket`
+  and `fetch` — no polyfills)
 - Docker Desktop running
 - Google Chrome at `/Applications/Google Chrome.app`. Override with
   `PLANNER_CHROME=/path/to/chrome`.
@@ -149,9 +150,9 @@ key Escape
 EOF
 ```
 
-Routes: 26 pages — 23 with no dynamic segment, which `npm run smoke` walks and prints, plus
-`/fitness/exercises/[exerciseId]`, `/fitness/sessions/[sessionId]` and
-`/schedule/time-chart/[chartId]`, which need a real id. Run `npm run smoke` for the current
+Routes: `npm run smoke` walks and prints every page with no dynamic segment. The pages with
+one (`/fitness/exercises/[exerciseId]`, `/fitness/sessions/[sessionId]`,
+`/schedule/time-chart/[chartId]`) need a real id and are not walked. Run it for the current
 list rather than trusting one written down here.
 
 ## Direct invocation — internal code, no browser
@@ -178,12 +179,12 @@ Pure logic (`src/lib/tree/*`, `src/lib/schedule/*`) has no DB dependency — for
 ## Test / typecheck / lint / build
 
 ```sh
-npm test          # vitest — 143 files, 2056 tests; needs Postgres up or 22 files skip
-npm run test:unit # 121 files, 1583 tests; no database
+npm test          # unit, then integration; integration needs Postgres up or those files skip
+npm run test:unit # no database
 npm run typecheck # tsc --noEmit — clean
 npm run lint      # eslint --max-warnings=0 — clean, and that is the bar
 npm run build     # passes; do not run it while `npm run dev` is up (see Gotchas)
-npm run smoke     # loads all 23 static routes; needs the dev server (see below)
+npm run smoke     # loads every static route; needs the dev server (see below)
 ```
 
 ## Gotchas
