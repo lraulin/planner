@@ -13,12 +13,15 @@ import {
   type DateRange,
 } from "@/lib/finances/analytics";
 import {
+  loadBillCharges,
   loadCarryingCost,
-  loadDashboard,
   loadInsightsRows,
+  loadMerchantNames,
   loadRecurringBills,
+  loadReviewCandidates,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
+import { billChargesOf } from "@/lib/finances/billCharges";
 import { billAnchor, unclaimedMerchants } from "@/lib/finances/commitments";
 import {
   annualCents,
@@ -813,11 +816,16 @@ function legacyMatchers(
 }
 
 export async function listCommitmentsTool(userId: string) {
-  const [data, payees] = await Promise.all([loadDashboard(userId), listPayees(userId)]);
+  const [storedBills, chargeRows, payees] = await Promise.all([
+    loadRecurringBills(userId),
+    loadBillCharges(userId),
+    listPayees(userId),
+  ]);
+  const billCharges = billChargesOf(chargeRows, storedBills).flat;
   const today = agentToday();
   return {
-    bills: data.bills.map((bill) => {
-      const last = data.billCharges
+    bills: storedBills.map((bill) => {
+      const last = billCharges
         .filter((charge) => charge.name === bill.name)
         .map((charge) => charge.dateKey)
         .sort()
@@ -846,17 +854,18 @@ export async function listCommitmentsTool(userId: string) {
 }
 
 export async function listCommitmentCandidatesTool(userId: string) {
-  const [data, analyzed] = await Promise.all([
-    loadDashboard(userId),
+  const [bills, merchants, analyzed] = await Promise.all([
+    loadRecurringBills(userId),
+    loadMerchantNames(userId),
     loadAnalyzed(userId, { window: "all" }),
   ]);
   const detected = analyzed.analysis.empty
-    ? data.merchants
+    ? merchants
     : analyzed.analysis.recurring.map((entry) => entry.merchant);
   return {
     merchants: unclaimedMerchants(
-      [...detected, ...data.merchants],
-      data.bills.flatMap((bill) => bill.payees.map((payee) => payee.name)),
+      [...detected, ...merchants],
+      bills.flatMap((bill) => bill.payees.map((payee) => payee.name)),
     ),
   };
 }
@@ -889,9 +898,9 @@ export async function searchCommitmentsTool(
   userId: string,
   args: Record<string, unknown>,
 ) {
-  const data = await loadDashboard(userId);
+  const bills = await loadRecurringBills(userId);
   const query = (optionalString(args, "query") ?? "").trim().toLocaleLowerCase();
-  const rows = data.bills
+  const rows = bills
     .map((bill) => ({
       id: bill.id,
       name: bill.name,
@@ -915,9 +924,9 @@ export async function findCommitmentCandidatesTool(
   userId: string,
   args: Record<string, unknown>,
 ) {
-  const data = await loadDashboard(userId);
+  const review = await loadReviewCandidates(userId);
   const query = (optionalString(args, "query") ?? "").trim().toLocaleLowerCase();
-  const rows = data.review
+  const rows = review
     .filter((entry) => entry.payeeId !== null)
     .filter(
       (entry) => query === "" || entry.merchant.toLocaleLowerCase().includes(query),
@@ -1013,8 +1022,8 @@ export async function setCommitmentPayeesTool(
 ) {
   const id = optionalString(args, "id") ?? "";
   await replaceCommitmentPayees(userId, { id }, asStringList(args.payeeIds) ?? []);
-  const data = await loadDashboard(userId);
-  const row = data.bills
+  const bills = await loadRecurringBills(userId);
+  const row = bills
     .map((bill) => ({
       id: bill.id,
       name: bill.name,

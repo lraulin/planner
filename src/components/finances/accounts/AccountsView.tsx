@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { BankLinkRow } from "@/lib/banksync/queries";
+import type { BankConnectionRow, BankLinkRow } from "@/lib/banksync/queries";
 import {
   operationalAccountRows,
   type OperationalAccount,
 } from "@/lib/finances/accountOperations";
-import type { DashboardData } from "@/lib/finances/dashboardQueries";
 import { accountPoolBreakdown } from "@/lib/finances/accountPool";
 import type { BudgetMismatch } from "@/lib/finances/budget/queries";
 import {
@@ -25,6 +24,7 @@ import {
 } from "./AccountOperations";
 import type { GridRow } from "@/lib/tree/slice";
 import type { FinanceAccountRow } from "@/lib/finances/types";
+import type { PendingRow } from "@/lib/finances/workingBalance";
 import {
   deleteAccountAction,
   listAccountsAction,
@@ -109,7 +109,14 @@ export function AccountsView({
   mismatch,
 }: {
   initialAccounts: FinanceAccountRow[];
-  operations: DashboardData;
+  /**
+   * The two things an account row needs beyond the account itself: holds the bank has not
+   * posted, and each connection's freshness. Nothing here is derived from the ledger.
+   */
+  operations: {
+    pending: readonly PendingRow[];
+    connections: readonly BankConnectionRow[];
+  };
   links: BankLinkRow[];
   todayKey: string;
   /** D3: per-account drift from the register. Empty before the budget is set up. */

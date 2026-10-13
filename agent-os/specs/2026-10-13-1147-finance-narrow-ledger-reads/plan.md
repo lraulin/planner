@@ -3,8 +3,9 @@
 **Status: active**
 Spec folder: `agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/`
 
-> Shaped 2026-10-13. Task 1 (this folder) and Task 2 (ledger refreshed, baseline captured)
-> are done; implementation continues at Task 3. Progress is in **Changes from original plan**
+> Shaped 2026-10-13. Task 1 (this folder), Task 2 (ledger refreshed, baseline captured) and
+> Task 3 (Accounts reads no ledger; `loadDashboard` retired) are done; implementation
+> continues at Task 4. Progress is in **Changes from original plan**
 > and **Verification**.
 
 ## Spec relationships
@@ -295,11 +296,18 @@ register-report                190,580  2c4a62b63959
 uncategorized-this-month, unknown-today and collapsed-years; their hashes are in the commit
 body of the task that first compares them.)
 
-Per-task results, one row per loader (filled as each task lands, D13):
+Per-task results, one row per loader (filled as each task lands, D13). "Rows" is ledger rows
+the read pulls from the database; the hash is the dump's sha256 prefix, equal before and
+after in every row. Local ms is filled once, in Task 10, from a back-to-back run of the base
+commit and the final tree under the timing lock.
 
-| Loader | Rows before → after | Dump bytes | sha256 before = after | Local ms before → after |
-| ------ | ------------------- | ---------- | --------------------- | ----------------------- |
-|        |                     |            |                       |                         |
+| Task | Loader                                                              | Rows before → after          | Dump bytes | sha256 before = after | Local ms before → after |
+| ---- | ------------------------------------------------------------------- | ---------------------------- | ---------- | --------------------- | ----------------------- |
+| 3    | Accounts page: `loadDashboard` → accounts + pending + connections   | 7,459 → 0                    | 3,871      | `746b72dee709` yes    |                         |
+| 3    | bills for the agent tools (`loadRecurringBills`)                    | 7,459 → 0                    | 13,893     | `36c64d619a2a` yes    |                         |
+| 3    | bill charges by name for `list_commitments` (`loadBillCharges`)     | 7,459 → 905                  | 54,168     | `b04d59bffdfe` yes    |                         |
+| 3    | merchant names for candidate search (`loadMerchantNames`)           | 7,459 → 3,241 distinct pairs | 16,822     | `50fe065549d0` yes    |                         |
+| 3    | review candidates for `find_commitment_candidates` (unchanged read) | 7,459 → 7,459                | 54,528     | `da547f9e4c63` yes    |                         |
 
 Production RSC response, signed-in browser:
 
@@ -311,10 +319,12 @@ Production RSC response, signed-in browser:
 
 ## Changes from original plan
 
-| #   | Change                                                                                                                                                                                                                                                                                 | Why                                                                                                                                                                                                                   |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Task 2 restored the backup into a **separate database** (`planner_narrow_reads` in the same container), not over the dev `planner` database. The archive was decrypted by streaming `gpg` into `pg_restore` with the project's own `decryptToCommand`; no plaintext dump touched disk. | Two other implementers were using the dev database at the same time, and a restore over it would have wiped their tests' fixtures. D13's equality proof only needs a ledger of the right shape, not the dev database. |
-| 2   | The refreshed ledger is not the shaping ledger: 7,459 rows ending 2026-10-11, **905 rows filed to 35 bill envelopes** (shaping saw one), and **no split parent**.                                                                                                                      | The forecast comparison (D3) now compares something. Split-child totals (D6) and any split-child-on-a-bill case cannot be proven from this ledger, so the integration tests seed them, as D13.2 already required.     |
+| #   | Change                                                                                                                                                                                                                                                                                                                               | Why                                                                                                                                                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Task 2 restored the backup into a **separate database** (`planner_narrow_reads` in the same container), not over the dev `planner` database. The archive was decrypted by streaming `gpg` into `pg_restore` with the project's own `decryptToCommand`; no plaintext dump touched disk.                                               | Two other implementers were using the dev database at the same time, and a restore over it would have wiped their tests' fixtures. D13's equality proof only needs a ledger of the right shape, not the dev database. |
+| 2   | The refreshed ledger is not the shaping ledger: 7,459 rows ending 2026-10-11, **905 rows filed to 35 bill envelopes** (shaping saw one), and **no split parent**.                                                                                                                                                                    | The forecast comparison (D3) now compares something. Split-child totals (D6) and any split-child-on-a-bill case cannot be proven from this ledger, so the integration tests seed them, as D13.2 already required.     |
+| 3   | `loadBillCharges` (D3) lands in Task 3, not Task 4, in a new pure module `billCharges.ts` (`billChargesOf` is the one loop from envelope rows to charges). Task 4 only moves the forecast onto it.                                                                                                                                   | Retiring `loadDashboard` in Task 3 left `list_commitments` without its bill charges; the agent tool needed the narrow read in the same commit, and the forecast and the tool must not carry two copies of the loop.   |
+| 4   | The five agent tools' reads, as built: `list_commitments` → bills + `loadBillCharges` + payees; `list_commitment_candidates` → bills + `loadMerchantNames` + analysis; `search_commitments` and `set_commitment_payees` → bills only; `find_commitment_candidates` → `loadReviewCandidates`. Their inputs and outputs are unchanged. | D2 listed these; recorded so the review does not have to rediscover which tool took which read.                                                                                                                       |
 
 ## Task 1: Save spec documentation
 

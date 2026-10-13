@@ -3,20 +3,30 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { effectiveCategory, effectiveFlow, paydaysFrom } from "./analytics";
 import {
+  effectiveCategory,
+  effectiveFlow,
+  effectiveMerchant,
+  paydaysFrom,
+  spendCentsOf,
+} from "./analytics";
+import {
+  loadBillCharges,
   loadCarryingCost,
-  loadDashboard,
   loadInsightsRows,
+  loadMerchantNames,
   loadPaydays,
+  loadRecurringBills,
+  loadReviewCandidates,
   unclassifiedCount,
 } from "./dashboardQueries";
+import { billChargesOf } from "./billCharges";
+import { listConnections } from "@/lib/banksync/queries";
+import { loadAccountsWithPending } from "./workingPendingQuery";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
-import { createCategoryGroup } from "./budget/mutations";
+import { createBudgetCategory, createCategoryGroup } from "./budget/mutations";
 import { reclassifyTransactions, upsertBillEnvelope } from "./mutations";
 import { listTransactions } from "./queries";
-import { renamePayee } from "./payees/mutations";
-import { listPayees } from "./payees/queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -265,39 +275,202 @@ describeDb("insights user isolation", () => {
   });
 });
 
-describeDb("loadDashboard", () => {
-  it("returns the accounts, bills and bill charges the headline is built from", async () => {
-    const userId = await makeUser();
+describeDb("the reads the retired dashboard was composed from", () => {
+  /**
+   * The edge cases the narrow bill read's argument depends on: every row that reaches a bill
+   * envelope by some route the full read handles in its own way. If `loadBillCharges` ever
+   * decided one of these in SQL instead of leaving it to `spendCentsOf`, the comparison with
+   * the full read would diverge here.
+   */
+  async function seedBillLedger(userId: string) {
     await seed(userId);
     await reclassifyTransactions(userId);
-    const alarmPayee = (await listPayees(userId)).find(
-      (payee) => payee.name === "SimpliSafe",
-    );
-    if (!alarmPayee) throw new Error("SimpliSafe payee was not seeded");
     await createCategoryGroup(userId, { name: "Household", kind: "spending" });
-    await upsertBillEnvelope(userId, {
-      name: "SimpliSafe",
-      payeeIds: [alarmPayee.id],
+    const alarmId = await upsertBillEnvelope(userId, {
+      name: "Alarm",
       cadence: { unit: "month", n: 1 },
       expectedCents: 3_471,
-      dueDay: 9,
     });
-    await renamePayee(userId, alarmPayee.id, "Home Alarm");
-
-    const data = await loadDashboard(userId);
-
-    expect(data.accounts).toHaveLength(1);
-    expect(data.accounts[0]).toMatchObject({
-      name: "Chase •••9910",
-      kind: "credit_card",
+    const internetId = await upsertBillEnvelope(userId, {
+      name: "Internet",
+      cadence: { unit: "month", n: 1 },
+      expectedCents: 6_000,
     });
-    expect(data.bills[0]).toMatchObject({ dueDay: 9 });
-    expect(data.bills[0].payees).toEqual([{ id: alarmPayee.id, name: "Home Alarm" }]);
-    // Only charges against a declared merchant — the Walmart row is not one.
-    expect(data.billCharges).toEqual([
-      { name: "SimpliSafe", dateKey: "2026-03-09", costCents: 3471 },
-      { name: "SimpliSafe", dateKey: "2026-04-09", costCents: 3471 },
+    const groceriesId = await createBudgetCategory(userId, {
+      name: "Groceries",
+      kind: "spending",
+    });
+    const [account] = await db
+      .select({ id: financeAccounts.id })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.userId, userId));
+    const insert = async (
+      values: Partial<typeof financeTransactions.$inferInsert> &
+        Pick<typeof financeTransactions.$inferInsert, "transactionDate" | "amount">,
+    ) => {
+      const [row] = await db
+        .insert(financeTransactions)
+        .values({
+          userId,
+          accountId: account.id,
+          description: "ACME BILL",
+          ...values,
+        })
+        .returning({ id: financeTransactions.id });
+      return row.id;
+    };
+
+    // An ordinary charge, and a refund and a positive interest_fee: neither is a cost.
+    await insert({
+      transactionDate: "2026-05-09",
+      amount: "-34.71",
+      derivedFlow: "spend",
+      budgetCategoryId: alarmId,
+    });
+    await insert({
+      transactionDate: "2026-05-10",
+      amount: "10.00",
+      derivedFlow: "refund",
+      budgetCategoryId: alarmId,
+    });
+    await insert({
+      transactionDate: "2026-05-11",
+      amount: "1.50",
+      derivedFlow: "interest_fee",
+      budgetCategoryId: alarmId,
+    });
+    await insert({
+      transactionDate: "2026-05-12",
+      amount: "-2.00",
+      derivedFlow: "interest_fee",
+      budgetCategoryId: alarmId,
+    });
+    // Never classified: the fallback calls a negative amount spend, and the dashboard counted it.
+    await insert({
+      transactionDate: "2026-05-13",
+      amount: "-60.00",
+      derivedFlow: null,
+      budgetCategoryId: internetId,
+    });
+    // Decided only by the override: derived as income, said to be spend.
+    await insert({
+      transactionDate: "2026-05-14",
+      amount: "-70.00",
+      derivedFlow: "income",
+      flowOverride: "spend",
+      budgetCategoryId: internetId,
+    });
+    // And the reverse: derived as spend, said to be income, so not a cost.
+    await insert({
+      transactionDate: "2026-05-15",
+      amount: "-80.00",
+      derivedFlow: "spend",
+      flowOverride: "income",
+      budgetCategoryId: internetId,
+    });
+    // A split child filed to a bill. Its parent is a bank row, not a money row.
+    const parentId = await insert({
+      transactionDate: "2026-05-16",
+      amount: "-90.00",
+      derivedFlow: "spend",
+      isParent: true,
+    });
+    await insert({
+      transactionDate: "2026-05-16",
+      amount: "-50.00",
+      derivedFlow: "spend",
+      parentId,
+      budgetCategoryId: internetId,
+    });
+    await insert({
+      transactionDate: "2026-05-16",
+      amount: "-40.00",
+      derivedFlow: "spend",
+      parentId,
+      budgetCategoryId: groceriesId,
+    });
+    // A pending hold from the other source, which the working-balance rule supersedes.
+    await insert({
+      transactionDate: "2026-05-17",
+      amount: "-5.00",
+      derivedFlow: "spend",
+      pending: true,
+      externalSource: "scrape:chase",
+      externalId: "superseded-hold",
+      budgetCategoryId: alarmId,
+    });
+    // Filed to an envelope that is not a bill.
+    await insert({
+      transactionDate: "2026-05-18",
+      amount: "-25.00",
+      derivedFlow: "spend",
+      budgetCategoryId: groceriesId,
+    });
+    return { alarmId, internetId };
+  }
+
+  /** The loop the dashboard and the forecast ran over every row, kept as the oracle. */
+  async function chargesFromFullRead(userId: string) {
+    const [rows, bills] = await Promise.all([
+      loadInsightsRows(userId),
+      loadRecurringBills(userId),
     ]);
+    const names = new Map(bills.map((bill) => [bill.id, bill.name]));
+    return rows.flatMap((row) => {
+      const name = row.budgetCategoryId ? names.get(row.budgetCategoryId) : undefined;
+      const costCents = spendCentsOf(row);
+      return name === undefined || costCents <= 0
+        ? []
+        : [{ name, dateKey: row.transactionDate, costCents }];
+    });
+  }
+
+  it("reads only rows filed to a bill, and derives the charges the full read does", async () => {
+    const userId = await makeUser();
+    const { alarmId, internetId } = await seedBillLedger(userId);
+
+    const narrow = await loadBillCharges(userId);
+    const bills = await loadRecurringBills(userId);
+    const derived = billChargesOf(narrow, bills).flat.map((charge) => ({
+      name: charge.name,
+      dateKey: charge.dateKey,
+      costCents: charge.costCents,
+    }));
+
+    expect(derived).toEqual(await chargesFromFullRead(userId));
+    // Pinned, so the equality above is not two empty lists. Out: the refund, the positive
+    // interest_fee, the row the user said is income, the split parent, the superseded hold
+    // and the grocery row. In: the unclassified row and the one made spend by override.
+    expect(derived).toEqual([
+      { name: "Alarm", dateKey: "2026-05-09", costCents: 3_471 },
+      { name: "Alarm", dateKey: "2026-05-12", costCents: 200 },
+      { name: "Internet", dateKey: "2026-05-13", costCents: 6_000 },
+      { name: "Internet", dateKey: "2026-05-14", costCents: 7_000 },
+      { name: "Internet", dateKey: "2026-05-16", costCents: 5_000 },
+    ]);
+    // Everything filed to a bill is read, costs or not: the cost test is the pure function's.
+    expect(narrow.map((row) => row.budgetCategoryId)).toEqual(
+      expect.arrayContaining([alarmId, internetId]),
+    );
+    expect(narrow).toHaveLength(8);
+    expect(narrow.map((row) => row.transactionDate)).toEqual(
+      [...narrow.map((row) => row.transactionDate)].sort(),
+    );
+  });
+
+  it("finds the merchant names the full read finds, once each", async () => {
+    const userId = await makeUser();
+    await seedBillLedger(userId);
+
+    const rows = await loadInsightsRows(userId);
+    const expected = [...new Set(rows.map((row) => effectiveMerchant(row)))]
+      .filter((name) => name !== "")
+      .sort((left, right) => left.localeCompare(right));
+
+    const names = await loadMerchantNames(userId);
+    expect(names).toEqual(expected);
+    expect(names).toContain("SimpliSafe");
+    expect(new Set(names).size).toBe(names.length);
   });
 
   it("reports no pending rows for a register built from files", async () => {
@@ -306,32 +479,57 @@ describeDb("loadDashboard", () => {
     const userId = await makeUser();
     await seed(userId);
 
-    expect((await loadDashboard(userId)).pending).toEqual([]);
+    expect((await loadAccountsWithPending(userId)).pending.rows).toEqual([]);
   });
 
-  it("does not hand a second user another user's dashboard", async () => {
+  it("hands a second user none of the first user's bill charges, merchants or candidates", async () => {
     const ownerId = await makeUser();
     const intruderId = await makeUser();
-    await seed(ownerId);
-    await reclassifyTransactions(ownerId);
-    await createCategoryGroup(ownerId, { name: "Household", kind: "spending" });
-    await upsertBillEnvelope(ownerId, {
-      name: "SimpliSafe",
+    await seedBillLedger(ownerId);
+    // The intruder owns an envelope and an account of their own, so an empty answer is not
+    // "this user has no bills".
+    await upsertBillEnvelope(intruderId, {
+      name: "Alarm",
       cadence: { unit: "month", n: 1 },
-      expectedCents: 3_471,
+      expectedCents: 1_000,
     });
 
-    const intruder = await loadDashboard(intruderId);
-    expect(intruder.accounts).toEqual([]);
-    expect(intruder.bills).toEqual([]);
-    expect(intruder.review).toEqual([]);
-    expect(intruder.billCharges).toEqual([]);
-    expect(intruder.pending).toEqual([]);
-    expect(intruder.paydays).toEqual([]);
-    expect(intruder.connections).toEqual([]);
+    expect(await loadBillCharges(intruderId)).toEqual([]);
+    expect(await loadMerchantNames(intruderId)).toEqual([]);
+    expect(await loadReviewCandidates(intruderId)).toEqual([]);
+    expect((await loadAccountsWithPending(intruderId)).accounts).toEqual([]);
+    expect(await listConnections(intruderId)).toEqual([]);
 
-    // And the owner still sees theirs, so the assertions above are not passing on an empty
-    // seed.
-    expect((await loadDashboard(ownerId)).accounts).toHaveLength(1);
+    // The owner still sees theirs, so none of the above passed on an empty seed.
+    expect((await loadBillCharges(ownerId)).length).toBe(8);
+    expect((await loadMerchantNames(ownerId)).length).toBeGreaterThan(0);
+    expect((await loadAccountsWithPending(ownerId)).accounts).toHaveLength(1);
+  });
+
+  it("does not let another user's row filed to this user's envelope count as a charge", async () => {
+    // The envelope id is the join key, so a row of another user that names it must not
+    // reach the owner's charges: each side of the join carries its own `user_id`.
+    const ownerId = await makeUser();
+    const intruderId = await makeUser();
+    const { alarmId } = await seedBillLedger(ownerId);
+    await seed(intruderId);
+    const [intruderAccount] = await db
+      .select({ id: financeAccounts.id })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.userId, intruderId));
+    await db.insert(financeTransactions).values({
+      userId: intruderId,
+      accountId: intruderAccount.id,
+      transactionDate: "2026-05-20",
+      description: "NOT YOURS",
+      amount: "-999.00",
+      derivedFlow: "spend",
+      budgetCategoryId: alarmId,
+    });
+
+    const owner = await loadBillCharges(ownerId);
+    expect(owner).toHaveLength(8);
+    expect(owner.some((row) => row.amountCents === -99_900)).toBe(false);
+    expect(await loadBillCharges(intruderId)).toEqual([]);
   });
 });

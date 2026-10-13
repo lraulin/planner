@@ -8,7 +8,6 @@ import {
   financeStatements,
   financeTransactions,
 } from "@/db/schema";
-import { listConnections, type BankConnectionRow } from "@/lib/banksync/queries";
 import {
   effectiveMerchant,
   paydaysFrom,
@@ -19,7 +18,7 @@ import {
   type RecurringMerchant,
 } from "./analytics";
 import type { BillCharge } from "./available";
-import type { PendingRow } from "./workingBalance";
+import type { BillChargeRow } from "./billCharges";
 import type { Payday } from "./classify/income";
 import {
   payeeClaimIndex,
@@ -45,7 +44,6 @@ import { activeBillTotals } from "./commitmentRows";
 import { numericStringToCents } from "./money";
 import { oncePerRequest } from "@/lib/db/requestMemo";
 import type { FinanceExecutor } from "./dbExecutor";
-import type { FinanceAccountRow } from "./types";
 import { loadAccountsWithPending } from "./workingPendingQuery";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { budgetContributionSql } from "./budget/contributionSql";
@@ -418,101 +416,98 @@ export async function loadBillForecast(
 }
 
 /**
- * Everything the Finances **dashboard** reads, in one call.
+ * Every posted charge filed to one of this user's bill envelopes, oldest first.
  *
- * Composed from reads that already exist rather than reimplemented: `listAccounts` computes the
- * three-tier headline balance and `syncedBalanceAsOf` that `available.ts` turns on, and
- * `paydaysFrom` runs the same `detectIncome` the classifier does. Two implementations of "what
- * is a paycheck" is exactly how a dashboard comes to disagree with the page it links to.
+ * What the bill forecast and the agent's commitment tools read in place of the whole
+ * classified ledger. A bill's charges are what is filed to its envelope, and the envelope
+ * join is the whole selection: the loop that used to run over every row skipped each one
+ * whose envelope was not in the user's `kind = 'bill'` set, which is exactly the rows this
+ * inner join drops. `spendCentsOf(row) > 0` stays in {@link billChargesOf}, so the one
+ * definition of a cost is still the pure function's.
  *
- * **Paydays and bill charges are derived here rather than in the view.** The full classified
- * history is a few thousand rows — the right payload for Insights, which re-slices all of it a
- * dozen ways, and the wrong one for a status page that needs a list of dates and a list of
- * charges. Both derivations are pure and neither depends on "today", so nothing about doing
- * them server-side makes the result depend on the deploy region's clock.
+ * Row scope is {@link countedRows}, the same predicate the full read uses, and the order is
+ * the full read's (date, then id), so the result is the full read's rows with the unfiled
+ * ones missing. `agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/` D3.
  */
-export type DashboardData = {
-  loadedAtMs: number;
-  accounts: FinanceAccountRow[];
-  /** Rows the bank has not yet posted. Signed in module convention. */
-  pending: PendingRow[];
-  bills: StoredBillRow[];
-  paydays: Payday[];
-  /**
-   * Every posted charge against a bill, keyed by the **envelope's name** rather than by the
-   * bank's merchant — so a bill covering two spellings arrives as one series.
-   */
-  billCharges: BillCharge[];
-  connections: BankConnectionRow[];
-  /** Distinct `effectiveMerchant` strings, for Review. */
-  merchants: string[];
-  /**
-   * Detected recurring merchants no envelope has claimed. Review — propose, never apply.
-   */
-  review: RecurringMerchant[];
-};
-
-export async function loadDashboard(userId: string): Promise<DashboardData> {
-  const loadedAtMs = Date.now();
-  const [
-    { accounts, pending: pendingSelection },
-    rows,
-    bills,
-    connections,
-    dismissedPayeeIds,
-  ] = await Promise.all([
-    loadAccountsWithPending(userId),
-    loadInsightsRows(userId),
-    loadRecurringBills(userId),
-    listConnections(userId),
-    db
-      .select({ id: financePayees.id })
-      .from(financePayees)
-      .where(
-        and(eq(financePayees.userId, userId), eq(financePayees.notACommitment, true)),
+export async function loadBillCharges(userId: string): Promise<BillChargeRow[]> {
+  const { pending } = await loadAccountsWithPending(userId);
+  const rows = await db
+    .select({
+      // The joined envelope's id rather than the row's own nullable column: the inner join
+      // makes them equal, and this one cannot be null.
+      budgetCategoryId: financeBudgetCategories.id,
+      transactionDate: financeTransactions.transactionDate,
+      amount: financeTransactions.amount,
+      derivedFlow: financeTransactions.derivedFlow,
+      flowOverride: financeTransactions.flowOverride,
+    })
+    .from(financeTransactions)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .innerJoin(
+      financeBudgetCategories,
+      and(
+        eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
+        eq(financeBudgetCategories.userId, userId),
+        eq(financeBudgetCategories.kind, "bill"),
       ),
-  ]);
-  // A bill's charges are what is filed to its envelope; a payee claim is how they get
-  // there. Routing by `budgetCategoryId` keeps the dashboard, the 12-month projection,
-  // and the grid on one answer. The claim index is still the route from a bank string
-  // to an envelope for Review — resolving that per panel is how a merchant ends up
-  // folded into a bill on one surface and not another.
-  const index = payeeClaimIndex(bills);
-  const envelopes = billEnvelopeIndex(bills);
-  const dismissed = new Set(dismissedPayeeIds.map((row) => row.id));
+    )
+    .where(
+      and(
+        countedRows(userId, pending.supersededTransactionIds),
+        eq(financeTransactions.userId, userId),
+      ),
+    )
+    .orderBy(asc(financeTransactions.transactionDate), asc(financeTransactions.id));
 
-  const billCharges: BillCharge[] = [];
-  const merchantSet = new Set<string>();
-
-  for (const row of rows) {
-    const merchant = effectiveMerchant(row);
-    if (merchant !== "") merchantSet.add(merchant);
-    const ref = row.budgetCategoryId ? envelopes.get(row.budgetCategoryId) : undefined;
-    if (ref === undefined || spendCentsOf(row) <= 0) continue;
-
-    billCharges.push({
-      name: ref.name,
-      dateKey: row.transactionDate,
-      costCents: spendCentsOf(row),
-    });
-  }
-
-  return {
-    loadedAtMs,
-    accounts,
-    pending: pendingSelection.rows,
-    bills,
-    paydays: paydaysFrom(rows),
-    billCharges,
-    connections,
-    merchants: [...merchantSet].sort((left, right) => left.localeCompare(right)),
-    review: reviewCandidates(rows, bills, index, dismissed),
-  };
+  return rows.map((row) => ({
+    budgetCategoryId: row.budgetCategoryId,
+    transactionDate: row.transactionDate,
+    amountCents: numericStringToCents(row.amount) ?? 0,
+    derivedFlow: row.derivedFlow,
+    flowOverride: row.flowOverride,
+  }));
 }
 
 /**
- * Review candidates on their own, for pages that want the list without the rest of the
- * dashboard (the Budget page's Review drawer).
+ * Every distinct merchant name the ledger shows, for the agent's candidate search.
+ *
+ * Reads the distinct `(description, payee name)` pairs and applies `effectiveMerchant` in
+ * JS. The function is deterministic in exactly those two inputs, so the set of its outputs
+ * over distinct inputs is the set over every row. Sorted as the dashboard sorted it.
+ */
+export async function loadMerchantNames(userId: string): Promise<string[]> {
+  const { pending } = await loadAccountsWithPending(userId);
+  const rows = await db
+    .selectDistinct({
+      description: financeTransactions.description,
+      payeeName: financePayees.name,
+    })
+    .from(financeTransactions)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .leftJoin(
+      financePayees,
+      and(
+        eq(financePayees.id, financeTransactions.payeeId),
+        eq(financePayees.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        countedRows(userId, pending.supersededTransactionIds),
+        eq(financeTransactions.userId, userId),
+      ),
+    );
+
+  const names = new Set<string>();
+  for (const row of rows) {
+    const merchant = effectiveMerchant(row);
+    if (merchant !== "") names.add(merchant);
+  }
+  return [...names].sort((left, right) => left.localeCompare(right));
+}
+
+/**
+ * Review candidates: recurring merchants no envelope has claimed. Propose, never apply.
  */
 export async function loadReviewCandidates(
   userId: string,

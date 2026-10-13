@@ -80,12 +80,15 @@ import { SNAPSHOT_SOURCE, SNAPSHOT_VERSION } from "@/lib/amazon/snapshot";
 import { SLIM_SOURCE, SLIM_VERSION } from "@/lib/amazon/types";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import {
+  loadBillCharges,
   loadCarryingCost,
-  loadDashboard,
   loadInsightsRows,
+  loadMerchantNames,
   loadRecurringBills,
+  loadReviewCandidates,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
+import { loadAccountsWithPending } from "@/lib/finances/workingPendingQuery";
 import { createCategoryGroup } from "@/lib/finances/budget/mutations";
 import {
   listBudgetEnvelopeOptions,
@@ -1153,10 +1156,17 @@ describeDb("a second user reads none of the first user's rows", () => {
     // what the owner gets, which is what stops this passing on an empty database.
     const mentions = (payload: unknown, id: string) =>
       (JSON.stringify(payload) ?? "").includes(id);
-    expect(mentions(await loadDashboard(intruder), owner.financeAccountId)).toBe(false);
-    expect(mentions(await loadDashboard(owner.userId), owner.financeAccountId)).toBe(
-      true,
-    );
+    expect(
+      mentions(await loadAccountsWithPending(intruder), owner.financeAccountId),
+    ).toBe(false);
+    expect(
+      mentions(await loadAccountsWithPending(owner.userId), owner.financeAccountId),
+    ).toBe(true);
+    // The narrow reads that replaced the dashboard each scope themselves.
+    expect(await loadBillCharges(intruder)).toEqual([]);
+    expect(await loadMerchantNames(intruder)).toEqual([]);
+    expect(await loadReviewCandidates(intruder)).toEqual([]);
+    expect((await loadMerchantNames(owner.userId)).length).toBeGreaterThan(0);
     expect(mentions(await loadNotesListPayload(intruder, null), owner.noteId)).toBe(
       false,
     );

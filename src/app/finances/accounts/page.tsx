@@ -1,8 +1,8 @@
 import { localDateKey } from "@/lib/schedule/geometry";
-import { listLinks } from "@/lib/banksync/queries";
+import { listConnections, listLinks } from "@/lib/banksync/queries";
 import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
-import { loadDashboard } from "@/lib/finances/dashboardQueries";
+import { loadAccountsWithPending } from "@/lib/finances/workingPendingQuery";
 import { loadBudgetMismatch } from "@/lib/finances/budget/queries";
 import { readSetting } from "@/lib/settings/queries";
 import { parseBudget } from "@/lib/settings/finances";
@@ -15,8 +15,12 @@ export const dynamic = "force-dynamic";
 /** Catalog of register accounts — rename, reclassify, bank URL, close, delete. */
 export default async function FinancesAccountsPage() {
   const userId = await getCurrentUserId();
-  const [data, links, mismatch] = await Promise.all([
-    loadDashboard(userId),
+  // Reads no ledger rows beyond the account totals and the pending holds: the view uses
+  // accounts, those holds, and connection freshness, and nothing else
+  // (`agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/` D2).
+  const [{ accounts, pending }, connections, links, mismatch] = await Promise.all([
+    loadAccountsWithPending(userId),
+    listConnections(userId),
     listLinks(userId),
     readSetting(userId, BUDGET_SCOPE).then((stored) =>
       loadBudgetMismatch(userId, parseBudget(stored).startMonth),
@@ -27,8 +31,8 @@ export default async function FinancesAccountsPage() {
     <AppShell active="finances">
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
         <AccountsView
-          initialAccounts={data.accounts}
-          operations={data}
+          initialAccounts={accounts}
+          operations={{ pending: pending.rows, connections }}
           links={links}
           todayKey={localDateKey(new Date())}
           mismatch={mismatch}
