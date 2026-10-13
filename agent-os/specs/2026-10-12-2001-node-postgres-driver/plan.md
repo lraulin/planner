@@ -41,6 +41,21 @@ Baseline after the loader fixes on master: about 7 sequential round trips per si
 same doubling from the app's side: 350 of 353 queries made a separate describe trip. The full
 tables are in `shape.md`.
 
+### What this is worth in production
+
+Less than the trip counts suggest. A separate measurement the same day put one production
+round trip at about 4.5 ms (public `/signup` with and without its single query, 20 runs each,
+64 against 73 ms median TTFB): Neon is close to `iad1`. Taking a signed-in page from about 7
+sequential trips to about 4 therefore saves roughly 15 ms. This spec does **not** explain the
+0.5–1 s tab switch Lee sees in production; that gap is still open, with Vercel CPU, connection
+setup and cold starts as the candidates.
+
+What the swap buys besides those milliseconds: no describe trip to reason around when reading
+`perf:routes`, no prepared-statement state against a transaction-mode pooler, and a pool that
+`attachDatabasePool` understands, so connection lifetime across a Fluid suspension becomes
+something measured (Task 8) rather than assumed. If Task 8 shows reconnects are common today,
+that is the larger finding.
+
 ## Decisions
 
 **D1 — One driver.** `pg` under `drizzle-orm/node-postgres`; `postgres` leaves `package.json`.

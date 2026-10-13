@@ -143,6 +143,9 @@ when the client is already executing a query is deprecated and will be removed i
 
 ## Context
 
+- **Expected gain:** about 15 ms per signed-in page at the ~4.5 ms production round trip
+  measured in another session on 2026-10-12. The brief was written before that number existed;
+  `plan.md` states it so the decision to implement is made with it in view.
 - **Visuals:** None. Nothing on screen changes.
 - **References:** see `references.md`.
 - **Product alignment:** serves the mission's fast daily-use workflow. Adds two runtime
