@@ -13,12 +13,10 @@ import {
   paydaysFrom,
   recurringMerchants,
   spendCandidates,
-  spendCentsOf,
   type AnalyticsRow,
   type RecurringMerchant,
 } from "./analytics";
-import type { BillCharge } from "./available";
-import type { BillChargeRow } from "./billCharges";
+import { billChargesOf, type BillChargeRow } from "./billCharges";
 import type { Payday } from "./classify/income";
 import {
   payeeClaimIndex,
@@ -27,12 +25,6 @@ import {
   type StoredBillRow,
 } from "./commitments";
 
-/** Envelope id → the bill it is. The route from a filed row to a bill charge. */
-function billEnvelopeIndex(
-  bills: readonly StoredBillRow[],
-): Map<string, { id: string; name: string }> {
-  return new Map(bills.map((bill) => [bill.id, { id: bill.id, name: bill.name }]));
-}
 import {
   billRows as billRowsOf,
   type BillRow,
@@ -348,20 +340,22 @@ export type BillForecast = {
 };
 
 /**
- * The Budget page's collapsed-by-default forecast panels — Next 12 months and Expected vs
+ * The Bills page's collapsed-by-default forecast panels — Next 12 months and Expected vs
  * income (`agent-os/specs/2026-08-23-2313-one-budget/` D8 carries these over from the
  * retired Commitments page, secondary rather than a permanent section).
  *
- * Reads the full three-year `loadInsightsRows` pass rather than the register alone: payday
- * detection (`paydaysFrom`) still feeds expected monthly income. The pay-period forecast
- * axis is gone (`agent-os/specs/2026-08-25-1154-month-ahead-zero-based/` D5).
+ * Reads the rows filed to a bill envelope, not the classified ledger: a bill's charges are
+ * what is filed to its envelope, and nothing else on this page looks at a transaction. Paydays
+ * are not read at all; expected income is the declared plan (`regularIncomePlan`), and the
+ * pay-period forecast axis is gone
+ * (`agent-os/specs/2026-08-25-1154-month-ahead-zero-based/` D5).
  */
 export async function loadBillForecast(
   userId: string,
   todayKey: string,
 ): Promise<BillForecast> {
-  const [rows, bills, incomeRows] = await Promise.all([
-    loadInsightsRows(userId),
+  const [chargeRows, bills, incomeRows] = await Promise.all([
+    loadBillCharges(userId),
     loadRecurringBills(userId),
     db
       .select({
@@ -374,18 +368,7 @@ export async function loadBillForecast(
       .from(financeBudgetCategories)
       .where(eq(financeBudgetCategories.userId, userId)),
   ]);
-  const envelopes = billEnvelopeIndex(bills);
-  const flatCharges: BillCharge[] = [];
-  const chargesByName = new Map<string, CommitmentCharge[]>();
-  for (const row of rows) {
-    const ref = row.budgetCategoryId ? envelopes.get(row.budgetCategoryId) : undefined;
-    if (ref === undefined || spendCentsOf(row) <= 0) continue;
-    const charge = { dateKey: row.transactionDate, costCents: spendCentsOf(row) };
-    flatCharges.push({ billId: ref.id, name: ref.name, ...charge });
-    const list = chargesByName.get(ref.id) ?? [];
-    list.push(charge);
-    chargesByName.set(ref.id, list);
-  }
+  const { flat: flatCharges, byBill: chargesByName } = billChargesOf(chargeRows, bills);
 
   const incomePlan = regularIncomePlan(incomeRows);
   const rowsOut = billRowsOf(bills, flatCharges, todayKey);

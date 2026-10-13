@@ -12,6 +12,7 @@ import {
 } from "./analytics";
 import {
   loadBillCharges,
+  loadBillForecast,
   loadCarryingCost,
   loadInsightsRows,
   loadMerchantNames,
@@ -456,6 +457,45 @@ describeDb("the reads the retired dashboard was composed from", () => {
     expect(narrow.map((row) => row.transactionDate)).toEqual(
       [...narrow.map((row) => row.transactionDate)].sort(),
     );
+  });
+
+  it("builds the forecast from those charges, and a second user's forecast is empty", async () => {
+    const ownerId = await makeUser();
+    const intruderId = await makeUser();
+    await seedBillLedger(ownerId);
+
+    const forecast = await loadBillForecast(ownerId, "2026-09-05");
+    const bills = await loadRecurringBills(ownerId);
+    const idByName = new Map(bills.map((bill) => [bill.name, bill.id]));
+    const expected = new Map<string, { dateKey: string; costCents: number }[]>();
+    for (const charge of await chargesFromFullRead(ownerId)) {
+      const id = idByName.get(charge.name);
+      if (!id) throw new Error(`no bill named ${charge.name}`);
+      expected.set(id, [
+        ...(expected.get(id) ?? []),
+        { dateKey: charge.dateKey, costCents: charge.costCents },
+      ]);
+    }
+
+    expect(expected.size).toBe(2);
+    expect(forecast.chargesByBill).toEqual(expected);
+    expect(forecast.chargeKeys).toEqual(
+      new Map(
+        [...expected].map(([id, charges]) => [
+          id,
+          charges.map((charge) => charge.dateKey).sort(),
+        ]),
+      ),
+    );
+    expect(forecast.billRows.map((row) => row.name).sort()).toEqual([
+      "Alarm",
+      "Internet",
+    ]);
+
+    const intruder = await loadBillForecast(intruderId, "2026-09-05");
+    expect(intruder.billRows).toEqual([]);
+    expect(intruder.chargesByBill.size).toBe(0);
+    expect(intruder.chargeKeys.size).toBe(0);
   });
 
   it("finds the merchant names the full read finds, once each", async () => {

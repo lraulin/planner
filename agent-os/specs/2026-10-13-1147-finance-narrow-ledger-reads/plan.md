@@ -4,8 +4,8 @@
 Spec folder: `agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/`
 
 > Shaped 2026-10-13. Task 1 (this folder), Task 2 (ledger refreshed, baseline captured) and
-> Task 3 (Accounts reads no ledger; `loadDashboard` retired) are done; implementation
-> continues at Task 4. Progress is in **Changes from original plan**
+> Task 3 (Accounts reads no ledger; `loadDashboard` retired) and Task 4 (the forecast
+> reads bill-envelope rows) are done; implementation continues at Task 5. Progress is in **Changes from original plan**
 > and **Verification**.
 
 ## Spec relationships
