@@ -107,8 +107,8 @@ describe("planBankSnapshotReconciliation", () => {
   });
 
   it("recognises its own earlier paste of the same page and inserts nothing", () => {
-    // A second identical paste is a no-op. The userscript derives `externalId` from the
-    // page row, so this is an identity rather than a description comparison — and the
+    // A second identical paste is a no-op. The snapshot parser derives `externalId` from
+    // the page row, so this is an identity rather than a description comparison — and the
     // brand-stem matcher that once did this job could not tell `CAPITAL ONE MOBILE PYMT`
     // from `Payment from CAPITAL ONE N.A. ...2322`.
     const first = incoming("AMAZON MKTPL", -1999);

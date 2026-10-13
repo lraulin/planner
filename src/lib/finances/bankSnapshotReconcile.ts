@@ -139,9 +139,10 @@ function incomingPairable(row: ParsedBankSnapshotRow): PairableRow {
 /**
  * Two records of one charge from the **same** browser feed.
  *
- * The userscript derives `externalId` from the page's own row — source, card, date, folded
- * description, amount, and an occurrence ordinal — so re-pasting the same page produces the
- * same ids. That is an identity, not a comparison, which is what lets the posted side drop
+ * `parseBankBrowserSnapshot` derives `externalId` from the page's own row — source, card,
+ * date, folded description, amount, and an occurrence ordinal — so re-pasting the same page
+ * produces the same ids. The userscripts emit no id of their own; the server owns the
+ * identity. That is an identity, not a comparison, which is what lets the posted side drop
  * description matching entirely.
  */
 function samePostedRow(
