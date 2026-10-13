@@ -5,13 +5,9 @@ import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { MoreIcon } from "./navIcons";
-import {
-  BUILT_MODULES,
-  moduleEntryHref,
-  primaryDestinations,
-  type ModuleId,
-} from "./modules";
+import { BUILT_MODULES, moduleEntryHref, primaryDestinations } from "./modules";
 import { NavLink } from "./NavLink";
+import { useActiveModule } from "./useActiveModule";
 import { useShellSettings } from "./useShellSettings";
 
 /**
@@ -30,7 +26,8 @@ import { useShellSettings } from "./useShellSettings";
  * There is no command palette here. `⌘K` has no touch equivalent, and commands reach the
  * phone through the `⋯` overflow on each module's own toolbar instead.
  */
-export function MoreSheet({ active }: { active: ModuleId | null }) {
+export function MoreSheet() {
+  const active = useActiveModule();
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const pathname = usePathname();

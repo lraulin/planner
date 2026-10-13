@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadLatestForExerciseAction } from "@/app/fitness/actions";
+import { loadLatestForExerciseAction } from "@/app/(shell)/fitness/actions";
 import { formatSetsLabel } from "@/lib/fitness/format";
 import type { ExerciseHistoryEntry, WorkoutSetView } from "@/lib/fitness/types";
 

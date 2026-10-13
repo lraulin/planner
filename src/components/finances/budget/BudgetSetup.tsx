@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { seedBudgetAction } from "@/app/finances/actions";
+import { seedBudgetAction } from "@/app/(shell)/finances/actions";
 import {
   BUDGET_PRESETS,
   PRESET_DESCRIPTIONS,

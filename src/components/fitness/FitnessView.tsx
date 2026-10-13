@@ -7,7 +7,7 @@ import {
   deleteExerciseAction,
   deleteSessionAction,
   replaceSessionAction,
-} from "@/app/fitness/actions";
+} from "@/app/(shell)/fitness/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ErrorBanner, TabToolbar, ToolbarButton } from "@/components/tabs/tabChrome";
 import { CommandBar } from "@/components/grid/CommandBar";

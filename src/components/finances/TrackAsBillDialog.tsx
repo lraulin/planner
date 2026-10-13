@@ -7,7 +7,7 @@ import { useToday } from "@/components/grid/useToday";
 import {
   loadTrackAsBillDraftAction,
   trackTransactionAsBillAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
 import { nextDueFrom, type Cadence } from "@/lib/finances/recurringBills";
 import type { ClaimedPayee, TrackAsBillDraft } from "@/lib/finances/registerBillDraft";

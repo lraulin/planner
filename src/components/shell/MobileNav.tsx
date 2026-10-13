@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { requestQuickCapture } from "@/components/capture/event";
 import { MoreSheet } from "./MoreSheet";
 import { CaptureIcon, OrganizeIcon } from "./navIcons";
-import { primaryDestinations, type ModuleId } from "./modules";
+import { primaryDestinations } from "./modules";
 import { NavLink } from "./NavLink";
 
 /**
@@ -25,7 +25,7 @@ import { NavLink } from "./NavLink";
  * A normal flex child of `AppShell` rather than `position: fixed`, so the scroll container
  * above it ends where the bar begins and the last row is never hidden underneath.
  */
-export function MobileNav({ active }: { active: ModuleId | null }) {
+export function MobileNav() {
   const pathname = usePathname();
 
   return (
@@ -62,7 +62,7 @@ export function MobileNav({ active }: { active: ModuleId | null }) {
             />
           ),
         )}
-        <MoreSheet active={active} />
+        <MoreSheet />
       </div>
     </nav>
   );

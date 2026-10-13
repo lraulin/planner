@@ -6,7 +6,7 @@ import {
   loadRegisterBlockAction,
   loadRegisterExportAction,
   loadRegisterIndexAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import type { TransactionListRow } from "@/lib/finances/types";
 import {
   REGISTER_BLOCK_SIZE,

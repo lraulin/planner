@@ -8,7 +8,7 @@ import type { ContactOption } from "@/lib/contacts/types";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
-import { updateNoteAction } from "@/app/notes/actions";
+import { updateNoteAction } from "@/app/(shell)/notes/actions";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { ContextsInput } from "@/components/detail/fields";
 import { MarkdownEditor } from "./MarkdownEditor";

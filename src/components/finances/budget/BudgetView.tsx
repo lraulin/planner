@@ -29,7 +29,7 @@ import {
   setTargetSnoozeAction,
   setRecurringBillAction,
   updateBudgetCategoryAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import type { Command } from "@/lib/commands/registry";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";

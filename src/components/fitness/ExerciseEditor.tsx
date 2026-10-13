@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createExerciseAction, updateExerciseAction } from "@/app/fitness/actions";
+import {
+  createExerciseAction,
+  updateExerciseAction,
+} from "@/app/(shell)/fitness/actions";
 import { Drawer, DrawerLeaveGuard, useDrawerLeave } from "@/components/detail/Drawer";
 import { BAR_PRESETS, barPresetId, parseBarWeight } from "@/lib/fitness/bars";
 import {

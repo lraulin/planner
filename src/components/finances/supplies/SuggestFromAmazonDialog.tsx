@@ -5,7 +5,7 @@ import {
   addSupplyOptionFromAmazonAction,
   createSupplyItemFromSuggestionAction,
   listAmazonSupplySuggestionsAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { formatUsd } from "@/lib/finances/money";
 import type { SupplyItemRow } from "@/lib/finances/supplies/queries";

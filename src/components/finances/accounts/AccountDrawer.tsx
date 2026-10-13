@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useId, useState, useTransition } from "react";
-import { updateAccountAction } from "@/app/finances/actions";
+import { updateAccountAction } from "@/app/(shell)/finances/actions";
 import type { AccountEdit } from "@/lib/finances/mutations";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";

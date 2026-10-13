@@ -8,7 +8,7 @@ import {
   deleteHouseAction,
   listHousesAction,
   refreshHouseRouteAction,
-} from "@/app/library/houses/actions";
+} from "@/app/(shell)/library/houses/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";

@@ -6,6 +6,7 @@ import {
   documentTitle,
   moduleDefaultPageHref,
   moduleEntryHref,
+  moduleForPathname,
   modulePages,
 } from "./modules";
 
@@ -53,6 +54,43 @@ describe("moduleEntryHref", () => {
       const landing = moduleDefaultPageHref(entry.id);
       expect(moduleEntryHref(entry.id, undefined)).toBe(landing ?? entry.href);
     }
+  });
+});
+
+describe("moduleForPathname", () => {
+  it("resolves every built module's own path and everything beneath it", () => {
+    for (const entry of BUILT_MODULES) {
+      expect(moduleForPathname(entry.href)).toBe(entry.id);
+      expect(moduleForPathname(`${entry.href}/anything/below`)).toBe(entry.id);
+    }
+  });
+
+  it("resolves the pages whose bare path redirects, which is where every link points", () => {
+    expect(moduleForPathname("/plan/tasks")).toBe("plan");
+    expect(moduleForPathname("/finances/register")).toBe("finances");
+    expect(moduleForPathname("/schedule/time-chart/abc")).toBe("schedule");
+    expect(moduleForPathname("/fitness/sessions/abc")).toBe("fitness");
+  });
+
+  it("ignores a query string or hash, so a whole destination can be passed", () => {
+    expect(moduleForPathname("/finances/budget?month=2026-09")).toBe("finances");
+    expect(moduleForPathname("/notes/journal#today")).toBe("notes");
+  });
+
+  it("is null for the shell routes that belong to no module", () => {
+    expect(moduleForPathname("/organize")).toBeNull();
+    expect(moduleForPathname("/settings")).toBeNull();
+    expect(moduleForPathname("/login")).toBeNull();
+  });
+
+  it("keeps the segment boundary, so /plan does not claim /planning", () => {
+    expect(moduleForPathname("/planning")).toBeNull();
+    expect(moduleForPathname("/finances-old")).toBeNull();
+  });
+
+  it("is null for a reserved module, which renders nowhere", () => {
+    expect(moduleForPathname("/focus")).toBeNull();
+    expect(moduleForPathname("/reports/anything")).toBeNull();
   });
 });
 

@@ -19,7 +19,7 @@ import {
   TextField,
 } from "./fields";
 import { RecurrenceFields } from "./RecurrenceFields";
-import { skipRecurrenceAction } from "@/app/plan/outline/actions";
+import { skipRecurrenceAction } from "@/app/(shell)/plan/outline/actions";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import { TaskContactPanel } from "@/components/contacts/TaskContactPanel";
 import type { FormTab } from "./FormTabs";

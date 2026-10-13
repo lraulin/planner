@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { PriorityLetter } from "@/db/schema";
-import { organizeInboxItemAction } from "@/app/organize/actions";
+import { organizeInboxItemAction } from "@/app/(shell)/organize/actions";
 import { requestQuickCapture } from "@/components/capture/event";
 import {
   CheckboxField,

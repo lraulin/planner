@@ -8,7 +8,7 @@ import {
   deleteNodeAction,
   moveNodeAction,
   setPriorityForNodesAction,
-} from "@/app/plan/outline/actions";
+} from "@/app/(shell)/plan/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ConversionDialog } from "@/components/outline/ConversionDialog";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";

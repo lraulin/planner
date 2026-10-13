@@ -8,7 +8,7 @@ import {
   useState,
   type ChangeEvent as ReactChangeEvent,
 } from "react";
-import { listContactOptionsAction } from "@/app/library/contacts/actions";
+import { listContactOptionsAction } from "@/app/(shell)/library/contacts/actions";
 import { ContactSelect } from "@/components/contacts/ContactSelect";
 import type { NodeItem, NodeItemKind } from "@/db/schema";
 import type { ContactOption } from "@/lib/contacts/types";

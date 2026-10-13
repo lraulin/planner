@@ -5,7 +5,7 @@ import {
   getNoteAction,
   saveJournalNoteAction,
   updateNoteAction,
-} from "@/app/notes/actions";
+} from "@/app/(shell)/notes/actions";
 
 import { FileImportHost } from "@/components/import/FileImportHost";
 import { RedNotebookImportPanel } from "@/components/settings/RedNotebookImportPanel";

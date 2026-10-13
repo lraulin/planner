@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { loadLatestForExerciseAction } from "@/app/fitness/actions";
+import { loadLatestForExerciseAction } from "@/app/(shell)/fitness/actions";
 import { Drawer } from "@/components/detail/Drawer";
 import { useAutosave, type SaveStatus } from "@/components/notes/useAutosave";
 import {

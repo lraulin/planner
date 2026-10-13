@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
-import { setCommitmentPayeesAction } from "@/app/finances/actions";
+import { setCommitmentPayeesAction } from "@/app/(shell)/finances/actions";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { PayeePickerField } from "@/components/finances/payees/PayeePickerField";
 

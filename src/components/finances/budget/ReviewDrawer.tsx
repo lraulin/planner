@@ -5,7 +5,7 @@ import {
   loadReviewCandidatesAction,
   setPayeeNotACommitmentAction,
   trackTransactionAsBillAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { Drawer, DrawerHeader, DrawerLeaveGuard } from "@/components/detail/Drawer";
 import { CadenceSelect } from "@/components/finances/CadenceSelect";
 import { DateText } from "@/components/date/DateText";

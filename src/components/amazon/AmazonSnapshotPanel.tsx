@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   applyAmazonSnapshotAction,
   previewAmazonSnapshotAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { amazonSnapshotHeaderProblem } from "@/lib/amazon/snapshot";
 
 export function AmazonSnapshotPanel() {

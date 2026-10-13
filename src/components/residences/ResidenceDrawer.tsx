@@ -4,7 +4,7 @@ import { useEffect, useId, useState, useTransition } from "react";
 import {
   getResidenceDetailAction,
   updateResidenceAction,
-} from "@/app/library/residences/actions";
+} from "@/app/(shell)/library/residences/actions";
 import {
   Drawer,
   DrawerFooter,

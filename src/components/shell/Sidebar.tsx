@@ -9,8 +9,9 @@ import { parseShellSettings, serializeShellSettings } from "@/lib/settings/shell
 import { SHELL_SCOPE } from "@/lib/settings/scopes";
 import { ChevronIcon, OrganizeIcon, SettingsIcon } from "./navIcons";
 import { openCommandPalette } from "./commandEvent";
-import { BUILT_MODULES, moduleEntryHref, type ModuleId } from "./modules";
+import { BUILT_MODULES, moduleEntryHref } from "./modules";
 import { NavLink } from "./NavLink";
+import { useActiveModule } from "./useActiveModule";
 
 const PALETTE_CHORD = formatBindings(OPEN_PALETTE) ?? "⌘K";
 
@@ -37,7 +38,8 @@ const SHELL_CODEC = {
   serialize: serializeShellSettings,
 };
 
-export function Sidebar({ active }: { active: ModuleId | null }) {
+export function Sidebar() {
+  const active = useActiveModule();
   const { value, patch } = useSetting(SHELL_SCOPE, SHELL_CODEC);
   const collapsed = value.sidebarCollapsed;
 

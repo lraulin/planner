@@ -14,7 +14,7 @@ import {
   deleteMetricAction,
   getMetricDetailAction,
   listMetricsAction,
-} from "@/app/metrics/actions";
+} from "@/app/(shell)/metrics/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";

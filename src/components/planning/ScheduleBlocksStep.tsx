@@ -24,7 +24,7 @@ import {
   rescheduleAppointmentAction,
   setAppointmentCheckStateAction,
   duplicateAppointmentAction,
-} from "@/app/schedule/actions";
+} from "@/app/(shell)/schedule/actions";
 import type { AppointmentCheck } from "@/db/schema";
 import { WeekCalendar } from "@/components/schedule/WeekCalendar";
 import { AppointmentDrawer } from "@/components/schedule/AppointmentDrawer";

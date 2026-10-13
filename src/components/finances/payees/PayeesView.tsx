@@ -10,7 +10,7 @@ import {
   listPayeesAction,
   seedPayeesAction,
   updatePayeeDetailsAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";

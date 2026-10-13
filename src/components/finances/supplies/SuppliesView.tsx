@@ -12,7 +12,7 @@ import {
   setSupplyItemGroupAction,
   updateSupplyItemAction,
   updateSupplyOptionAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { DataGrid } from "@/components/grid/DataGrid";

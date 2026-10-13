@@ -33,7 +33,7 @@ Concretely:
   from a `mutations.ts` (a patch type is part of the contract), but the `db` client itself
   stops at `src/lib`. Components mutate by calling a server action.
 - **`actions.ts` is a wrapper, not a place for logic.** It resolves the user, delegates to
-  `src/lib`, revalidates, and shapes the result. `src/app/fitness/actions.ts` is the
+  `src/lib`, revalidates, and shapes the result. `src/app/(shell)/fitness/actions.ts` is the
   reference: one `run()` helper, one line per action. If an action grows a branch, the
   branch belongs in `src/lib`.
 - **Every mutation takes `userId` as its first argument and scopes on it.** No exceptions,

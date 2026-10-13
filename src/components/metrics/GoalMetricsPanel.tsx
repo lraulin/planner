@@ -5,7 +5,7 @@ import {
   createMetricAction,
   getMetricDetailAction,
   listMetricsForOwnerAction,
-} from "@/app/metrics/actions";
+} from "@/app/(shell)/metrics/actions";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { metricPriorityText } from "@/lib/metrics/compactRow";
 import { formatMetricNumber } from "@/lib/metrics/parse";

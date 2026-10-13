@@ -12,6 +12,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import type { Command } from "@/lib/commands/registry";
 import { moduleById, modulePages } from "./modules";
 import type { ModuleId } from "./modules";
+import { useActiveModule } from "./useActiveModule";
 import { movePage, placePage } from "@/lib/navigation/pageOrder";
 import { pageForPathname } from "@/lib/navigation/pages";
 import { useRegisterCommands } from "./CommandProvider";
@@ -55,8 +56,9 @@ const TAB_LABEL =
  * because while arranging the tabs do not go anywhere. Desktop reorders by drag or by `←`/`→`;
  * the phone, which has no HTML5 drag, has the same `←`/`→` buttons.
  */
-export function PageBar({ active }: { active: ModuleId | null }) {
+export function PageBar() {
   const pathname = usePathname();
+  const active = useActiveModule();
   /*
    * Carried across the switch, because the query is *where you are looking* and the page is
    * *how it is drawn*: flipping Calendar → Agenda must not throw away the week you had scrolled
@@ -79,20 +81,32 @@ export function PageBar({ active }: { active: ModuleId | null }) {
   /** Slot the drop would land in (0…pages.length), measured against the current order. */
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   /*
-   * The mode is held *per module* and compared, rather than stored as a boolean and cleared
-   * when `active` changes: switching modules then exits arranging for free, with no
-   * setState-in-effect to fight React over. Deliberately not a `ShellSettings` field —
-   * reloading into a bar whose tabs do not navigate is a trap, and only the *order* is worth
-   * persisting.
+   * The mode is held *per place* — module and pathname — and compared, rather than stored as a
+   * boolean and cleared when `active` changes: leaving the place then exits arranging for
+   * free, with no setState-in-effect to fight React over. Deliberately not a `ShellSettings`
+   * field — reloading into a bar whose tabs do not navigate is a trap, and only the *order*
+   * is worth persisting.
+   *
+   * The pathname is in the key because this bar used to be remounted by every navigation and so
+   * forgot the mode on any page change. It no longer is (`AppShell` sits above the pages), and
+   * the tabs do not navigate while arranging, so the only way to change page mid-arrangement is
+   * a palette or chord go-to — which should drop the mode exactly as it did.
    */
-  const [arrangingModule, setArrangingModule] = useState<ModuleId | null>(null);
+  const [arrangingAt, setArrangingAt] = useState<{
+    moduleId: ModuleId;
+    pathname: string;
+  } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const tabRefs = useRef(new Map<string, HTMLButtonElement | null>());
 
   const ids = pages.map(({ page }) => page.id);
   /** Below two pages there is no bar, and so nothing to rearrange. */
   const hasBar = ids.length >= 2;
-  const arranging = active !== null && arrangingModule === active;
+  const arranging =
+    active !== null &&
+    arrangingAt !== null &&
+    arrangingAt.moduleId === active &&
+    arrangingAt.pathname === pathname;
   // Derived for the same reason the mode is: a page that left the list is no selection.
   const selected = selectedId && ids.includes(selectedId) ? selectedId : null;
   const canDrag = !compact && arranging;
@@ -138,8 +152,10 @@ export function PageBar({ active }: { active: ModuleId | null }) {
           ? "Leave rearrange mode and go back to navigating"
           : "Reorder this module's page tabs by dragging or with the arrow buttons",
         run: () => {
-          setArrangingModule((currentModule) =>
-            currentModule === active ? null : active,
+          setArrangingAt((current) =>
+            current && current.moduleId === active && current.pathname === pathname
+              ? null
+              : { moduleId: active, pathname },
           );
         },
       },
@@ -156,7 +172,7 @@ export function PageBar({ active }: { active: ModuleId | null }) {
         run: () => resetOrder(active),
       },
     ];
-  }, [active, arranging, hasBar, resetOrder, stored]);
+  }, [active, arranging, hasBar, pathname, resetOrder, stored]);
   useRegisterCommands(arrangeCommands);
 
   function endDrag() {
@@ -210,7 +226,7 @@ export function PageBar({ active }: { active: ModuleId | null }) {
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
-            setArrangingModule(null);
+            setArrangingAt(null);
             return;
           }
           if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
@@ -310,7 +326,7 @@ export function PageBar({ active }: { active: ModuleId | null }) {
           <ArrangeButton
             label="Done"
             title="Leave rearrange mode"
-            onClick={() => setArrangingModule(null)}
+            onClick={() => setArrangingAt(null)}
           />
         </div>
       </div>

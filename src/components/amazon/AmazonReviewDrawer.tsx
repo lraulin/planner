@@ -14,7 +14,7 @@ import {
   approveAmazonChargeMatchAction,
   listAmazonChargeCandidatesAction,
   listAmazonReviewItemsAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import type { AmazonChargeCandidate } from "@/lib/amazon/apply";
 import type { AmazonReviewRow } from "@/lib/amazon/queries";
 

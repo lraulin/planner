@@ -11,7 +11,6 @@ import { CommandsPanel } from "./CommandsPanel";
 import { MobileHeader } from "./MobileHeader";
 import { MobileNav } from "./MobileNav";
 import { Sidebar } from "./Sidebar";
-import type { ModuleId } from "./modules";
 
 /**
  * The chrome every signed-in module sits inside.
@@ -19,6 +18,17 @@ import type { ModuleId } from "./modules";
  * This wrapper was copy-pasted into thirteen page files, which is how the shell ended up with
  * nowhere to add phone navigation. It lives here now — and being one seam is also what made
  * replacing the tab strip with a sidebar a change to a single file rather than fourteen.
+ *
+ * **It is rendered once, by `src/app/(shell)/layout.tsx`**, not by pages. Next keys every route
+ * segment, so a shell rendered by each page was unmounted and rebuilt on every navigation —
+ * sidebar, menu bar, page bar and command provider included. Above the pages it persists, and
+ * `children` is the only thing that changes. Nothing is passed down about *where* you are: the
+ * surfaces that need it read the pathname (`useActiveModule`), which cannot disagree with the
+ * address bar the way a hand-passed prop eventually did.
+ *
+ * Consequence worth knowing: everything in here now outlives a navigation. State that used to
+ * be cleared by the remount has to be cleared on purpose (see `PageBar`'s arrange mode); the
+ * row clipboard, which was documented as surviving a navigation, finally does.
  *
  * The outer axis is now horizontal: the sidebar is a column beside the content above `md`,
  * and absent below it, where the phone navigates through `MobileHeader` + `MobileNav`
@@ -34,18 +44,12 @@ import type { ModuleId } from "./modules";
  * instead. `min-w-0` does the same job on the new horizontal axis — a wide grid beside the
  * sidebar would otherwise push the whole layout instead of scrolling inside itself.
  */
-export function AppShell({
-  active,
-  children,
-}: {
-  active: ModuleId | null;
-  children: React.ReactNode;
-}) {
+export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <CommandProvider>
       <RowClipboardProvider>
         <div className="flex h-full min-h-0">
-          <Sidebar active={active} />
+          <Sidebar />
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <MobileHeader />
@@ -67,7 +71,7 @@ export function AppShell({
               the bailout it guards against is a build-time error, not a runtime one.
             */}
             <Suspense fallback={null}>
-              <PageBar active={active} />
+              <PageBar />
             </Suspense>
 
             {/*
@@ -77,7 +81,7 @@ export function AppShell({
             */}
             <div className="relative flex min-h-0 flex-1 flex-col">{children}</div>
 
-            <MobileNav active={active} />
+            <MobileNav />
           </div>
 
           {/*

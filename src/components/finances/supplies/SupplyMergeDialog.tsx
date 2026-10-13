@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useState, useTransition } from "react";
 import {
   mergeSupplyItemsAction,
   previewSupplyMergeAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { ModalShell } from "@/components/detail/ModalShell";
 import type { SupplyMergePreview } from "@/lib/finances/supplies/mutations";
 

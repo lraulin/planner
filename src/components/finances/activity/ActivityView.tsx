@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import {
   listFinanceActivityAction,
   loadFinanceActivityEventAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { downloadTextFile } from "@/components/grid/downloadCsv";
 import { GridToolbar } from "@/components/grid/GridToolbar";

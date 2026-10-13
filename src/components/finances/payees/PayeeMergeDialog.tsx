@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState, useTransition } from "react";
-import { mergePayeesAction, previewPayeeMergeAction } from "@/app/finances/actions";
+import {
+  mergePayeesAction,
+  previewPayeeMergeAction,
+} from "@/app/(shell)/finances/actions";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { formatUsd } from "@/lib/finances/money";
 import type { PayeeMergePreview } from "@/lib/finances/payees/queries";

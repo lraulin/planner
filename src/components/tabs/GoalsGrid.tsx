@@ -22,7 +22,7 @@ import {
 } from "@/components/grid/commonColumns";
 import { DeadlineCell, NameCell, TextCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import { setGoalFieldAction } from "@/app/plan/outline/detail-actions";
+import { setGoalFieldAction } from "@/app/(shell)/plan/outline/detail-actions";
 import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";

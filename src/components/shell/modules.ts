@@ -302,6 +302,34 @@ function standaloneLabel(pathname: string): string | null {
 }
 
 /**
+ * The built module whose subtree contains `pathname`, or `undefined` for a path in none.
+ *
+ * Same trailing-slash boundary as `pageForPathname`: `/plan` claims `/plan/tasks` and not a
+ * hypothetical `/planning`. Reserved modules are excluded, because nothing may resolve to a
+ * destination that renders nowhere.
+ */
+function builtModuleAt(pathname: string): BuiltModule | undefined {
+  return BUILT_MODULES.find(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+  );
+}
+
+/**
+ * Which module a pathname is in — the shell's "active" row — or `null` outside every module.
+ *
+ * Replaces an `active` prop that every page used to hand to `AppShell`. It always equalled the
+ * first path segment, which is to say it restated the URL, and a page that forgot or mistyped it
+ * lit the wrong sidebar row with nothing to catch it. `/organize` (Process Inbox) is a shell
+ * route that belongs to no module, so it resolves to `null`, as the pages' `active={null}` did.
+ *
+ * The query string and hash are ignored, so a destination can be passed whole.
+ */
+export function moduleForPathname(path: string): ModuleId | null {
+  const pathname = path.split(/[?#]/)[0] ?? path;
+  return builtModuleAt(pathname)?.id ?? null;
+}
+
+/**
  * What to call a destination in a "← Back to …" control, given only its path.
  *
  * Named from the registry rather than by the caller, because the caller does not reliably know:
@@ -317,9 +345,7 @@ function standaloneLabel(pathname: string): string | null {
 export function destinationLabel(path: string, fallback = "Back"): string {
   const pathname = path.split(/[?#]/)[0] ?? path;
 
-  const entry = MODULES.filter((item) => item.status === "built").find(
-    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
-  );
+  const entry = builtModuleAt(pathname);
   if (!entry) return standaloneLabel(pathname) ?? fallback;
 
   const page = pageForPathname(entry.id, entry.href, pathname);

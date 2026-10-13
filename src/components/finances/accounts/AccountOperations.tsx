@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { pasteBankSnapshotAction } from "@/app/finances/actions";
+import { pasteBankSnapshotAction } from "@/app/(shell)/finances/actions";
 import { syncAction } from "@/app/settings/bankSyncActions";
 import { useToast } from "@/components/shell/ToastProvider";
 import { looksLikeBankBrowserSnapshot } from "@/lib/finances/bankSnapshot";

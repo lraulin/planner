@@ -28,7 +28,7 @@ import {
   renameTimeChartAction,
   updateTimeChartAction,
   updateTimeChartAreaAction,
-} from "@/app/schedule/actions";
+} from "@/app/(shell)/schedule/actions";
 import { contrastText } from "@/lib/schedule/geometry";
 import { asyncHandler } from "@/lib/eventHandler";
 import {

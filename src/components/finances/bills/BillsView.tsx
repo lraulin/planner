@@ -6,7 +6,7 @@ import {
   setRecurringBillAction,
   updateBudgetCategoryAction,
   createBudgetCategoryAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import type { BudgetData } from "@/lib/finances/budget/queries";
 import type { BudgetBillRow } from "@/lib/finances/budget/rows";
 import type { BillForecast } from "@/lib/finances/dashboardQueries";

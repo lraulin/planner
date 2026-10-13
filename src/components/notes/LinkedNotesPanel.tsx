@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { LinkedNoteSummary } from "@/lib/detail/types";
 import { notesPath } from "@/lib/url/viewState";
-import { createNoteAction } from "@/app/notes/actions";
+import { createNoteAction } from "@/app/(shell)/notes/actions";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
 import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";

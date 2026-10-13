@@ -23,7 +23,7 @@ import {
   createAppointmentAction,
   updateAppointmentAction,
   type AppointmentFormPayload,
-} from "@/app/schedule/actions";
+} from "@/app/(shell)/schedule/actions";
 import { GOOGLE_EVENT_COLORS } from "@/lib/google/eventColors";
 import { googleCalendarEventUrl } from "@/lib/google/eventUrl";
 import { fromDateKey, toDateKey, WEEKDAY_LABELS } from "@/lib/schedule/geometry";

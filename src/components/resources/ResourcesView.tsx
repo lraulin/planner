@@ -8,7 +8,7 @@ import {
   createResourceAction,
   deleteResourceAction,
   listResourcesAction,
-} from "@/app/library/resources/actions";
+} from "@/app/(shell)/library/resources/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";

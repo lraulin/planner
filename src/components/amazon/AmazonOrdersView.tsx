@@ -35,7 +35,7 @@ import {
   addSupplyFromAmazonItemAction,
   addSupplyOptionFromAmazonAction,
   listSupplyItemsAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { SupplyItemPickerDialog } from "@/components/finances/supplies/SupplyItemPickerDialog";
 import type { SupplyItemRow } from "@/lib/finances/supplies/queries";
 import {

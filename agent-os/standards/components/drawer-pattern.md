@@ -158,7 +158,7 @@ only when staying open would strand the user with nothing useful to do next.
 ## Server actions
 
 Drawer forms submit through **server actions**, following the pattern already established in
-`src/app/plan/outline/actions.ts`: the action returns `{ ok: false, error }` rather than throwing,
+`src/app/(shell)/plan/outline/actions.ts`: the action returns `{ ok: false, error }` rather than throwing,
 so a rejected save renders inline instead of crashing the view.
 
 `revalidatePath` in the action refreshes the outline, so there is no separate refresh call

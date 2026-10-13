@@ -15,7 +15,7 @@ import {
   createContactAction,
   deleteContactAction,
   listContactsAction,
-} from "@/app/library/contacts/actions";
+} from "@/app/(shell)/library/contacts/actions";
 import { syncGoogleContactsAction } from "@/app/settings/actions";
 import type { GoogleContactSyncStatus } from "@/lib/google/contacts/sync";
 import { DataGrid } from "@/components/grid/DataGrid";

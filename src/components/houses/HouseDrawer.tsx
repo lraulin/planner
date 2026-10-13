@@ -2,7 +2,10 @@
 
 import { useEffect, useId, useState, useTransition } from "react";
 import type { PriorityLetter } from "@/db/schema";
-import { getHouseDetailAction, updateHouseAction } from "@/app/library/houses/actions";
+import {
+  getHouseDetailAction,
+  updateHouseAction,
+} from "@/app/(shell)/library/houses/actions";
 import {
   Drawer,
   DrawerFooter,

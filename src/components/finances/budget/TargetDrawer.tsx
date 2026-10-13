@@ -2,7 +2,7 @@
 
 import { useId, useMemo, useState, useTransition } from "react";
 
-import { saveEnvelopeTargetAction } from "@/app/finances/actions";
+import { saveEnvelopeTargetAction } from "@/app/(shell)/finances/actions";
 import {
   Drawer,
   DrawerFooter,

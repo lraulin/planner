@@ -42,7 +42,7 @@ import {
   setAllNotesCollapsedAction,
   setNoteCollapsedAction,
   updateNoteAction,
-} from "@/app/notes/actions";
+} from "@/app/(shell)/notes/actions";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";

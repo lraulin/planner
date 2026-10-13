@@ -8,7 +8,7 @@ import {
   createTimeChartAction,
   deleteTimeChartAction,
   updateTimeChartAction,
-} from "@/app/schedule/actions";
+} from "@/app/(shell)/schedule/actions";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";

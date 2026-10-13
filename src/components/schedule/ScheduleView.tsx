@@ -37,7 +37,7 @@ import {
   rescheduleAppointmentAction,
   setAppointmentCheckStateAction,
   syncGoogleAction,
-} from "@/app/schedule/actions";
+} from "@/app/(shell)/schedule/actions";
 import { WeekCalendar } from "./WeekCalendar";
 import { AgendaGrid } from "./AgendaGrid";
 import { ProjectsRail } from "./ProjectsRail";

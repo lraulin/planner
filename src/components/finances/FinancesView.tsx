@@ -23,7 +23,7 @@ import { monthLabel } from "@/lib/finances/budget/envelope";
 import { parseReportDrill } from "@/lib/finances/reportDrill";
 import { insightsCommands } from "@/lib/finances/insightsCommands";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
-import { reclassifyAction } from "@/app/finances/actions";
+import { reclassifyAction } from "@/app/(shell)/finances/actions";
 import {
   budgetEnvelopeHref,
   activityEmptyCopy,
@@ -44,7 +44,7 @@ import {
   getTransactionAction,
   listAccountsAction,
   setTransactionBudgetCategoriesAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { useToday } from "@/components/grid/useToday";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";

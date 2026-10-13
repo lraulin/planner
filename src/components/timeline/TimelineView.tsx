@@ -10,7 +10,7 @@ import {
   deleteLifeEventAction,
   listTimelineAction,
   updateLifeEventAction,
-} from "@/app/library/timeline/actions";
+} from "@/app/(shell)/library/timeline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";

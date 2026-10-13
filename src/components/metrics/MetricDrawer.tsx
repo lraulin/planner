@@ -22,7 +22,7 @@ import {
   importMetricEntriesAction,
   updateMetricAction,
   updateMetricEntryAction,
-} from "@/app/metrics/actions";
+} from "@/app/(shell)/metrics/actions";
 import {
   Drawer,
   DrawerFooter,

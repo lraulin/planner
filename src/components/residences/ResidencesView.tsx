@@ -7,7 +7,7 @@ import {
   createResidenceAction,
   deleteResidenceAction,
   listResidencesAction,
-} from "@/app/library/residences/actions";
+} from "@/app/(shell)/library/residences/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";

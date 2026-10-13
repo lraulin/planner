@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { findAction } from "@/app/find/actions";
+import { findAction } from "@/app/(shell)/find/actions";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useToday } from "@/components/grid/useToday";

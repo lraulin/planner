@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadStatementPeriodAction } from "@/app/finances/actions";
+import { loadStatementPeriodAction } from "@/app/(shell)/finances/actions";
 import type { StatementPeriodRow, StatementViewRow } from "@/lib/finances/types";
 
 /**

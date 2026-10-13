@@ -7,7 +7,7 @@ import {
   createJobAction,
   deleteJobAction,
   listJobsAction,
-} from "@/app/library/jobs/actions";
+} from "@/app/(shell)/library/jobs/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";

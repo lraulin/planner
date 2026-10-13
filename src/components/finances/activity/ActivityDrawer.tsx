@@ -2,7 +2,7 @@
 
 import { useToast } from "@/components/shell/ToastProvider";
 import { useId, useState, useTransition } from "react";
-import { restoreDeletedHoldAction } from "@/app/finances/actions";
+import { restoreDeletedHoldAction } from "@/app/(shell)/finances/actions";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { Section } from "@/components/detail/fields";
 import type {

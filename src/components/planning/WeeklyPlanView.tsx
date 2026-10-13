@@ -15,7 +15,7 @@ import {
   upsertPlanEntryAction,
   setFocusAreaAction,
   saveMissionAction,
-} from "@/app/schedule/plan/actions";
+} from "@/app/(shell)/schedule/plan/actions";
 import {
   EMPTY_ENTRY,
   STEP_HINTS,

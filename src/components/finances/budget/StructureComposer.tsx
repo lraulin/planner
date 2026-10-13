@@ -5,7 +5,7 @@ import { useRef, useState, useTransition } from "react";
 import {
   createBudgetCategoryAction,
   createCategoryGroupAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import type { EnvelopeKind } from "@/db/schema";
 import { isComposingKey } from "@/lib/keyboard";
 

@@ -7,7 +7,7 @@ import {
   unsplitTransactionAction,
   updateSplitChildrenAction,
   updateTransactionAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { DateText } from "@/components/date/DateText";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";

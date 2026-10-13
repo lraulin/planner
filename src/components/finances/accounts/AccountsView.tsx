@@ -29,7 +29,7 @@ import {
   deleteAccountAction,
   listAccountsAction,
   reconcileAccountAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";

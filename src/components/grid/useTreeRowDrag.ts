@@ -10,7 +10,7 @@ import {
 import { selectionMoveRoots } from "@/lib/grid/selection";
 import type { GridSort } from "@/lib/settings/grid";
 import type { RowDrag } from "./DataGrid";
-import { moveNodeAction, setCollapsedAction } from "@/app/plan/outline/actions";
+import { moveNodeAction, setCollapsedAction } from "@/app/(shell)/plan/outline/actions";
 
 type ApplyResult = { ok: true } | { ok: false; error: string };
 

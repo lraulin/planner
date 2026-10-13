@@ -5,7 +5,7 @@ import {
   loadAmazonBlockAction,
   loadAmazonExportAction,
   loadAmazonIndexAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import type { AmazonItemListRow } from "@/lib/amazon/types";
 import {
   AMAZON_BLOCK_SIZE,

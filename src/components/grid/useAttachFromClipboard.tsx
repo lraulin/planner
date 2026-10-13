@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { attachUrlsToNodeAction } from "@/app/plan/outline/detail-actions";
+import { attachUrlsToNodeAction } from "@/app/(shell)/plan/outline/detail-actions";
 import { useToast } from "@/components/shell/ToastProvider";
 import type { ActionResult } from "@/components/grid/useOptimisticNodes";
 import {

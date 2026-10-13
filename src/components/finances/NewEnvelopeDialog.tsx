@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
-import { createBudgetCategoryAction } from "@/app/finances/actions";
+import { createBudgetCategoryAction } from "@/app/(shell)/finances/actions";
 import { ModalShell } from "@/components/detail/ModalShell";
 import type { EnvelopeKind } from "@/db/schema";
 

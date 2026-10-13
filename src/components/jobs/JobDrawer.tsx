@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useId, useState, useTransition } from "react";
-import { getJobDetailAction, updateJobAction } from "@/app/library/jobs/actions";
+import {
+  getJobDetailAction,
+  updateJobAction,
+} from "@/app/(shell)/library/jobs/actions";
 import {
   Drawer,
   DrawerFooter,

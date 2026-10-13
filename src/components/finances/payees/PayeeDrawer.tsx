@@ -6,7 +6,7 @@ import {
   removePayeeAliasAction,
   setPayeeAutoCategoryAction,
   updatePayeeDetailsAction,
-} from "@/app/finances/actions";
+} from "@/app/(shell)/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { Section, SelectField, TextArea } from "@/components/detail/fields";

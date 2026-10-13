@@ -1,0 +1,61 @@
+import { Suspense } from "react";
+import { getCurrentUserId } from "@/lib/auth";
+import { BudgetSetup } from "@/components/finances/budget/BudgetSetup";
+import { BudgetView } from "@/components/finances/budget/BudgetView";
+import { monthKeyFromParam } from "@/lib/finances/budget/envelope";
+import { billAnchorsOf, loadBudget } from "@/lib/finances/budget/queries";
+import { lastChargeByEnvelope } from "@/lib/finances/billLastCharge";
+import type { BillAnchor } from "@/lib/finances/commitments";
+import { loadPaydays } from "@/lib/finances/dashboardQueries";
+import { listPayees } from "@/lib/finances/payees/queries";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * The envelope budget: assign the money you have, one month at a time.
+ *
+ * The only budgeting page (`agent-os/specs/2026-08-23-2313-one-budget/`) — Schedules and
+ * Commitments collapsed into it, and bills are `kind: 'bill'` rows in the same grid as
+ * every other envelope.
+ */
+export default async function FinancesBudgetPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
+  const userId = await getCurrentUserId();
+  const { month } = await searchParams;
+  const [data, payees, paydays, lastCharges] = await Promise.all([
+    loadBudget(userId, monthKeyFromParam(month ?? null)),
+    listPayees(userId),
+    loadPaydays(userId),
+    lastChargeByEnvelope(userId),
+  ]);
+  const anchors = data.configured
+    ? billAnchorsOf(data.categories, lastCharges, data.todayKey)
+    : new Map<string, BillAnchor>();
+
+  return (
+    <Suspense fallback={<div className="min-h-0 flex-1" />}>
+      {data.configured ? (
+        <BudgetView
+          data={data}
+          anchors={anchors}
+          payees={payees.map(({ id, name, claim }) => ({
+            id,
+            name,
+            budgetCategoryId: claim?.id ?? null,
+          }))}
+          paydays={paydays}
+        />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-auto p-3">
+          <BudgetSetup
+            todayKey={data.todayKey}
+            positionCents={data.prospectiveOpeningCents}
+          />
+        </div>
+      )}
+    </Suspense>
+  );
+}

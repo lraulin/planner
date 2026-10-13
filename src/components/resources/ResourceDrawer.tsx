@@ -7,7 +7,7 @@ import type { ResourceDetail, ResourceInput } from "@/lib/resources/types";
 import {
   getResourceDetailAction,
   updateResourceAction,
-} from "@/app/library/resources/actions";
+} from "@/app/(shell)/library/resources/actions";
 import {
   Drawer,
   DrawerFooter,
