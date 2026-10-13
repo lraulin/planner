@@ -46,12 +46,31 @@ export function isStaticPlannerRedirect(uri: string): boolean {
   );
 }
 
-function isBlockedLookupHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  if (host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0") {
-    return true;
-  }
+/**
+ * Whether a client_id URL's host is one this server must not fetch from.
+ *
+ * A client ID Metadata Document is fetched **by the server, on behalf of whoever typed the
+ * URL**, so a name that points back at this machine or its network turns the fetch into a
+ * probe of it. The response has to echo the URL to be accepted, which stops a read, not the
+ * request.
+ *
+ * Takes `URL.hostname`, which is not the bare host the checks below want: an IPv6 literal
+ * keeps its brackets (`[::1]`) and a rooted name keeps its dot (`localhost.`). Every
+ * comparison here used to run against that raw string, so `[::1]`, `[fe80::1]` and
+ * `localhost.` — each one written out below — all walked past. Both are stripped first.
+ *
+ * Literals only. A public name that *resolves* to a private address is not caught by looking
+ * at the string; that needs the resolved address checked at connect time.
+ */
+export function isBlockedLookupHost(hostname: string): boolean {
+  const host = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost")) return true;
+
   if (
+    /^0\./.test(host) ||
     /^127\./.test(host) ||
     /^10\./.test(host) ||
     /^192\.168\./.test(host) ||
@@ -60,8 +79,17 @@ function isBlockedLookupHost(hostname: string): boolean {
   ) {
     return true;
   }
-  if (host === "::1" || host.startsWith("[::1]") || host.startsWith("fe80")) {
-    return true;
+
+  // An IPv6 literal. `URL` has already written an IPv4-mapped address as hex groups
+  // (`::ffff:7f00:1`), so the mapped range is refused whole rather than decoded.
+  if (host.includes(":")) {
+    return (
+      host === "::" ||
+      host === "::1" ||
+      /^fe[89ab]/.test(host) || // fe80::/10 link-local
+      /^f[cd]/.test(host) || // fc00::/7 unique-local
+      /^::ffff:/.test(host) // IPv4-mapped
+    );
   }
   return false;
 }
