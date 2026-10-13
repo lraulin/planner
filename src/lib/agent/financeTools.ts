@@ -56,11 +56,14 @@ import {
   type InsightsReportFilter,
   type InsightsWindowKey,
 } from "@/lib/finances/insightsFilter";
-import { listAccounts, listStatements } from "@/lib/finances/queries";
+import {
+  listAccounts,
+  listStatements,
+  loadStatementsView,
+} from "@/lib/finances/queries";
 import type { FinanceAccountRow } from "@/lib/finances/types";
 import { accountBalanceView, type PendingRow } from "@/lib/finances/workingBalance";
 import { loadWorkingPendingSelection } from "@/lib/finances/workingPendingQuery";
-import { reconcileAccounts } from "@/lib/finances/reconcile";
 import { searchTransactions } from "@/lib/finances/transactionSearch";
 import { zonedDateKey } from "@/lib/schedule/geometry";
 import type { InsightsAxis } from "@/lib/settings/finances";
@@ -664,24 +667,25 @@ export async function searchTransactionsTool(
   };
 }
 
+/**
+ * The Statements page's own read (`loadStatementsView`), filtered and paged.
+ *
+ * Not `loadInsightsRows`: those are money rows — split leaves, superseded holds dropped —
+ * and a statement is checked against the register, where a split is still one bank row.
+ */
 export async function listStatementsTool(
   userId: string,
   args: Record<string, unknown>,
 ) {
-  const [statements, rows] = await Promise.all([
-    listStatements(userId),
-    loadInsightsRows(userId),
-  ]);
-  const report = reconcileAccounts(statements, rows);
-  const checkById = new Map(report.statements.map((row) => [row.statementId, row]));
+  const view = await loadStatementsView(userId);
   const accountId = optionalString(args, "accountId");
   const from = optionalString(args, "from");
   const to = optionalString(args, "to");
   const holeKeys = new Set(
-    report.holes.map((hole) => `${hole.accountId}:${hole.afterPeriodEnd}`),
+    view.holes.map((hole) => `${hole.accountId}:${hole.afterPeriodEnd}`),
   );
 
-  const filtered = statements.filter((statement) => {
+  const filtered = view.rows.filter((statement) => {
     if (accountId && statement.accountId !== accountId) return false;
     if (from && statement.periodEnd < from) return false;
     if (to && statement.periodStart > to) return false;
@@ -694,25 +698,22 @@ export async function listStatementsTool(
   );
   const page = paginate(filtered, bounds);
   return {
-    statements: page.items.map((statement) => {
-      const check = checkById.get(statement.id);
-      return {
-        id: statement.id,
-        accountId: statement.accountId,
-        accountName: statement.accountName,
-        periodStart: statement.periodStart,
-        periodEnd: statement.periodEnd,
-        openingBalanceCents: statement.openingBalanceCents,
-        closingBalanceCents: statement.closingBalanceCents,
-        paymentsCreditsCents: statement.paymentsCreditsCents,
-        purchasesCents: statement.purchasesCents,
-        registerSumCents: check?.registerSumCents ?? 0,
-        registerDeltaCents: check?.registerDeltaCents ?? 0,
-        rowCount: check?.rowCount ?? 0,
-        holeAfter: holeKeys.has(`${statement.accountId}:${statement.periodEnd}`),
-      };
-    }),
-    holes: report.holes.filter((hole) => !accountId || hole.accountId === accountId),
+    statements: page.items.map((statement) => ({
+      id: statement.id,
+      accountId: statement.accountId,
+      accountName: statement.accountName,
+      periodStart: statement.periodStart,
+      periodEnd: statement.periodEnd,
+      openingBalanceCents: statement.openingBalanceCents,
+      closingBalanceCents: statement.closingBalanceCents,
+      paymentsCreditsCents: statement.paymentsCreditsCents,
+      purchasesCents: statement.purchasesCents,
+      registerSumCents: statement.registerSumCents,
+      registerDeltaCents: statement.registerDeltaCents,
+      rowCount: statement.rowCount,
+      holeAfter: holeKeys.has(`${statement.accountId}:${statement.periodEnd}`),
+    })),
+    holes: view.holes.filter((hole) => !accountId || hole.accountId === accountId),
     pageInfo: page.pageInfo,
   };
 }
