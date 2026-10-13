@@ -10,6 +10,11 @@ import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { AccountsView } from "@/components/finances/accounts/AccountsView";
 
 export const dynamic = "force-dynamic";
+/**
+ * The browser may show this payload again for 60 s. Must agree with `cachePolicy.ts`, which
+ * says why this page qualifies; a test fails if the two drift.
+ */
+export const unstable_dynamicStaleTime = 60;
 
 /** Catalog of register accounts — rename, reclassify, bank URL, close, delete. */
 export default async function FinancesAccountsPage() {

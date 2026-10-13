@@ -5,6 +5,11 @@ import { loadWishList } from "@/lib/detail/wishQueries";
 import { WishesGrid } from "@/components/tabs/WishesGrid";
 
 export const dynamic = "force-dynamic";
+/**
+ * The browser may show this payload again for 60 s. Must agree with `cachePolicy.ts`, which
+ * says why this page qualifies; a test fails if the two drift.
+ */
+export const unstable_dynamicStaleTime = 60;
 
 export default async function WishesPage() {
   const userId = await getCurrentUserId();

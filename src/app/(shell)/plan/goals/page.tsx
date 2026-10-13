@@ -4,6 +4,11 @@ import { loadOutline } from "@/lib/tree/queries";
 import { GoalsGrid } from "@/components/tabs/GoalsGrid";
 
 export const dynamic = "force-dynamic";
+/**
+ * The browser may show this payload again for 60 s. Must agree with `cachePolicy.ts`, which
+ * says why this page qualifies; a test fails if the two drift.
+ */
+export const unstable_dynamicStaleTime = 60;
 
 export default async function GoalsPage() {
   const userId = await getCurrentUserId();
