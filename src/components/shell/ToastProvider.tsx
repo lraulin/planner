@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import {
   createContext,
   useCallback,
@@ -22,6 +21,7 @@ import {
   type ToastTimer,
   type ToastTone,
 } from "@/lib/toast/toast";
+import { NavLink } from "./NavLink";
 
 export type ToastAction =
   { label: string; href: string } | { label: string; run: () => void };
@@ -173,9 +173,9 @@ function ToastCard({
           {content.action && (
             <p className="mt-1">
               {"href" in content.action ? (
-                <Link href={content.action.href} className={linkClass}>
+                <NavLink href={content.action.href} className={linkClass}>
                   {content.action.label}
-                </Link>
+                </NavLink>
               ) : (
                 <button
                   type="button"

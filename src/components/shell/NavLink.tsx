@@ -30,7 +30,21 @@ import { pendingNavigation } from "./pendingNavigation";
  * navigation has ended without arriving (superseded by another click, or failed).
  */
 
-type LinkProps = Omit<ComponentProps<typeof Link>, "children" | "href">;
+type LinkProps = Omit<ComponentProps<typeof Link>, "children" | "href" | "prefetch">;
+
+/**
+ * Viewport prefetch for every in-app link — the one switch for it.
+ *
+ * `undefined` is Next's default: each visible link prefetches its route. Spec decision 6 turns
+ * this to `false` ("every in-app link goes through `NavLink`") **if** click → last DOM change
+ * on the five measured routes is not more than 20 ms worse on a production build. That gate
+ * could not be measured in the implementing session (`plan.md`, Measurements), so it stays at
+ * the default; flipping it is this one line plus the table in the spec. For a dynamic route
+ * with no `loading.js` the prefetch carries no page data (`prefetching.md`), so the expected
+ * result is a saving of ~35 requests per view for no slower click — but that is the claim the
+ * gate exists to check, not a fact.
+ */
+const PREFETCH: false | undefined = undefined;
 
 export function NavLink({
   className,
@@ -69,6 +83,7 @@ export function NavLink({
     <Link
       {...props}
       href={href}
+      prefetch={PREFETCH}
       onClick={handleClick}
       className={mergeClass(className, "relative")}
     >
