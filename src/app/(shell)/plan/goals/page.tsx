@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { loadOutline } from "@/lib/tree/queries";
 import { packOutline } from "@/lib/tree/wire";
 import { GoalsGrid } from "@/components/tabs/GoalsGrid";
+import { PageStamp } from "@/components/shell/PageStamp";
 
 export const dynamic = "force-dynamic";
 /**
@@ -16,8 +17,11 @@ export default async function GoalsPage() {
   const nodes = await loadOutline(userId);
 
   return (
-    <Suspense fallback={<div className="min-h-0 flex-1" />}>
-      <GoalsGrid wire={packOutline(nodes)} />
-    </Suspense>
+    <>
+      <PageStamp />
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        <GoalsGrid wire={packOutline(nodes)} />
+      </Suspense>
+    </>
   );
 }

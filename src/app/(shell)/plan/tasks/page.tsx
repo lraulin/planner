@@ -4,6 +4,7 @@ import { loadOutline } from "@/lib/tree/queries";
 import { packOutline } from "@/lib/tree/wire";
 import { loadContactOptions } from "@/lib/contacts/queries";
 import { TasksGrid } from "@/components/tabs/TasksGrid";
+import { PageStamp } from "@/components/shell/PageStamp";
 
 export const dynamic = "force-dynamic";
 /**
@@ -20,8 +21,11 @@ export default async function TasksPage() {
   ]);
 
   return (
-    <Suspense fallback={<div className="min-h-0 flex-1" />}>
-      <TasksGrid wire={packOutline(nodes)} contactOptions={contacts} />
-    </Suspense>
+    <>
+      <PageStamp />
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        <TasksGrid wire={packOutline(nodes)} contactOptions={contacts} />
+      </Suspense>
+    </>
   );
 }

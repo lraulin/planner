@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useId, useRef, useState, useTransition } from "react";
 import { readJsonResponse } from "@/lib/http/readJson";
 
@@ -27,6 +28,7 @@ const directoryAttributes = {
 /** Import Tomboy `.note` XML as flat notes with subject `Tomboy`. */
 export function TomboyImportPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const headingId = useId();
+  const router = useRouter();
   const filesRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
@@ -65,6 +67,7 @@ export function TomboyImportPanel({ embedded = false }: { embedded?: boolean } =
           return;
         }
         setResult(envelope.data);
+        router.refresh();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Tomboy import failed.");
       } finally {

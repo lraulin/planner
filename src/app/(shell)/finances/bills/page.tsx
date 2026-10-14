@@ -6,6 +6,7 @@ import { loadBillForecast } from "@/lib/finances/dashboardQueries";
 import { listPayees } from "@/lib/finances/payees/queries";
 import { lastChargeByEnvelope } from "@/lib/finances/billLastCharge";
 import { localDateKey } from "@/lib/schedule/geometry";
+import { PageStamp } from "@/components/shell/PageStamp";
 
 export const dynamic = "force-dynamic";
 /**
@@ -24,18 +25,21 @@ export default async function FinancesBillsPage() {
   ]);
   const anchors = billAnchorsOf(data.categories, lastCharges, todayKey);
   return (
-    <Suspense fallback={<div className="flex-1" />}>
-      <BillsView
-        data={data}
-        anchors={anchors}
-        forecast={forecast}
-        payees={payees.map((row) => ({
-          id: row.id,
-          name: row.name,
-          budgetCategoryId: row.claim?.id ?? null,
-        }))}
-        lastCharges={lastCharges}
-      />
-    </Suspense>
+    <>
+      <PageStamp />
+      <Suspense fallback={<div className="flex-1" />}>
+        <BillsView
+          data={data}
+          anchors={anchors}
+          forecast={forecast}
+          payees={payees.map((row) => ({
+            id: row.id,
+            name: row.name,
+            budgetCategoryId: row.claim?.id ?? null,
+          }))}
+          lastCharges={lastCharges}
+        />
+      </Suspense>
+    </>
   );
 }

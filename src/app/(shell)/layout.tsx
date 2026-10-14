@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/shell/AppShell";
+import { CacheEpoch } from "@/components/shell/CacheEpoch";
 
 /**
  * The signed-in shell, rendered once above every module's pages.
@@ -9,5 +10,11 @@ import { AppShell } from "@/components/shell/AppShell";
  * shell itself, so no page names it.
  */
 export default function ShellLayout({ children }: { children: React.ReactNode }) {
-  return <AppShell>{children}</AppShell>;
+  return (
+    <>
+      {/* A new id each time this layout renders: only a refresh or a revalidating action does. */}
+      <CacheEpoch epoch={crypto.randomUUID()} />
+      <AppShell>{children}</AppShell>
+    </>
+  );
 }

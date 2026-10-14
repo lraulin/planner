@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useId, useRef, useState, useTransition } from "react";
 import { readJsonResponse } from "@/lib/http/readJson";
 
@@ -21,6 +22,7 @@ export function RedNotebookImportPanel({
   embedded = false,
 }: { embedded?: boolean } = {}) {
   const headingId = useId();
+  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +50,7 @@ export function RedNotebookImportPanel({
           return;
         }
         setResult(body);
+        router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Import failed.");
       } finally {

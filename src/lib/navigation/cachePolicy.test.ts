@@ -81,6 +81,14 @@ describe("route cache policy registry", () => {
     expect(disagreements).toEqual([]);
   });
 
+  it("puts a PageStamp in every cached page, or its arrival refresh never runs", () => {
+    const unstamped = all
+      .filter((page) => ROUTE_CACHE_POLICIES[page.route]?.policy === "cached")
+      .filter((page) => !page.source.includes("<PageStamp />"))
+      .map((page) => page.route);
+    expect(unstamped).toEqual([]);
+  });
+
   it("gives every entry a reason", () => {
     for (const [route, entry] of Object.entries(ROUTE_CACHE_POLICIES)) {
       expect(entry.reason.trim().length, route).toBeGreaterThan(8);

@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { loadOutline } from "@/lib/tree/queries";
 import { loadWishList } from "@/lib/detail/wishQueries";
 import { WishesGrid } from "@/components/tabs/WishesGrid";
+import { PageStamp } from "@/components/shell/PageStamp";
 
 export const dynamic = "force-dynamic";
 /**
@@ -19,8 +20,11 @@ export default async function WishesPage() {
   ]);
 
   return (
-    <Suspense fallback={<div className="min-h-0 flex-1" />}>
-      <WishesGrid initialWishes={wishes} initialNodes={nodes} />
-    </Suspense>
+    <>
+      <PageStamp />
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        <WishesGrid initialWishes={wishes} initialNodes={nodes} />
+      </Suspense>
+    </>
   );
 }

@@ -10,6 +10,7 @@ import { RowClipboardProvider } from "@/components/grid/RowClipboardProvider";
 import { CommandsPanel } from "./CommandsPanel";
 import { MobileHeader } from "./MobileHeader";
 import { MobileNav } from "./MobileNav";
+import { NavigationFreshness } from "./NavigationFreshness";
 import { NavigationSurface } from "./NavigationSurface";
 import { Sidebar } from "./Sidebar";
 
@@ -96,6 +97,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         */}
           <CommandsPanel />
 
+          <NavigationFreshness />
           <FileCommands />
           <CommandKeys />
           <CommandPalette />

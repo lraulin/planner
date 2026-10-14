@@ -8,6 +8,7 @@ import { readSetting } from "@/lib/settings/queries";
 import { parseBudget } from "@/lib/settings/finances";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { AccountsView } from "@/components/finances/accounts/AccountsView";
+import { PageStamp } from "@/components/shell/PageStamp";
 
 export const dynamic = "force-dynamic";
 /**
@@ -32,14 +33,17 @@ export default async function FinancesAccountsPage() {
   ]);
 
   return (
-    <Suspense fallback={<div className="min-h-0 flex-1" />}>
-      <AccountsView
-        initialAccounts={accounts}
-        operations={{ pending: pending.rows, connections }}
-        links={links}
-        todayKey={localDateKey(new Date())}
-        mismatch={mismatch}
-      />
-    </Suspense>
+    <>
+      <PageStamp />
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        <AccountsView
+          initialAccounts={accounts}
+          operations={{ pending: pending.rows, connections }}
+          links={links}
+          todayKey={localDateKey(new Date())}
+          mismatch={mismatch}
+        />
+      </Suspense>
+    </>
   );
 }

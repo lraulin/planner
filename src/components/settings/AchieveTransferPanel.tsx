@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useId, useRef, useState, useTransition } from "react";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { downloadTextFile } from "@/components/grid/downloadCsv";
@@ -40,6 +41,7 @@ export function AchieveTransferPanel({
   embedded = false,
 }: { embedded?: boolean } = {}) {
   const headingId = useId();
+  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   /** Hold the File until the user confirms replace — avoid parking multi-MB XML in React state. */
   const pendingFileRef = useRef<File | null>(null);
@@ -127,6 +129,8 @@ export function AchieveTransferPanel({
           return;
         }
         setResult(body);
+        // Imported notes change what every cached outline page shows.
+        router.refresh();
         if (fileRef.current) fileRef.current.value = "";
       } catch (e) {
         setError(e instanceof Error ? e.message : "Import failed.");

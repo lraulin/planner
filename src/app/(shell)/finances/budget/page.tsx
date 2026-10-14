@@ -8,6 +8,7 @@ import { lastChargeByEnvelope } from "@/lib/finances/billLastCharge";
 import type { BillAnchor } from "@/lib/finances/commitments";
 import { loadPaydays } from "@/lib/finances/dashboardQueries";
 import { listPayees } from "@/lib/finances/payees/queries";
+import { PageStamp } from "@/components/shell/PageStamp";
 
 export const dynamic = "force-dynamic";
 /**
@@ -41,26 +42,29 @@ export default async function FinancesBudgetPage({
     : new Map<string, BillAnchor>();
 
   return (
-    <Suspense fallback={<div className="min-h-0 flex-1" />}>
-      {data.configured ? (
-        <BudgetView
-          data={data}
-          anchors={anchors}
-          payees={payees.map(({ id, name, claim }) => ({
-            id,
-            name,
-            budgetCategoryId: claim?.id ?? null,
-          }))}
-          paydays={paydays}
-        />
-      ) : (
-        <div className="min-h-0 flex-1 overflow-auto p-3">
-          <BudgetSetup
-            todayKey={data.todayKey}
-            positionCents={data.prospectiveOpeningCents}
+    <>
+      <PageStamp />
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        {data.configured ? (
+          <BudgetView
+            data={data}
+            anchors={anchors}
+            payees={payees.map(({ id, name, claim }) => ({
+              id,
+              name,
+              budgetCategoryId: claim?.id ?? null,
+            }))}
+            paydays={paydays}
           />
-        </div>
-      )}
-    </Suspense>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-auto p-3">
+            <BudgetSetup
+              todayKey={data.todayKey}
+              positionCents={data.prospectiveOpeningCents}
+            />
+          </div>
+        )}
+      </Suspense>
+    </>
   );
 }

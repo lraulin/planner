@@ -5,6 +5,7 @@ import { organizerQueue } from "@/lib/organizer/queue";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { loadOutline } from "@/lib/tree/queries";
 import { packOutline } from "@/lib/tree/wire";
+import { PageStamp } from "@/components/shell/PageStamp";
 
 export const dynamic = "force-dynamic";
 /**
@@ -22,10 +23,13 @@ export default async function OverviewPage() {
   const inboxCount = organizerQueue(nodes, localDateKey(new Date())).length;
 
   return (
-    <OverviewView
-      wire={packOutline(nodes)}
-      inboxCount={inboxCount}
-      masterContexts={masterContexts}
-    />
+    <>
+      <PageStamp />
+      <OverviewView
+        wire={packOutline(nodes)}
+        inboxCount={inboxCount}
+        masterContexts={masterContexts}
+      />
+    </>
   );
 }

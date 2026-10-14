@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { loadOutline } from "@/lib/tree/queries";
 import { packOutline } from "@/lib/tree/wire";
 import { OutlineGrid } from "@/components/outline/OutlineGrid";
+import { PageStamp } from "@/components/shell/PageStamp";
 
 export const dynamic = "force-dynamic";
 /**
@@ -16,8 +17,11 @@ export default async function OutlinePage() {
   const nodes = await loadOutline(userId);
 
   return (
-    <Suspense fallback={<div className="min-h-0 flex-1" />}>
-      <OutlineGrid wire={packOutline(nodes)} />
-    </Suspense>
+    <>
+      <PageStamp />
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        <OutlineGrid wire={packOutline(nodes)} />
+      </Suspense>
+    </>
   );
 }
