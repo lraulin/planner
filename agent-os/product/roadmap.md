@@ -147,6 +147,16 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   gzip) and pages that borrow it as supporting data send a slice; inline edits shrink the same
   way. The saving is bytes first, 10-40 ms per click locally; row rendering is untouched.
 
+- **🟡 Immediate navigation and an in-memory page cache.**
+  `specs/2026-10-13-1155-immediate-navigation-and-page-cache`. The shell is one `(shell)` layout
+  rendered once; the active module comes from the pathname; a click lights its destination in
+  one frame and only a navigation slower than 300 ms gets a bar and a veil (no skeletons). Eleven
+  pages are cached in memory for 60 s through a per-route policy registry that fails closed, with
+  explicit rules for own non-revalidating writes, focus return, the local day rolling over and
+  the three import panels. **Open:** the production-build timings and stale-data table, and the
+  prefetch gate (decision 6) — all need a signed-in production build. Follow-ups, as new work:
+  server render cost and payload size (Plan ~810 kB, Register's server work).
+
 ### Still in Phase 1
 
 - **Residual grid chrome polish** if needed after daily use (finer Show Fields multi-select /

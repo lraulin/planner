@@ -142,18 +142,23 @@ What shaping found (Next 16.3.8, read from `node_modules/next/dist`):
 
 ## Acceptance criteria
 
-- [ ] The shell (sidebar, menu bar, page bar) is not remounted by a navigation between any two
+- [x] The shell (sidebar, menu bar, page bar) is not remounted by a navigation between any two
       shell routes. Anything that used to close because the shell remounted still closes on
       navigation (More sheet, an open menu, the palette, page-bar rearrange mode across modules).
-- [ ] No page passes `active`; the active module resolves from the pathname in one tested function.
+- [x] No page passes `active`; the active module resolves from the pathname in one tested function.
 - [ ] Clicking a module, page tab or bottom-nav slot moves the active look within 50 ms on a
-      production build, for the slowest route too (Register).
+      production build, for the slowest route too (Register). _Dev: 3–15 ms on every route
+      measured (and 30 ms on a 390 px viewport); production not measured._
 - [ ] A navigation that finishes under 300 ms shows no bar and no dimming. Register shows both.
-- [ ] Content is never replaced by a placeholder. There is no `loading.tsx` under `src/app`.
+      _Dev, with RSC responses delayed over CDP: none under 300 ms, both from 300 ms, gone on
+      arrival. Register's own production latency (384–956 ms) not measured._
+- [x] Content is never replaced by a placeholder. There is no `loading.tsx` under `src/app`.
 - [ ] Prefetch requests per fresh view: recorded before; zero after — or kept, with the numbers.
 - [ ] Revisiting a `cached` tab inside 60 s makes no page request. After 60 s it does.
-- [ ] Every `page.tsx` has a registry entry and a matching export; the test proves it.
-- [ ] Each of the 44 `revalidate: []` actions is listed with its host page(s), and every host is
+      _Production build of a scratch app: yes (Task 6). Planner on a dev server: 0 requests inside
+      the window across all ten measured revisits._
+- [x] Every `page.tsx` has a registry entry and a matching export; the test proves it.
+- [x] Each of the 44 `revalidate: []` actions is listed with its host page(s), and every host is
       `self-patching` / `uncached` or its client refreshes after the write.
 - [ ] Every row of the stale-data table (Task 9) passes on a production build.
 - [ ] Timing table (Task 2 vs Task 9) is in the spec: first visit and revisit, five routes.
@@ -302,9 +307,68 @@ the layout and the rest take the default.
 The root layout reads every scope, but it is not re-rendered by a navigation, so it is not a
 cached payload.
 
-### After (Task 9)
+### After (Task 9) — warmed dev server, local Postgres, commit `8bdc5b20`
 
-_(filled in Task 9)_
+Same procedure, same machine state class (load average 6–10 while measuring; the baseline's was
+22–35, so absolute "Done" figures are not directly comparable — **Active** and **Page requests**
+are, because they do not depend on load). Medians of 5.
+
+| Step                              | Visit   | Active ms (before → after) | Done ms (before → after) | Server ms | Page requests (before → after)                                       |
+| --------------------------------- | ------- | -------------------------- | ------------------------ | --------- | -------------------------------------------------------------------- |
+| Plan: Tasks                       | visit   | 149 → 15                   | 168 → 176                | 39 → 40   | 1 → 1                                                                |
+| Plan: Outline                     | visit   | 210 → 8                    | 250 → 234                | 42 → 41   | 1 → 1                                                                |
+| Plan: Goals                       | visit   | 182 → 13                   | 217 → 232                | 37 → 47   | 1 → 1                                                                |
+| Plan: Tasks                       | revisit | 70 → 8                     | 78 → 51                  | 36 → -    | 1 → **0**                                                            |
+| Plan: Outline                     | revisit | 237 → 10                   | 267 → 256                | 36 → -    | 1 → **0**                                                            |
+| Plan: Goals                       | revisit | 70 → 3                     | 84 → 57                  | 35 → -    | 1 → **0**                                                            |
+| Finances: module switch           | visit   | 204 → 11                   | 211 → 193                | 74 → 64   | 1 → 1                                                                |
+| Finances: Budget                  | visit   | 148 → 8                    | 171 → 130                | 55 → -    | 1 → 0 (cached by the module switch's landing page)                   |
+| Finances: Accounts                | visit   | 185 → 8                    | 214 → 166                | 109 → 39  | 1 → 1                                                                |
+| Finances: Bills                   | visit   | 210 → 7                    | 231 → 134                | 124 → 53  | 1 → 1                                                                |
+| Finances: Budget                  | revisit | 132 → 7                    | 156 → 116                | 46 → -    | 1 → **0**                                                            |
+| Finances: Accounts                | revisit | 149 → 7                    | 156 → 66                 | 101 → -   | 1 → **0**                                                            |
+| Finances: Bills                   | revisit | 188 → 7                    | 200 → 90                 | 107 → -   | 1 → **0**                                                            |
+| Finances: Register                | visit   | 203 → 8                    | 223 → 130                | 152 → 55  | 1 → 1                                                                |
+| Finances: Bills (after Register)  | revisit | 192 → 7                    | 203 → 189                | 112 → 66  | 1 → 1 (Register is self-patching: the one refetch the spec accepted) |
+| Finances: Register                | revisit | 197 → 5                    | 208 → 79                 | 148 → 52  | 1 → 1 (never cached)                                                 |
+| Finances: Budget (after Register) | revisit | 136 → 7                    | 160 → 157                | 52 → 52   | 1 → 1 (same)                                                         |
+
+What the table supports: the active look moves in **3–15 ms for every route, Register
+included** (criterion: within 50 ms; the "first frame" is the click's own task), against 70–237 ms
+before. Every cached tab's revisit makes **no page request**; Register is never reused;
+Budget/Bills after Register refetch once, as designed. "Done" for revisits is the client render of
+the cached payload (the Outline's 256 ms is that grid mounting, not the network). What it cannot
+support: production figures, or the prefetch count (a dev server never prefetches).
+
+### Task 9 — stale-data table
+
+Exercised on the **dev server against the shared local `planner` database**, with the one write
+reversed afterwards. The router, the segment cache and the server's `unstable_dynamicStaleTime`
+are the same code as production (Task 6 proved the production behaviour on a scratch app); what a
+dev server does not reproduce is prefetching and bundling, neither of which this table depends on.
+**Not run on a production build of the planner** — no signed-in production session was available
+(change 1). Re-run on a production build before freezing.
+
+| Write path                                               | Expect                                       | Result                                                                                                                                                                                                      |
+| -------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revalidating action (rename a task on Tasks)             | Every cached tab refetches on next visit     | **Pass.** Outline was cached (revisit: 0 requests); after the rename its next visit made 1 request and showed the new name. Restored.                                                                       |
+| Categorise in Register → open cached Budget              | Budget shows the new activity                | **Mechanism passes**, write not performed: leaving Register (self-patching) marks the cache suspect; Budget → Register → Budget made 1 request with the bar shown at once, Budget → Accounts → Budget none. |
+| Edit in Register / Notes / Supplies / Scenarios → return | The edit is still shown                      | **Pass by construction, one case observed:** those routes are `self-patching` (never cached; `cachePolicy.test.ts`); Register's revisit makes a request every time (table above).                           |
+| Finance import, Amazon import                            | Cached tabs refetch                          | Not run (needs import files). Both panels already called `router.refresh()`; unchanged.                                                                                                                     |
+| Tomboy, RedNotebook, Achieve import                      | Cached tabs refetch                          | Not run (needs import files). `router.refresh()` added to all three on success; `router.refresh()` empties every cached page (Task 6).                                                                      |
+| Userscript push from the bank page, then back to the tab | Visible page and next tab are fresh          | Not run (no writer). Covered by the focus-return rule below.                                                                                                                                                |
+| Alert email POST to `/api/finances/alerts`, tab focused  | Visible within 60 s on the next tab visit    | Not run. Follows from the window: a cached payload is reused for at most 60 s.                                                                                                                              |
+| Agent API write; MCP write                               | Fresh on focus return; ≤ 60 s while focused  | Not run (no agent key locally). Focus return **passes**: 31 s away on a cached page → 1 refresh request; 3 s away → none; on a self-patching page → none, cache marked.                                     |
+| Edit in a second tab                                     | Fresh on focus return                        | Not run as a second tab; same path as the focus-return row.                                                                                                                                                 |
+| Google Calendar stale pull                               | Cached tabs refetch                          | Not run (the test account is not linked to Google, deliberately). `ScheduleView` already calls `router.refresh()` after the pull.                                                                           |
+| Settings write that feeds a server render                | Host page is not cached, or shows the change | **Pass by audit** (Task 7 table): the two pages whose render reads a client-written scope are `self-patching` / `uncached`.                                                                                 |
+| Local day rolls over                                     | No tab shows yesterday's "today"             | **Pass.** Local `Date` shifted a day, `visibilitychange` dispatched: 1 refresh request on a cached page; a payload first seen on a previous day also refreshes on arrival (unit-tested).                    |
+
+### Acceptance — what is and is not met
+
+See the checklist under **Acceptance criteria**; the unchecked boxes are exactly the ones that
+need a production build of the planner (timings, prefetch count, the stale-data table "on a
+production build") or a deploy. The spec is therefore **left active**.
 
 ## Task 1: Save spec documentation
 
