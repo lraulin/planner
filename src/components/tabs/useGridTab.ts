@@ -13,6 +13,8 @@ import {
   setCollapsedAction,
 } from "@/app/(shell)/plan/outline/actions";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
+import { useOutline } from "@/components/grid/useOutline";
+import type { OutlineWire } from "@/lib/tree/wire";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useStateChange } from "@/components/grid/useStateChange";
@@ -34,9 +36,10 @@ import { isTypingTarget } from "@/lib/keyboard";
  * so Shift-range and arrow multi-select walk what the user sees. Until they do, the full
  * tree order is used as a stand-in.
  */
-export function useGridTab(initialNodes: OutlineNode[]) {
-  const { nodes, byId, patch, apply, error, setError } =
-    useOptimisticNodes(initialNodes);
+export function useGridTab(wire: OutlineWire) {
+  const { nodes, byId, patch, apply, error, setError } = useOptimisticNodes(
+    useOutline(wire),
+  );
   const {
     detail: detailId,
     setDetail: setDetailId,

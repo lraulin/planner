@@ -4,6 +4,8 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { WeeklyPlan, WeeklyPlanEntry } from "@/db/schema";
 import type { WeeklyPlanPayload } from "@/lib/planning/queries";
+import type { OutlineWire } from "@/lib/tree/wire";
+import { useOutline } from "@/components/grid/useOutline";
 import type { PlanEntryPatch, WeeklyPlanPatch } from "@/lib/planning/mutations";
 import { fromDateKey, startOfWeek, toDateKey, weekDays } from "@/lib/schedule/geometry";
 import { asyncHandler } from "@/lib/eventHandler";
@@ -31,7 +33,9 @@ import { TimeBudgetStep } from "./TimeBudgetStep";
 import { ScheduleBlocksStep } from "./ScheduleBlocksStep";
 
 type Props = {
-  payload: WeeklyPlanPayload;
+  /** The wizard's payload without its outline, which crosses packed as `wire`. */
+  payload: Omit<WeeklyPlanPayload, "nodes">;
+  wire: OutlineWire;
   weekKey: string;
   step: number;
 };
@@ -67,7 +71,8 @@ function weekRangeLabel(weekStart: Date): string {
  * Full-page weekly planning wizard. Steps are free to visit; the strip and Back/Next
  * share the same `?step=` URL so a refresh lands where you left off.
  */
-export function WeeklyPlanView({ payload, weekKey, step }: Props) {
+export function WeeklyPlanView({ payload, wire, weekKey, step }: Props) {
+  const nodes = useOutline(wire);
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -255,7 +260,7 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
   const stepContext: StepContext | null = plan
     ? {
         planId: plan.id,
-        nodes: payload.nodes,
+        nodes,
         entries,
         entryFor,
         patchEntry,
@@ -367,7 +372,7 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
           <FixedTimeStep
             plan={plan}
             schedule={schedule}
-            nodes={payload.nodes}
+            nodes={nodes}
             weekKey={weekKey}
             onPatchPlan={patchPlan}
             onScheduleChange={() => refresh()}

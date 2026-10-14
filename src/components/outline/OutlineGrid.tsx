@@ -54,6 +54,8 @@ import { shouldDiscardVirginInsert } from "@/lib/grid/virginInsert";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
+import { useOutline } from "@/components/grid/useOutline";
+import type { OutlineWire } from "@/lib/tree/wire";
 import { useStateChange } from "@/components/grid/useStateChange";
 import { useToday } from "@/components/grid/useToday";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
@@ -157,7 +159,8 @@ function viewDefaults(): GridDefaults {
  * Filtering by type or focus is not here — those are the `type` / `icon` and `focus`
  * columns, filtered from their column menus like everything else.
  */
-export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
+export function OutlineGrid({ wire }: { wire: OutlineWire }) {
+  const initialNodes = useOutline(wire);
   const { nodes, byId, patch, apply, error, setError } =
     useOptimisticNodes(initialNodes);
   const { attachFromClipboard } = useAttachFromClipboard(apply);

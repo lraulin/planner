@@ -26,6 +26,8 @@ import { COMMIT_FORM } from "@/lib/commands/chords";
 import type { OrganizerOutcome } from "@/lib/organizer/types";
 import { fromDateKey, shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
+import type { OutlineWire } from "@/lib/tree/wire";
+import { useOutline } from "@/components/grid/useOutline";
 
 const PROCESS_CHORD = formatBindings(COMMIT_FORM) ?? "⌘⏎";
 
@@ -49,16 +51,22 @@ const OUTCOMES: {
 ];
 
 export function OrganizerView({
-  nodes,
-  queue,
+  wire,
+  queueIds,
   today,
   nowIso,
 }: {
-  nodes: readonly OutlineNode[];
-  queue: readonly OutlineNode[];
+  wire: OutlineWire;
+  /** The processing queue, in order, as ids into `wire` — the rows themselves cross once. */
+  queueIds: readonly string[];
   today: string;
   nowIso: string;
 }) {
+  const nodes = useOutline(wire);
+  const queue = useMemo(() => {
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    return queueIds.flatMap((id) => byId.get(id) ?? []);
+  }, [nodes, queueIds]);
   const [destination, setDestination] = useState<ProjectPickerValue>({ kind: "none" });
   const [projectQuery, setProjectQuery] = useState("");
 

@@ -41,6 +41,7 @@ import {
 import type { ChooserDateFilter, ChooserViewId } from "@/lib/chooser/types";
 import type { PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
+import type { OutlineWire } from "@/lib/tree/wire";
 import { setTcPrioritiesAction } from "@/app/(shell)/plan/outline/actions";
 import {
   buildChooserColumns,
@@ -95,14 +96,14 @@ function chooserScopes(viewId: string): readonly string[] {
 }
 
 export function ChooserGrid({
-  initialNodes,
+  wire,
   plannedNodeIds,
 }: {
-  initialNodes: OutlineNode[];
+  wire: OutlineWire;
   /** Tasks already sitting on a day in the Day tab; see `settings.hidePlanned`. */
   plannedNodeIds?: string[];
 }) {
-  const tab = useGridTab(initialNodes);
+  const tab = useGridTab(wire);
   // The Chooser is a projection of the tree like Tasks and Projects are, so it gets the same
   // non-structural command set rather than the two-action `rowActions` shim it used to pass —
   // which was the last caller of that path, and the reason the path existed.

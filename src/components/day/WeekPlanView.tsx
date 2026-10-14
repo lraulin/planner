@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { ErrorBanner } from "@/components/tabs/tabChrome";
 import { buildChooserItems, defaultSettings } from "@/lib/chooser/views";
 import { formatPriority } from "@/lib/tree/format";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { OutlineWire } from "@/lib/tree/wire";
+import { useOutline } from "@/components/grid/useOutline";
 import { isDayItemSettled } from "@/lib/day/priority";
 import type { DailyItemView, WeekPayload } from "@/lib/day/types";
 import { moveDailyItemToDayAction, planNodeForDayAction } from "@/app/day/actions";
@@ -39,13 +40,14 @@ const ITEM_MIME = "application/x-planner-daily-item";
 
 export function WeekPlanView({
   initial,
-  nodes,
+  wire,
   today,
 }: {
   initial: WeekPayload;
-  nodes: OutlineNode[];
+  wire: OutlineWire;
   today: string;
 }) {
+  const nodes = useOutline(wire);
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);

@@ -1,6 +1,7 @@
 import { getCurrentUserId } from "@/lib/auth";
 import { loadWeek } from "@/lib/day/queries";
 import { loadOutline } from "@/lib/tree/queries";
+import { packOutline } from "@/lib/tree/wire";
 import {
   fromDateKey,
   localDateKey,
@@ -37,6 +38,10 @@ export default async function WeekPlanPage({
   ]);
 
   return (
-    <WeekPlanView initial={payload} nodes={nodes} today={localDateKey(new Date())} />
+    <WeekPlanView
+      initial={payload}
+      wire={packOutline(nodes)}
+      today={localDateKey(new Date())}
+    />
   );
 }

@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { organizerQueue } from "@/lib/organizer/queue";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { loadOutline } from "@/lib/tree/queries";
+import { packOutline } from "@/lib/tree/wire";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,8 @@ export default async function OrganizePage() {
 
   return (
     <OrganizerView
-      nodes={nodes}
-      queue={organizerQueue(nodes, today)}
+      wire={packOutline(nodes)}
+      queueIds={organizerQueue(nodes, today).map((node) => node.id)}
       today={today}
       nowIso={now.toISOString()}
     />

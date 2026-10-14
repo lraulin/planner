@@ -9,7 +9,8 @@ import { MasterContextsDialog } from "@/components/contexts/MasterContextsDialog
 import { ProjectPickerDialog } from "@/components/projects/ProjectPickerDialog";
 import type { ProjectPickerValue } from "@/components/projects/ProjectPicker";
 import type { MasterContextOption } from "@/lib/contexts/queries";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { OutlineWire } from "@/lib/tree/wire";
+import { useOutline } from "@/components/grid/useOutline";
 
 type Action =
   | { label: string; href: string; count?: number }
@@ -24,14 +25,15 @@ const STEP_STYLES = [
 ];
 
 export function OverviewView({
-  nodes,
+  wire,
   inboxCount,
   masterContexts,
 }: {
-  nodes: readonly OutlineNode[];
+  wire: OutlineWire;
   inboxCount: number;
   masterContexts: readonly MasterContextOption[];
 }) {
+  const nodes = useOutline(wire);
   const router = useRouter();
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [contextsOpen, setContextsOpen] = useState(false);

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
+import type { OutlineWire } from "@/lib/tree/wire";
 import { asGroupBy, treeGridRows, type GroupBy } from "@/lib/tree/slice";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
@@ -150,8 +151,8 @@ const RESULT_AREA_CREATE_KINDS = ["result_area"] as const;
  * Editing a name, category, importance or description happens here; everything else is the
  * existing Result Area drawer.
  */
-export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
-  const tab = useGridTab(initialNodes);
+export function ResultAreasGrid({ wire }: { wire: OutlineWire }) {
+  const tab = useGridTab(wire);
   const nodeCommands = useNodeCommandDeck({
     nodes: tab.nodes,
     selectedId: tab.selectedId,

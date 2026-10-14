@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { plannedNodeIds } from "@/lib/day/queries";
 import { loadOutline } from "@/lib/tree/queries";
+import { packOutline } from "@/lib/tree/wire";
 import { ChooserGrid } from "@/components/chooser/ChooserGrid";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export default async function ChooserPage() {
 
   return (
     <Suspense fallback={<div className="min-h-0 flex-1" />}>
-      <ChooserGrid initialNodes={nodes} plannedNodeIds={[...planned]} />
+      <ChooserGrid wire={packOutline(nodes)} plannedNodeIds={[...planned]} />
     </Suspense>
   );
 }

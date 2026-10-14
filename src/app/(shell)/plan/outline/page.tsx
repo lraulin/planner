@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { loadOutline } from "@/lib/tree/queries";
+import { packOutline } from "@/lib/tree/wire";
 import { OutlineGrid } from "@/components/outline/OutlineGrid";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export default async function OutlinePage() {
 
   return (
     <Suspense fallback={<div className="min-h-0 flex-1" />}>
-      <OutlineGrid initialNodes={nodes} />
+      <OutlineGrid wire={packOutline(nodes)} />
     </Suspense>
   );
 }

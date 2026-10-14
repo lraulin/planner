@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
+import type { OutlineWire } from "@/lib/tree/wire";
 import type { ContactOption } from "@/lib/contacts/types";
 import { owningProjectId } from "@/lib/tree/owningProject";
 import { asGroupBy, treeGridRows, type GroupBy, type GridRow } from "@/lib/tree/slice";
@@ -289,14 +290,14 @@ const TASK_GROUP_DIMENSIONS: GroupBy[] = [
 ];
 
 export function TasksGrid({
-  initialNodes,
+  wire,
   contactOptions,
 }: {
-  initialNodes: OutlineNode[];
+  wire: OutlineWire;
   /** Name lookup for the optional Contact column; see `buildColumns`. */
   contactOptions: ContactOption[];
 }) {
-  const tab = useGridTab(initialNodes);
+  const tab = useGridTab(wire);
   const nodeCommands = useNodeCommandDeck({
     nodes: tab.nodes,
     selectedId: tab.selectedId,

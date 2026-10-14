@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
+import type { OutlineWire } from "@/lib/tree/wire";
 import { asGroupBy, treeGridRows, type GroupBy } from "@/lib/tree/slice";
 import { formatEffort } from "@/lib/tree/format";
 import {
@@ -273,8 +274,8 @@ const PROJECT_GROUP_DIMENSIONS: GroupBy[] = [
   "deadlineBand",
 ];
 
-export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
-  const tab = useGridTab(initialNodes);
+export function ProjectsGrid({ wire }: { wire: OutlineWire }) {
+  const tab = useGridTab(wire);
   const nodeCommands = useNodeCommandDeck({
     nodes: tab.nodes,
     selectedId: tab.selectedId,

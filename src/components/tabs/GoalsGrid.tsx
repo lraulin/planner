@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
+import type { OutlineWire } from "@/lib/tree/wire";
 import { asGroupBy, treeGridRows, type GroupBy } from "@/lib/tree/slice";
 import { formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
@@ -178,8 +179,8 @@ const GOAL_GROUP_DIMENSIONS: GroupBy[] = [
   "priorityLetter",
 ];
 
-export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
-  const tab = useGridTab(initialNodes);
+export function GoalsGrid({ wire }: { wire: OutlineWire }) {
+  const tab = useGridTab(wire);
   const nodeCommands = useNodeCommandDeck({
     nodes: tab.nodes,
     selectedId: tab.selectedId,

@@ -1,6 +1,7 @@
 import { getCurrentUserId } from "@/lib/auth";
 import { loadWeeklyPlanPayload } from "@/lib/planning/queries";
 import { fromDateKey, startOfWeek, toDateKey } from "@/lib/schedule/geometry";
+import { packOutline } from "@/lib/tree/wire";
 import { WeeklyPlanView } from "@/components/planning/WeeklyPlanView";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +21,16 @@ export default async function WeeklyPlanPage({
   const weekStart = startOfWeek(requested, weekStartsOn);
   const step = Number(params.step ?? 0);
 
-  const payload = await loadWeeklyPlanPayload(userId, { weekStart, weekStartsOn });
+  // The agent tools read `nodes` off this payload as rows; only the page packs them.
+  const { nodes, ...payload } = await loadWeeklyPlanPayload(userId, {
+    weekStart,
+    weekStartsOn,
+  });
 
   return (
     <WeeklyPlanView
       payload={payload}
+      wire={packOutline(nodes)}
       weekKey={toDateKey(weekStart)}
       step={Number.isInteger(step) && step >= 0 && step <= 5 ? step : 0}
     />

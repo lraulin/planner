@@ -4,6 +4,7 @@ import { listMasterContexts } from "@/lib/contexts/queries";
 import { organizerQueue } from "@/lib/organizer/queue";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { loadOutline } from "@/lib/tree/queries";
+import { packOutline } from "@/lib/tree/wire";
 
 export const dynamic = "force-dynamic";
 /**
@@ -22,7 +23,7 @@ export default async function OverviewPage() {
 
   return (
     <OverviewView
-      nodes={nodes}
+      wire={packOutline(nodes)}
       inboxCount={inboxCount}
       masterContexts={masterContexts}
     />
