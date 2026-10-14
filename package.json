@@ -45,11 +45,11 @@
     "@fullcalendar/interaction": "^6.1.21",
     "@fullcalendar/react": "^6.1.21",
     "@fullcalendar/timegrid": "^6.1.21",
-    "@tanstack/react-virtual": "^3.14.13",
+    "@tanstack/react-virtual": "^3.14.15",
     "better-auth": "^1.7.7",
     "d3-sankey": "^0.12.3",
-    "drizzle-orm": "^0.45.3",
-    "next": "16.3.8",
+    "drizzle-orm": "^0.45.4",
+    "next": "16.4.0",
     "postgres": "^3.4.7",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -57,7 +57,7 @@
     "recharts": "^3.10.1",
     "remark-gfm": "^4.0.1",
     "unpdf": "^1.8.1",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
