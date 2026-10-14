@@ -437,6 +437,84 @@ the **catalog**, not a junk drawer for things you could not justify on the bar:
 checkbox, or whose only two states are "unavailable" and "duplicated", does not belong in any
 of the three tiers — it belongs deleted.
 
+## The shell is one layout, and where you are comes from the URL
+
+`src/app/(shell)/layout.tsx` renders `AppShell` **once**, above every module's pages. A route
+group, so no URL changes; `/login`, `/signup`, `/oauth/authorize`, `/settings` and `/api` stay
+outside it because they are not in the module registry and must not grow a sidebar.
+
+**Never render `AppShell` from a page or a module layout.** Next keys every route segment, so a
+shell rendered inside the page is unmounted and rebuilt on every navigation — sidebar, menu
+bar, page bar and command provider included. That is how the shell used to be (34 pages
+copy-pasting it), and it is why a click felt like a full reload.
+
+Two consequences an author has to know:
+
+- **Nothing passes `active`.** `moduleForPathname(pathname)` in `shell/modules.ts` resolves the
+  module from the URL (`null` for Process Inbox), `pageForPathname` the page. A prop could only
+  ever restate the URL, and a page that forgot it lit the wrong row with nothing to catch it.
+- **Everything in the shell now outlives a navigation.** State that the remount used to clear
+  has to be cleared on purpose. `PageBar`'s rearrange mode is keyed by module _and_ pathname for
+  exactly this; the row clipboard, which was documented as surviving a navigation, finally does.
+
+### Acknowledge the click, do not replace the page
+
+The old page stays on screen until the new one is ready. **No `loading.tsx` and no skeleton:**
+a fallback that replaces content flashes on every 200–300 ms switch, and keeping the old page
+never does. What the shell adds, from one pending-navigation record
+(`lib/navigation/pendingNavigation.ts`, pure and tested):
+
+- **The destination takes the active look at once** — sidebar row, page tab, bottom-nav slot,
+  More sheet and the phone header title read `usePresentedPathname()`, not the address bar. It
+  goes back to the address bar when the navigation is abandoned, fails, or redirects elsewhere.
+  The page bar keeps the module on screen, with no tab lit, when the destination is in another
+  module: swapping its tabs before the content arrives would show one module's chrome over
+  another's page.
+- **A slow navigation gets a bar, and only a slow one.** After `NAVIGATION_PROGRESS_DELAY_MS`
+  (300) a thin bar and a veil appear (`NavigationSurface`), with `aria-busy`. The veil takes no
+  pointer events: the old page staying usable is the point.
+- **A same-page URL change is not a navigation.** A drawer opening or a view switch never
+  becomes pending, and dims nothing.
+
+### One link component, and one switch for prefetch
+
+Every in-app link goes through **`NavLink`**, never `next/link` directly: it records the click,
+uses `useLinkStatus` to learn a navigation ended without arriving, and owns the `prefetch`
+prop through one constant. A link whose destination has an active state somewhere in the chrome
+passes `activeLook`; anything else keeps the faint overlay. A go-to **command** is not a link —
+it navigates through `useNavigate()`, which records the same way.
+
+Prefetch is a measured decision, not a default either way: spec decision 6 turns it off if click
+→ last DOM change is no more than 20 ms worse on a production build. See
+`agent-os/specs/2026-10-13-1155-immediate-navigation-and-page-cache/plan.md` for the state of
+that gate before changing the constant.
+
+## Pages may be cached for a minute — and when they may not
+
+Every `page.tsx` has an entry in `src/lib/navigation/cachePolicy.ts`: `cached`, `self-patching`
+or `uncached`, with a one-line reason. **A test fails when a page has none**, and when a
+page's `unstable_dynamicStaleTime` literal disagrees with its policy. A route the registry does
+not name is treated as `self-patching`: never cached, and it protects the ones that are.
+
+**A new page starts `uncached`.** It may be `cached` only if both hold:
+
+1. **Every write it makes revalidates or refreshes.** A view that patches its own copy of server
+   data and writes through `revalidate: []` is `self-patching`; the cached payload of a page
+   you left would otherwise show data from before the write.
+2. **Its server render reads no setting that a non-revalidating write changes.** Client
+   settings writes (`saveSettingsAction`) revalidate nothing, so a page whose render reads one
+   re-reads it only because it is not cached.
+
+**Adding an action that passes `revalidate: []` means its host page is `self-patching`** (or
+refreshes itself after the write). Leaving a `self-patching` page is what marks the cache
+suspect, which is why this is a page-level rule: the 45th action cannot forget to opt in.
+
+The rules for the ways data changes without this tab hearing of it — the suspect mark, focus
+return, the day rolling over, a cached page that may be behind — are in
+`lib/navigation/freshness.ts`. Every cached page renders `<PageStamp />`; a test checks. The
+cache is in memory only: finance data does not sit unencrypted in browser storage, and
+`localStorage` stays a write mirror (`persistent-ui-state`).
+
 ## Shell state is a setting, not a `localStorage` flag
 
 The sidebar's collapsed state and the Commands panel's open/collapsed state live in
@@ -463,7 +541,8 @@ from `src/lib/keyboard.ts`, and those belong with the component that knows what 
 ## Testing
 
 The registry's matching and merging, the menu tree (`menus.ts`), the binding match/format
-(`bindings.ts`) and the shell settings codec are pure and live in `src/lib/` with tests. The
+(`bindings.ts`), the shell settings codec, the pending-navigation record, the cache policy
+registry and the freshness rules are pure and live in `src/lib/` with tests. The
 sidebar, menu bar, panel, palette, provider and overflow button are wiring and get none —
 `testing.md`. Verify them in a real browser via the `run-planner` skill.
 
