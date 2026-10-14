@@ -1461,6 +1461,16 @@ period)` so money already spent stops being held twice and only going over bites
   On 2026-09-26 the app got one outcome surface, toasts (`specs/2026-09-26-2137-toasts-and-one-step-snapshot-paste`),
   and a copied bank snapshot applies on ⌘V or one toolbar click; the textarea is only a fallback.
 
+- **Finance pages read what they use** (daily-use performance, 2026-10-13) —
+  `specs/2026-10-13-1147-finance-narrow-ledger-reads`. Accounts stopped reading ledger rows
+  and `loadDashboard` was retired; the bill forecast reads only rows filed to bill
+  envelopes; Review loads when its drawer opens; the Register reads its Date window plus
+  the narrow set of rows whose Category can be refused, and its filter lists load when a
+  menu opens. Equal to the old output byte for byte on a restored production backup.
+  Follow-ups, none started: the Register's first query built from the stored view (a saved
+  layout still costs one request a load), Track-as-bill draft and Scenarios (full reads
+  behind a dialog and a secondary page), and windowing Insights.
+
 ---
 
 ## Phase order (dependency sketch)

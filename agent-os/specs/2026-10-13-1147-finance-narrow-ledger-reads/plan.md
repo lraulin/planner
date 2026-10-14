@@ -3,12 +3,11 @@
 **Status: active**
 Spec folder: `agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/`
 
-> Shaped 2026-10-13. Task 1 (this folder), Task 2 (ledger refreshed, baseline captured),
-> Task 3 (Accounts reads no ledger; `loadDashboard` retired), Task 4 (the forecast reads
-> bill-envelope rows), Task 5 (Review loads when its drawer opens), Task 6 (Insights
-> tidy-up, split totals by one aggregate join), Task 7 (the Register names the reader's
-> day), Task 9 (facets on demand, landed ahead of Task 8) and Task 8 (the Register reads
-> its Date window) are done; Task 10 remains. Progress is in **Changes from original plan** and **Verification**.
+> Shaped 2026-10-13. Tasks 1-9 are built and on `master`, and Task 10's local verification
+> is done (see **Verification**). The spec stays **active** until two things that cannot be
+> done from a development machine are done: the production RSC timings after deploy, and a
+> decision on the `perf:routes` chain for Register (see **Changes** #11). Progress is in
+> **Changes from original plan** and **Verification**.
 
 ## Spec relationships
 
@@ -206,24 +205,28 @@ search tools (whole-history questions). Budget (done 2026-10-12).
 
 - [x] Local ledger refreshed from a production backup; row counts recorded here (Verification,
       "Baseline").
-- [ ] `/finances/accounts` issues no query selecting transaction rows beyond `listAccounts`
+- [x] `/finances/accounts` issues no query selecting transaction rows beyond `listAccounts`
       and the pending candidates; `loadDashboard` no longer exists.
-- [ ] `/finances/bills` reads only rows filed to bill envelopes; the review list loads on
+- [x] `/finances/bills` reads only rows filed to bill envelopes; the review list loads on
       drawer open and again after a save.
-- [ ] Insights output is byte-identical; `notes` is no longer selected.
-- [ ] With default grid state, `/finances/register` reads the month's rows, the assignability
+- [x] Insights output is byte-identical; `notes` is no longer selected.
+- [x] With default grid state, `/finances/register` reads the month's rows, the assignability
       subset and one count/years query — not the ledger — and fires no index or facets request
-      on load, checked at an hour when the UTC date differs from the local one.
-- [ ] Changing sort, search or a non-date filter while Date is bounded reads the window only.
-- [ ] Date = All, Uncategorized, Activity and Report still return exactly what they do today.
-- [ ] Every dump in D13 is byte-identical; the facets action equals the old `index.facets`.
-- [ ] `registerDateBound` is unit-tested per band, custom bounds, unknown today, non-`all`
+      on load, checked at an hour when the UTC date differs from the local one (2026-10-13
+      21:51 EDT = 2026-10-14 01:51 UTC, server process in UTC, default layout: one GET, no
+      POST).
+- [x] Changing sort, search or a non-date filter while Date is bounded reads the window only.
+- [x] Date = All, Uncategorized, Activity and Report still return exactly what they do today.
+- [x] Every dump in D13 is byte-identical; the facets action equals the old `index.facets`.
+- [x] `registerDateBound` is unit-tested per band, custom bounds, unknown today, non-`all`
       views and an advanced-filter-only date condition (all three of the last return null).
-- [ ] Second-user integration tests pass with no skip warning.
-- [ ] `npm run perf:routes -- finances`: no route's longest chain grows.
-- [ ] Lint, typecheck, `npm test`, build, `npm run smoke` with the dev server up.
+- [x] Second-user integration tests pass with no skip warning.
+- [ ] `npm run perf:routes -- finances`: no route's longest chain grows. **Not met by the
+      tool's number for Register** (5 → 6-7 in interleaved runs); statement traces show the
+      same three waves. See Changes #11.
+- [x] Lint, typecheck, `npm test`, build, `npm run smoke` with the dev server up.
 - [ ] Production RSC timings for Accounts, Bills and Register re-measured after deploy and
-      recorded beside the 2026-10-12 figures.
+      recorded beside the 2026-10-12 figures. **Cannot be done before deploy.**
 
 ## Verification
 
@@ -331,6 +334,43 @@ commit and the final tree under the timing lock.
 | 8    | Register, bounded Date (This Month / Last Month / Last 7 / Last 30 / This Year / custom range / with search / sorted by amount): window + subset + count | 7,459 → 34 + 914 + 1 count (This Month); 74 / 75 / 1,045 / 209 for last month, last 30, this year, custom | 64,607 / 97,453 / 45,705 / 98,290 / 209,056 / 131,086 / 37,639 / 64,609 | `f8d79b96183c` `8ec8f76c3c3e` `962ee13b8b00` `962eaec5453e` `cf14d41d8d68` `8b20ee99b378` `81a2b4ae53ec` `200e35d622aa` yes |                         |
 | 8    | Register, unbounded (Date = All, unknown today, Uncategorized, Activity, Report): whole ledger, as before                                                | 7,459 → 7,459                                                                                             | 856,797 / 856,889 / 36,500 / 46,670 / 190,580                           | `d26db9636756` `5593374b51cd` `6ac991dda483` `1a7f35f96067` `2c4a62b63959` yes                                              |                         |
 
+**Loader times, local, final** (median of 11 after two warm-ups; base commit `6d5e23c4` and
+the final tree measured back to back in one lock hold, load average 25-27 on 12 CPUs, so the
+ratios are the evidence and single milliseconds are not). `-` is a read that no longer
+exists on that path.
+
+| Read                                                                              | Base ms            | Final ms                       |
+| --------------------------------------------------------------------------------- | ------------------ | ------------------------------ |
+| Accounts page: `loadDashboard` → accounts + pending + connections                 | 80.3               | 8.0                            |
+| Bills page load: `loadBillForecast`                                               | 66.3               | 16.7                           |
+| Bills page load: `loadReviewCandidates`                                           | 177.0              | - (on drawer open: 47.7)       |
+| Agent tools: `loadDashboard` → `loadBillCharges` / `loadMerchantNames`            | 80.3               | 24.5 / 22.5                    |
+| Register first paint, This Month (`loadRegisterPrepared` → `loadRegisterInitial`) | 84.4               | 21.5                           |
+| Register, This Month by action (`loadRegisterPrepared`)                           | 84.4               | 10.0                           |
+| Register filter lists, first menu open (`loadRegisterFacets`)                     | in every index     | 85.6 once per view             |
+| Register, Date = All (unchanged path)                                             | 82.6               | 144.3 (noise: min 78.5 → 90.1) |
+| `listTransactions`, whole ledger, three interleaved rounds                        | 50.3 / 53.8 / 53.4 | 54.3 / 48.5 / 56.0             |
+| Insights `loadInsightsRows` (unchanged read)                                      | 103.7              | 88.5                           |
+
+D6 (one aggregate join for split totals) is **neutral on this ledger**: no split parent, and
+the correlated subqueries were already index-assisted (psql: about 8 ms either way). Its
+value here is one definition of the row's columns and joins, not milliseconds.
+
+**`perf:routes -- finances`**, final tree, 10 ms one way, longest chain / queries
+(base in brackets): accounts 7 / 13 (7 / 17), bills 10 / 26 (5 / 27), budget 6 / 24 (9 / 24,
+untouched), insights 2 / 21 (6 / 21, untouched), register 6 / 17 (5 / 15), statements 7 / 5
+(6 / 5, untouched), supplies 4 / 6 (6 / 6, untouched).
+
+The tool's number is noisy (budget, which this spec never touched, read 6, 8 and 10 in
+back-to-back runs). Interleaved A/B runs of base against final, two servers, same ledger:
+bills 5-9 against 8-10 (base alone read 5 and 9 on consecutive runs), accounts 6-7 against
+7, **register 5 against 6-7, consistently**. A statement trace of the Register request at 10 ms
+shows the same shape on both: one statement (session), then ten (the pool is ten
+connections), then the rest, three waves; base 15 statements, final 17; wall time with delay
+245 ms against 215 ms. So the number of sequential round trips is unchanged and the tool's
++1 or +2 is CPU and scheduling time landing differently once the render is cheap, not an
+extra wait. The criterion as worded is not met for Register and is left unchecked.
+
 Production RSC response, signed-in browser:
 
 | Page     | 2026-10-12 | After |
@@ -353,6 +393,9 @@ Production RSC response, signed-in browser:
 | 8   | **Task 9 landed before Task 8.** Facets on demand (D10) shipped first, then the windowed index read (D8, D9).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | A window read computes facets over the window; the filter lists would have been wrong from the Task 8 commit until the Task 9 one. Taking facets out of the index first keeps every commit correct.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 9   | D10 as built: `registerFacets` (pure, beside `prepareRegister`), `loadRegisterFacets`, `loadRegisterFacetsAction`; `useRegisterSource` keeps the answer per **view** (`viewId`, `report`, `category`, `month` — the filter lists do not depend on filters, sorts or search) until `reload()` or a new server render. The browser asks when a column menu opens (`ColumnHeaderRow`) or the filter dialog opens (`GridToolbar`), through an optional `onDistinctValuesNeeded` prop on `DataGrid` and `GridToolbar` that no other grid sets. It also asks at once when an options filter on an enum column is active, because a ticked value is drawn as a chip from the column's list (`useGridChips`): the default layout has only the Date band, so a default load fires no facets request. | The spec said the first menu or dialog open; the chip case is the one other consumer of the lists, and a chip reading `value:Foo` until a menu is opened would be a regression.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | 10  | D8 and D9 as built: `registerDateBound` returns `{ from, to }` with either side null when only one is bounded, and takes each band's days from `calendarBandRange`, extracted from `matchesCalendar` so the grid and the SQL window read one definition. `prepareRegister` takes an optional `RegisterWholeView` (`total`, `notBudgetedIds`) and refuses a derived view with it. `loadRegisterInitial` is the page's first paint: the default query is assembled inside the library once the count-and-years read is back, so the page no longer builds it. The subset is chained off the accounts inside the one wave.                                                                                                                                                                     | Years decide the default's collapsed groups, which are part of the query, so the query cannot be built before the count; keeping that assembly in `src/lib` is also what lets the integration test compare it with the whole-ledger derivation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 11  | `perf:routes -- finances` reports Register at 6-7 against 5 at the base commit, bills at 8-10 against 5-9, and the criterion says no route's chain grows. Not met by the tool's number; left unchecked. The statement trace of the Register request is three waves on both trees (see Verification), the final tree is faster with delay applied, and the untouched Budget route moves by more than that between runs. Counting statements per wave rather than round-trip time would remove the noise; that is a change to `scripts/route-round-trips.mjs` and was not made.                                                                                                                                                                                                               | Reported as measured rather than argued away: the acceptance criterion was written against a number this tool cannot hold steady. Lee decides whether the trace is enough.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 12  | The assignability subset is read with the account's own `off_budget` column (`"flagged"`) when the page has not read the accounts yet, and with the caller's ids otherwise (the index action). Same rows; `notBudgetedIdsOf` still decides.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | It removed the one read that waited on the account list. It did not change the measured chain, so it is a structural choice, not a measured win.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| 13  | The Register's two redundant requests are not the same cause: the date key is fixed (`readerTodayKey`) and **the saved view remains** (Changes #7). With Lee's stored layout the page's first query still differs from the browser's, so a request fires on every load; it is now a window read of about 10 ms rather than a ledger read of about 80 ms. Follow-up specs, in order of value: the Register's first query from the stored view (cookie replay or client-side first preparation), Track-as-bill draft and Scenarios (D11), Insights windowing (D5).                                                                                                                                                                                                                            | Recorded so the roadmap carries them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 ## Task 1: Save spec documentation
 

@@ -464,14 +464,22 @@ async function readBankRowTotals(
  */
 async function readAssignabilitySubset(
   userId: string,
-  offBudgetAccountIds: ReadonlySet<string>,
+  /**
+   * Which accounts count as off budget: the ids a caller already holds, or `"flagged"` for
+   * the accounts' own `off_budget` column. The second is for a caller that has not read the
+   * accounts yet and would otherwise have to wait for them; it selects the same rows, because
+   * the caller's set is built from that column, and the pure function still decides.
+   */
+  offBudget: ReadonlySet<string> | "flagged",
 ): Promise<AssignabilitySubsetRow[]> {
   const reasons = [
     isNotNull(financeTransactions.transferGroupId),
     sql`coalesce(${financeTransactions.flowOverride}, ${financeTransactions.derivedFlow}) = 'internal_transfer'`,
-    offBudgetAccountIds.size > 0
-      ? inArray(financeTransactions.accountId, [...offBudgetAccountIds])
-      : undefined,
+    offBudget === "flagged"
+      ? sql`${financeTransactions.accountId} in (select id from ${financeAccounts} where ${financeAccounts.userId} = ${userId} and ${financeAccounts.offBudget})`
+      : offBudget.size > 0
+        ? inArray(financeTransactions.accountId, [...offBudget])
+        : undefined,
   ];
   const rows = await db
     .select({
@@ -551,8 +559,8 @@ export async function loadRegisterPrepared(
  * The default query is All Transactions, This Month, newest first, grouped by year and
  * month — and its collapsed groups are the ledger's other years, which only the ledger can
  * say. So the count-and-years read is part of the same wave as the window read, and the query
- * is assembled once all of it is back. One wave; no read waits on another except the subset,
- * which needs the accounts' off-budget flags and is chained off them rather than behind them.
+ * is assembled once all of it is back. One wave: the subset reads the off-budget flag itself
+ * rather than waiting for the account list, which a chained read measurably cost.
  */
 export async function loadRegisterInitial(
   userId: string,
@@ -579,7 +587,7 @@ export async function loadRegisterInitial(
       ...(bound.to !== null ? { to: bound.to } : {}),
     }),
     readBankRowTotals(userId),
-    accounts.then((rows) => readAssignabilitySubset(userId, offBudgetIdsOf(rows))),
+    readAssignabilitySubset(userId, "flagged"),
     accounts,
     budgetStartMonth,
   ]);
