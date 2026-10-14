@@ -439,27 +439,40 @@ function matchesCalendar(
   const blank = value === null || value === "";
   if (blank) return !CALENDAR_BAND_IDS.has(id);
 
+  const range = calendarBandRange(id, today);
+  if (range) return value >= range.from && value <= range.to;
+
+  return true;
+}
+
+/**
+ * The inclusive day range a named calendar band covers on `today`, or null for an id that is
+ * not a band.
+ *
+ * The one definition of where each band starts and stops: `matchesCalendar` tests a value
+ * against it, and the Register's SQL window (`registerDateBound`) reads the same range, so
+ * "This Month" cannot mean one thing in the grid and another in the query that feeds it.
+ */
+export function calendarBandRange(
+  id: string,
+  today: string,
+): { from: string; to: string } | null {
   if (id === "this-month") {
     const month = monthKeyOf(today);
-    return value >= month && value <= monthEndKey(month);
+    return { from: month, to: monthEndKey(month) };
   }
   if (id === "last-month") {
     const month = prevMonthKey(monthKeyOf(today));
-    return value >= month && value <= monthEndKey(month);
+    return { from: month, to: monthEndKey(month) };
   }
   if (id === "this-year") {
     const january = monthKeyOf(`${today.slice(0, 4)}-01-01`);
     const december = monthKeyOf(`${today.slice(0, 4)}-12-01`);
-    return value >= january && value <= monthEndKey(december);
+    return { from: january, to: monthEndKey(december) };
   }
-  if (id === "last-7-days") {
-    return value >= shiftDays(today, -6) && value <= today;
-  }
-  if (id === "last-30-days") {
-    return value >= shiftDays(today, -29) && value <= today;
-  }
-
-  return true;
+  if (id === "last-7-days") return { from: shiftDays(today, -6), to: today };
+  if (id === "last-30-days") return { from: shiftDays(today, -29), to: today };
+  return null;
 }
 
 /** Shift a `YYYY-MM-DD` calendar day by `delta` whole days (day-label arithmetic). */

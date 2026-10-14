@@ -1,13 +1,16 @@
 import { sliceBlock } from "@/lib/grid/serverQuery";
 import { describe, expect, it } from "vitest";
 import { customFilter, optionsFilter } from "@/lib/grid/customFilter";
+import { effectiveFlow } from "./analytics";
 import { activityViewFilters } from "./registerActivity";
 import { THIS_MONTH_DATE_FILTER } from "./registerFields";
 import type { TransactionListRow } from "./types";
 import {
   parseRegisterQuery,
+  notBudgetedIdsOf,
   prepareRegister,
   REGISTER_BLOCK_SIZE,
+  registerDateBound,
   registerFacets,
   registerQueryKey,
   type RegisterQuery,
@@ -625,5 +628,238 @@ describe("activity view", () => {
       0,
     );
     expect(sum).toBe(-3100);
+  });
+});
+
+describe("registerDateBound", () => {
+  const bound = (over: Partial<RegisterQuery>) => registerDateBound(query(over));
+  const band = (...ids: string[]) => ({ date: optionsFilter(ids) });
+  const custom = (join: "and" | "or", ...conditions: [string, string][]) => ({
+    date: {
+      mode: "custom" as const,
+      join,
+      conditions: conditions.map(([op, value]) => ({
+        op: op as "gte",
+        value,
+      })),
+    },
+  });
+
+  it("bounds each calendar band by the days the filter itself matches", () => {
+    // today is 2026-08-24
+    expect(bound({ filters: band("this-month") })).toEqual({
+      from: "2026-08-01",
+      to: "2026-08-31",
+    });
+    expect(bound({ filters: band("last-month") })).toEqual({
+      from: "2026-07-01",
+      to: "2026-07-31",
+    });
+    expect(bound({ filters: band("this-year") })).toEqual({
+      from: "2026-01-01",
+      to: "2026-12-31",
+    });
+    // Both lookbacks include today.
+    expect(bound({ filters: band("last-7-days") })).toEqual({
+      from: "2026-08-18",
+      to: "2026-08-24",
+    });
+    expect(bound({ filters: band("last-30-days") })).toEqual({
+      from: "2026-07-26",
+      to: "2026-08-24",
+    });
+  });
+
+  it("covers every band of an OR of bands, and gives up on an id that is not one", () => {
+    expect(bound({ filters: band("this-month", "last-month") })).toEqual({
+      from: "2026-07-01",
+      to: "2026-08-31",
+    });
+    // `nonblanks` matches every dated row; an unknown id matches everything too.
+    expect(bound({ filters: band("this-month", "nonblanks") })).toBeNull();
+    expect(bound({ filters: band("some-achieve-id") })).toBeNull();
+  });
+
+  it("bounds a custom comparison with a day, on one side or both", () => {
+    expect(
+      bound({ filters: custom("and", ["gte", "2026-03-01"], ["lte", "2026-04-30"]) }),
+    ).toEqual({ from: "2026-03-01", to: "2026-04-30" });
+    expect(bound({ filters: custom("and", ["gt", "2026-03-01"]) })).toEqual({
+      from: "2026-03-01",
+      to: null,
+    });
+    expect(bound({ filters: custom("and", ["lt", "2026-03-01"]) })).toEqual({
+      from: null,
+      to: "2026-03-01",
+    });
+    expect(bound({ filters: custom("and", ["eq", "2026-03-05"]) })).toEqual({
+      from: "2026-03-05",
+      to: "2026-03-05",
+    });
+    // AND narrows, so the tightest of two lower bounds wins.
+    expect(
+      bound({ filters: custom("and", ["gte", "2026-01-01"], ["gte", "2026-06-01"]) }),
+    ).toEqual({ from: "2026-06-01", to: null });
+  });
+
+  it("keeps a side open for an OR when any branch leaves it open", () => {
+    expect(
+      bound({ filters: custom("or", ["gte", "2026-06-01"], ["lte", "2026-02-01"]) }),
+    ).toBeNull();
+    expect(
+      bound({ filters: custom("or", ["gte", "2026-06-01"], ["gte", "2026-03-01"]) }),
+    ).toEqual({ from: "2026-03-01", to: null });
+  });
+
+  it("gives no bound when a day it cannot read, or a condition that is not a comparison", () => {
+    expect(bound({ filters: custom("and", ["gte", "last tuesday"]) })).toBeNull();
+    expect(bound({ filters: custom("and", ["neq", "2026-03-05"]) })).toBeNull();
+    expect(bound({ filters: custom("and", ["contains", "2026"]) })).toBeNull();
+  });
+
+  it("gives no bound for an unknown today", () => {
+    // Every band matches everything while today is unknown, so the read cannot be narrowed.
+    expect(bound({ today: null, filters: band("this-month") })).toBeNull();
+  });
+
+  it("gives no bound for a view whose base set comes from the whole ledger", () => {
+    expect(bound({ viewId: "uncategorized", filters: band("this-month") })).toBeNull();
+    expect(
+      bound({
+        viewId: "activity",
+        category: "groceries",
+        month: "2026-08",
+        filters: band("this-month"),
+      }),
+    ).toBeNull();
+  });
+
+  it("gives no bound when the date condition lives only in the advanced filter, or is absent", () => {
+    expect(bound({ filters: {} })).toBeNull();
+    expect(
+      bound({
+        filters: {},
+        advancedFilter: {
+          join: "and",
+          conditions: [{ columnId: "date", op: "gte", value: "2026-08-01" }],
+        },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("a windowed prepare", () => {
+  // A transfer straddles the window edge, one leg on an off-budget account, an
+  // internal transfer and ordinary spend on both sides of it.
+  const ledger = [
+    tx({ id: "new-spend", transactionDate: "2026-08-20" }),
+    tx({
+      id: "in-window-leg",
+      accountId: "checking",
+      transactionDate: "2026-08-02",
+      derivedFlow: "internal_transfer",
+      transferGroupId: "pair",
+    }),
+    tx({ id: "old-spend", transactionDate: "2026-06-10" }),
+    tx({
+      id: "outside-leg",
+      accountId: "card",
+      transactionDate: "2026-07-30",
+      derivedFlow: "internal_transfer",
+      transferGroupId: "pair",
+    }),
+    tx({
+      id: "to-savings",
+      accountId: "checking",
+      transactionDate: "2026-08-05",
+      derivedFlow: "internal_transfer",
+      transferGroupId: "out",
+    }),
+    tx({
+      id: "from-checking",
+      accountId: "savings",
+      transactionDate: "2026-08-05",
+      derivedFlow: "internal_transfer",
+      transferGroupId: "out",
+    }),
+    tx({
+      id: "unpaired-internal",
+      transactionDate: "2026-08-07",
+      derivedFlow: "internal_transfer",
+    }),
+    tx({ id: "savings-interest", accountId: "savings", transactionDate: "2026-08-09" }),
+  ];
+  const ctx: RegisterQueryContext = {
+    ...EMPTY_CTX,
+    offBudgetAccountIds: new Set(["savings"]),
+  };
+
+  /** What the SQL subset read selects, from the ledger: the three reasons a row can be refused. */
+  const subset = ledger
+    .filter(
+      (row) =>
+        ctx.offBudgetAccountIds.has(row.accountId) ||
+        row.transferGroupId !== null ||
+        row.derivedFlow === "internal_transfer",
+    )
+    .map((row) => ({
+      id: row.id,
+      accountId: row.accountId,
+      transactionDate: row.transactionDate,
+      transferGroupId: row.transferGroupId ?? null,
+      effectiveFlow: effectiveFlow(row),
+    }));
+
+  it("answers a This Month query exactly as the whole ledger does", () => {
+    const thisMonth = query({ filters: { date: THIS_MONTH_DATE_FILTER }, groupBy: [] });
+    const bound = registerDateBound(thisMonth);
+    if (!bound) throw new Error("expected a bound");
+    const window = ledger.filter(
+      (row) =>
+        (bound.from === null || row.transactionDate >= bound.from) &&
+        (bound.to === null || row.transactionDate <= bound.to),
+    );
+
+    const whole = prepareRegister(ledger, thisMonth, ctx);
+    const windowed = prepareRegister(window, thisMonth, ctx, {
+      total: ledger.length,
+      notBudgetedIds: notBudgetedIdsOf(subset, ctx.offBudgetAccountIds),
+    });
+
+    expect(windowed).toEqual(whole);
+    // The leg outside the window is still refused its Category, because its partner is.
+    expect(windowed.index.notBudgetedIds).toContain("in-window-leg");
+    expect(windowed.index.total).toBe(ledger.length);
+    expect(windowed.index.shown).toBeLessThan(windowed.index.total);
+  });
+
+  it("judges a leg whose partner is outside the window by the partner, not by the window", () => {
+    // Annotating the window alone would see one leg of `pair` and call it assignable.
+    const alone = prepareRegister(
+      ledger.filter((row) => row.id === "in-window-leg"),
+      query({ groupBy: [] }),
+      ctx,
+    );
+    expect(alone.block.rows[0].categoryAssignable).toBe(true);
+
+    const withSubset = prepareRegister(
+      ledger.filter((row) => row.id === "in-window-leg"),
+      query({ groupBy: [] }),
+      ctx,
+      {
+        total: ledger.length,
+        notBudgetedIds: notBudgetedIdsOf(subset, ctx.offBudgetAccountIds),
+      },
+    );
+    expect(withSubset.block.rows[0].categoryAssignable).toBe(false);
+  });
+
+  it("refuses to prepare a derived view from a window", () => {
+    expect(() =>
+      prepareRegister([], query({ viewId: "uncategorized" }), ctx, {
+        total: 0,
+        notBudgetedIds: [],
+      }),
+    ).toThrow();
   });
 });

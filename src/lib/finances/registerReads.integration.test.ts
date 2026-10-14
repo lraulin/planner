@@ -5,8 +5,19 @@ import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { optionsFilter } from "@/lib/grid/customFilter";
 import { createBudgetCategory } from "./budget/mutations";
-import { loadRegisterFacets, loadRegisterPrepared } from "./queries";
-import type { RegisterQueryContext } from "./registerQuery";
+import {
+  listTransactions,
+  loadRegisterFacets,
+  loadRegisterInitial,
+  loadRegisterPrepared,
+} from "./queries";
+import {
+  parseRegisterQuery,
+  prepareRegister,
+  type RegisterQueryContext,
+} from "./registerQuery";
+import { collapsedYearGroupIds } from "./grouping";
+import { THIS_MONTH_DATE_FILTER } from "./registerFields";
 
 const reachable = await databaseReachable();
 const describeDb = reachable ? describe : describe.skip;
@@ -40,7 +51,7 @@ async function makeAccount(
     .values({
       userId,
       name,
-      kind: "checking",
+      kind: offBudget ? "loan" : "checking",
       offBudget,
       externalSource: "test",
       externalKey: crypto.randomUUID(),
@@ -144,5 +155,193 @@ describeDb("register facets", () => {
     );
     expect(prepared.index.total).toBe(0);
     expect(prepared.block.rows).toEqual([]);
+  });
+});
+
+describeDb("the Register's windowed read", () => {
+  let ownerId: string;
+  let intruderId: string;
+  let offBudgetId: string;
+  const TODAY = "2026-10-13";
+
+  async function seedLedger() {
+    const checking = await makeAccount(ownerId, "Checking");
+    const card = await makeAccount(ownerId, "Card");
+    offBudgetId = await makeAccount(ownerId, "Mortgage", true);
+    // A transfer whose legs fall either side of the This Month window.
+    await makeRow(ownerId, checking, {
+      transactionDate: "2026-10-02",
+      description: "PAYMENT TO CARD",
+      derivedFlow: "internal_transfer",
+      transferGroupId: crypto.randomUUID().slice(0, 36),
+    });
+    const group = crypto.randomUUID();
+    await makeRow(ownerId, checking, {
+      transactionDate: "2026-10-01",
+      description: "CARD PAYMENT OUT",
+      derivedFlow: "internal_transfer",
+      transferGroupId: group,
+    });
+    await makeRow(ownerId, card, {
+      transactionDate: "2026-09-30",
+      description: "CARD PAYMENT IN",
+      amount: "10.00",
+      derivedFlow: "internal_transfer",
+      transferGroupId: group,
+    });
+    // A pair the classifier grouped but flowed as ordinary spend: only the group id says it
+    // is a transfer, so only the group rule refuses both legs.
+    const spendPair = crypto.randomUUID();
+    await makeRow(ownerId, checking, {
+      transactionDate: "2026-10-03",
+      description: "GROUPED OUT",
+      derivedFlow: "spend",
+      transferGroupId: spendPair,
+    });
+    await makeRow(ownerId, card, {
+      transactionDate: "2026-08-14",
+      description: "GROUPED IN",
+      amount: "10.00",
+      derivedFlow: "spend",
+      transferGroupId: spendPair,
+    });
+    // Off budget, in and out of the window.
+    await makeRow(ownerId, offBudgetId, { transactionDate: "2026-10-05" });
+    await makeRow(ownerId, offBudgetId, { transactionDate: "2024-02-05" });
+    // An internal transfer by override alone, with no partner.
+    await makeRow(ownerId, checking, {
+      transactionDate: "2026-10-06",
+      derivedFlow: "spend",
+      flowOverride: "internal_transfer",
+    });
+    // Ordinary rows on both sides, and on the window's edges.
+    for (const date of [
+      "2026-10-13",
+      "2026-10-01",
+      "2026-09-30",
+      "2025-12-31",
+      "2020-02-01",
+    ]) {
+      await makeRow(ownerId, checking, {
+        transactionDate: date,
+        description: `ROW ${date}`,
+      });
+    }
+  }
+
+  function context(): RegisterQueryContext {
+    return {
+      offBudgetAccountIds: new Set([offBudgetId]),
+      budgetStartMonth: "2026-01-01",
+    };
+  }
+
+  beforeEach(async () => {
+    ownerId = await makeUser();
+    intruderId = await makeUser();
+    await seedLedger();
+  });
+
+  const base = {
+    today: TODAY,
+    sorts: [{ columnId: "date", direction: "desc" }],
+    groupBy: ["year", "month"],
+  };
+
+  it("answers every bounded Date query as a whole-ledger read would", async () => {
+    const ctx = context();
+    const ledger = await listTransactions(ownerId);
+    const custom = {
+      mode: "custom",
+      join: "and",
+      conditions: [
+        { op: "gte", value: "2025-12-31" },
+        { op: "lte", value: "2026-09-30" },
+      ],
+    };
+    const queries = [
+      { ...base, filters: { date: THIS_MONTH_DATE_FILTER } },
+      { ...base, filters: { date: { mode: "options", ids: ["last-month"] } } },
+      { ...base, filters: { date: { mode: "options", ids: ["last-30-days"] } } },
+      { ...base, filters: { date: { mode: "options", ids: ["this-year"] } } },
+      { ...base, filters: { date: custom } },
+      { ...base, search: "ROW", filters: { date: THIS_MONTH_DATE_FILTER } },
+      {
+        ...base,
+        sorts: [{ columnId: "amount", direction: "asc" }],
+        filters: { date: THIS_MONTH_DATE_FILTER },
+      },
+    ];
+    for (const raw of queries) {
+      const expected = prepareRegister(ledger, parseRegisterQuery(raw), ctx);
+      const actual = await loadRegisterPrepared(ownerId, raw, ctx);
+      expect(actual).toEqual(expected);
+    }
+
+    // Not vacuous: the window excludes rows, and the leg across its edge is refused a Category.
+    const month = await loadRegisterPrepared(ownerId, queries[0], ctx);
+    expect(month.index.shown).toBeLessThan(month.index.total);
+    expect(month.index.total).toBe(ledger.length);
+    expect(month.index.notBudgetedIds.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it("reads the whole ledger for Date = All and for the derived views, with the same answer", async () => {
+    const ctx = context();
+    const ledger = await listTransactions(ownerId);
+    for (const raw of [
+      { ...base, filters: {} },
+      { ...base, viewId: "uncategorized", filters: { date: THIS_MONTH_DATE_FILTER } },
+      { ...base, filters: { date: THIS_MONTH_DATE_FILTER }, today: null },
+    ]) {
+      expect(await loadRegisterPrepared(ownerId, raw, ctx)).toEqual(
+        prepareRegister(ledger, parseRegisterQuery(raw), ctx),
+      );
+    }
+  });
+
+  it("paints the first load from the window, with the same index and the ledger's prior years", async () => {
+    const ctx = context();
+    const ledger = await listTransactions(ownerId);
+    const years = collapsedYearGroupIds(
+      ledger.map((row) => row.transactionDate),
+      TODAY.slice(0, 4),
+    );
+    const expected = prepareRegister(
+      ledger,
+      parseRegisterQuery({
+        ...base,
+        collapsedGroups: years,
+        filters: { date: THIS_MONTH_DATE_FILTER },
+      }),
+      ctx,
+    );
+
+    const initial = await loadRegisterInitial(
+      ownerId,
+      TODAY,
+      Promise.resolve(ctx.budgetStartMonth),
+    );
+    expect(initial.defaultCollapsedGroups).toEqual(years);
+    expect(years.length).toBeGreaterThan(1);
+    expect(initial.prepared).toEqual(expected);
+  });
+
+  it("hands a second user an empty window and none of the first user's flags", async () => {
+    const ctx = context();
+    const prepared = await loadRegisterPrepared(
+      intruderId,
+      { ...base, filters: { date: THIS_MONTH_DATE_FILTER } },
+      // The intruder naming the owner's off-budget account id changes nothing: the subset
+      // read is scoped by user on its own rows.
+      ctx,
+    );
+    expect(prepared.index.total).toBe(0);
+    expect(prepared.index.notBudgetedIds).toEqual([]);
+    expect(prepared.block.rows).toEqual([]);
+
+    const initial = await loadRegisterInitial(intruderId, TODAY, Promise.resolve(null));
+    expect(initial.prepared.index.total).toBe(0);
+    expect(initial.prepared.index.notBudgetedIds).toEqual([]);
+    expect(initial.defaultCollapsedGroups).toEqual([]);
   });
 });

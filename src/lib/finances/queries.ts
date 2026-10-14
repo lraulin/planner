@@ -9,6 +9,7 @@ import {
   isNotNull,
   lte,
   max,
+  or,
   sql,
 } from "drizzle-orm";
 import { db } from "@/db";
@@ -23,6 +24,9 @@ import {
   financeTransactions,
 } from "@/db/schema";
 import type { FinanceExecutor } from "./dbExecutor";
+import { effectiveFlow } from "./analytics";
+import { collapsedYearGroupIds } from "./grouping";
+import { THIS_MONTH_DATE_FILTER } from "./registerFields";
 import { numericStringToCents } from "./money";
 import { checkStatements, type ReconcileTransaction } from "./reconcile";
 import { bankRows, moneyRows } from "./splitRows";
@@ -38,10 +42,14 @@ import type {
 import { trackAsBillDraft, type TrackAsBillDraft } from "./registerBillDraft";
 import {
   annotateCategoryAssignability,
+  notBudgetedIdsOf,
   parseRegisterQuery,
   prepareRegister,
   REGISTER_BLOCK_SIZE,
+  registerDateBound,
   registerFacets,
+  type AssignabilitySubsetRow,
+  type RegisterQuery,
   type RegisterPrepared,
   type RegisterQueryContext,
   type RegisterRowBlock,
@@ -426,20 +434,176 @@ export async function listTransactionsByIds(
   });
 }
 
+/**
+ * Every bank row's count and the calendar years the ledger spans, in one scan.
+ *
+ * The two whole-view facts a date window cannot give: `total` is the "of N" in the grid's
+ * count, and the years decide which prior years the page collapses by default. One query so
+ * the first paint stays within `read-latency.md`'s ten.
+ */
+async function readBankRowTotals(
+  userId: string,
+): Promise<{ total: number; years: string[] }> {
+  const [row] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      years: sql<
+        string[]
+      >`coalesce(array_agg(distinct extract(year from ${financeTransactions.transactionDate})::int::text), '{}')`,
+    })
+    .from(financeTransactions)
+    .where(and(bankRows, eq(financeTransactions.userId, userId)));
+  return { total: row?.total ?? 0, years: [...(row?.years ?? [])].sort() };
+}
+
+/**
+ * The rows that can be "not budgeted", in ledger order: those of an off-budget account, the
+ * legs of a transfer (anything with a group id, so both legs of a pair), and those whose
+ * stored flow is `internal_transfer`. Everything else is assignable by construction; see
+ * `AssignabilitySubsetRow`. Same scope and order as {@link listTransactions}.
+ */
+async function readAssignabilitySubset(
+  userId: string,
+  offBudgetAccountIds: ReadonlySet<string>,
+): Promise<AssignabilitySubsetRow[]> {
+  const reasons = [
+    isNotNull(financeTransactions.transferGroupId),
+    sql`coalesce(${financeTransactions.flowOverride}, ${financeTransactions.derivedFlow}) = 'internal_transfer'`,
+    offBudgetAccountIds.size > 0
+      ? inArray(financeTransactions.accountId, [...offBudgetAccountIds])
+      : undefined,
+  ];
+  const rows = await db
+    .select({
+      id: financeTransactions.id,
+      accountId: financeTransactions.accountId,
+      transactionDate: financeTransactions.transactionDate,
+      transferGroupId: financeTransactions.transferGroupId,
+      derivedFlow: financeTransactions.derivedFlow,
+      flowOverride: financeTransactions.flowOverride,
+      amount: financeTransactions.amount,
+    })
+    .from(financeTransactions)
+    .where(and(bankRows, eq(financeTransactions.userId, userId), or(...reasons)))
+    .orderBy(
+      desc(financeTransactions.transactionDate),
+      desc(financeTransactions.createdAt),
+      asc(financeTransactions.id),
+    );
+  return rows.map((row) => ({
+    id: row.id,
+    accountId: row.accountId,
+    transactionDate: row.transactionDate,
+    transferGroupId: row.transferGroupId,
+    effectiveFlow: effectiveFlow({
+      flowOverride: row.flowOverride,
+      derivedFlow: row.derivedFlow,
+      amountCents: numericStringToCents(row.amount) ?? 0,
+    }),
+  }));
+}
+
+function rowSetFor(query: RegisterQuery): { rowSet: "money" } | undefined {
+  return query.viewId === "activity" || query.viewId === "report"
+    ? { rowSet: "money" }
+    : undefined;
+}
+
+/**
+ * The Register's index and first block for a query.
+ *
+ * When the Date filter bounds the query (`registerDateBound`) this reads that window, the
+ * assignability subset and one count: the rows the filter can keep, the rows whose Category
+ * can be refused, and the two whole-view facts. `prepareRegister` then runs the filter over
+ * the window exactly as it ran it over the ledger. Otherwise — Date = All, the derived views,
+ * an unknown today, an advanced-filter-only date condition — it reads the whole ledger as it
+ * always did. The two paths return the same `RegisterPrepared` for the same query.
+ */
 export async function loadRegisterPrepared(
   userId: string,
   rawQuery: unknown,
   ctx: RegisterQueryContext,
 ): Promise<RegisterPrepared> {
   const query = parseRegisterQuery(rawQuery);
-  const ledger = await listTransactions(
-    userId,
-    {},
-    query.viewId === "activity" || query.viewId === "report"
-      ? { rowSet: "money" }
-      : undefined,
+  const bound = registerDateBound(query);
+  if (bound === null) {
+    const ledger = await listTransactions(userId, {}, rowSetFor(query));
+    return prepareRegister(ledger, query, ctx);
+  }
+  const [window, subset, totals] = await Promise.all([
+    listTransactions(userId, {
+      ...(bound.from !== null ? { from: bound.from } : {}),
+      ...(bound.to !== null ? { to: bound.to } : {}),
+    }),
+    readAssignabilitySubset(userId, ctx.offBudgetAccountIds),
+    readBankRowTotals(userId),
+  ]);
+  return prepareRegister(window, query, ctx, {
+    total: totals.total,
+    notBudgetedIds: notBudgetedIdsOf(subset, ctx.offBudgetAccountIds),
+  });
+}
+
+/**
+ * The Register page's first paint: the default query's index and first block, and the prior
+ * years it collapses.
+ *
+ * The default query is All Transactions, This Month, newest first, grouped by year and
+ * month — and its collapsed groups are the ledger's other years, which only the ledger can
+ * say. So the count-and-years read is part of the same wave as the window read, and the query
+ * is assembled once all of it is back. One wave; no read waits on another except the subset,
+ * which needs the accounts' off-budget flags and is chained off them rather than behind them.
+ */
+export async function loadRegisterInitial(
+  userId: string,
+  todayKey: string,
+  budgetStartMonth: Promise<string | null>,
+): Promise<{
+  prepared: RegisterPrepared;
+  defaultCollapsedGroups: string[];
+}> {
+  const accounts = listAccounts(userId);
+  const base = {
+    today: todayKey,
+    sorts: [{ columnId: "date", direction: "desc" }],
+    groupBy: ["year", "month"],
+    filters: { date: THIS_MONTH_DATE_FILTER },
+  };
+  const bound = registerDateBound(parseRegisterQuery(base));
+  if (bound === null) {
+    throw new Error("The default Register query must bound the Date filter.");
+  }
+  const [window, totals, subset, accountRows, startMonth] = await Promise.all([
+    listTransactions(userId, {
+      ...(bound.from !== null ? { from: bound.from } : {}),
+      ...(bound.to !== null ? { to: bound.to } : {}),
+    }),
+    readBankRowTotals(userId),
+    accounts.then((rows) => readAssignabilitySubset(userId, offBudgetIdsOf(rows))),
+    accounts,
+    budgetStartMonth,
+  ]);
+  const defaultCollapsedGroups = collapsedYearGroupIds(
+    totals.years.map((year) => `${year}-01-01`),
+    todayKey.slice(0, 4),
   );
-  return prepareRegister(ledger, query, ctx);
+  const offBudgetAccountIds = offBudgetIdsOf(accountRows);
+  const prepared = prepareRegister(
+    window,
+    parseRegisterQuery({ ...base, collapsedGroups: defaultCollapsedGroups }),
+    { offBudgetAccountIds, budgetStartMonth: startMonth },
+    {
+      total: totals.total,
+      notBudgetedIds: notBudgetedIdsOf(subset, offBudgetAccountIds),
+    },
+  );
+  return { prepared, defaultCollapsedGroups };
+}
+
+function offBudgetIdsOf(
+  accounts: readonly { id: string; offBudget: boolean }[],
+): Set<string> {
+  return new Set(accounts.filter((account) => account.offBudget).map((a) => a.id));
 }
 
 /**
@@ -456,13 +620,7 @@ export async function loadRegisterFacets(
   ctx: RegisterQueryContext,
 ): Promise<Record<string, string[]>> {
   const query = parseRegisterQuery(rawQuery);
-  const ledger = await listTransactions(
-    userId,
-    {},
-    query.viewId === "activity" || query.viewId === "report"
-      ? { rowSet: "money" }
-      : undefined,
-  );
+  const ledger = await listTransactions(userId, {}, rowSetFor(query));
   return registerFacets(ledger, query, ctx);
 }
 
