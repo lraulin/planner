@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { listMetrics } from "@/lib/metrics/queries";
 import { loadOutline } from "@/lib/tree/queries";
+import { metricGoalsWire } from "@/lib/tree/wireSlices";
 import { MetricsView } from "@/components/metrics/MetricsView";
 
 export const dynamic = "force-dynamic";
@@ -12,11 +13,9 @@ export default async function MetricsPage() {
     listMetrics(userId),
     loadOutline(userId),
   ]);
-  const goals = nodes.filter((n) => n.type === "goal");
-
   return (
     <Suspense fallback={<div className="min-h-0 flex-1" />}>
-      <MetricsView initialMetrics={metrics} goals={goals} />
+      <MetricsView initialMetrics={metrics} goalsWire={metricGoalsWire(nodes)} />
     </Suspense>
   );
 }

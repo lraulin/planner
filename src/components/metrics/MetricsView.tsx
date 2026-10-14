@@ -44,7 +44,8 @@ import {
   type MetricsLayoutSettings,
 } from "@/lib/metrics/layout";
 import type { MetricDetail, MetricListRow } from "@/lib/metrics/types";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { MetricGoalWire } from "@/lib/tree/wireSlices";
+import { useOutline } from "@/components/grid/useOutline";
 import { MetricChart } from "./MetricChart";
 import { MetricDrawer } from "./MetricDrawer";
 import {
@@ -93,11 +94,13 @@ function viewDefaults(): GridDefaults {
  */
 export function MetricsView({
   initialMetrics,
-  goals,
+  goalsWire,
 }: {
   initialMetrics: MetricListRow[];
-  goals: OutlineNode[];
+  /** The goals the owner select offers, packed — see `metricGoalsWire`. */
+  goalsWire: MetricGoalWire;
 }) {
+  const goals = useOutline(goalsWire);
   const router = useRouter();
   const compact = useIsCompact();
   const [rows, setRows] = useState(initialMetrics);

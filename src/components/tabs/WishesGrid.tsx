@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { PriorityLetter } from "@/db/schema";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { DetailNode, DetailWire } from "@/lib/tree/wireSlices";
+import { useOutline } from "@/components/grid/useOutline";
 import type { GridRow } from "@/lib/tree/slice";
 import type { WishListRow } from "@/lib/detail/wishTypes";
 import { OPEN_RECORD } from "@/lib/commands/chords";
@@ -52,11 +53,13 @@ function viewDefaults(): GridDefaults {
  */
 export function WishesGrid({
   initialWishes,
-  initialNodes,
+  nodesWire,
 }: {
   initialWishes: WishListRow[];
-  initialNodes: OutlineNode[];
+  /** Result areas and wish owners, packed — see `wishOwnersWire`. */
+  nodesWire: DetailWire;
 }) {
+  const nodes = useOutline(nodesWire);
   /** Optimistic patches on top of the server list — same idea as the node grids. */
   const [patches, setPatches] = useState<Record<string, Partial<WishListRow>>>({});
   // Keep patches until server props refresh — clearing on action settle flickers the old list.
@@ -90,10 +93,10 @@ export function WishesGrid({
   );
 
   const byNodeId = useMemo(() => {
-    const map = new Map<string, OutlineNode>();
-    for (const node of initialNodes) map.set(node.id, node);
+    const map = new Map<string, DetailNode>();
+    for (const node of nodes) map.set(node.id, node);
     return map;
-  }, [initialNodes]);
+  }, [nodes]);
 
   const resultAreas = useMemo(() => {
     const seen = new Map<string, string>();
@@ -399,7 +402,7 @@ export function WishesGrid({
 
       <NodeDetailDrawer
         node={detailNode}
-        nodes={initialNodes}
+        nodes={nodes}
         onClose={() => setDetailNodeId(null)}
       />
     </div>

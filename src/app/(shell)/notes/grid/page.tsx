@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { loadNotesListPayload, loadNote } from "@/lib/notes/queries";
 import { loadOutline } from "@/lib/tree/queries";
+import { noteLinkTargetsWire } from "@/lib/tree/wireSlices";
 import { loadContactOptions } from "@/lib/contacts/queries";
 import { loadSettingsForSession } from "@/lib/settings/session";
 import { parseNotesView } from "@/lib/settings/notes";
@@ -48,7 +49,7 @@ export default async function NotesGridPage({
         initialNotes={list.summaries}
         initialBodyMatchIds={list.bodyMatchIds}
         initialOpenNote={openNote}
-        nodes={nodes}
+        nodesWire={noteLinkTargetsWire(nodes)}
         contacts={contacts}
       />
     </Suspense>

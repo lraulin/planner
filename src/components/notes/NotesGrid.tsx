@@ -13,7 +13,8 @@ import { isSelfOrDescendantIn } from "@/lib/tree/ancestry";
 import type { NoteFlag } from "@/db/schema";
 import { INSERT_AFTER, INSERT_CHILD } from "@/lib/commands/chords";
 import type { NoteNode, NotePosition, NoteSummary } from "@/lib/notes/types";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { NoteLinkWire } from "@/lib/tree/wireSlices";
+import { useOutline } from "@/components/grid/useOutline";
 import type { ContactOption } from "@/lib/contacts/types";
 import type { GridRow } from "@/lib/tree/slice";
 import {
@@ -114,7 +115,7 @@ export function NotesGrid({
   initialNotes,
   initialBodyMatchIds = null,
   initialOpenNote = null,
-  nodes,
+  nodesWire,
   contacts,
 }: {
   /** List rows: metadata + snippet, never Markdown bodies. */
@@ -126,11 +127,12 @@ export function NotesGrid({
   initialBodyMatchIds?: string[] | null;
   /** Deep-linked note detail from the server, if `?note=` was present. */
   initialOpenNote?: NoteNode | null;
-  /** Records a note can be linked to. */
-  nodes: OutlineNode[];
+  /** The linked-record picker's candidates, packed — see `noteLinkTargetsWire`. */
+  nodesWire: NoteLinkWire;
   /** People a note can be filed against, as Contact History. */
   contacts: ContactOption[];
 }) {
+  const nodes = useOutline(nodesWire);
   const { value: displaySettings } = useDisplaySettings();
   const [patches, setPatches] = useState<Record<string, Partial<NoteSummary>>>({});
   // Keep patches until server props refresh — clearing on action settle flickers the old tree.

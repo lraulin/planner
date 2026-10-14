@@ -10,7 +10,7 @@ import { useIsCompact } from "@/components/shell/useIsCompact";
 import { metricPriorityText } from "@/lib/metrics/compactRow";
 import { formatMetricNumber } from "@/lib/metrics/parse";
 import type { MetricDetail, MetricListRow } from "@/lib/metrics/types";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { MetricGoalNode } from "@/lib/tree/wireSlices";
 import { MetricCompactList } from "./MetricCompactList";
 import { MetricDrawer } from "./MetricDrawer";
 
@@ -33,7 +33,7 @@ export function GoalMetricsPanel({
   initialRows = [],
 }: {
   goalId: string;
-  goals: OutlineNode[];
+  goals: MetricGoalNode[];
   initialRows?: MetricListRow[];
 }) {
   const compact = useIsCompact();

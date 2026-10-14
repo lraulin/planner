@@ -21,7 +21,8 @@ import type {
 } from "@fullcalendar/core";
 import type { TimeChart, TimeChartArea } from "@/db/schema";
 import { isComposingKey } from "@/lib/keyboard";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { TimeChartResultAreaWire } from "@/lib/tree/wireSlices";
+import { useOutline } from "@/components/grid/useOutline";
 import {
   createTimeChartAreaAction,
   deleteTimeChartAreaAction,
@@ -44,7 +45,8 @@ import { TimeChartAreaPanel } from "./TimeChartAreaPanel";
 type Props = {
   chart: TimeChart;
   initialAreas: TimeChartArea[];
-  nodes: OutlineNode[];
+  /** Visible result areas for the area panel's select, packed — see `timeChartResultAreasWire`. */
+  nodesWire: TimeChartResultAreaWire;
   /** Query string to restore when leaving (week + chart selection). */
   returnTo?: string;
 };
@@ -53,7 +55,13 @@ type Props = {
  * Full-page Time Chart editor (Achieve’s separate window as an in-app view).
  * Template week Sun–Sat, only chart areas — click-drag to create like appointments.
  */
-export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Props) {
+export function TimeChartEditorView({
+  chart,
+  initialAreas,
+  nodesWire,
+  returnTo,
+}: Props) {
+  const nodes = useOutline(nodesWire);
   const router = useRouter();
   const [, startTransition] = useTransition();
   const nameInputRef = useRef<HTMLInputElement | null>(null);

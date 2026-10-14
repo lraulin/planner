@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { loadOutline } from "@/lib/tree/queries";
+import { scheduleNodesWire } from "@/lib/tree/wireSlices";
 import { ScheduleView, type SchedulePage } from "@/components/schedule/ScheduleView";
 import { fromDateKey, localDateKey, startOfWeek } from "@/lib/schedule/geometry";
 import { loadScheduleView, rangeForView } from "@/lib/schedule/viewRange";
@@ -74,7 +75,7 @@ export async function ScheduleRangePage({
       <ScheduleView
         page={page}
         initial={schedule}
-        nodes={nodes}
+        nodesWire={scheduleNodesWire(nodes)}
         anchorKey={anchorKey}
         // `Schedule block…` on any grid row lands here. See `ScheduleView`.
         blockNodeId={params.block ?? null}

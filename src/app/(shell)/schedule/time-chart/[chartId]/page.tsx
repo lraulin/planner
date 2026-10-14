@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getCurrentUserId } from "@/lib/auth";
 import { getTimeChart, listTimeChartAreas } from "@/lib/schedule/queries";
 import { loadOutline } from "@/lib/tree/queries";
+import { timeChartResultAreasWire } from "@/lib/tree/wireSlices";
 import { internalPath } from "@/lib/navigation/internalPath";
 import { TimeChartEditorView } from "@/components/schedule/TimeChartEditorView";
 
@@ -33,7 +34,7 @@ export default async function TimeChartEditorPage({
     <TimeChartEditorView
       chart={chart}
       initialAreas={areas}
-      nodes={nodes}
+      nodesWire={timeChartResultAreasWire(nodes)}
       // A link can carry any `returnTo`, and the editor's Back button follows it.
       returnTo={internalPath(returnTo)}
     />

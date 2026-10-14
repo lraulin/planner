@@ -6,7 +6,7 @@ import type { NoteNode, NoteSummary } from "@/lib/notes/types";
 import type { NoteInput } from "@/lib/notes/mutations";
 import type { ContactOption } from "@/lib/contacts/types";
 import { fromDateKey } from "@/lib/schedule/geometry";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { NoteLinkNode } from "@/lib/tree/wireSlices";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import { updateNoteAction } from "@/app/(shell)/notes/actions";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
@@ -38,7 +38,7 @@ export function NoteDrawer({
   /** The note the drawer is open on, or null when closed / still loading detail. */
   note: NoteNode | null;
   /** Records a note can be linked to. */
-  nodes: OutlineNode[];
+  nodes: NoteLinkNode[];
   /** People a note can be filed against, as Contact History. */
   contacts: ContactOption[];
   /** Existing subjects, for the combobox. Always includes "General". */
@@ -130,7 +130,7 @@ function NoteForm({
 }: {
   titleId: string;
   note: NoteNode;
-  nodes: OutlineNode[];
+  nodes: NoteLinkNode[];
   contacts: ContactOption[];
   subjects: string[];
   onClose: () => void;

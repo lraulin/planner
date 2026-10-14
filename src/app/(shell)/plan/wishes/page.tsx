@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { loadOutline } from "@/lib/tree/queries";
+import { wishOwnersWire } from "@/lib/tree/wireSlices";
 import { loadWishList } from "@/lib/detail/wishQueries";
 import { WishesGrid } from "@/components/tabs/WishesGrid";
 import { PageStamp } from "@/components/shell/PageStamp";
@@ -23,7 +24,13 @@ export default async function WishesPage() {
     <>
       <PageStamp />
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <WishesGrid initialWishes={wishes} initialNodes={nodes} />
+        <WishesGrid
+          initialWishes={wishes}
+          nodesWire={wishOwnersWire(
+            nodes,
+            wishes.map((wish) => wish.nodeId),
+          )}
+        />
       </Suspense>
     </>
   );

@@ -11,7 +11,8 @@ import {
 import { useRouter } from "next/navigation";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import type { Appointment, AppointmentCheck, TimeChart } from "@/db/schema";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { ScheduleWire } from "@/lib/tree/wireSlices";
+import { useOutline } from "@/components/grid/useOutline";
 import type { SchedulePayload, ScheduleOccurrence } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import {
@@ -79,7 +80,8 @@ type Props = {
    */
   page: SchedulePage;
   initial: SchedulePayload;
-  nodes: OutlineNode[];
+  /** The rows the rail, agenda and appointment form read, packed — see `scheduleNodesWire`. */
+  nodesWire: ScheduleWire;
   /** The day the visible range is anchored on — `?start=`, or today. */
   anchorKey: string;
   /** `?block=` — a row somewhere else asked for a calendar block. See below. */
@@ -160,10 +162,11 @@ const CHECK_STATES = [
 export function ScheduleView({
   page,
   initial,
-  nodes,
+  nodesWire,
   anchorKey,
   blockNodeId = null,
 }: Props) {
+  const nodes = useOutline(nodesWire);
   const router = useRouter();
   const [, startTransition] = useTransition();
   /*

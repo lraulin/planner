@@ -7,7 +7,7 @@ import type {
   ResultAreaDetails,
   TaskDetails,
 } from "@/db/schema";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { DetailNode } from "@/lib/tree/wireSlices";
 import type { NodeDetail, NodeDetailValues } from "@/lib/detail/types";
 import { FieldGrid, PriorityField, SelectField, TextField } from "./fields";
 
@@ -18,7 +18,7 @@ import { FieldGrid, PriorityField, SelectField, TextField } from "./fields";
 export type DetailFormProps = {
   detail: NodeDetail;
   /** The row the drawer was opened from, which already carries the subtree rollups. */
-  node: OutlineNode;
+  node: DetailNode;
   values: NodeDetailValues;
   patch: (changes: Partial<NodeDetailValues>) => void;
   patchResultArea: (changes: Partial<ResultAreaDetails>) => void;

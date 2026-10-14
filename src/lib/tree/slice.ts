@@ -319,7 +319,9 @@ export const DEFAULT_CATEGORIES = ["Personal", "Work"] as const;
  * Distinct category names for the Result Area form combobox: defaults plus every non-blank
  * category already used on a result area, sorted alphabetically.
  */
-export function categoryOptions(nodes: readonly OutlineNode[]): string[] {
+export function categoryOptions(
+  nodes: readonly Pick<OutlineNode, "type" | "category">[],
+): string[] {
   const seen = new Set<string>(DEFAULT_CATEGORIES);
   for (const node of nodes) {
     if (node.type !== "result_area") continue;

@@ -1,7 +1,7 @@
 "use client";
 
 import type { TimeChartArea } from "@/db/schema";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { TimeChartResultAreaNode } from "@/lib/tree/wireSlices";
 import { WEEKDAY_LABELS, WEEKDAYS, WEEKDAYS_ONLY } from "@/lib/schedule/geometry";
 
 const PRESET_COLORS = [
@@ -19,7 +19,7 @@ const PRESET_COLORS = [
 
 type Props = {
   area: TimeChartArea | null;
-  nodes: OutlineNode[];
+  nodes: TimeChartResultAreaNode[];
   onChange: (patch: Partial<TimeChartArea>) => void;
   onDelete: () => void;
   nameInputRef?: React.RefObject<HTMLInputElement | null>;

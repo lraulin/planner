@@ -16,7 +16,7 @@ import { walkUp } from "./walkUp";
  * reason the command is disabled with a sentence rather than hidden.
  */
 export function owningProjectId(
-  nodes: readonly OutlineNode[],
+  nodes: readonly Pick<OutlineNode, "id" | "parentId" | "type">[],
   id: string | null,
 ): string | null {
   if (!id) return null;

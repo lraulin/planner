@@ -171,7 +171,9 @@ export const agendaColumns: ColumnDef<AgendaColumnCtx, AgendaRow>[] = [
 ];
 
 /** Project id → name, for the column that only needs the label. */
-export function projectNamesFrom(nodes: readonly OutlineNode[]): Map<string, string> {
+export function projectNamesFrom(
+  nodes: readonly Pick<OutlineNode, "id" | "type" | "name">[],
+): Map<string, string> {
   return new Map(
     nodes
       .filter((node) => node.type === "project")

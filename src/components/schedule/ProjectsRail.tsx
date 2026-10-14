@@ -4,7 +4,7 @@ import { useCallback, useMemo } from "react";
 import { Draggable } from "@fullcalendar/interaction";
 import { useEffect, useRef } from "react";
 import { isSettled } from "@/lib/tree/completionCascade";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { ScheduleNode } from "@/lib/tree/wireSlices";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 import { useSetting } from "@/components/settings/SettingsProvider";
 import { SCHEDULE_SCOPE } from "@/lib/settings/scopes";
@@ -12,7 +12,7 @@ import type { ScheduleViewSettings } from "@/lib/settings/schedule";
 import { SCHEDULE_VIEW_CODEC } from "./scheduleSetting";
 
 type Props = {
-  nodes: OutlineNode[];
+  nodes: ScheduleNode[];
 };
 
 /** The four switches, which are the rail's whole configuration. */
@@ -66,7 +66,7 @@ export function ProjectsRail({ nodes }: Props) {
 
     // derive already walked this (`resultAreaName`). A second parent walk here would
     // hang on a cycle and could disagree with the Outline about the name.
-    const map = new Map<string, OutlineNode[]>();
+    const map = new Map<string, ScheduleNode[]>();
     for (const p of projects) {
       const key = p.resultAreaName || "(No Result Area)";
       const arr = map.get(key) ?? [];

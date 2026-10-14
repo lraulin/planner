@@ -11,7 +11,7 @@ import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridRow } from "@/lib/tree/slice";
 import type { ScheduleOccurrence } from "@/lib/schedule/queries";
 import { agendaRows, type AgendaRow } from "@/lib/schedule/agenda";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { ScheduleNode } from "@/lib/tree/wireSlices";
 import type { Command } from "@/lib/commands/registry";
 import {
   agendaColumns,
@@ -44,7 +44,7 @@ export function AgendaGrid({
 }: {
   occurrences: ScheduleOccurrence[];
   days: Date[];
-  nodes: OutlineNode[];
+  nodes: ScheduleNode[];
   /** The schedule tab's own commands, so this row is the only command row on screen. */
   hostCommands: readonly Command[];
   /** The tab's lens controls — Time Chart, Plan Week, the Calendar | Agenda switch. */

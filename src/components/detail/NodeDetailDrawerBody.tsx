@@ -20,7 +20,7 @@ import type {
 } from "@/db/schema";
 import { KIND_LABELS, kindOfNode } from "@/lib/tree/hierarchy";
 import { TypeIcon } from "@/components/icons/TypeIcon";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { DetailNode } from "@/lib/tree/wireSlices";
 import type { NodeDetail, NodeDetailValues, NodeItemValues } from "@/lib/detail/types";
 import {
   attachUrlsToNodeAction,
@@ -84,12 +84,12 @@ export function NodeDetailDrawer({
   onClose,
 }: {
   /** The row the drawer is open on, or null when it is closed. */
-  node: OutlineNode | null;
+  node: DetailNode | null;
   /**
    * Full outline (or a rich enough subset) so the Result Area form can offer existing
    * categories in its combobox. Optional — defaults still cover Personal / Work.
    */
-  nodes?: OutlineNode[];
+  nodes?: Pick<DetailNode, "type" | "category">[];
   onClose: () => void;
 }) {
   const titleId = useId();
@@ -188,7 +188,7 @@ function DetailForm({
   onClose,
   formCloseRef,
 }: {
-  node: OutlineNode;
+  node: DetailNode;
   detail: NodeDetail;
   categories: string[];
   onReload: (detail: NodeDetail) => void;

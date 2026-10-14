@@ -60,7 +60,7 @@ import { METRIC_TYPE_LABELS, METRIC_TYPES } from "@/lib/metrics/types";
 import { downloadTextFile } from "@/components/grid/downloadCsv";
 import { exportFilename, stampExportBody } from "@/lib/grid/exportCsv";
 import { writeClipboardText } from "@/lib/tree/copyAsText";
-import type { OutlineNode } from "@/lib/tree/types";
+import type { MetricGoalNode } from "@/lib/tree/wireSlices";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
 
@@ -133,7 +133,7 @@ export function MetricDrawer({
   onChanged,
 }: {
   detail: MetricDetail | null;
-  goals: OutlineNode[];
+  goals: MetricGoalNode[];
   onClose: () => void;
   /** Called after a successful mutation; parent should reload detail + lists. */
   onChanged: (metricId: string) => void;
@@ -164,7 +164,7 @@ function MetricForm({
 }: {
   titleId: string;
   initial: MetricDetail;
-  goals: OutlineNode[];
+  goals: MetricGoalNode[];
   onClose: () => void;
   onChanged: (metricId: string) => void;
 }) {

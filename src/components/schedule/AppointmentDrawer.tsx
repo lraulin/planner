@@ -38,7 +38,7 @@ import type { DraftAppointment } from "./ScheduleView";
 type Props = {
   open: boolean;
   value: Appointment | DraftAppointment | null;
-  nodes: OutlineNode[];
+  nodes: Pick<OutlineNode, "id" | "type" | "name" | "hidden">[];
   onClose: () => void;
   /**
    * Refresh background schedule data after a successful write. Does **not** close the
@@ -96,7 +96,7 @@ export function AppointmentDrawer({
 
 type FormProps = {
   value: Appointment | DraftAppointment;
-  nodes: OutlineNode[];
+  nodes: Pick<OutlineNode, "id" | "type" | "name" | "hidden">[];
   onClose: () => void;
   onSaved: () => void;
   onDelete: (id: string) => void;
