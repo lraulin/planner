@@ -42,6 +42,9 @@ Plan tab and the Schedule calendar, 160–230 ms server, 50–90 ms client, ~600
   `loadNodeDetailAction(nodeId)` on open (`src/components/detail/NodeDetailDrawerBody.tsx`)
   and reads only id, name and type from the row. The prompt's "the drawer could fetch a
   node's detail when opened" is already how it works, so there is nothing to move.
+  _(As built: the task and project forms also read the row's rollups and child counts, and
+  `isDream` picks the heading icon, so the drawer's row is a ten-column slice, `DetailNode`.
+  Still nothing that needs to leave the row.)_
 - **Column trimming is weak here.** `grid-column-parity` put nearly every field in every
   grid's Show Fields list, and the grid standard has filter and search reach hidden
   columns. A grid's "needed" set is close to the whole row.
@@ -99,3 +102,16 @@ Decisions made in shaping without a question, because they follow from the above
 ## Standards Applied
 
 See `standards.md`.
+
+## As built
+
+- **Wire layout** (`src/lib/tree/wire.ts`): `{ n, c, v }` — row count, column names once,
+  and one entry per column that is either dense (`[v0, v1, …]`) or sparse (`{ i, v }`, only
+  rows that differ from the column's fallback), whichever is smaller by a simple
+  half-the-rows rule. Dates travel as epoch milliseconds. A column whose entry type does not
+  match its field's type fails the typecheck. Fallbacks are the common value, not `null`.
+- **Slices** (`src/lib/tree/wireSlices.ts`): Metrics goals, Time Chart result areas, Notes
+  link targets, Wish List owners, Schedule rows. One function per consumer; the rows kept and
+  the columns named beside the type the consumer is checked against.
+- **Entry points**: `useOutline(wire)` in `src/components/grid/useOutline.ts`; `useGridTab`
+  takes the wire, so Tasks, Projects, Goals, Result Areas and the Chooser unpack in one place.

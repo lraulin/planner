@@ -142,6 +142,10 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   settings reads are request-cached; nav links show immediate pending feedback. Calendar and
   Contacts paint the local Google mirror first and sync stale data once in the background.
   Virtualization remains deferred until a measured miss.
+  Payload follow-up, `specs/2026-10-13-1158-outline-payload-packing`: the outline crosses to
+  the browser packed (field names once, defaults omitted; 20% of the raw bytes, 65% of the
+  gzip) and pages that borrow it as supporting data send a slice; inline edits shrink the same
+  way. The saving is bytes first, 10-40 ms per click locally; row rendering is untouched.
 
 ### Still in Phase 1
 
@@ -984,7 +988,7 @@ period)` so money already spent stops being held twice and only going over bites
   figure cannot tell "four annual bills are each underfunded" from "you are short this
   week", and only one of those has a move attached to it.
   **What is narrowed, and what is not.** Commitments D0 rejected discretionary
-  envelopes as busywork. That argument is about a *category list* — a bucket for
+  envelopes as busywork. That argument is about a _category list_ — a bucket for
   clothes, a bucket for games — and the busywork came from adopting YNAB's default
   suggested list, which is a configuration choice. It holds for the list and does not
   reach the model. The recommended preset is therefore **five envelopes**, and each one

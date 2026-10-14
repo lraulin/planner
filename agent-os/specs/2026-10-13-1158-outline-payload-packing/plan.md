@@ -129,27 +129,31 @@ trip, stop and report rather than build.
 
 ## Acceptance criteria
 
-- [ ] Baseline and after-figures for every route in Context are recorded in this plan: raw
+- [x] Baseline and after-figures for every route in Context are recorded in this plan: raw
       and gzip bytes of the RSC navigation response, raw and gzip bytes of one inline-edit
       action response on `/plan/outline`, server time, and click-to-settled time — all from
       a production build, same dataset, same machine.
-- [ ] Tree pages: raw RSC bytes at most 40% of baseline (expected ~25–30%).
-- [ ] Slice pages: `/metrics` and the time-chart editor at most 5% of baseline;
+- [x] Tree pages: raw RSC bytes at most 40% of baseline (expected ~25–30%). _Met: 19.5–20.1%._
+- [ ] Slice pages: `/metrics` and the time-chart editor at most 5% of baseline; _Time chart 0.6%, Notes 5.4%, Wishes 1.2%, Calendar/Agenda 11.2% met; **`/metrics` not met as written** (26.6% of the page; 5.6% of the outline's share of it) — see Measurements._
       `/notes/grid`, `/plan/wishes`, `/schedule/calendar`, `/schedule/agenda` at most 15%.
-- [ ] The inline-edit action response on a Plan tab shrinks by the same proportion as its
-      page.
-- [ ] Each grid renders the same rows and the same cells as before: the before/after DOM
+- [x] The inline-edit action response on a Plan tab shrinks by the same proportion as its
+      page. _Met: 20.3% against the page's 19.6%._
+- [x] Each grid renders the same rows and the same cells as before: the before/after DOM
       capture from Task 2 and Task 6 diffs empty for every grid route, in its default view
       and in a view with every Show Fields column on.
-- [ ] Pickers, the Schedule rail, the Metrics goal select and the time-chart area list offer
-      the same entries in the same order as before.
+- [x] Pickers, the Schedule rail, the Metrics goal select and the time-chart area list offer
+      the same entries in the same order as before. _Met by capture; the Wish List drawer did not open as a dialog in either build, so its entries are checked by page text only._
 - [ ] Sort, filter, group, search, drag-reorder, multi-select, optimistic edits (including
       the revert on a rejected action) and the detail drawer behave as before on Outline and
-      Tasks.
-- [ ] `wire.test.ts` passes, including the round trip and the size tripwire.
-- [ ] `npm test` with no integration skips, typecheck, lint, production build, and
+      Tasks. _Partly verified: sort, search, group, shift-range select, the drawer and an
+      optimistic edit that persists are identical before and after. Drag-reorder could not be
+      driven in the headless browser (it fails the same way on the pre-change build) and the
+      rejected-action revert was exercised but did not visibly revert in either build, so
+      both remain for a hand check on Outline._
+- [x] `wire.test.ts` passes, including the round trip and the size tripwire.
+- [x] `npm test` with no integration skips, typecheck, lint, production build, and
       `npm run smoke` all pass.
-- [ ] If measured tab-switch time does not improve, the plan says so in plain words.
+- [x] If measured tab-switch time does not improve, the plan says so in plain words. _It improves, by little; stated below._
 
 ## Measurements
 
@@ -261,16 +265,98 @@ validates, has a slower parse and a real network on the other side of those 23 k
 where the larger share of this is expected to land; only the post-deploy production
 re-measurement (Task 6) can say.
 
+### After (Task 6)
+
+Same dataset, machine and method as the baseline above, but **compared against a fresh
+build of the commit just before the codec** (`cfbcb6d2`, which already contains the
+shell-once-above-every-module work that landed on `master` meanwhile), so only this spec's
+change differs. That is why the "before" column here is a little smaller than the Task 2
+table: that table was taken on the older shell. Load average during these runs: 3–8.
+Each pair of columns is before → after.
+
+| Route                            | Raw B (before → after) | %     | Gzip B (before → after) | %   | Fetch ms | Settled ms |
+| -------------------------------- | ---------------------- | ----- | ----------------------- | --- | -------- | ---------- |
+| `/plan/outline`                  | 1,110,526 → 217,457    | 19.6% | 64,501 → 41,482         | 64% | 44 → 35  | 230 → 202  |
+| `/plan/tasks`                    | 1,110,538 → 217,469    | 19.6% | 64,516 → 41,503         | 64% | 41 → 33  | 255 → 256  |
+| `/plan/projects`                 | 1,110,530 → 217,461    | 19.6% | 64,502 → 41,480         | 64% | 40 → 33  | 159 → 151  |
+| `/plan/goals`                    | 1,110,517 → 217,448    | 19.6% | 64,497 → 41,473         | 64% | 40 → 36  | 133 → 130  |
+| `/plan/result-areas`             | 1,110,545 → 217,476    | 19.6% | 64,516 → 41,490         | 64% | 40 → 32  | 124 → 118  |
+| `/plan/overview`                 | 1,109,540 → 216,478    | 19.5% | 64,276 → 41,262         | 64% | 40 → 32  | 118 → 111  |
+| `/chooser`                       | 1,110,719 → 217,650    | 19.6% | 64,554 → 41,534         | 64% | 44 → 32  | 82 → 74    |
+| `/organize`                      | 1,109,745 → 216,872    | 19.5% | 64,335 → 41,393         | 64% | 53 → 41  | 66 → 54    |
+| `/schedule/week-plan`            | 1,109,790 → 216,728    | 19.5% | 64,364 → 41,363         | 64% | 41 → 37  | 65 → 61    |
+| `/schedule/plan`                 | 1,117,732 → 224,670    | 20.1% | 65,422 → 42,670         | 65% | 43 → 32  | 64 → 50    |
+| `/metrics`                       | 22,589 → 6,001         | 26.6% | 3,635 → 2,565           | 71% | 26 → 27  | 76 → 77    |
+| `/schedule/time-chart/[chartId]` | 1,111,773 → 6,499      | 0.6%  | 64,812 → 2,435          | 4%  | 44 → 28  | 82 → 60    |
+| `/notes/grid`                    | 1,112,478 → 60,184     | 5.4%  | 64,803 → 22,618         | 35% | 42 → 26  | 62 → 44    |
+| `/plan/wishes`                   | 1,116,827 → 12,994     | 1.2%  | 65,775 → 3,596          | 5%  | 38 → 24  | 126 → 109  |
+| `/schedule/calendar`             | 1,116,751 → 124,838    | 11.2% | 65,307 → 27,729         | 42% | 44 → 29  | 83 → 66    |
+| `/schedule/agenda`               | 1,116,743 → 124,830    | 11.2% | 65,300 → 27,720         | 42% | 41 → 30  | 67 → 51    |
+| inline edit on `/plan/outline`   | 1,120,135 → 227,066    | 20.3% | 66,618 → 43,599         | 65% | 51 → 39  | 222 → 206  |
+
+What it says, plainly:
+
+- **Bytes fall by the amount promised.** A tree page is 19.5–20% of its raw size and 64% of
+  its gzip size; the inline edit's action response shrinks by the same 80%. The slice pages
+  fall further because they stop sending columns nobody reads.
+- **Time improves, modestly, over loopback.** A tab switch settles 6–28 ms sooner on the
+  pages with no large grid and about 28 ms sooner on Outline; Tasks and Goals did not move
+  (±3 ms, inside the noise). An inline edit settles ~16 ms sooner. The cost the spec set
+  out to remove — ~150–250 ms of rendering ~650 rows — is not touched and is still most of
+  a Plan tab switch. Do not expect packing alone to make Plan tabs feel different on a
+  laptop. Whether it does on the iPhone, with a real network and a slower parser, is
+  exactly what the post-deploy measurement is for.
+- **Pack and unpack cost ~1 ms and ~2 ms** for the 789-node outline in Node; both are
+  inside the fetch/settle figures above.
+- **`/metrics` does not meet its criterion as written, and cannot.** The page sends the
+  metrics themselves (~5 kB), which are not the outline. What the spec was after is the
+  outline's share: 12 goals' rows went from 17,500 B to 974 B (5.6%).
+- **Memory.** The unpacked rows are the same objects as before, so heap in the browser is
+  unchanged by design; the transport buffer the RSC parser holds is 80% smaller. Not
+  measured separately.
+
+### Verification run (Task 6)
+
+- **Rendered rows and cells.** Every grid route and page in the baseline capture, in its
+  default view and with every Show Fields column on (Outline 29 cells per row, Tasks 32,
+  Projects 33), captured before and after: 17 routes, 1,358 rows, per-row markup hashes,
+  headers, "Showing N of M", page text, and the entries of five drawers/pickers (Metrics
+  owner select, Calendar's appointment form, the Notes linked-record picker with 789
+  entries, the Wish List drawer, the Outline drawer). **The diff is empty.** The harness
+  was checked for sensitivity: the same tool reports 35 differences between the default and
+  all-fields captures.
+- **Behaviour.** On Outline and Tasks, the same script on both builds produced identical
+  digests for: sort by name (three clicks), search, group by, shift-range multi-select, the
+  detail drawer, and an inline state change followed by a reload.
+- **Not exercised**, see the acceptance list: drag-to-reorder, and the visible revert of a
+  rejected action.
+
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                                                                                                                   | Why                                                                                                                                                        |
-| --- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Task 2's dataset is a synthetic 789-node outline in a scratch database, not "a restored backup".                         | The backups are encrypted with a passphrase in the Keychain; an unattended run does not read that. Sizes land inside production's measured per-node range. |
-| 2   | Task 2's go/no-go ran two experiments (outline emptied; codec prototyped on two pages), not only the first.              | The emptied outline measures rendering as much as payload, so on its own it cannot say what packing recovers. Result and decision are under Measurements.  |
-| 3   | The "`/metrics` … at most 5% of baseline" criterion rests on a premise the baseline disproved; it is restated at Task 6. | `/metrics` already sent only goals: 28.6 kB, of which the metrics themselves are ~40%. The criterion assumed the page carried the whole outline.           |
+| #   | Change                                                                                                                                          | Why                                                                                                                                                                              |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Task 2's dataset is a synthetic 789-node outline in a scratch database, not "a restored backup".                                                | The backups are encrypted with a passphrase in the Keychain; an unattended run does not read that. Sizes land inside production's measured per-node range.                       |
+| 2   | Task 2's go/no-go ran two experiments (outline emptied; codec prototyped on two pages), not only the first.                                     | The emptied outline measures rendering as much as payload, so on its own it cannot say what packing recovers. Result and decision are under Measurements.                        |
+| 3   | The "`/metrics` … at most 5% of baseline" criterion is reported as not met and restated as the outline's share of that page (5.6%).             | `/metrics` already sent only goals; ~5 kB of its 22.6 kB are the metrics themselves, which are not the outline.                                                                  |
+| 4   | The Wish List's slice holds result areas plus the nodes that own a wish, not every node.                                                        | The grid only ever opened owners; a hand-edited `?detail=` naming another node no longer opens a drawer there.                                                                   |
+| 5   | The detail drawer's row is typed as a `DetailNode` slice (id, name, type, isDream, category, counts and rollups), not just "id, name and type". | The shaping read said the drawer takes only id, name and type; the task and project forms also read rollups and counts. The compiler found them.                                 |
+| 6   | `/schedule/plan` splits `nodes` off `WeeklyPlanPayload` at the page rather than changing the loader.                                            | As the plan said; recorded because `WeeklyPlanView` now takes `payload` without `nodes` plus a `wire`.                                                                           |
+| 7   | Task 6's "before" is a rebuild of the commit before the codec, not the Task 2 numbers.                                                          | The route-group / shell-once work landed on `master` between Task 2 and Task 6 and changes the page size slightly; comparing against it would have credited this spec with that. |
+
+## Still to do before this spec can freeze
+
+- **Post-deploy production measurement** (Task 6's last bullet): repeat the 2026-10-12
+  signed-in-browser measurement on production and record it beside the local figures. It
+  needs the deploy and a signed-in browser; it was not possible from the implementing
+  session.
+- **`/metrics` criterion**: either accept the restatement above or tighten the slice; a
+  decision for Lee.
+- **Hand check on Outline**: drag-to-reorder and the revert of a rejected edit.
+- At freeze: record the standards commit SHA, and run `/index-standards` if a file is
+  added (the data-grid rule is already written and indexed).
 
 ## Task 1: Save Spec Documentation
 

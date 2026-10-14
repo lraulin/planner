@@ -10,7 +10,7 @@ api:
 
 components:
   data-grid:
-    description: The one shared DataGrid — hierarchy survives sort/filter/group, drag-to-reorder is first-class, filtering and search reach hidden columns, three rungs of progressive filter disclosure, chips + "Showing N of M", Clear filters is a menu command not a toolbar button, the two-row verbs/lens toolbar (named menus live in the shell), the grid reports its on-screen row ids rather than hosts guessing (via useNavigableIds — sort reorders without shortening, so the two lists look alike), rowMenu takes a nullable row, every preference persists — through useGridState, or through useSetting in the module's own scope where there is no GridToolbar; and why no grid library
+    description: The one shared DataGrid — hierarchy survives sort/filter/group, drag-to-reorder is first-class, filtering and search reach hidden columns, three rungs of progressive filter disclosure, chips + "Showing N of M", Clear filters is a menu command not a toolbar button, the two-row verbs/lens toolbar (named menus live in the shell), the grid reports its on-screen row ids rather than hosts guessing (via useNavigableIds — sort reorders without shortening, so the two lists look alike), rowMenu takes a nullable row, every preference persists — through useGridState, or through useSetting in the module's own scope where there is no GridToolbar; row sets cross to the browser packed (`packOutline` / `useOutline`) and a page that borrows the outline sends a slice, and why no grid library
   drawer-pattern:
     description: Right-sliding drawer for full-record editing — DrawerFooter Cancel|Save|Save & Close (or autosave for notes), sticky footer, unsaved-changes on leave, server actions
   modal-pattern:

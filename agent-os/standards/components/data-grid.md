@@ -212,6 +212,32 @@ the grid cannot show is a header the user cannot account for — they can see th
 not the value that made them, cannot filter by it, and cannot sort by it. Category was in
 exactly that state before it became a column.
 
+## Row sets cross to the browser packed, and a borrowed outline is a slice
+
+`OutlineNode` has 63 fields; as keyed objects an empty task is ~1.4 kB, ~70% of it field
+names repeated per row, and every inline edit re-sent the page. So the outline crosses the
+server → client boundary **packed**: a page calls `packOutline(nodes)` (`src/lib/tree/wire.ts`)
+and its entry component unpacks once with `useOutline(wire)`. Everything below the entry
+component still receives `OutlineNode[]`.
+
+- **Memoise on the wire, nowhere else.** `useOptimisticNodes` drops its patch layer when its
+  input changes identity, so the unpacked array must be new exactly when the server sent a new
+  payload. Do not unpack in a render body or memoise on anything that changes per render.
+- **A page that uses the outline as supporting data sends a slice, not the outline.** One
+  picker, one lookup or one rail is not a reason to ship every column of every node. The slice
+  is cut from the already-loaded `loadOutline` result (after `derive`, so `hidden`, L.A.P. and
+  `resultAreaName` are not recomputed) and lives in `src/lib/tree/wireSlices.ts`: the rows kept
+  and the columns named. Consumers are typed against the `Pick` the slice exports, so the
+  compiler proves a component reads nothing it was not sent.
+- **A tree grid is not trimmed to its visible columns.** Filter and search reach hidden
+  columns (below), so a tree grid needs nearly the whole row. Empty columns cost nothing once
+  packed.
+- **Send a subset as ids, not as a second copy of the rows** (`/organize`'s queue).
+- **A new `OutlineRow` / `OutlineNode` field must be taught to the codec.** `COLUMNS` in
+  `wire.ts` is a `Record<keyof OutlineNode, …>`, so forgetting fails the typecheck.
+
+Decided in `specs/2026-10-13-1158-outline-payload-packing`.
+
 ## Filtering, searching and grouping act on _defined_ columns, not visible ones
 
 Show Fields hides a column. It does not un-ask the question you asked about it.
