@@ -156,6 +156,18 @@ describe("extractPageTitle", () => {
     expect(extractPageTitle(`<title>It&#39;s fine</title>`)).toBe("It's fine");
   });
 
+  it("decodes once, so an escaped entity stays the text of an entity", () => {
+    expect(
+      extractPageTitle(`<title>Use &amp;lt;b&amp;gt; &amp; &lt;i&gt;</title>`),
+    ).toBe("Use &lt;b&gt; & <i>");
+  });
+
+  it("drops a numeric reference to no real character instead of failing the title", () => {
+    expect(extractPageTitle(`<title>a&#x110000;b&#0;c&#xD800;d&#x1F44B;</title>`)).toBe(
+      "abcd👋",
+    );
+  });
+
   it("returns null when nothing usable is present", () => {
     expect(extractPageTitle("<html><body>no title</body></html>")).toBeNull();
     expect(extractPageTitle("<title>   </title>")).toBeNull();

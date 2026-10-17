@@ -149,22 +149,37 @@ function cleanTitle(raw: string): string | null {
   return collapsed.slice(0, MAX_TITLE_LENGTH).trimEnd();
 }
 
-/** Enough entity decoding for typical page titles without pulling in a dependency. */
+/**
+ * Enough entity decoding for typical page titles without pulling in a dependency. One
+ * pass, so `&amp;lt;` is the text `&lt;` and not a second-round `<`; a numeric reference to
+ * no real character (NUL, a surrogate, past U+10FFFF — `fromCodePoint` throws on the last)
+ * is dropped rather than failing the whole title.
+ */
 function decodeBasicEntities(value: string): string {
-  return value
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;/gi, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => {
-      const code = Number.parseInt(hex, 16);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : "";
-    })
-    .replace(/&#(\d+);/g, (_, dec: string) => {
-      const code = Number(dec);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : "";
-    });
+  return value.replace(
+    /&(nbsp|amp|lt|gt|quot|apos|#x[0-9a-f]+|#[0-9]+);/gi,
+    (_, entity: string) => {
+      switch (entity.toLowerCase()) {
+        case "nbsp":
+          return " ";
+        case "amp":
+          return "&";
+        case "lt":
+          return "<";
+        case "gt":
+          return ">";
+        case "quot":
+          return '"';
+        case "apos":
+          return "'";
+      }
+      const code =
+        entity[1] === "x" || entity[1] === "X"
+          ? Number.parseInt(entity.slice(2), 16)
+          : Number.parseInt(entity.slice(1), 10);
+      const isCharacter =
+        code >= 1 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff);
+      return isCharacter ? String.fromCodePoint(code) : "";
+    },
+  );
 }
