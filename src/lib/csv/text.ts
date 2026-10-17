@@ -12,6 +12,40 @@ export function escapeCsvField(value: string): string {
 }
 
 /**
+ * A cell that starts with `=`, `+`, `-`, `@`, a tab or a CR is a formula to Excel and Sheets,
+ * and exported text comes from third parties (a bank's payee, an Amazon product name). Such a
+ * cell is written with a leading `'`, which both programs read as "this is text" and do not show.
+ *
+ * Leading apostrophes are part of the trigger so the mapping can be undone exactly:
+ * `restoreCsvText(neutralizeCsvText(s)) === s` for every `s`.
+ *
+ * **Plain numbers are left alone.** `-12.34`, `+5`, `-$1,234.50` and `-12%` start with a
+ * trigger and are not formulas; prefixing them would turn every negative amount in a money
+ * column into text. A single character (`-` as an empty placeholder) is not a formula either.
+ */
+const FORMULA_START = /^'*[=+\-@\t\r]/;
+const PLAIN_NUMBER = /^[+-]?\$?[+-]?(?:\d[\d,]*\.?\d*|\.\d+)%?$/;
+
+export function neutralizeCsvText(value: string): string {
+  if (value.length < 2 || !FORMULA_START.test(value) || PLAIN_NUMBER.test(value)) {
+    return value;
+  }
+  return `'${value}`;
+}
+
+/** Undo {@link neutralizeCsvText} on a cell read back from a file this app wrote. */
+export function restoreCsvText(value: string): string {
+  return value.startsWith("'") && FORMULA_START.test(value.slice(1))
+    ? value.slice(1)
+    : value;
+}
+
+/** {@link escapeCsvField} for a cell of exported data: formula-neutral first, then quoted. */
+export function escapeCsvCell(value: string): string {
+  return escapeCsvField(neutralizeCsvText(value));
+}
+
+/**
  * Split a single CSV line into fields. Handles quoted fields with commas and `""`
  * escapes. Does **not** span lines — use {@link parseCsvRows} for multi-line cells.
  */

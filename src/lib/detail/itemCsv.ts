@@ -1,9 +1,11 @@
 import type { NodeItem } from "@/db/schema";
 import type { ContactOption } from "@/lib/contacts/types";
 import {
+  escapeCsvCell,
   escapeCsvField,
   normalizeCsvHeader,
   parseCsvRowsWithLines,
+  restoreCsvText,
 } from "@/lib/csv/text";
 import type { NodeItemValues } from "@/lib/detail/types";
 import type { ItemField } from "./itemKinds";
@@ -116,7 +118,7 @@ export function itemsToCsv(
 
   const header = fields.map((f) => escapeCsvField(f.label)).join(",");
   const lines = items.map((item) =>
-    fields.map((f) => escapeCsvField(cellOf(item, f, contactNames))).join(","),
+    fields.map((f) => escapeCsvCell(cellOf(item, f, contactNames))).join(","),
   );
   return [header, ...lines].join("\n") + (lines.length || fields.length ? "\n" : "");
 }
@@ -189,7 +191,7 @@ export function parseItemsCsv(
     for (let c = 0; c < mapping.length; c++) {
       const field = mapping[c];
       if (!field) continue;
-      const raw = cells[c] ?? "";
+      const raw = restoreCsvText(cells[c] ?? "");
 
       if (field.kind === "priority") {
         const parsed = parsePriority(raw);

@@ -17,7 +17,7 @@
 import { formatUsd } from "@/lib/finances/money";
 import type { ForwardBucket } from "@/lib/finances/commitments";
 import type { SpendingVsIncome } from "@/lib/finances/commitmentRows";
-import { escapeCsvField } from "@/lib/csv/text";
+import { escapeCsvCell } from "@/lib/csv/text";
 import {
   exportableColumns,
   formatExportStamp,
@@ -307,16 +307,16 @@ export function serializeBudgetExport(
  */
 function budgetToCsv(doc: BudgetExportDocument, exportedAt: Date): string {
   const lines: string[] = [
-    escapeCsvField(doc.title),
-    escapeCsvField(`Exported ${formatExportStamp(exportedAt).iso}`),
+    escapeCsvCell(doc.title),
+    escapeCsvCell(`Exported ${formatExportStamp(exportedAt).iso}`),
     [doc.headline.label, doc.headline.value, doc.headline.note ?? ""]
-      .map(escapeCsvField)
+      .map(escapeCsvCell)
       .join(","),
     "",
   ];
   for (const section of doc.sections) {
-    lines.push(escapeCsvField(section.title));
-    if (section.caption) lines.push(escapeCsvField(section.caption));
+    lines.push(escapeCsvCell(section.title));
+    if (section.caption) lines.push(escapeCsvCell(section.caption));
     // `tableToCsv` ends with exactly one newline; drop the empty tail it splits into.
     lines.push(
       ...tableToCsv(sectionColumns(section), section.rows).split("\n").slice(0, -1),

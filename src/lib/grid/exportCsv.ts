@@ -7,7 +7,7 @@
  * DataGrid gets File ▸ Export without N copies of the same commands.
  */
 
-import { escapeCsvField } from "@/lib/csv/text";
+import { escapeCsvCell, escapeCsvField } from "@/lib/csv/text";
 import type { Command } from "@/lib/commands/registry";
 import { parseDepthForest, type ForestNode } from "./forest";
 
@@ -100,7 +100,7 @@ export function tableToCsv<TRow>(
   if (columns.length === 0) return "";
   const header = columns.map((column) => escapeCsvField(column.header)).join(",");
   const lines = rows.map((row) =>
-    columns.map((column) => escapeCsvField(column.value(row))).join(","),
+    columns.map((column) => escapeCsvCell(column.value(row))).join(","),
   );
   return [header, ...lines].join("\n") + "\n";
 }

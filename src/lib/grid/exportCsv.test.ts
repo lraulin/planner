@@ -91,6 +91,16 @@ describe("tableToCsv", () => {
     ]);
   });
 
+  it("keeps third-party text from running as a formula, but not an amount", () => {
+    const csv = tableToCsv(columns, [
+      { name: '=HYPERLINK("http://evil","Pay")', note: "-12.34", depth: 0 },
+    ]);
+    expect(parseCsvRows(csv)[1]).toEqual([
+      `'=HYPERLINK("http://evil","Pay")`,
+      "-12.34",
+    ]);
+  });
+
   it("still downloads a header when the grid is empty", () => {
     // A template you can fill and re-import. Matching itemsToCsv.
     expect(tableToCsv(columns, [])).toBe("Name,Note\n");

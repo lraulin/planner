@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  escapeCsvCell,
   escapeCsvField,
+  neutralizeCsvText,
   normalizeCsvHeader,
+  restoreCsvText,
   parseCsvRows,
   parseCsvRowsWithLines,
   splitCsvLine,
@@ -13,6 +16,66 @@ describe("normalizeCsvHeader", () => {
     expect(normalizeCsvHeader("posting_date")).toBe("postingdate");
     expect(normalizeCsvHeader("Quantity Transacted")).toBe("quantitytransacted");
     expect(normalizeCsvHeader("Amount ($)")).toBe("amount");
+  });
+});
+
+describe("neutralizeCsvText", () => {
+  it("prefixes text a spreadsheet would run as a formula", () => {
+    expect(neutralizeCsvText('=HYPERLINK("http://x","y")')).toBe(
+      `'=HYPERLINK("http://x","y")`,
+    );
+    expect(neutralizeCsvText("@SUM(A1:A9)")).toBe("'@SUM(A1:A9)");
+    expect(neutralizeCsvText("+1-1")).toBe("'+1-1");
+    expect(neutralizeCsvText("-2+3")).toBe("'-2+3");
+    expect(neutralizeCsvText("\tcmd")).toBe("'\tcmd");
+  });
+
+  it("leaves text and plain numbers alone, so a money column stays numeric", () => {
+    for (const value of [
+      "",
+      "Costco",
+      "a=b",
+      "-",
+      "-12.34",
+      "+5",
+      "-1,234.50",
+      "-$1,234.50",
+      "$-12",
+      "-.5",
+      "-12%",
+    ]) {
+      expect(neutralizeCsvText(value)).toBe(value);
+    }
+  });
+
+  it("is undone exactly by restoreCsvText, whatever the cell holds", () => {
+    const alphabet = ["'", "=", "+", "-", "@", "\t", "\r", "a", "1", ".", "$", ","];
+    const cells = alphabet.map((first) => first);
+    for (let length = 0; length <= 4; length++) {
+      const walk = (prefix: string) => {
+        if (prefix.length === length) {
+          expect(
+            restoreCsvText(neutralizeCsvText(prefix)),
+            JSON.stringify(prefix),
+          ).toBe(prefix);
+          return;
+        }
+        for (const next of cells) walk(prefix + next);
+      };
+      walk("");
+    }
+  });
+
+  it("does not strip an apostrophe that guards nothing", () => {
+    expect(restoreCsvText("'tis")).toBe("'tis");
+    expect(restoreCsvText("O'Brien")).toBe("O'Brien");
+  });
+});
+
+describe("escapeCsvCell", () => {
+  it("neutralises first and quotes second", () => {
+    expect(escapeCsvCell("=A1,B1")).toBe(`"'=A1,B1"`);
+    expect(parseCsvRows(escapeCsvCell("=A1,B1"))).toEqual([["'=A1,B1"]]);
   });
 });
 

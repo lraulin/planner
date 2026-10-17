@@ -120,6 +120,22 @@ describe("itemsToCsv / parseItemsCsv", () => {
     ]);
   });
 
+  it("writes formula-looking text as text and reads it back unchanged", () => {
+    const rows = [
+      item({ id: "1", title: '=HYPERLINK("http://evil","x")', description: "-5" }),
+      item({ id: "2", title: "'=already quoted", description: "+1-1" }),
+    ];
+    const csv = itemsToCsv(BENEFIT_FIELDS, rows);
+    expect(csv).toContain(`"'=HYPERLINK(""http://evil"",""x"")"`);
+
+    const parsed = parseItemsCsv(BENEFIT_FIELDS, csv);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows.map((row) => [row.title, row.description])).toEqual([
+      ['=HYPERLINK("http://evil","x")', "-5"],
+      ["'=already quoted", "+1-1"],
+    ]);
+  });
+
   it("exports a header-only template when the list is empty", () => {
     expect(itemsToCsv(BENEFIT_FIELDS, [])).toBe(
       "Priority,Title,Description,Received\n",
