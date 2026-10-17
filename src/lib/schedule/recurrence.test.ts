@@ -606,6 +606,85 @@ describe("expandRecurrence — series that started long before the window", () =
   });
 });
 
+describe("expandRecurrence — agrees with a day-by-day walk", () => {
+  // The fast-forward is the clever part, and every bug it has had was a window that disagreed
+  // with the series' own history. This is the history, done the slow obvious way.
+  let seed = 20261016;
+  const random = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const between = (low: number, high: number) =>
+    low + Math.floor(random() * (high - low + 1));
+
+  function slowWalk(m: RecurrenceInput, from: Date, to: Date): string[] {
+    const hours = m.endAt.getTime() - m.startAt.getTime();
+    const out: string[] = [];
+    const keep = (start: Date) => {
+      if (start < to && start.getTime() + hours > from.getTime()) {
+        out.push(start.toISOString());
+      }
+    };
+    const counted = m.recurrenceEnd === "count" ? (m.recurrenceCount ?? 0) : Infinity;
+    if (m.recurrenceFrequency === "daily") {
+      for (let k = 0; k < counted; k++) {
+        const start = new Date(m.startAt);
+        start.setDate(start.getDate() + k * m.recurrenceInterval);
+        if (start >= to) break;
+        keep(start);
+      }
+      return out;
+    }
+    const weekdays = m.recurrenceByWeekday ?? [m.startAt.getDay()];
+    const weekOne = new Date(m.startAt);
+    weekOne.setHours(0, 0, 0, 0);
+    weekOne.setDate(weekOne.getDate() - weekOne.getDay());
+    let seen = 0;
+    for (let week = 0; ; week += m.recurrenceInterval) {
+      const weekStart = new Date(weekOne);
+      weekStart.setDate(weekStart.getDate() + week * 7);
+      if (weekStart >= to) break;
+      for (const weekday of weekdays) {
+        const start = new Date(weekStart);
+        start.setDate(start.getDate() + weekday);
+        start.setHours(m.startAt.getHours(), m.startAt.getMinutes(), 0, 0);
+        if (start < m.startAt) continue;
+        if (seen++ >= counted) return out;
+        keep(start);
+      }
+    }
+    return out;
+  }
+
+  it("holds for random daily and weekly series, however old, over random windows", () => {
+    for (let n = 0; n < 400; n++) {
+      const startAt = new Date(
+        between(2008, 2026),
+        between(0, 11),
+        between(1, 28),
+        between(0, 23),
+      );
+      const hours = between(1, 3) * 3_600_000 * (random() < 0.1 ? 20 : 1);
+      const weekly = random() < 0.5;
+      const m = master({
+        startAt,
+        endAt: new Date(startAt.getTime() + hours),
+        recurrenceFrequency: weekly ? "weekly" : "daily",
+        recurrenceInterval: between(1, 4),
+        recurrenceByWeekday:
+          weekly && random() < 0.7
+            ? [...new Set([between(0, 6), between(0, 6), between(0, 6)])].sort()
+            : null,
+        recurrenceEnd: random() < 0.4 ? "count" : "never",
+        recurrenceCount: between(1, 1500),
+      });
+      const from = new Date(between(2008, 2030), between(0, 11), between(1, 28));
+      const to = new Date(from);
+      to.setDate(to.getDate() + between(1, 14));
+
+      const got = expandRecurrence(m, from, to).map((o) => o.startAt.toISOString());
+      expect(got, JSON.stringify({ m, from, to })).toEqual(slowWalk(m, from, to));
+    }
+  });
+});
+
 describe("expandTimeChartAreas", () => {
   it("places multi-day areas on each selected weekday", () => {
     const week = serializeRange(weekRange(fromDateKey("2026-07-26"))); // Sunday

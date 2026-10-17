@@ -339,6 +339,73 @@ describe("buildBudget — income and Ready to Assign", () => {
   });
 });
 
+describe("buildBudget — the reconciliation invariant, over random ledgers", () => {
+  // Ready to Assign + every envelope balance = the on-budget position - what is held back,
+  // in every month, whatever the assignments, refunds, overspends and carryover flags.
+  let seed = 31337;
+  const random = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const between = (low: number, high: number) =>
+    low + Math.floor(random() * (high - low + 1));
+
+  it("holds for 300 generated ledgers", () => {
+    const months = [
+      "2026-01-01",
+      "2026-02-01",
+      "2026-03-01",
+      "2026-04-01",
+      "2026-05-01",
+    ];
+    const categories = [
+      { id: "a", groupId: "g", isIncome: false },
+      { id: "b", groupId: "g", isIncome: false },
+      { id: "pay", groupId: "i", isIncome: true },
+    ];
+    for (let n = 0; n < 300; n++) {
+      const openingCents = between(-500_000, 500_000);
+      const result = buildBudget({
+        categories,
+        allocations: months.flatMap((month) =>
+          categories
+            .filter((category) => !category.isIncome && random() < 0.6)
+            .map((category) => ({
+              month,
+              categoryId: category.id,
+              amountCents: between(-50_000, 100_000),
+              carryover: random() < 0.3,
+              snoozed: false,
+            })),
+        ),
+        activity: months.flatMap((month) =>
+          categories
+            .filter(() => random() < 0.7)
+            .map((category) => ({
+              month,
+              categoryId: category.id,
+              amountCents: category.isIncome
+                ? between(0, 300_000)
+                : between(-120_000, 20_000),
+            })),
+        ),
+        buffered: months
+          .filter(() => random() < 0.3)
+          .map((month) => ({ month, bufferedCents: between(0, 80_000) })),
+        startMonth: months[0],
+        endMonth: months[months.length - 1],
+        openingCents,
+      });
+
+      let position = openingCents;
+      for (const month of result) {
+        position += month.totalIncomeCents + month.totalActivityCents;
+        expect(
+          month.readyToAssignCents + month.totalBalanceCents,
+          `${n} ${month.month}`,
+        ).toBe(position - month.bufferedCents);
+      }
+    }
+  });
+});
+
 describe("buildBudget — the reconciliation invariant", () => {
   /**
    * Ready to Assign plus every envelope balance equals the on-budget position, whenever every
