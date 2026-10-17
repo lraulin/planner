@@ -28,6 +28,20 @@ describe("tomboyToMarkdown", () => {
     });
   });
 
+  it("keeps whitespace outside the emphasis markers, where Markdown can see them", () => {
+    // `**word **` is not bold in CommonMark: a closing marker may not follow a space.
+    expect(
+      tomboyToMarkdown("a <bold>bold </bold>b<italic> slanted</italic> c").markdown,
+    ).toBe("a **bold** b *slanted* c");
+  });
+
+  it("leaves a character reference to no real character as written", () => {
+    // `String.fromCodePoint` throws on > U+10FFFF, which would fail the whole note.
+    expect(tomboyToMarkdown("a &#x110000; b").markdown).toBe("a &#x110000; b");
+    // NUL cannot be stored in a Postgres text column.
+    expect(tomboyToMarkdown("a &#0; b").markdown).toBe("a &#0; b");
+  });
+
   it("rejects mismatched tags instead of silently dropping content", () => {
     expect(() => tomboyToMarkdown("<bold>text</italic>")).toThrow(
       "Unexpected closing </italic>",

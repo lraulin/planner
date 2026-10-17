@@ -153,7 +153,11 @@ function decodeXml(source: string): string {
       const value = lower.startsWith("#x")
         ? Number.parseInt(lower.slice(2), 16)
         : Number.parseInt(lower.slice(1), 10);
-      return Number.isFinite(value) ? String.fromCodePoint(value) : _;
+      // A reference to no real character (NUL, a surrogate, past U+10FFFF) stays as written:
+      // `fromCodePoint` throws on the last and a Postgres text column refuses the first.
+      const isCharacter =
+        value >= 1 && value <= 0x10ffff && !(value >= 0xd800 && value <= 0xdfff);
+      return isCharacter ? String.fromCodePoint(value) : _;
     },
   );
 }
@@ -222,7 +226,11 @@ function wrapInline(body: string, marker: string): string {
   if (body === "" || body.trim() === "") return body;
   // A block produced by a nested size tag already carries stronger Markdown structure.
   if (/(?:^|\n)#{1,6} /.test(body)) return body;
-  return `${marker}${body}${marker}`;
+  // A closing marker after a space (or an opening one before it) is not emphasis in
+  // Markdown, and Tomboy happily formats the space along with the word.
+  const [, lead = "", core = "", trail = ""] =
+    /^(\s*)([\s\S]*?)(\s*)$/.exec(body) ?? [];
+  return `${lead}${marker}${core}${marker}${trail}`;
 }
 
 function renderHeading(body: string, level: number): string {
