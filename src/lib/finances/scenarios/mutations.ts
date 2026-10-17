@@ -11,6 +11,7 @@ import {
   SCENARIO_LINE_KINDS,
   type ScenarioLineKind,
 } from "@/db/schema";
+import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { between, after, compare, first } from "@/lib/tree/sortKey";
 import {
   lineSourceOf,
@@ -583,22 +584,16 @@ async function isSelfOrDescendant(
   candidateId: string,
   executor: Executor,
 ): Promise<boolean> {
-  let cursor: string | null = candidateId;
-  for (let hops = 0; cursor !== null && hops < 1000; hops++) {
-    if (cursor === lineId) return true;
+  return isSelfOrDescendantVia(lineId, candidateId, async (id) => {
     const [row] = await executor
       .select({ parentId: financeScenarioLines.parentId })
       .from(financeScenarioLines)
       .where(
-        and(
-          eq(financeScenarioLines.userId, userId),
-          eq(financeScenarioLines.id, cursor),
-        ),
+        and(eq(financeScenarioLines.userId, userId), eq(financeScenarioLines.id, id)),
       )
       .limit(1);
-    cursor = row?.parentId ?? null;
-  }
-  return false;
+    return row?.parentId;
+  });
 }
 
 /**
