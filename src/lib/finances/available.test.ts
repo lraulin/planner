@@ -36,6 +36,17 @@ describe("nextPayday", () => {
     });
   });
 
+  it("still lands on the next payday when the anchor is years back", () => {
+    // A weekly override anchored 2018-01-05: 4,000-odd days, more than 300 cadences.
+    const result = nextPayday(
+      series,
+      { anchorDate: "2018-01-05", cadenceDays: 7 },
+      "2026-08-16",
+    );
+    // 2018-01-05 is a Friday, and so is every 7th day after it.
+    expect(result).toEqual({ dateKey: "2026-08-21", daysAway: 5, source: "override" });
+  });
+
   it("uses the median gap, so a job-change hole does not drag the projection late", () => {
     // 77 days between Endava's last check and TrustedQA's first — a real gap from the data.
     const withHole = [

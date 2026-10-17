@@ -59,13 +59,6 @@ export type PaydayOverride = {
 };
 
 /**
- * Bound on the forward walk. Long enough to cross any real gap between an anchor and today —
- * a decade of fortnights — and short enough that a corrupt anchor fails fast instead of
- * spinning.
- */
-const MAX_PAYDAY_STEPS = 300;
-
-/**
  * The next payday at or after `todayKey`.
  *
  * The detected path walks forward from the **newest** payday on file by the median observed
@@ -110,10 +103,7 @@ function walkForward(
   // arithmetically rather than by looping from the anchor, so an anchor years back costs the
   // same as one last fortnight.
   const elapsed = daysBetweenKeys(anchorKey, todayKey);
-  const steps = Math.min(
-    MAX_PAYDAY_STEPS,
-    Math.max(0, Math.ceil(elapsed / cadenceDays)),
-  );
+  const steps = Math.max(0, Math.ceil(elapsed / cadenceDays));
   const dateKey = shiftDateKey(anchorKey, steps * cadenceDays);
   const daysAway = daysBetweenKeys(todayKey, dateKey);
   return { dateKey, daysAway, source };
