@@ -140,7 +140,13 @@ export function expandRecurrence(
 
   // Safety: do not walk from a series start decades before the window forever.
   // Jump near the range when possible.
+  //
+  // `index` is the occurrence's position in the series — what end-after-N counts — and after
+  // a fast-forward it starts wherever the jump landed. It is **not** a measure of work, so the
+  // caps below count `walked` (steps taken in this call) and `out.length` (what is emitted):
+  // capping `index` made every daily series older than `maxOccurrences` days vanish.
   let index = 0;
+  let walked = 0;
 
   if (freq === "daily") {
     let start = new Date(master.startAt);
@@ -155,13 +161,16 @@ export function expandRecurrence(
       const steps = Math.floor(daysBehind / interval);
       start = addDays(start, steps * interval);
       index = steps;
-      while (endedBy(start) && index < maxOccurrences) {
+      // The jump undershoots by at most a step or two (DST, the occurrence's own length).
+      while (endedBy(start) && walked < maxOccurrences) {
         start = addDays(start, interval);
         index++;
+        walked++;
       }
     }
 
-    while (index < maxOccurrences) {
+    walked = 0;
+    while (walked < maxOccurrences) {
       if (pastSeriesEnd(master, start, index)) break;
       if (start >= rangeEnd) break;
       const end = new Date(start.getTime() + duration);
@@ -170,6 +179,7 @@ export function expandRecurrence(
       }
       start = addDays(start, interval);
       index++;
+      walked++;
     }
     return out;
   }
@@ -214,7 +224,9 @@ export function expandRecurrence(
       index = Math.max(0, weeksIterated * weekdays.length - beforeSeriesStart);
     }
 
-    while (out.length < maxOccurrences && weekIndex < maxOccurrences * 2) {
+    // Bounded by weeks walked in this call, not by the week's distance from the series start.
+    const firstWeek = weekIndex;
+    while (out.length < maxOccurrences && weekIndex - firstWeek < maxOccurrences * 2) {
       const weekStart = addDays(seriesWeekStart, weekIndex * 7);
       if (weekStart >= rangeEnd) break;
 
@@ -229,7 +241,7 @@ export function expandRecurrence(
           out.push(occurrenceOf(master, day));
         }
         index++;
-        if (index >= maxOccurrences) return out;
+        if (out.length >= maxOccurrences) return out;
       }
       weekIndex += interval;
     }

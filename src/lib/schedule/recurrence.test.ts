@@ -519,6 +519,93 @@ describe("expandRecurrence — bounds", () => {
   });
 });
 
+describe("expandRecurrence — series that started long before the window", () => {
+  // `maxOccurrences` bounds what is emitted and how far one call walks, not how old a series
+  // may be: fast-forwarding past 500 days of a daily series must not read as 500 emissions.
+  it("still shows a daily series that began more than maxOccurrences days ago", () => {
+    const occ = expandRecurrence(
+      master({ ...at9("2023-01-02"), recurrenceFrequency: "daily" }),
+      ...window("2026-10-12", "2026-10-19"),
+    );
+    expect(keysOf(occ)).toEqual([
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16",
+      "2026-10-17",
+      "2026-10-18",
+    ]);
+  });
+
+  it("keeps an every-third-day series on its grid after years of fast-forwarding", () => {
+    // 2020-01-06 + 3n: 2026-10-12 is day 2471, 2471 % 3 = 2, so the grid hits Oct 13 and 16.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2020-01-06"),
+        recurrenceFrequency: "daily",
+        recurrenceInterval: 3,
+      }),
+      ...window("2026-10-12", "2026-10-19"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-10-13", "2026-10-16"]);
+  });
+
+  it("ends a long-running counted daily series on its Nth day", () => {
+    // 800 days from 2023-01-02 end on 2025-03-11, the last one; the window runs past it.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2023-01-02"),
+        recurrenceFrequency: "daily",
+        recurrenceEnd: "count",
+        recurrenceCount: 800,
+      }),
+      ...window("2025-03-08", "2025-03-16"),
+    );
+    expect(keysOf(occ)).toEqual([
+      "2025-03-08",
+      "2025-03-09",
+      "2025-03-10",
+      "2025-03-11",
+    ]);
+  });
+
+  it("emits every ticked weekday of a weekly series that is years old", () => {
+    // Mon, Wed, Fri since 2020: ~900 occurrences behind the window.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2020-01-06"),
+        recurrenceFrequency: "weekly",
+        recurrenceByWeekday: [1, 3, 5],
+      }),
+      ...window("2026-10-11", "2026-10-18"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-10-12", "2026-10-14", "2026-10-16"]);
+  });
+
+  it("still shows a weekly series that began more than two thousand weeks ago", () => {
+    const occ = expandRecurrence(
+      master({ ...at9("1985-01-07"), recurrenceFrequency: "weekly" }),
+      ...window("2026-10-11", "2026-10-18"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-10-12"]);
+  });
+
+  it("ends a long-running counted weekly series on its Nth occurrence", () => {
+    // 2012-01-02 is a Monday; the 700th Monday is 699 weeks on, 2025-05-26.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2012-01-02"),
+        recurrenceFrequency: "weekly",
+        recurrenceEnd: "count",
+        recurrenceCount: 700,
+      }),
+      ...window("2025-05-19", "2025-06-09"),
+    );
+    expect(keysOf(occ)).toEqual(["2025-05-19", "2025-05-26"]);
+  });
+});
+
 describe("expandTimeChartAreas", () => {
   it("places multi-day areas on each selected weekday", () => {
     const week = serializeRange(weekRange(fromDateKey("2026-07-26"))); // Sunday
