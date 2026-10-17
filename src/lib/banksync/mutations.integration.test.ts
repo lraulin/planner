@@ -440,7 +440,7 @@ describeDb("a vanished hold is carried or kept, never dropped (D5)", () => {
     return category.id;
   }
 
-  const account = (accountId: string, transactions: SimpleFinTransaction[]) =>
+  const account = (transactions: SimpleFinTransaction[]) =>
     ({ id: "sfin-1", name: "Card", balance: "0.00", transactions }) as SimpleFinAccount;
 
   async function syncWith(
@@ -450,7 +450,7 @@ describeDb("a vanished hold is carried or kept, never dropped (D5)", () => {
     transactions: SimpleFinTransaction[],
   ) {
     const plan = planSync({
-      accounts: [account(accountId, transactions)],
+      accounts: [account(transactions)],
       accountIdByExternal: new Map([["sfin-1", accountId]]),
       otherSourceExternalIds: new Set(),
       existingByAccount: await existingRowsInWindow(

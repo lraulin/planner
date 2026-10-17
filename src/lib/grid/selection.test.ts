@@ -114,13 +114,13 @@ describe("idsForFieldEdit", () => {
 
 describe("moveSelection", () => {
   it("moves focus and replaces selection without Shift", () => {
-    const result = moveSelection(ORDER, "b", "b", new Set(["b"]), 1, false);
+    const result = moveSelection(ORDER, "b", "b", 1, false);
     expect([...result.selectedIds]).toEqual(["c"]);
     expect(result.focusId).toBe("c");
   });
 
   it("grows the range with Shift", () => {
-    const result = moveSelection(ORDER, "b", "b", new Set(["b"]), 2, true);
+    const result = moveSelection(ORDER, "b", "b", 2, true);
     expect([...result.selectedIds].sort()).toEqual(["b", "c", "d"]);
     expect(result.anchorId).toBe("b");
     expect(result.focusId).toBe("d");

@@ -67,11 +67,7 @@ function month(months: BudgetMonth[], key = "2026-08-01"): BudgetMonth {
 }
 
 /** Re-fold with an edit applied, so an operation is judged by the numbers it produces. */
-function apply(
-  months: BudgetMonth[],
-  edit: BudgetEdit,
-  base: Parameters<typeof ledger>[0],
-) {
+function apply(edit: BudgetEdit, base: Parameters<typeof ledger>[0]) {
   const allocations = new Map<string, Cell>();
   for (const row of base.allocations ?? []) {
     allocations.set(`${row.month}|${row.categoryId}`, row);
@@ -116,7 +112,7 @@ describe("coverOverspending", () => {
     ]);
     expect(edit.note).toBe("Covered $150.00 of Groceries from Dining on August 22");
 
-    const after = month(apply(months, edit, base));
+    const after = month(apply(edit, base));
     expect(after.categories[FOOD.id]?.balanceCents).toBe(0);
     expect(after.categories[FUN.id]?.balanceCents).toBe(35_000);
     // A move between envelopes changes nothing outside them.
@@ -139,7 +135,7 @@ describe("coverOverspending", () => {
       todayKey: TODAY,
     });
 
-    const after = month(apply(months, edit, base2));
+    const after = month(apply(edit, base2));
     expect(after.categories[FUN.id]?.balanceCents).toBe(0);
     // Still short, and visibly so, rather than the shortfall moving to the donor.
     expect(after.categories[FOOD.id]?.balanceCents).toBe(-9_000);
@@ -211,7 +207,7 @@ describe("transferBetweenCategories", () => {
     });
     expect(edit.note).toBe("Reassigned $150.00 from Groceries → Dining on August 22");
 
-    const after = month(apply(months, edit, base));
+    const after = month(apply(edit, base));
     expect(after.categories[FOOD.id]?.balanceCents).toBe(25_000);
     expect(after.categories[FUN.id]?.balanceCents).toBe(25_000);
     expect(after.readyToAssignCents).toBe(before.readyToAssignCents);
@@ -227,7 +223,7 @@ describe("transferBetweenCategories", () => {
       amountCents: 999_999,
       todayKey: TODAY,
     });
-    const after = month(apply(months, edit, base));
+    const after = month(apply(edit, base));
     expect(after.categories[FUN.id]?.balanceCents).toBe(0);
     expect(after.categories[FOOD.id]?.balanceCents).toBe(50_000);
   });
@@ -299,7 +295,7 @@ describe("unassignToReadyToAssign", () => {
       "Unassigned $150.00 from Groceries to Ready to Assign on August 22",
     );
 
-    const after = month(apply(months, edit, base));
+    const after = month(apply(edit, base));
     expect(after.categories[FOOD.id]?.balanceCents).toBe(25_000);
     expect(after.categories[FUN.id]?.assignedCents).toBe(10_000);
     expect(after.readyToAssignCents).toBe(before.readyToAssignCents + 15_000);
@@ -313,7 +309,7 @@ describe("unassignToReadyToAssign", () => {
       amountCents: 999_999,
       todayKey: TODAY,
     });
-    const after = month(apply(months, edit, base));
+    const after = month(apply(edit, base));
     expect(after.categories[FUN.id]?.balanceCents).toBe(0);
     expect(after.categories[FUN.id]?.assignedCents).toBe(0);
   });
@@ -341,7 +337,7 @@ describe("unassignToReadyToAssign", () => {
       { month: "2026-08-01", categoryId: FOOD.id, amountCents: -40_000 },
     ]);
 
-    const after = month(apply(months, edit, leftover));
+    const after = month(apply(edit, leftover));
     expect(after.categories[FOOD.id]?.assignedCents).toBe(-40_000);
     expect(after.categories[FOOD.id]?.balanceCents).toBe(0);
   });
@@ -365,7 +361,7 @@ describe("unassignToReadyToAssign", () => {
       { month: "2026-09-01", categoryId: RENT.id, amountCents: 10_000 },
     ]);
 
-    const after = apply(months, edit, base2);
+    const after = apply(edit, base2);
     expect(month(after, "2026-08-01").categories[FOOD.id]?.assignedCents).toBe(40_000);
     expect(month(after, "2026-09-01").categories[RENT.id]?.assignedCents).toBe(10_000);
   });
@@ -423,7 +419,7 @@ describe("assignFromReadyToAssign", () => {
     expect(edit.allocations).toEqual([
       { month: "2026-08-01", categoryId: FOOD.id, amountCents: 100_000 },
     ]);
-    expect(month(apply(months, edit, base)).readyToAssignCents).toBe(0);
+    expect(month(apply(edit, base)).readyToAssignCents).toBe(0);
   });
 
   it("assigns everything left when no amount is given", () => {
@@ -518,7 +514,7 @@ describe("setAssignment", () => {
       amountCents: 50_000,
       todayKey: TODAY,
     });
-    expect(month(apply(months, edit, base)).readyToAssignCents).toBe(-40_000);
+    expect(month(apply(edit, base)).readyToAssignCents).toBe(-40_000);
   });
 });
 
@@ -535,7 +531,7 @@ describe("holdForNextMonth", () => {
     expect(edit.buffered).toEqual({ month: "2026-08-01", bufferedCents: 40_000 });
     expect(edit.note).toBe("Held $400.00 for next month on August 22");
 
-    const after = apply(months, edit, base);
+    const after = apply(edit, base);
     expect(month(after).readyToAssignCents).toBe(60_000);
     expect(month(after, "2026-09-01").fromLastMonthCents).toBe(100_000);
   });
@@ -548,7 +544,7 @@ describe("holdForNextMonth", () => {
       todayKey: TODAY,
     });
     expect(edit.buffered?.bufferedCents).toBe(100_000);
-    expect(month(apply(months, edit, base)).readyToAssignCents).toBe(0);
+    expect(month(apply(edit, base)).readyToAssignCents).toBe(0);
   });
 
   it("releases no more than is held", () => {
@@ -718,7 +714,7 @@ describe("setZero", () => {
     expect(edit.allocations).toEqual([
       { month: "2026-08-01", categoryId: FOOD.id, amountCents: 0 },
     ]);
-    expect(month(apply(months, edit, base)).readyToAssignCents).toBe(200_000);
+    expect(month(apply(edit, base)).readyToAssignCents).toBe(200_000);
   });
 
   it("does nothing on an already-empty month", () => {

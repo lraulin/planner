@@ -139,7 +139,6 @@ export function useMultiSelect(
           orderedIds,
           current.anchorId,
           current.focusId,
-          current.selectedIds,
           delta,
           extend,
         );

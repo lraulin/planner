@@ -214,7 +214,6 @@ export function moveSelection(
   orderedIds: readonly string[],
   anchorId: string | null,
   focusId: string | null,
-  selectedIds: ReadonlySet<string>,
   delta: number,
   extend: boolean,
 ): SelectResult {
