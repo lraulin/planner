@@ -1,6 +1,10 @@
 import type { NodeItem } from "@/db/schema";
 import type { ContactOption } from "@/lib/contacts/types";
-import { escapeCsvField, parseCsvRowsWithLines } from "@/lib/csv/text";
+import {
+  escapeCsvField,
+  normalizeCsvHeader,
+  parseCsvRowsWithLines,
+} from "@/lib/csv/text";
 import type { NodeItemValues } from "@/lib/detail/types";
 import type { ItemField } from "./itemKinds";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
@@ -35,13 +39,6 @@ export type ParseItemsCsvResult = {
   errors: { row: number; message: string }[];
 };
 
-function normalizeHeader(h: string): string {
-  return h
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-}
-
 /** Header aliases so "Pri" / "Name" / "Summary" still map when labels differ by kind. */
 const HEADER_ALIASES: Record<string, string> = {
   pri: "priority",
@@ -62,17 +59,17 @@ const HEADER_ALIASES: Record<string, string> = {
 
 function fieldHeaderKey(field: ItemCsvField): string {
   if (field.key === "priority") return "priority";
-  return normalizeHeader(field.key);
+  return normalizeCsvHeader(field.key);
 }
 
 function matchField(
   fields: readonly ItemCsvField[],
   header: string,
 ): ItemCsvField | undefined {
-  const norm = normalizeHeader(header);
+  const norm = normalizeCsvHeader(header);
   if (!norm) return undefined;
 
-  const byLabel = fields.find((f) => normalizeHeader(f.label) === norm);
+  const byLabel = fields.find((f) => normalizeCsvHeader(f.label) === norm);
   if (byLabel) return byLabel;
 
   const byKey = fields.find((f) => fieldHeaderKey(f) === norm);

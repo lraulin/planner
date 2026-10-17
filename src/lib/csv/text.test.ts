@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   escapeCsvField,
+  normalizeCsvHeader,
   parseCsvRows,
   parseCsvRowsWithLines,
   splitCsvLine,
 } from "./text";
+
+describe("normalizeCsvHeader", () => {
+  it("matches a header however it is spaced, cased or punctuated", () => {
+    expect(normalizeCsvHeader(" Posting Date ")).toBe("postingdate");
+    expect(normalizeCsvHeader("posting_date")).toBe("postingdate");
+    expect(normalizeCsvHeader("Quantity Transacted")).toBe("quantitytransacted");
+    expect(normalizeCsvHeader("Amount ($)")).toBe("amount");
+  });
+});
 
 describe("escapeCsvField", () => {
   it("quotes fields that contain commas, quotes, or newlines", () => {

@@ -1,4 +1,8 @@
-import { parseCsvRows, parseCsvRowsWithLines } from "@/lib/csv/text";
+import {
+  normalizeCsvHeader,
+  parseCsvRows,
+  parseCsvRowsWithLines,
+} from "@/lib/csv/text";
 import { parseAmountCents } from "./money";
 import type {
   ParsedAccount,
@@ -36,18 +40,11 @@ export type ParseSuccess = { ok: true; parsed: ParsedFinanceCsv };
 
 const HEADER_MARKERS = ["transactiontype", "quantitytransacted", "subtotal"] as const;
 
-function normalizeHeader(cell: string): string {
-  return cell
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
 /** Cheap enough to run on every upload; specific enough not to claim a bank CSV. */
 export function looksLikeCoinbaseCsv(text: string): boolean {
   const rows = parseCsvRows(text);
   return rows.some((row) => {
-    const present = new Set(row.map(normalizeHeader));
+    const present = new Set(row.map(normalizeCsvHeader));
     return HEADER_MARKERS.every((marker) => present.has(marker));
   });
 }
@@ -55,7 +52,7 @@ export function looksLikeCoinbaseCsv(text: string): boolean {
 function headerIndex(cells: readonly string[]): Map<string, number> {
   const index = new Map<string, number>();
   cells.forEach((cell, i) => {
-    const key = normalizeHeader(cell);
+    const key = normalizeCsvHeader(cell);
     if (!index.has(key)) index.set(key, i);
   });
   return index;
@@ -135,7 +132,7 @@ export function parseCoinbaseCsv(
   }
   const rows = parseCsvRowsWithLines(text);
   const headerAt = rows.findIndex(({ cells: row }) => {
-    const present = new Set(row.map(normalizeHeader));
+    const present = new Set(row.map(normalizeCsvHeader));
     return HEADER_MARKERS.every((marker) => present.has(marker));
   });
   if (headerAt === -1) {

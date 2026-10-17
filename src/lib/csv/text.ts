@@ -46,6 +46,18 @@ export function splitCsvLine(line: string): string[] {
 }
 
 /**
+ * A header cell reduced to lowercase letters and digits, so "Posting Date", "posting_date"
+ * and "Posting date " match one key. The importers that recognise a file by its header row
+ * all match on this.
+ */
+export function normalizeCsvHeader(cell: string): string {
+  return cell
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
  * Parse a whole CSV document into rows of fields. Quoted fields may contain commas
  * and newlines. Strips a leading BOM. Drops rows that are entirely blank.
  */

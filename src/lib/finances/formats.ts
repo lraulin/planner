@@ -1,6 +1,6 @@
 import type { FinanceAccountKind } from "@/db/schema";
 import { dateKeyFromParts } from "@/lib/schedule/geometry";
-import { parseCsvRowsWithLines } from "@/lib/csv/text";
+import { normalizeCsvHeader, parseCsvRowsWithLines } from "@/lib/csv/text";
 import { parseAmountCents } from "./money";
 import type {
   FinanceFeed,
@@ -23,14 +23,6 @@ import type {
  * Parsing is pure: no database, no account ids. Resolving accounts and assigning dedup
  * fingerprints happens in `import.ts`, against rows this produces.
  */
-
-/** Header cells, lowercased and stripped of spaces and punctuation, for matching. */
-function normalizeHeader(cell: string): string {
-  return cell
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
 
 /**
  * Bank CSVs this module parses — the feeds that arrive as a file with a header on row 0.
@@ -67,7 +59,7 @@ const HEADERS: Record<BankCsvFeed, readonly string[]> = {
  * the caller reports as "unrecognised format" naming the file.
  */
 export function detectFeed(headerCells: readonly string[]): BankCsvFeed | null {
-  const present = new Set(headerCells.map(normalizeHeader));
+  const present = new Set(headerCells.map(normalizeCsvHeader));
   for (const [feed, required] of Object.entries(HEADERS) as [
     BankCsvFeed,
     readonly string[],
@@ -123,7 +115,7 @@ export function parseCsvDate(raw: string): string | null {
 function headerIndex(headerCells: readonly string[]): Map<string, number> {
   const index = new Map<string, number>();
   headerCells.forEach((cell, i) => {
-    const key = normalizeHeader(cell);
+    const key = normalizeCsvHeader(cell);
     if (!index.has(key)) index.set(key, i);
   });
   return index;
