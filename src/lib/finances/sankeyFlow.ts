@@ -1,21 +1,21 @@
 /**
- * Period-total Sankey: income sources → Spent/Kept (or From savings) → categories.
+ * Period-total Sankey: income sources → Spent/Kept (or From savings) → where it went.
  *
  * This is not a claim that a given paycheck bought the groceries. It is the period's
  * totals drawn so the widths balance. Transfers are dropped; Uncategorized is a real
  * sink, not omitted.
  */
 
+import type { EnvelopeKind } from "@/db/schema";
 import {
   effectiveCategory,
-  effectiveMerchant,
+  effectiveFlow,
   incomeCentsOf,
-  spendByCategory,
   spendCentsOf,
   type AnalyticsRow,
 } from "./analytics";
-
-export type SankeyGrouping = "category" | "category-merchant";
+import { UNCATEGORIZED } from "./classify/categories";
+import type { BudgetGroupRow } from "./budget/queries";
 
 export type SankeyNode = {
   id: string;
@@ -38,20 +38,22 @@ export type SankeyModel = {
   netCents: number;
 };
 
+/** Which node a row's income lands in, and which node its spend leaves through. */
+export type SankeyLabels<R extends AnalyticsRow> = {
+  source: (row: R) => string;
+  sink: (row: R) => string;
+};
+
 export const SANKEY_SPENT = "middle:spent";
 export const SANKEY_KEPT = "middle:kept";
 export const SANKEY_FROM_SAVINGS = "middle:from-savings";
 
-function sourceId(merchant: string): string {
-  return `source:${merchant}`;
+function sourceId(label: string): string {
+  return `source:${label}`;
 }
 
-function sinkId(category: string): string {
-  return `sink:${category}`;
-}
-
-function merchantSinkId(category: string, merchant: string): string {
-  return `merchant:${category}:${merchant}`;
+function sinkId(label: string): string {
+  return `sink:${label}`;
 }
 
 /** Split `total` across `weights` in whole cents. The last positive weight takes the remainder. */
@@ -71,50 +73,41 @@ function allocate(total: number, weights: readonly number[]): number[] {
   return shares;
 }
 
-export function cashFlowSankey(
-  rows: readonly AnalyticsRow[],
-  grouping: SankeyGrouping = "category",
+function byCentsDescending(left: [string, number], right: [string, number]): number {
+  return right[1] - left[1] || left[0].localeCompare(right[0]);
+}
+
+export function cashFlowSankey<R extends AnalyticsRow>(
+  rows: readonly R[],
+  labels: SankeyLabels<R>,
 ): SankeyModel {
   const sources = new Map<string, number>();
+  const sinks = new Map<string, number>();
   let incomeCents = 0;
+  let spendCents = 0;
   for (const row of rows) {
     const income = incomeCentsOf(row);
-    if (income <= 0) continue;
-    const merchant = effectiveMerchant(row) || "Income";
-    sources.set(merchant, (sources.get(merchant) ?? 0) + income);
-    incomeCents += income;
-  }
-
-  let spendCents = 0;
-  const spendByCatMerchant = new Map<string, Map<string, number>>();
-  for (const row of rows) {
+    if (income > 0) {
+      const label = labels.source(row);
+      sources.set(label, (sources.get(label) ?? 0) + income);
+      incomeCents += income;
+    }
     const cost = spendCentsOf(row);
-    if (cost === 0) continue;
-    spendCents += cost;
-    const category = effectiveCategory(row);
-    const merchant = effectiveMerchant(row) || category;
-    const inner = spendByCatMerchant.get(category) ?? new Map<string, number>();
-    inner.set(merchant, (inner.get(merchant) ?? 0) + cost);
-    spendByCatMerchant.set(category, inner);
+    if (cost !== 0) {
+      const label = labels.sink(row);
+      sinks.set(label, (sinks.get(label) ?? 0) + cost);
+      spendCents += cost;
+    }
   }
 
   const netCents = incomeCents - spendCents;
   const nodes: SankeyNode[] = [];
   const links: SankeyLink[] = [];
 
-  const sourceEntries = [...sources.entries()].sort(
-    (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
-  );
-  for (const [merchant, cents] of sourceEntries) {
-    nodes.push({
-      id: sourceId(merchant),
-      label: merchant,
-      stage: "source",
-      cents,
-    });
+  const sourceEntries = [...sources.entries()].sort(byCentsDescending);
+  for (const [label, cents] of sourceEntries) {
+    nodes.push({ id: sourceId(label), label, stage: "source", cents });
   }
-
-  const categories = spendByCategory(rows);
 
   if (netCents >= 0) {
     if (spendCents > 0) {
@@ -136,17 +129,17 @@ export function cashFlowSankey(
     const sourceWeights = sourceEntries.map((entry) => entry[1]);
     const toSpent = allocate(spendCents, sourceWeights);
     const toKept = allocate(netCents, sourceWeights);
-    sourceEntries.forEach(([merchant], index) => {
+    sourceEntries.forEach(([label], index) => {
       if (toSpent[index] > 0) {
         links.push({
-          source: sourceId(merchant),
+          source: sourceId(label),
           target: SANKEY_SPENT,
           cents: toSpent[index],
         });
       }
       if (toKept[index] > 0) {
         links.push({
-          source: sourceId(merchant),
+          source: sourceId(label),
           target: SANKEY_KEPT,
           cents: toKept[index],
         });
@@ -155,12 +148,8 @@ export function cashFlowSankey(
   } else {
     const shortfall = -netCents;
     if (incomeCents > 0) {
-      sourceEntries.forEach(([merchant, cents]) => {
-        links.push({
-          source: sourceId(merchant),
-          target: SANKEY_SPENT,
-          cents,
-        });
+      sourceEntries.forEach(([label, cents]) => {
+        links.push({ source: sourceId(label), target: SANKEY_SPENT, cents });
       });
     }
     nodes.push({
@@ -175,74 +164,81 @@ export function cashFlowSankey(
       stage: "middle",
       cents: spendCents,
     });
-    links.push({
-      source: SANKEY_FROM_SAVINGS,
-      target: SANKEY_SPENT,
-      cents: shortfall,
-    });
+    links.push({ source: SANKEY_FROM_SAVINGS, target: SANKEY_SPENT, cents: shortfall });
   }
 
-  for (const category of categories) {
-    if (category.cents === 0) continue;
-    nodes.push({
-      id: sinkId(category.category),
-      label: category.category,
-      stage: "sink",
-      cents: category.cents,
-    });
+  for (const [label, cents] of [...sinks.entries()].sort(byCentsDescending)) {
+    if (cents === 0) continue;
+    nodes.push({ id: sinkId(label), label, stage: "sink", cents });
     if (spendCents > 0) {
-      links.push({
-        source: SANKEY_SPENT,
-        target: sinkId(category.category),
-        cents: category.cents,
-      });
-    }
-    if (grouping === "category-merchant") {
-      const inner = spendByCatMerchant.get(category.category);
-      if (!inner) continue;
-      const merchants = [...inner.entries()].sort(
-        (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
-      );
-      for (const [merchant, cents] of merchants) {
-        if (cents === 0) continue;
-        const id = merchantSinkId(category.category, merchant);
-        nodes.push({
-          id,
-          label: merchant,
-          stage: "sink",
-          cents,
-        });
-        links.push({
-          source: sinkId(category.category),
-          target: id,
-          cents,
-        });
-      }
+      links.push({ source: SANKEY_SPENT, target: sinkId(label), cents });
     }
   }
 
   return { nodes, links, incomeCents, spendCents, netCents };
 }
 
-export function sankeyNodeDrill(
-  nodeId: string,
-): Extract<import("./insightsFilter").InsightsDrill, { kind: "sankey" }> | null {
-  if (nodeId === SANKEY_SPENT) return { kind: "sankey", id: "spent", role: "spent" };
-  if (nodeId === SANKEY_KEPT) return { kind: "sankey", id: "kept", role: "kept" };
-  if (nodeId === SANKEY_FROM_SAVINGS) {
-    return { kind: "sankey", id: "from-savings", role: "from-savings" };
-  }
-  if (nodeId.startsWith("source:")) {
-    return { kind: "sankey", id: nodeId.slice("source:".length), role: "source" };
-  }
-  if (nodeId.startsWith("sink:")) {
-    return { kind: "sankey", id: nodeId.slice("sink:".length), role: "category" };
-  }
-  if (nodeId.startsWith("merchant:")) {
-    const rest = nodeId.slice("merchant:".length);
-    const sep = rest.indexOf(":");
-    const merchant = sep >= 0 ? rest.slice(sep + 1) : rest;
-    return { kind: "sankey", id: merchant, role: "merchant" };
-  }
-  return null;
+/** What {@link budgetGroupSankey} reads off a row beyond the analytics fields. */
+export type BudgetGroupSankeyRow = AnalyticsRow & {
+  budgetCategoryId: string | null;
+  groupId: string | null;
+  envelopeKind: EnvelopeKind | null;
+};
+
+/**
+ * The Sankey drawn by budget group, which is the level a whole year reads at.
+ *
+ * One node per payee and per envelope put 18 sources and 50 sinks on one picture, every
+ * label stacked on its neighbour. A row lands under its envelope's **top-level** group. An
+ * envelope with no group stands as its own node: groups are optional folders inside a
+ * section, so an ungrouped envelope — Payroll, VA, a savings goal — is already top level.
+ *
+ * Money crossing the boundary (a crypto sale, a tax refund, a sweep out) is counted as
+ * income or spend here, because a diagram of where the money came from that left it out
+ * would not balance against the accounts. Uncategorized, it gets its own node rather than
+ * hiding in Uncategorized.
+ */
+export function budgetGroupSankey(
+  rows: readonly BudgetGroupSankeyRow[],
+  groups: readonly Pick<BudgetGroupRow, "id" | "name" | "parentGroupId">[],
+): SankeyModel {
+  const byId = new Map(groups.map((group) => [group.id, group]));
+  const topLevelName = (groupId: string): string | null => {
+    const seen = new Set<string>();
+    let current = byId.get(groupId);
+    while (current?.parentGroupId) {
+      if (seen.has(current.id)) throw new Error("Budget groups contain a cycle.");
+      seen.add(current.id);
+      current = byId.get(current.parentGroupId);
+    }
+    return current?.name ?? null;
+  };
+  // Labelled before the flow is rewritten: afterwards a crypto sale looks like a paycheck.
+  const labelled = rows.map((row) => {
+    const transfer = effectiveFlow(row) === "external_transfer";
+    const grouped = row.groupId ? topLevelName(row.groupId) : null;
+    const label =
+      grouped ??
+      (row.budgetCategoryId
+        ? effectiveCategory(row)
+        : transfer
+          ? row.amountCents > 0
+            ? "Transfers in"
+            : "Transfers out"
+          : UNCATEGORIZED);
+    return {
+      ...row,
+      flowOverride: transfer
+        ? row.amountCents > 0
+          ? ("income" as const)
+          : ("spend" as const)
+        : row.flowOverride,
+      label,
+    };
+  });
+
+  return cashFlowSankey(labelled, {
+    source: (row) => row.label,
+    sink: (row) => row.label,
+  });
 }

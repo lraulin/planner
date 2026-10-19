@@ -1784,10 +1784,10 @@ export function trailingRange(endKey: string, months: number): DateRange {
 }
 
 /** Rows inside an inclusive window. */
-export function rowsInRange(
-  rows: readonly AnalyticsRow[],
+export function rowsInRange<R extends Pick<AnalyticsRow, "transactionDate">>(
+  rows: readonly R[],
   range: DateRange,
-): AnalyticsRow[] {
+): R[] {
   return rows.filter(
     (row) =>
       row.transactionDate >= range.startKey && row.transactionDate <= range.endKey,

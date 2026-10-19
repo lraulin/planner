@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { AnalyticsRow } from "./analytics";
+import { effectiveCategory, effectiveMerchant, type AnalyticsRow } from "./analytics";
 import {
+  budgetGroupSankey,
   cashFlowSankey,
   SANKEY_FROM_SAVINGS,
   SANKEY_KEPT,
   SANKEY_SPENT,
-  sankeyNodeDrill,
+  type BudgetGroupSankeyRow,
 } from "./sankeyFlow";
+
+const byCategory = {
+  source: (row: AnalyticsRow) => effectiveMerchant(row),
+  sink: effectiveCategory,
+};
 
 function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
   return {
@@ -31,21 +37,24 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
 
 describe("cashFlowSankey", () => {
   it("balances income into Spent and Kept when money is left over", () => {
-    const model = cashFlowSankey([
-      row({
-        derivedFlow: "income",
-        description: "PAYROLL",
-        amountCents: 100000,
-        derivedCategory: null,
-      }),
-      row({ derivedCategory: "Groceries", amountCents: -40000 }),
-      row({ derivedCategory: "Dining", amountCents: -10000 }),
-      row({
-        derivedFlow: "internal_transfer",
-        amountCents: -20000,
-        derivedCategory: null,
-      }),
-    ]);
+    const model = cashFlowSankey(
+      [
+        row({
+          derivedFlow: "income",
+          description: "PAYROLL",
+          amountCents: 100000,
+          derivedCategory: null,
+        }),
+        row({ derivedCategory: "Groceries", amountCents: -40000 }),
+        row({ derivedCategory: "Dining", amountCents: -10000 }),
+        row({
+          derivedFlow: "internal_transfer",
+          amountCents: -20000,
+          derivedCategory: null,
+        }),
+      ],
+      byCategory,
+    );
 
     expect(model.incomeCents).toBe(100000);
     expect(model.spendCents).toBe(50000);
@@ -64,15 +73,18 @@ describe("cashFlowSankey", () => {
   });
 
   it("adds a From savings source when spending exceeds income", () => {
-    const model = cashFlowSankey([
-      row({
-        derivedFlow: "income",
-        description: "PAYROLL",
-        amountCents: 20000,
-        derivedCategory: null,
-      }),
-      row({ derivedCategory: "Rent & Housing", amountCents: -50000 }),
-    ]);
+    const model = cashFlowSankey(
+      [
+        row({
+          derivedFlow: "income",
+          description: "PAYROLL",
+          amountCents: 20000,
+          derivedCategory: null,
+        }),
+        row({ derivedCategory: "Rent & Housing", amountCents: -50000 }),
+      ],
+      byCategory,
+    );
 
     expect(model.netCents).toBe(-30000);
     const fromSavings = model.nodes.find((node) => node.id === SANKEY_FROM_SAVINGS);
@@ -85,26 +97,6 @@ describe("cashFlowSankey", () => {
   });
 
   it("keeps Uncategorized as a sink and drops transfers from spend", () => {
-    const model = cashFlowSankey([
-      row({
-        derivedFlow: "income",
-        description: "PAYROLL",
-        amountCents: 10000,
-        derivedCategory: null,
-      }),
-      row({ derivedCategory: null, sourceCategory: "", amountCents: -3000 }),
-      row({
-        derivedFlow: "internal_transfer",
-        amountCents: -8000,
-        derivedCategory: null,
-      }),
-    ]);
-
-    expect(model.spendCents).toBe(3000);
-    expect(model.nodes.some((node) => node.label === "Uncategorized")).toBe(true);
-  });
-
-  it("splits categories into merchants when asked", () => {
     const model = cashFlowSankey(
       [
         row({
@@ -113,39 +105,145 @@ describe("cashFlowSankey", () => {
           amountCents: 10000,
           derivedCategory: null,
         }),
+        row({ derivedCategory: null, sourceCategory: "", amountCents: -3000 }),
         row({
-          derivedCategory: "Groceries",
-          description: "WALMART",
-          amountCents: -4000,
+          derivedFlow: "internal_transfer",
+          amountCents: -8000,
+          derivedCategory: null,
         }),
-        row({ derivedCategory: "Groceries", description: "ALDI", amountCents: -2000 }),
       ],
-      "category-merchant",
+      byCategory,
     );
 
-    const grocerySinks = model.nodes.filter(
-      (node) => node.stage === "sink" && node.id.startsWith("merchant:"),
-    );
-    expect(grocerySinks).toHaveLength(2);
+    expect(model.spendCents).toBe(3000);
+    expect(model.nodes.some((node) => node.label === "Uncategorized")).toBe(true);
   });
 });
 
-describe("sankeyNodeDrill", () => {
-  it("maps node ids back to a drill key", () => {
-    expect(sankeyNodeDrill(SANKEY_SPENT)).toEqual({
-      kind: "sankey",
-      id: "spent",
-      role: "spent",
-    });
-    expect(sankeyNodeDrill("sink:Groceries")).toEqual({
-      kind: "sankey",
-      id: "Groceries",
-      role: "category",
-    });
-    expect(sankeyNodeDrill("source:PAYROLL")).toEqual({
-      kind: "sankey",
-      id: "PAYROLL",
-      role: "source",
-    });
+describe("budgetGroupSankey", () => {
+  const groups = [
+    { id: "housing", name: "Housing", parentGroupId: null },
+    { id: "utilities", name: "Utilities", parentGroupId: "housing" },
+    { id: "fun", name: "Discretionary", parentGroupId: null },
+  ];
+
+  function envelopeRow(
+    overrides: Partial<BudgetGroupSankeyRow> = {},
+  ): BudgetGroupSankeyRow {
+    return {
+      ...row({ derivedCategory: null }),
+      budgetCategoryName: "Groceries",
+      budgetCategoryId: "groceries",
+      groupId: null,
+      envelopeKind: "spending",
+      ...overrides,
+    };
+  }
+
+  function sinks(model: ReturnType<typeof budgetGroupSankey>) {
+    return Object.fromEntries(
+      model.nodes
+        .filter((node) => node.stage === "sink")
+        .map((node) => [node.label, node.cents]),
+    );
+  }
+
+  it("rolls envelopes up to their top-level group", () => {
+    const model = budgetGroupSankey(
+      [
+        envelopeRow({
+          budgetCategoryName: "Rent",
+          budgetCategoryId: "rent",
+          groupId: "housing",
+          amountCents: -150000,
+        }),
+        envelopeRow({
+          budgetCategoryName: "Electricity",
+          budgetCategoryId: "power",
+          groupId: "utilities",
+          amountCents: -9000,
+        }),
+        envelopeRow({
+          budgetCategoryName: "Eating Out",
+          budgetCategoryId: "eating",
+          groupId: "fun",
+          amountCents: -4000,
+        }),
+        envelopeRow({
+          budgetCategoryName: "Clothes",
+          budgetCategoryId: "clothes",
+          groupId: "fun",
+          amountCents: -2500,
+        }),
+      ],
+      groups,
+    );
+
+    // Utilities nests under Housing, so it is not a node of its own.
+    expect(sinks(model)).toEqual({ Housing: 159000, Discretionary: 6500 });
+  });
+
+  it("lets an ungrouped envelope stand as its own node on either side", () => {
+    const model = budgetGroupSankey(
+      [
+        envelopeRow({
+          derivedFlow: "income",
+          description: "ACME PAYROLL",
+          amountCents: 300000,
+          budgetCategoryName: "Payroll",
+          budgetCategoryId: "payroll",
+          envelopeKind: "income",
+        }),
+        envelopeRow({
+          derivedFlow: "income",
+          description: "VA TREAS 310",
+          amountCents: 18000,
+          budgetCategoryName: "VA",
+          budgetCategoryId: "va",
+          envelopeKind: "income",
+        }),
+        envelopeRow({ amountCents: -6000 }),
+      ],
+      groups,
+    );
+
+    const sources = model.nodes
+      .filter((node) => node.stage === "source")
+      .map((node) => node.label);
+    expect(sources).toEqual(["Payroll", "VA"]);
+    expect(sinks(model)).toEqual({ Groceries: 6000 });
+  });
+
+  it("counts uncategorized money crossing the boundary under its own node", () => {
+    const model = budgetGroupSankey(
+      [
+        envelopeRow({
+          derivedFlow: "external_transfer",
+          description: "COINBASE SELL",
+          amountCents: 50000,
+          budgetCategoryName: null,
+          budgetCategoryId: null,
+        }),
+        envelopeRow({
+          derivedFlow: "external_transfer",
+          description: "TRANSFER TO CREDIT UNION",
+          amountCents: -20000,
+          budgetCategoryName: null,
+          budgetCategoryId: null,
+        }),
+        envelopeRow({
+          amountCents: -1000,
+          budgetCategoryName: null,
+          budgetCategoryId: null,
+        }),
+      ],
+      groups,
+    );
+
+    expect(model.incomeCents).toBe(50000);
+    expect(model.nodes.find((node) => node.stage === "source")?.label).toBe(
+      "Transfers in",
+    );
+    expect(sinks(model)).toEqual({ "Transfers out": 20000, Uncategorized: 1000 });
   });
 });

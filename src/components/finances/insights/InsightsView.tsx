@@ -27,9 +27,9 @@ import {
   type EnvelopeReportRow,
   type ReportEnvelope,
 } from "@/lib/finances/reports";
-import { effectiveFlow, rowsInRange, type DateRange } from "@/lib/finances/analytics";
+import { rowsInRange, type DateRange } from "@/lib/finances/analytics";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
-import { cashFlowSankey } from "@/lib/finances/sankeyFlow";
+import { budgetGroupSankey } from "@/lib/finances/sankeyFlow";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
 import type { StatementListRow } from "@/lib/finances/types";
 import type { BudgetData } from "@/lib/finances/budget/queries";
@@ -613,22 +613,12 @@ export function InsightsView({
           >
             <summary>Cash-flow diagram</summary>
             <p className="py-2 text-ink-muted">
-              All sources join the same pool. This does not attribute purchases to a
+              By top-level budget group; an envelope outside any group stands alone. All
+              sources join the same pool. This does not attribute purchases to a
               particular income source.
             </p>
             <SankeyChart
-              model={cashFlowSankey(
-                rowsInRange(filtered, range).map((row) => ({
-                  ...row,
-                  flowOverride:
-                    effectiveFlow(row) === "external_transfer"
-                      ? row.amountCents > 0
-                        ? "income"
-                        : "spend"
-                      : row.flowOverride,
-                })),
-                "category",
-              )}
+              model={budgetGroupSankey(rowsInRange(filtered, range), data.groups)}
             />
           </details>
           <details
