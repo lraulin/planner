@@ -76,6 +76,10 @@ development. It connects lazily, so importing `@/db` stays harmless.
 - A `pool.on("error")` listener that logs without credentials. Measured: an idle client dying
   with no listener is an `uncaughtException`; with one, the pool drops it and the next query
   reconnects.
+- A listener on each client `connect()` hands out, for as long as it is checked out. pg-pool
+  detaches the pool's listener on checkout, so a transaction's connection dropping _between_
+  statements was an `uncaughtException` too (found by the dropped-connection test, which
+  crashed the run). The next statement fails through Drizzle and release discards the client.
 - No custom type parsers. `pg.defaults.parseInputDatesAsUTC = true`, the one setting beyond
   parity: pg accepts a raw `Date` parameter (postgres.js threw) and formats it in process-local
   time, which turned `03:30Z` into `2026-10-11` under New York. UTC matches the UTC-noon
@@ -146,26 +150,28 @@ NULL inside `text[]` is `null` rather than postgres.js's `"NULL"`.
 
 ## Acceptance criteria
 
-- [ ] `postgres` is not in `package.json` and nothing imports it or `drizzle-orm/postgres-js`.
-- [ ] `npm run perf:routes` reports no describe trips on any route.
-- [ ] Every route's statement count equals its recorded baseline exactly, and its longest chain
+- [x] `postgres` is not in `package.json` and nothing imports it or `drizzle-orm/postgres-js`.
+- [x] `npm run perf:routes` reports no describe trips on any route.
+- [x] Every route's statement count equals its recorded baseline exactly, and its longest chain
       is no higher than the larger of its two baseline runs (identical runs differ by 1). The
       floor falls (4–5 under the dev bypass, about 7 signed in, today). Before and after numbers
-      are in **As built**.
-- [ ] `npm test` passes with the integration suite **not skipped**, and with pg's
-      queued-query warning treated as a failure.
-- [ ] `npm run smoke` passes against a dev server on the new driver.
-- [ ] A connect timeout and a dropped connection, in a query and in a transaction, both return
+      are in **As built**, against a baseline re-measured on master `28822a2a` (row 5).
+- [x] `npm test` passes with the integration suite **not skipped**, and with pg's
+      queued-query warning treated as a failure (stricter than the warning: row 3).
+- [x] `npm run smoke` passes against a dev server on the new driver.
+- [x] A connect timeout and a dropped connection, in a query and in a transaction, both return
       the generic message at the client boundary and log the original.
-- [ ] A real unique and a real CHECK violation through `db` satisfy `isUniqueViolation` /
+- [x] A real unique and a real CHECK violation through `db` satisfy `isUniqueViolation` /
       `isCheckViolation`.
-- [ ] One integration test pins the JS type of each raw selection kind the app relies on.
-- [ ] Each raw `.rows` reader in D3 is exercised by an integration test.
-- [ ] `npm run db:migrate` reports the `pg` driver locally and in CI.
-- [ ] A preview deployment renders signed-in pages against Neon's pooled endpoint.
+- [x] One integration test pins the JS type of each raw selection kind the app relies on.
+- [x] Each raw `.rows` reader in D3 is exercised by an integration test.
+- [x] `npm run db:migrate` reports the `pg` driver locally and in CI.
+- [ ] A preview deployment renders signed-in pages against Neon's pooled endpoint. _Partly
+      done 2026-10-22: the preview built and its public pages queried Neon through pg (see
+      **As built**); signed-in pages need Lee's login._
 - [ ] Reconnect cost against the pooled endpoint is measured and the idle timeout confirmed or
-      changed, with the number recorded.
-- [ ] `security.md`, `migrations.md`, `read-latency.md`, `tech-stack.md` and `.env.example`
+      changed, with the number recorded. _Needs Lee: `scripts/pg-reconnect-cost.mjs` (row 6)._
+- [x] `security.md`, `migrations.md`, `read-latency.md`, `tech-stack.md` and `.env.example`
       describe the new driver.
 
 ## Changes from original plan
@@ -173,10 +179,14 @@ NULL inside `text[]` is `null` rather than postgres.js's `"NULL"`.
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                                                                                                    | Why                                                                                                                                                                                                                                                                                                                     |
-| --- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Acceptance compares statement counts exactly and chain length with a tolerance of 1                       | Task 2 ran the measurement twice: statement counts were identical, chain lengths differed by 1 on 11 of 44 routes. "No higher than baseline" would fail on noise alone.                                                                                                                                                 |
-| 2   | D5 is enforced by serialising a transaction's client in `src/db/pool.ts`, not by a helper at each fan-out | Measured the sites first: ~3,500 collisions, a dozen source files, many chained off shared promises. One driver constraint with one place to hold it; per-site fixes would be the same patch repeated and would have to be remembered by every future caller. The invariant and the acceptance criterion are unchanged. |
+| #   | Change                                                                                                                       | Why                                                                                                                                                                                                                                                                                                                     |
+| --- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Acceptance compares statement counts exactly and chain length with a tolerance of 1                                          | Task 2 ran the measurement twice: statement counts were identical, chain lengths differed by 1 on 11 of 44 routes. "No higher than baseline" would fail on noise alone.                                                                                                                                                 |
+| 2   | D5 is enforced by serialising a transaction's client in `src/db/pool.ts`, not by a helper at each fan-out                    | Measured the sites first: ~3,500 collisions, a dozen source files, many chained off shared promises. One driver constraint with one place to hold it; per-site fixes would be the same patch repeated and would have to be remembered by every future caller. The invariant and the acceptance criterion are unchanged. |
+| 3   | The suite's tripwire checks each pg client's busy state on every `query()`, instead of listening for pg's deprecation notice | pg prints the notice only once a statement is already _waiting_ behind the running one, and `util.deprecate` prints it once per process. A test overlapping two queries on a bare `pg.Client` passed under the listener. The new check fails on any overlap, which is what pg 9 refuses.                                |
+| 4   | D2 gains a listener on each checked-out client                                                                               | Not in the shaped design: pg-pool leaves a checked-out client with no `error` listener, so a transaction's connection dropping between statements crashed the process. Found by Task 6's dropped-connection test.                                                                                                       |
+| 5   | Acceptance compares against a baseline re-measured on master `28822a2a`, not Task 2's `5f665924`                             | Master moved 69 commits (narrowed finance reads, outline payload packing) before the swap landed, so Task 2's statement counts no longer described the page code. Both baselines are kept: Task 2's in `shape.md`, the new one in **As built**.                                                                         |
+| 6   | Task 8's reconnect cost is measured by timing (`scripts/pg-reconnect-cost.mjs`), not by a flight count in the proxy          | A ratio of connect-plus-query to a warm query needs no proxy in front of Neon and includes SCRAM's CPU time, which a reconnect really spends.                                                                                                                                                                           |
 
 ## Task 1: Save spec documentation
 
@@ -219,10 +229,21 @@ Done 2026-10-12 as one change in `pool.ts` rather than call-site fixes; see D5 a
 The type-pin test, the real constraint violations, the transaction connect-failure redaction,
 and coverage for any D3 reader that lacks it.
 
+Done 2026-10-22. The constraint violations were already in `driverErrors.integration.test.ts`
+(Task 3). `src/db/pool.integration.test.ts` adds a dropped connection, in a query and in a
+transaction, through a TCP relay that is cut, and a listener-count check across checkouts;
+`src/db/rawTypes.integration.test.ts` pins the types and calls the ingestion watermark, the
+one D3 reader only import paths reached. The other readers were already covered
+(`crossUserReads`, `path`, `notes/mutations`, and every suite that calls `loadOutline`).
+
 ## Task 7: Verify locally
 
 `npm test` (check for the skip warning), dev server + `npm run smoke`, `npm run db:migrate`,
 then `npm run perf:routes` again and compare with Task 2.
+
+Done 2026-10-22 after rebasing onto master `28822a2a`: smoke 64 of 64 and `db:migrate`
+printing `Using 'pg' driver` locally; CI run `39834784936` printed the same and passed 4,692
+unit and 1,301 integration tests, none skipped. Perf is in **As built**.
 
 ## Task 8: Verify against Neon, then ship
 
@@ -234,7 +255,21 @@ first `drizzle-kit migrate` over pg against Neon; if it fails the build fails an
 deploy stays up. **Lee:** change `sslmode=require` to `sslmode=verify-full` in Vercel's
 `DATABASE_URL` and `DIRECT_DATABASE_URL`.
 
+Status 2026-10-22: preview built and its public pages reached Neon; shipped to master, so the
+production deploy runs the first pg migration. Left for Lee, which keeps this spec active:
+
+1. Sign in on production (or the preview) and load a few signed-in pages — outline, register,
+   budget — to close the preview criterion. A failure would show as a 500 or as
+   "Something went wrong." with `[db]` lines in the Vercel function log.
+2. Run `DATABASE_URL='<Neon pooled string>' node scripts/pg-reconnect-cost.mjs` and record the
+   result in **As built**. Keep `idleTimeoutMillis` at 60 s if a reconnect costs about five
+   round trips or more; lower it toward Vercel's 5 s only if it costs one or two.
+3. The `sslmode` change above. Until then pg prints a one-time SSL warning; behaviour is the
+   same.
+
 ## Task 9: Documents
+
+Done 2026-10-22.
 
 `agent-os/standards/development/security.md` (the tell), `database/migrations.md`
 (Connections), `database/read-latency.md` (the "counts twice" note and the floors go; reads go
@@ -252,6 +287,82 @@ out together on the pool but one at a time on a transaction),
 > While this spec is **active**, a material change to requirements, design or scope (including
 > from feedback on what was implemented) updates the relevant section and adds a row to
 > **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+
+## As built
+
+### Round trips per route (Tasks 2 and 7)
+
+`npm run perf:routes` against `npm run dev:latency`, 10 ms each way, dev login bypass as the
+seeded `test@example.com`, both drivers against the same local database on 2026-10-22, two
+runs each. postgres.js is master `28822a2a`; node-postgres is that plus this spec's commits.
+The machine was under load (load average 6–12), which is the noise the tolerance of 1 is for.
+
+- **Describes:** 326 of 326 queries on postgres.js, **0 of 326** on node-postgres.
+- **Statements:** identical on every route (326 in total), so nothing was added or dropped.
+- **Longest chain:** lower on every route, never higher than either baseline run. The mean
+  across routes went from 5.5 to 2.4. The floor under the dev bypass went from 4–5 to 2
+  (`/chooser`, `/finances/activity` and `/plan/projects` read 1 in a run, which is noise).
+  Signed in, better-auth's session and user lookups go from 4 trips to 2, so a signed-in page's
+  floor is about 4, not 7.
+- **What that is worth in production:** about 3 trips off each signed-in page, ~13–15 ms at
+  the 4.5 ms production round trip, and more on the finance pages (`/finances/bills` 9 → 3–4,
+  `/finances/scenarios` 9–10 → 4–5: ~25 ms).
+
+| Route                    | Queries | postgres.js | node-postgres |
+| ------------------------ | ------- | ----------- | ------------- |
+| `/chooser`               | 4       | 4, 4        | 1, 2          |
+| `/finances/accounts`     | 13      | 8, 7        | 3, 3          |
+| `/finances/activity`     | 3       | 4, 5        | 1, 1          |
+| `/finances/bills`        | 26      | 9, 9        | 4, 3          |
+| `/finances/budget`       | 24      | 8, 9        | 4, 4          |
+| `/finances/insights`     | 21      | 7, 7        | 3, 2          |
+| `/finances/orders`       | 10      | 5, 4        | 2, 2          |
+| `/finances/payees`       | 8       | 5, 5        | 2, 3          |
+| `/finances/register`     | 17      | 6, 7        | 3, 3          |
+| `/finances/scenarios`    | 17      | 10, 9       | 4, 5          |
+| `/finances/statements`   | 5       | 6, 7        | 3, 3          |
+| `/finances/supplies`     | 6       | 5, 5        | 2, 2          |
+| `/find`                  | 2       | 5, 5        | 2, 3          |
+| `/fitness/exercises`     | 9       | 5, 4        | 2, 2          |
+| `/fitness/exercises/new` | 9       | 4, 5        | 2, 2          |
+| `/fitness/log`           | 9       | 5, 5        | 3, 2          |
+| `/fitness/sessions`      | 9       | 5, 5        | 2, 2          |
+| `/library/contacts`      | 6       | 5, 5        | 2, 2          |
+| `/library/houses`        | 3       | 5, 5        | 2, 2          |
+| `/library/jobs`          | 3       | 5, 5        | 2, 2          |
+| `/library/residences`    | 3       | 5, 5        | 2, 2          |
+| `/library/resources`     | 7       | 5, 5        | 2, 2          |
+| `/library/timeline`      | 5       | 5, 5        | 2, 2          |
+| `/login`                 | 2       | 5, 5        | 2, 2          |
+| `/metrics`               | 5       | 5, 5        | 2, 2          |
+| `/notes/grid`            | 6       | 7, 7        | 5, 3          |
+| `/notes/journal`         | 3       | 5, 5        | 2, 2          |
+| `/oauth/authorize`       | 2       | 5, 5        | 2, 3          |
+| `/organize`              | 3       | 5, 5        | 2, 2          |
+| `/plan/goals`            | 3       | 5, 5        | 2, 2          |
+| `/plan/outline`          | 3       | 5, 4        | 2, 2          |
+| `/plan/overview`         | 4       | 5, 5        | 3, 3          |
+| `/plan/projects`         | 3       | 3, 4        | 1, 2          |
+| `/plan/result-areas`     | 3       | 4, 4        | 2, 2          |
+| `/plan/tasks`            | 5       | 5, 5        | 2, 2          |
+| `/plan/wishes`           | 5       | 5, 5        | 2, 2          |
+| `/schedule/agenda`       | 7       | 7, 7        | 3, 3          |
+| `/schedule/calendar`     | 7       | 7, 7        | 3, 3          |
+| `/schedule/day`          | 9       | 7, 6        | 3, 3          |
+| `/schedule/plan`         | 15      | 6, 6        | 3, 3          |
+| `/schedule/time-charts`  | 3       | 4, 5        | 2, 2          |
+| `/schedule/week-plan`    | 4       | 5, 5        | 2, 2          |
+| `/settings`              | 13      | 7, 7        | 3, 3          |
+| `/signup`                | 2       | 5, 5        | 2, 2          |
+
+### Against Neon (Task 8)
+
+- **Preview** `planner-j756m1vnw-lee-5344.vercel.app` (branch `claude/musing-williamson-5ea114`,
+  2026-10-22) built and serves `/login` and `/signup`. `/signup?invite=<unknown token>` runs one
+  read-only invite lookup through the pool and answered "invalid or has been revoked" (not a 500) six times: about 1.0 s for the first request, a cold instance connecting, then 0.08–0.14 s.
+  Signed-in pages redirect to `/login` and were not loaded: that needs Lee's login.
+- **Reconnect cost:** not measured; it needs the pooled connection string. Idle timeout stays
+  at 60 s until it is.
 
 ## Follow-ups (new work — not amendments to this spec)
 
