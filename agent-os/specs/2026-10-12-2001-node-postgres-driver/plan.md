@@ -359,8 +359,11 @@ The machine was under load (load average 6–12), which is the noise the toleran
 
 - **Preview** `planner-j756m1vnw-lee-5344.vercel.app` (branch `claude/musing-williamson-5ea114`,
   2026-10-22) built and serves `/login` and `/signup`. `/signup?invite=<unknown token>` runs one
-  read-only invite lookup through the pool and answered "invalid or has been revoked" (not a 500) six times: about 1.0 s for the first request, a cold instance connecting, then 0.08–0.14 s.
+  read-only invite lookup through the pool and answered "invalid or has been revoked" (not a 500) six times: about 1.0 s for the first request, a cold instance connecting, then
+  0.08–0.14 s.
   Signed-in pages redirect to `/login` and were not loaded: that needs Lee's login.
+- **Production** deployed `f1bf90a5` on 2026-10-22: the build's `drizzle-kit migrate` ran over
+  pg against Neon without failing the build, and the same invite probe answered in 0.13–0.47 s.
 - **Reconnect cost:** not measured; it needs the pooled connection string. Idle timeout stays
   at 60 s until it is.
 
