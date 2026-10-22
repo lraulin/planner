@@ -142,7 +142,7 @@ describe("a database that cannot be reached", () => {
 
   it("fails a transaction's connect with an error the redaction recognises", async () => {
     const db = await deadDb();
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const error = await db
       .transaction(() => Promise.resolve("unreachable"))
@@ -154,11 +154,12 @@ describe("a database that cannot be reached", () => {
     expect(((error as Error).cause as Error).message).toMatch(/timeout/i);
     expect(isInternalError(error)).toBe(true);
     expect(safeErrorMessage(error, "test")).toBe(GENERIC_ERROR_MESSAGE);
+    expect(log).toHaveBeenCalledWith("[test]", error);
   });
 
   it("fails a plain query through the same redaction", async () => {
     const db = await deadDb();
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const error = await db
       .execute(sql`select ${"a bank description"} as x`)
@@ -168,5 +169,116 @@ describe("a database that cannot be reached", () => {
     // The statement and its parameters are in the thrown message; they are not allowed out.
     expect((error as Error).message).toContain("a bank description");
     expect(safeErrorMessage(error, "test")).toBe(GENERIC_ERROR_MESSAGE);
+    expect(log).toHaveBeenCalledWith("[test]", error);
+  });
+});
+
+/** True when nothing in the first few links of the chain carries a `code`. */
+function codeless(error: unknown): boolean {
+  let current = error;
+  for (let depth = 0; depth < 4 && current instanceof Error; depth++) {
+    if ("code" in current) return false;
+    current = current.cause;
+  }
+  return true;
+}
+
+describeDb("a connection that drops mid-statement", () => {
+  /**
+   * A TCP relay to the real database that can be cut. Destroying both halves is what a
+   * pooler restart or a NAT timeout looks like from the client: the socket closes with no
+   * Postgres error message, so pg reports "Connection terminated unexpectedly" and no `code`.
+   */
+  async function severableDb() {
+    const target = new URL(process.env.DATABASE_URL ?? "");
+    const live: net.Socket[] = [];
+    const server = net.createServer((inbound) => {
+      const outbound = net.connect(Number(target.port || 5432), target.hostname);
+      for (const socket of [inbound, outbound]) {
+        socket.on("error", () => {});
+        live.push(socket);
+        sockets.push(socket);
+      }
+      inbound.pipe(outbound).pipe(inbound);
+    });
+    servers.push(server);
+    await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+
+    const relayed = new URL(target);
+    relayed.hostname = "127.0.0.1";
+    relayed.port = String((server.address() as net.AddressInfo).port);
+    const pool = createPool({ connectionString: relayed.toString(), max: 2 });
+    pools.push(pool);
+    return {
+      db: drizzle(pool),
+      sever: () => {
+        for (const socket of live.splice(0)) socket.destroy();
+      },
+    };
+  }
+
+  it("redacts a query whose connection is cut while it runs", async () => {
+    const { db, sever } = await severableDb();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Warm the pool so the cut lands on a running statement, not on the connect.
+    await db.execute(sql`select 1`);
+
+    const pending = db
+      .execute(sql`select pg_sleep(5), ${"a bank description"} as x`)
+      .catch((e: unknown) => e);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    sever();
+    const error = await pending;
+
+    // The shape that made `code` alone an unsafe tell.
+    expect(codeless(error)).toBe(true);
+    expect(isInternalError(error)).toBe(true);
+    expect(safeErrorMessage(error, "test")).toBe(GENERIC_ERROR_MESSAGE);
+    expect(log).toHaveBeenCalledWith("[test]", error);
+  });
+
+  it("redacts a transaction whose connection is cut between statements", async () => {
+    const { db, sever } = await severableDb();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const error = await db
+      .transaction(async (tx) => {
+        await tx.execute(sql`select 1`);
+        sever();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await tx.execute(sql`select ${"a bank description"} as x`);
+      })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(codeless(error)).toBe(true);
+    expect(isInternalError(error)).toBe(true);
+    expect(safeErrorMessage(error, "test")).toBe(GENERIC_ERROR_MESSAGE);
+    expect(log).toHaveBeenCalledWith("[test]", error);
+    // The drop itself arrived while the client was checked out and idle. Unheard, it is an
+    // uncaught exception, which Vitest reports as a failed run.
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining("checked-out client dropped"),
+    );
+  });
+});
+
+describeDb("a pooled client checked out again and again", () => {
+  it("carries the same error listeners after a dozen transactions as after one", async () => {
+    const pool = createPool({ connectionString: process.env.DATABASE_URL, max: 1 });
+    pools.push(pool);
+    const db = drizzle(pool);
+
+    const listenersWhileCheckedOut = async () => {
+      const client = await pool.connect();
+      const count = client.listenerCount("error");
+      client.release();
+      return count;
+    };
+
+    const first = await listenersWhileCheckedOut();
+    for (let i = 0; i < 12; i++)
+      await db.transaction((tx) => tx.execute(sql`select 1`));
+    expect(await listenersWhileCheckedOut()).toBe(first);
   });
 });

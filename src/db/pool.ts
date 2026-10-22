@@ -87,22 +87,53 @@ function serialise(client: pg.PoolClient): pg.PoolClient {
 }
 
 /**
+ * Listen for a checked-out client losing its connection, for as long as it is checked out.
+ *
+ * The pool's `error` listener only covers clients sitting idle in it; pg-pool detaches it on
+ * checkout. A transaction's connection that drops *between* statements — while the callback
+ * awaits something other than the database — is then an `error` event with no listener, an
+ * `uncaughtException` that takes the process down. Measured, not assumed: the
+ * dropped-connection test in `pool.integration.test.ts` crashed the run before this existed.
+ *
+ * The statement that follows still fails, through Drizzle, with "Client has encountered a
+ * connection error and is not queryable", and that is what reaches the caller and the
+ * redaction. On release pg-pool sees the client is no longer queryable and discards it.
+ */
+function guardWhileCheckedOut(client: pg.PoolClient): pg.PoolClient {
+  const onError = (error: Error) => {
+    console.error(`[db] checked-out client dropped: ${error.message}`);
+  };
+  client.on("error", onError);
+
+  // Detach on release, or every checkout would add another listener to a pooled client.
+  const release = client.release.bind(client);
+  client.release = (error?: Error | boolean) => {
+    client.removeListener("error", onError);
+    release(error);
+  };
+  return client;
+}
+
+/**
  * `pg.Pool` with its promise-form `connect()` — the call `db.transaction` makes — returning a
- * serialised client, and failing recognisably.
+ * serialised client that cannot crash the process, and failing recognisably.
  *
  * Only the promise form is touched. `pool.query()` checks a client out through the callback
- * form for one statement and reports through its own promise, which Drizzle already wraps as
- * a query error; wrapping that path as well would bury the driver's own `code` under a
- * second layer.
+ * form for one statement, listens for its errors itself, and reports through its own
+ * promise, which Drizzle already wraps as a query error; wrapping that path as well would
+ * bury the driver's own `code` under a second layer.
  */
 class AppPool extends pg.Pool {
   override connect(): Promise<pg.PoolClient>;
   override connect(callback: NonNullable<ConnectCallback>): void;
   override connect(callback?: ConnectCallback): Promise<pg.PoolClient> | void {
     if (callback) return super.connect(callback);
-    return super.connect().then(serialise, (cause: unknown) => {
-      throw new DatabaseConnectionError(cause);
-    });
+    return super.connect().then(
+      (client) => serialise(guardWhileCheckedOut(client)),
+      (cause: unknown) => {
+        throw new DatabaseConnectionError(cause);
+      },
+    );
   }
 }
 
