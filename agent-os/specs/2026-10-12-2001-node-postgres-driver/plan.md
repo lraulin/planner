@@ -1,6 +1,6 @@
 # Node-postgres driver
 
-**Status: active**  
+**Status: frozen / complete** (2026-10-22)  
 Spec folder: `agent-os/specs/2026-10-12-2001-node-postgres-driver/`
 
 ## Spec relationships
@@ -166,9 +166,9 @@ NULL inside `text[]` is `null` rather than postgres.js's `"NULL"`.
 - [x] One integration test pins the JS type of each raw selection kind the app relies on.
 - [x] Each raw `.rows` reader in D3 is exercised by an integration test.
 - [x] `npm run db:migrate` reports the `pg` driver locally and in CI.
-- [ ] A preview deployment renders signed-in pages against Neon's pooled endpoint. _Partly
-      done 2026-10-22: the preview built and its public pages queried Neon through pg (see
-      **As built**); signed-in pages need Lee's login._
+- [x] A preview deployment renders signed-in pages against Neon's pooled endpoint. _The
+      preview's public pages queried Neon; signed-in pages were confirmed by Lee on production,
+      on node-postgres since `f1bf90a5`, 2026-10-22._
 - [x] Reconnect cost against the pooled endpoint is measured and the idle timeout confirmed or
       changed, with the number recorded. _60 s confirmed: 8.6 trips pooled, 9.5 direct._
 - [x] `security.md`, `migrations.md`, `read-latency.md`, `tech-stack.md` and `.env.example`
@@ -256,7 +256,8 @@ deploy stays up. **Lee:** change `sslmode=require` to `sslmode=verify-full` in V
 `DATABASE_URL` and `DIRECT_DATABASE_URL`.
 
 Status 2026-10-22: preview built and its public pages reached Neon; shipped to master, so the
-production deploy runs the first pg migration. Left for Lee, which keeps this spec active:
+production deploy ran the first pg migration. Left for Lee at that point, all since closed
+except the `sslmode` edit, which changes nothing but the warning:
 
 1. Sign in on production (or the preview) and load a few signed-in pages — outline, register,
    budget — to close the preview criterion. A failure would show as a 500 or as
@@ -283,6 +284,8 @@ out together on the pool but one at a time on a transaction),
 - Complete **Changes from original plan**; mark `plan.md` and `shape.md`
   **Status: frozen / complete** (date) and pin the standards commit.
 - Add a line under daily-use performance in `agent-os/product/roadmap.md`.
+
+Done 2026-10-22: every criterion checked, standards pinned at `dff043d6`, roadmap line added.
 
 > While this spec is **active**, a material change to requirements, design or scope (including
 > from feedback on what was implemented) updates the relevant section and adds a row to
@@ -377,8 +380,13 @@ The machine was under load (load average 6–12), which is the noise the toleran
 - **Idle timeout: 60 s, confirmed.** Vercel's 5 s would pay ~40 ms after every pause longer
   than five seconds, more than the ~15 ms a page saves.
 
-## Follow-ups (new work — not amendments to this spec)
+## Follow-ups (new work — not amendments to this frozen spec)
 
 - Collapse better-auth's session → user lookup into one query.
 - Raise `max` if any route's widest wave exceeds 10.
 - Delete `scripts/ingest-identity-replay.ts` if the Sep 10–13 replay is no longer needed.
+- Vercel: `sslmode=require` → `sslmode=verify-full` in `DATABASE_URL` and
+  `DIRECT_DATABASE_URL` (Lee; silences pg's SSL warning, same behaviour).
+- pg 8.23 can pipeline a client (`pipeline: true`). A transaction's `Promise.all` could then be
+  one trip instead of one per statement; measure whether any transaction is on a hot path
+  first.

@@ -1471,6 +1471,15 @@ period)` so money already spent stops being held twice and only going over bites
   layout still costs one request a load), Track-as-bill draft and Scenarios (full reads
   behind a dialog and a secondary page), and windowing Insights.
 
+- **One round trip per query** (daily-use performance, 2026-10-22) —
+  `specs/2026-10-12-2001-node-postgres-driver`. postgres.js gave way to node-postgres under
+  Drizzle, so a parameterised query no longer spends a trip describing itself: 0 of 326
+  queries do, against 326 of 326 before, and the mean longest chain per page fell from 5.5 to
+  2.4 trips (about 15 ms a signed-in page in production, 25 ms on the heaviest finance pages).
+  A transaction runs its statements in order on one client, and a dropped connection mid-
+  transaction no longer crashes the function. Idle timeout 60 s, confirmed against Neon's
+  pooler (a reconnect costs ~8.6 round trips).
+
 ---
 
 ## Phase order (dependency sketch)

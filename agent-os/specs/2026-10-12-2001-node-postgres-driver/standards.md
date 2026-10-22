@@ -2,6 +2,7 @@
 
 Applied as of standards commit `5f665924`. References, not copies — see AGENTS.md.
 `git show 5f665924:agent-os/standards/<path>` recovers what applied.
+Pinned at freeze (2026-10-22): `dff043d6`, which includes this spec's own Task 9 edits.
 
 - `agent-os/standards/database/migrations.md` — migrations run through drizzle-kit over
   `DIRECT_DATABASE_URL` during the production build; D7 changes which driver drizzle-kit picks

@@ -1,6 +1,7 @@
 # Node-postgres driver — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-10-22). As built, the re-measured baseline
+and the Neon numbers are in `plan.md`; the Task 2 baseline below is the shaping-time one.
 
 ## Scope
 
