@@ -170,7 +170,8 @@ NULL inside `text[]` is `null` rather than postgres.js's `"NULL"`.
       done 2026-10-22: the preview built and its public pages queried Neon through pg (see
       **As built**); signed-in pages need Lee's login._
 - [ ] Reconnect cost against the pooled endpoint is measured and the idle timeout confirmed or
-      changed, with the number recorded. _Needs Lee: `scripts/pg-reconnect-cost.mjs` (row 6)._
+      changed, with the number recorded. _Timeout confirmed at 60 s on the direct endpoint (9.5
+      trips, **As built**); one run against the `-pooler` string remains._
 - [x] `security.md`, `migrations.md`, `read-latency.md`, `tech-stack.md` and `.env.example`
       describe the new driver.
 
@@ -364,8 +365,15 @@ The machine was under load (load average 6–12), which is the noise the toleran
   Signed-in pages redirect to `/login` and were not loaded: that needs Lee's login.
 - **Production** deployed `f1bf90a5` on 2026-10-22: the build's `drizzle-kit migrate` ran over
   pg against Neon without failing the build, and the same invite probe answered in 0.13–0.47 s.
-- **Reconnect cost:** not measured; it needs the pooled connection string. Idle timeout stays
-  at 60 s until it is.
+- **Reconnect cost**, `scripts/pg-reconnect-cost.mjs` from Lee's Mac, 2026-10-22, 15 runs, against
+  Neon's **direct** endpoint (`ep-…` with no `-pooler`), not the pooled one the app uses: one
+  query on a warm client 9.6 ms, connect plus one query 100.7 ms, so a reconnect costs as much
+  as **9.5 round trips** — nearly double the five-trip estimate, the excess being TLS and
+  SCRAM's hashing. At ~4.5 ms a trip from iad1, about 40 ms per reconnect.
+- **Idle timeout: 60 s, confirmed.** Vercel's 5 s would pay ~40 ms after every pause longer
+  than five seconds, more than the ~15 ms a page saves. The pooled endpoint terminates TLS and
+  authentication at PgBouncer instead, which may cost somewhat differently but not little
+  enough to change this; one run with the `-pooler` string closes the criterion.
 
 ## Follow-ups (new work — not amendments to this spec)
 
