@@ -19,8 +19,8 @@
  * `npm run perf:routes -- finances`.
  *
  * Needs the dev login bypass (`AUTH_DEV_BYPASS=true`), like `npm run smoke`, so the floor it
- * reports is the bypass's: about 4, a user lookup then the settings read. Signed in for real
- * it is about 7, a session read and a user read before the settings.
+ * reports is the bypass's: 2, a user lookup then the settings read. Signed in for real it is
+ * about 4, a session read and a user read before the settings.
  */
 
 import { pageRoutes } from "./page-routes.mjs";
@@ -104,10 +104,12 @@ console.log(
 );
 const describes = rows.reduce((total, row) => total + row.describes, 0);
 const queries = rows.reduce((total, row) => total + row.queries, 0);
+// Always printed: zero is the claim worth seeing. node-postgres binds in the same flight as
+// the parse; postgres.js described every parameterised statement in a trip of its own.
+console.log(`perf: ${describes} of ${queries} queries made a separate describe trip.`);
 if (queries > 0 && describes / queries > 0.5) {
   console.log(
-    `perf: ${describes} of ${queries} queries made a describe trip before binding — the driver` +
-      ` is costing two round trips a query, and "in sequence" counts both.`,
+    `perf: the driver is costing two round trips a query, and "in sequence" counts both.`,
   );
 }
 proxy.close();

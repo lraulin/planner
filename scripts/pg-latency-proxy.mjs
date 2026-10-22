@@ -9,8 +9,8 @@ import net from "node:net";
  * difference can be seen before it ships: `scripts/route-round-trips.mjs` drives it.
  *
  * It counts by reading the frontend half of the wire protocol. A `Sync` or a simple `Query`
- * ends one statement; a `Flush` is the extra trip postgres.js makes to describe an unprepared
- * statement before it will bind its parameters.
+ * ends one statement; a `Flush` is the extra trip postgres.js made to describe an unprepared
+ * statement before it would bind its parameters.
  */
 export function startLatencyProxy({
   listenPort = 5433,
