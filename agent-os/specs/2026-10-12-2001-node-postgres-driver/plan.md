@@ -169,9 +169,8 @@ NULL inside `text[]` is `null` rather than postgres.js's `"NULL"`.
 - [ ] A preview deployment renders signed-in pages against Neon's pooled endpoint. _Partly
       done 2026-10-22: the preview built and its public pages queried Neon through pg (see
       **As built**); signed-in pages need Lee's login._
-- [ ] Reconnect cost against the pooled endpoint is measured and the idle timeout confirmed or
-      changed, with the number recorded. _Timeout confirmed at 60 s on the direct endpoint (9.5
-      trips, **As built**); one run against the `-pooler` string remains._
+- [x] Reconnect cost against the pooled endpoint is measured and the idle timeout confirmed or
+      changed, with the number recorded. _60 s confirmed: 8.6 trips pooled, 9.5 direct._
 - [x] `security.md`, `migrations.md`, `read-latency.md`, `tech-stack.md` and `.env.example`
       describe the new driver.
 
@@ -365,15 +364,18 @@ The machine was under load (load average 6–12), which is the noise the toleran
   Signed-in pages redirect to `/login` and were not loaded: that needs Lee's login.
 - **Production** deployed `f1bf90a5` on 2026-10-22: the build's `drizzle-kit migrate` ran over
   pg against Neon without failing the build, and the same invite probe answered in 0.13–0.47 s.
-- **Reconnect cost**, `scripts/pg-reconnect-cost.mjs` from Lee's Mac, 2026-10-22, 15 runs, against
-  Neon's **direct** endpoint (`ep-…` with no `-pooler`), not the pooled one the app uses: one
-  query on a warm client 9.6 ms, connect plus one query 100.7 ms, so a reconnect costs as much
-  as **9.5 round trips** — nearly double the five-trip estimate, the excess being TLS and
-  SCRAM's hashing. At ~4.5 ms a trip from iad1, about 40 ms per reconnect.
+- **Reconnect cost**, `scripts/pg-reconnect-cost.mjs` from Lee's Mac, 2026-10-22, 15 runs each:
+
+  | Endpoint                 | Warm query | Connect + query | Reconnect costs as much as |
+  | ------------------------ | ---------- | --------------- | -------------------------- |
+  | Pooled (`-pooler`, used) | 10.0 ms    | 96.6 ms         | **8.6 round trips**        |
+  | Direct                   | 9.6 ms     | 100.7 ms        | 9.5 round trips            |
+
+  Nearly double the five-trip estimate; the excess is TLS and SCRAM's hashing, and PgBouncer
+  terminating them barely changes it. At ~4.5 ms a trip from iad1, about 40 ms a reconnect.
+
 - **Idle timeout: 60 s, confirmed.** Vercel's 5 s would pay ~40 ms after every pause longer
-  than five seconds, more than the ~15 ms a page saves. The pooled endpoint terminates TLS and
-  authentication at PgBouncer instead, which may cost somewhat differently but not little
-  enough to change this; one run with the `-pooler` string closes the criterion.
+  than five seconds, more than the ~15 ms a page saves.
 
 ## Follow-ups (new work — not amendments to this spec)
 
