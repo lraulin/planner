@@ -43,18 +43,64 @@ export class DatabaseConnectionError extends Error {
 type ConnectCallback = Parameters<pg.Pool["connect"]>[0];
 
 /**
- * `pg.Pool` with its promise-form `connect()` made recognisable when it fails.
+ * Make a checked-out client run one statement at a time, in the order they were issued.
  *
- * Only the promise form is wrapped. `pool.query()` checks a client out through the callback
- * form and reports through its own promise, which Drizzle already wraps as a query error;
- * wrapping that path as well would bury the driver's own `code` under a second layer.
+ * A transaction is one connection, and a connection runs one statement at a time. Code
+ * written against the shared `db` fans reads out with `Promise.all` — the latency standard
+ * asks for it — and the same functions take a `DbExecutor`, so they fan out on a `tx` too.
+ * postgres.js queued those silently. node-postgres queues them and prints "Calling
+ * client.query() when the client is already executing a query is deprecated", and pg 9
+ * removes the queue.
+ *
+ * Doing the queueing here, at the one place a transaction obtains its client, keeps that
+ * invariant out of every call site: roughly thirty `Promise.all`s sit under functions that
+ * take an executor, and each would otherwise need to know whether it was handed a pool or a
+ * transaction. Nothing is slower than before; the wire order is the same.
+ *
+ * Only the promise form of `query` is serialised, because it is the only form Drizzle uses.
+ * A callback or a `Submittable` (a cursor, a stream) passes through untouched, and still
+ * trips pg's warning if it overlaps — which the integration suite treats as a failure, so a
+ * path that bypasses this is found rather than silently queued.
+ */
+function serialise(client: pg.PoolClient): pg.PoolClient {
+  const query = client.query.bind(client) as (...args: unknown[]) => unknown;
+  let tail: Promise<unknown> = Promise.resolve();
+
+  client.query = ((...args: unknown[]) => {
+    const first = args[0];
+    const promiseForm =
+      !args.some((arg) => typeof arg === "function") &&
+      !(typeof first === "object" && first !== null && "submit" in first);
+    if (!promiseForm) return query(...args);
+
+    const run = tail.then(() => query(...args));
+    // The next statement waits for this one to *finish*, however it finishes: a failed
+    // statement must not wedge the queue, and its rejection belongs to its own caller.
+    tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }) as pg.PoolClient["query"];
+
+  return client;
+}
+
+/**
+ * `pg.Pool` with its promise-form `connect()` — the call `db.transaction` makes — returning a
+ * serialised client, and failing recognisably.
+ *
+ * Only the promise form is touched. `pool.query()` checks a client out through the callback
+ * form for one statement and reports through its own promise, which Drizzle already wraps as
+ * a query error; wrapping that path as well would bury the driver's own `code` under a
+ * second layer.
  */
 class AppPool extends pg.Pool {
   override connect(): Promise<pg.PoolClient>;
   override connect(callback: NonNullable<ConnectCallback>): void;
   override connect(callback?: ConnectCallback): Promise<pg.PoolClient> | void {
     if (callback) return super.connect(callback);
-    return super.connect().catch((cause: unknown) => {
+    return super.connect().then(serialise, (cause: unknown) => {
       throw new DatabaseConnectionError(cause);
     });
   }

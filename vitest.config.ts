@@ -53,6 +53,8 @@ export default defineConfig({
         test: {
           name: "integration",
           include: ["src/**/*.integration.test.ts"],
+          // Turns pg's "query issued on a busy client" deprecation into a test failure.
+          setupFiles: ["src/lib/testing/failOnQueuedQuery.ts"],
           /**
            * Vitest's defaults — 5s a test, 10s a hook — are a budget for the assertion, not
            * for the machine. Every test here opens a real Postgres connection; the slowest

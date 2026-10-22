@@ -104,11 +104,21 @@ likely place is the pool's `connect`, since that is the only unwrapped path.
 
 **D5 — No query is issued on a transaction while another is in flight.** pg 8 warns
 ("…deprecated and will be removed in pg@9.0") and queues them; postgres.js already ran them one
-at a time on the wire, so nothing is lost. Where the executor is statically `tx`, use sequential
-awaits. Where a function takes a `DbExecutor` and fans out (`bankSnapshotApply.ts`,
-`billLastCharge.ts`, others the gate finds), use one shared helper in `src/lib/db/` that runs
-concurrently on the shared `db` and in order on a transaction — the same `executor === db` test
-`oncePerRequest` uses. The integration suite fails on that warning, permanently.
+at a time on the wire, so nothing is lost. **Enforced once, in `src/db/pool.ts`**: the client
+`db.transaction` obtains through `pool.connect()` is serialised, so statements handed to it
+together run one at a time in the order issued. Callers keep writing `Promise.all`, which is
+what the latency standard asks of them on the shared `db`, and nothing at a call site needs to
+know whether its executor is a pool or a transaction. The integration suite fails on pg's
+warning, permanently (`src/lib/testing/failOnQueuedQuery.ts`), as a tripwire for a client
+obtained some other way.
+
+_Superseded design:_ the shaped D5 was a helper in `src/lib/db/` called wherever a function
+taking a `DbExecutor` fans out, concurrent on `db` and sequential on `tx`. Task 5 measured
+the sites first: 3,500 collisions across 25 test files and a dozen source files
+(`budget/queries.ts`, `dashboardQueries.ts`, `billLastCharge.ts`, `bankSnapshotApply.ts`, and
+the loaders they compose), several chained off a shared promise, so a thunk-taking helper
+would have meant restructuring each. Those were one cause, not thirty — a driver constraint
+with a single point where it can be held — so it is held there.
 
 **D6 — Probes and scripts.** `databaseReachable()` and `scripts/postgres-reachable.mjs` keep
 their meaning exactly (an authenticated `select 1` within 2 s; any failure is "no"), on a
@@ -163,9 +173,10 @@ NULL inside `text[]` is `null` rather than postgres.js's `"NULL"`.
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                                                                              | Why                                                                                                                                                                     |
-| --- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Acceptance compares statement counts exactly and chain length with a tolerance of 1 | Task 2 ran the measurement twice: statement counts were identical, chain lengths differed by 1 on 11 of 44 routes. "No higher than baseline" would fail on noise alone. |
+| #   | Change                                                                                                    | Why                                                                                                                                                                                                                                                                                                                     |
+| --- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Acceptance compares statement counts exactly and chain length with a tolerance of 1                       | Task 2 ran the measurement twice: statement counts were identical, chain lengths differed by 1 on 11 of 44 routes. "No higher than baseline" would fail on noise alone.                                                                                                                                                 |
+| 2   | D5 is enforced by serialising a transaction's client in `src/db/pool.ts`, not by a helper at each fan-out | Measured the sites first: ~3,500 collisions, a dozen source files, many chained off shared promises. One driver constraint with one place to hold it; per-site fixes would be the same patch repeated and would have to be remembered by every future caller. The invariant and the acceptance criterion are unchanged. |
 
 ## Task 1: Save spec documentation
 
@@ -199,6 +210,9 @@ derivation in `src/db/executor.ts`.
 ## Task 5: One query at a time on a transaction (D5)
 
 Turn the warning into a suite failure, fix what it finds, leave the gate on.
+
+Done 2026-10-12 as one change in `pool.ts` rather than call-site fixes; see D5 and the row in
+**Changes from original plan**.
 
 ## Task 6: Parity tests
 
