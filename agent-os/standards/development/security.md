@@ -68,7 +68,10 @@ the finance tables is a bank description and an amount. Connection failures can 
 database host.
 
 There are two tells: a `DrizzleQueryError` anywhere in the `cause` chain, and a string
-`code` property. Nothing this codebase throws on purpose is either. The check lives in
+`code` property. Nothing this codebase throws on purpose is either. The one database failure
+Drizzle does not wrap — `pool.connect()` timing out as `db.transaction` starts — is given a
+`code` where it happens, as `DatabaseConnectionError` in `src/db/pool.ts`, so it falls under
+the second tell instead of reading as a sentence we wrote. The check lives in
 `src/lib/security/safeError.ts` and runs at every client boundary: `actionErrorMessage` in
 `src/app/actionResult.ts`, and the import/export route catches. Log the real error before
 replacing it, or the next Neon timeout becomes "Something went wrong." with no way to find

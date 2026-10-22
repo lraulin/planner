@@ -62,7 +62,16 @@ Prints the longest chain of sequential round trips per route. Run it after chang
 or what a page loads. `npm run perf:routes -- finances` measures matching routes only.
 
 - A page should sit at the floor plus one or two waves. Under the dev login bypass the floor
-  is about 4; signed in for real it is about 7 (session, user, settings).
-- Every query currently counts **twice**: postgres.js describes an unprepared statement in a
-  trip of its own before binding. That is the driver, not the loader — `prepare: true` was
-  measured and does not help across a pool.
+  is 2 (user, settings); signed in for real it is about 4 (session, user, settings).
+- One query is one trip. The last line reports how many made a separate describe trip; it
+  should say 0. A non-zero count means the driver is describing statements before binding
+  them, which postgres.js did for every one until October 2026, doubling every chain.
+
+## On a transaction, one at a time
+
+A transaction is one connection, and a connection runs one statement at a time. Keep writing
+`Promise.all` in functions that take a `DbExecutor`: on the shared `db` the reads go out
+together, and on a `tx` the client (serialised in `src/db/pool.ts`) runs them in the order
+issued. Nothing is lost, but nothing is gained either: a `Promise.all` of five on a
+transaction is five trips. Do reads before the transaction when they do not need its
+isolation.

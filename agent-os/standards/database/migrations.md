@@ -54,6 +54,10 @@ Migrations run over **`DIRECT_DATABASE_URL`**, never the pooler
 transaction-mode, where DDL like `ALTER TYPE ... ADD VALUE` fails with an unhelpful error.
 Locally the two are the same string.
 
+drizzle-kit connects with `pg`, the app's driver (it prints `Using 'pg' driver`). Under `pg`,
+`sslmode=require` verifies the server certificate and warns that it is being treated as
+`verify-full`; write `sslmode=verify-full` in a hosted connection string to say what happens.
+
 ## Production
 
 `npm run build` runs `scripts/migrate-on-deploy.mjs` before `next build`, so schema and code

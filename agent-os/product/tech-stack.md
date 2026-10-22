@@ -20,6 +20,18 @@ free; Neon is on its metered Launch plan with a $5/month escalation threshold.
 
 - **PostgreSQL**, accessed through **Drizzle ORM** — chosen over Prisma because the outline
   leans heavily on recursive CTEs, which Drizzle expresses directly.
+- **node-postgres (`pg`)** is the driver, under `drizzle-orm/node-postgres` (since October
+  2026; postgres.js before). It sends Parse, Bind and Execute in one flight, where postgres.js
+  spent a separate round trip describing every parameterised statement — so it halves what a
+  page waits on Neon. Host-neutral: the same driver talks to Docker locally and to Neon, and
+  `@neondatabase/serverless` was declined for tying the runtime to one host.
+- **One pool** (`src/db/pool.ts`, shared from `src/db/index.ts`): `max` 10,
+  `idleTimeoutMillis` 60 s (a reconnect costs about five round trips, so Vercel's suggested
+  5 s would spend more than the driver saves), `connectionTimeoutMillis` 10 s (pg waits
+  forever by default). `attachDatabasePool` from `@vercel/functions` keeps a function
+  instance alive until idle clients close, so none are left open across a suspension; it is a
+  no-op off Vercel. A transaction's client runs its statements one at a time, which pg 9 will
+  require and callers need not know about.
 - **Docker Compose** runs Postgres locally, so development never depends on the hosted
   database.
 
