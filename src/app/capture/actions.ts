@@ -25,8 +25,8 @@ export async function captureAction(input: {
   parentId?: string | null;
   defaults?: CaptureDefaults;
 }): Promise<CaptureResult> {
+  const userId = await getCurrentUserId();
   try {
-    const userId = await getCurrentUserId();
     const items = parseCapture(input.text);
     if (items.length === 0) return { ok: false, error: "Nothing to capture." };
 

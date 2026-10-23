@@ -57,7 +57,8 @@ function revalidate(targets: readonly RevalidateTarget[]): void {
 }
 
 /**
- * Resolve the user, delegate, revalidate, and turn a throw into `{ ok: false }`.
+ * Resolve the user, delegate, revalidate, and turn a throw into `{ ok: false }`. With no
+ * session the action redirects to `/login` instead of reporting a failure.
  *
  * A mutation reports a new row either by returning its id as a string or by returning the
  * row itself; both surface as `id` so the caller can select or open what it just created.
@@ -69,8 +70,9 @@ export async function run<T>(
   work: (userId: string) => Promise<T>,
   options: { revalidate?: readonly RevalidateTarget[] } = {},
 ): Promise<ActionResult> {
+  // Outside the `try`: a lapsed session redirects to /login, and a redirect is a throw.
+  const userId = await getCurrentUserId();
   try {
-    const userId = await getCurrentUserId();
     const result = await work(userId);
     revalidate(options.revalidate ?? DEFAULT_REVALIDATE);
     if (typeof result === "string") return { ok: true, id: result };
@@ -98,8 +100,9 @@ export async function runWithData<T>(
   work: (userId: string) => Promise<T>,
   options: { revalidate?: readonly RevalidateTarget[] } = {},
 ): Promise<DataActionResult<Payload<T>>> {
+  // Outside the `try`: a lapsed session redirects to /login, and a redirect is a throw.
+  const userId = await getCurrentUserId();
   try {
-    const userId = await getCurrentUserId();
     const result = await work(userId);
     revalidate(options.revalidate ?? DEFAULT_REVALIDATE);
     if (typeof result === "string") return { ok: true, id: result };
@@ -120,8 +123,9 @@ export async function runWithData<T>(
 export async function runQuery<T>(
   work: (userId: string) => Promise<T>,
 ): Promise<QueryResult<T>> {
+  // Outside the `try`: a lapsed session redirects to /login, and a redirect is a throw.
+  const userId = await getCurrentUserId();
   try {
-    const userId = await getCurrentUserId();
     return { ok: true, data: await work(userId) };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error) };

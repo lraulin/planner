@@ -90,8 +90,8 @@ export async function importMetricEntriesAction(
   metricId: string,
   entries: MetricEntryInput[],
 ): Promise<ImportActionResult> {
+  const userId = await getCurrentUserId();
   try {
-    const userId = await getCurrentUserId();
     if (entries.length === 0) {
       throw new Error("No tracking rows to import.");
     }

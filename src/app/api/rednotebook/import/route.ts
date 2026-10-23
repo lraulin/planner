@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-import { getCurrentUserId } from "@/lib/auth";
+import { findCurrentAccount } from "@/lib/auth";
 import { importRedNotebookFiles } from "@/lib/rednotebook/import";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
@@ -15,8 +15,15 @@ const MAX_FILES = 120;
  * the React Flight serializer (same pattern as Achieve import).
  */
 export async function POST(request: Request) {
+  // Before the `try`: a fetch is owed a 401 it can read, not the 500 the catch would give.
+  const account = await findCurrentAccount();
+  if (!account)
+    return NextResponse.json(
+      { ok: false, error: "Sign in to import RedNotebook entries." },
+      { status: 401 },
+    );
+  const userId = account.id;
   try {
-    const userId = await getCurrentUserId();
     const form = await request.formData();
 
     const rawFiles = form.getAll("files").filter((v): v is File => v instanceof File);

@@ -64,8 +64,8 @@ export async function resetSettingScopesAction(
  * shows up here without reconnecting.
  */
 export async function refreshGoogleCalendarsAction(): Promise<ActionResult> {
+  const userId = await getCurrentUserId();
   try {
-    const userId = await getCurrentUserId();
     await refreshCalendarsFromGoogle(userId);
     revalidatePath("/settings");
     return { ok: true };
@@ -86,8 +86,8 @@ export async function refreshGoogleCalendarsAction(): Promise<ActionResult> {
  * the schedule of every mirrored event, not just the settings panel.
  */
 export async function disconnectGoogleAction(): Promise<ActionResult> {
+  const userId = await getCurrentUserId();
   try {
-    const userId = await getCurrentUserId();
     await disconnectGoogle(userId);
     revalidatePath("/", "layout");
     return { ok: true };
@@ -121,8 +121,8 @@ export async function setCalendarSyncEnabledAction(
  * local-first background sync) so a background pull does not thrash open drawers.
  */
 export async function syncGoogleContactsAction(): Promise<ActionResult> {
+  const userId = await getCurrentUserId();
   try {
-    const userId = await getCurrentUserId();
     const status = await syncGoogleContacts(userId);
     if (status.state !== "ok") {
       return {

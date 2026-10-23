@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCurrentAccount } from "@/lib/auth";
+import { findCurrentAccount } from "@/lib/auth";
 import { parseAuthorizeRequest } from "@/lib/oauth/authorize";
 import { redirectHost } from "@/lib/oauth/clients";
 import { publicOrigin } from "@/lib/oauth/origin";
@@ -27,10 +27,10 @@ export default async function AuthorizeMcpPage({
     );
   }
 
-  let account: { email: string };
-  try {
-    account = await getCurrentAccount();
-  } catch {
+  // Not `getCurrentAccount`: its redirect would come back to the bare path, and the OAuth
+  // request lives in the query string.
+  const account = await findCurrentAccount();
+  if (!account) {
     const returnTo = `/oauth/authorize?${new URLSearchParams(
       Object.fromEntries(
         Object.entries(params).flatMap(([key, value]) =>

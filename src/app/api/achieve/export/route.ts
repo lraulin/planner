@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserId } from "@/lib/auth";
+import { findCurrentAccount } from "@/lib/auth";
 import { stampAchieveXml } from "@/lib/achieve/exportXml";
 import { exportAchieveXmlForUser } from "@/lib/achieve/exportLoad";
 import { exportFilename } from "@/lib/grid/exportCsv";
@@ -12,8 +12,15 @@ import { safeErrorMessage } from "@/lib/security/safeError";
  * the client as a return value.
  */
 export async function GET() {
+  // Before the `try`: a fetch is owed a 401 it can read, not the 500 the catch would give.
+  const account = await findCurrentAccount();
+  if (!account)
+    return NextResponse.json(
+      { ok: false, error: "Sign in to export your outline." },
+      { status: 401 },
+    );
+  const userId = account.id;
   try {
-    const userId = await getCurrentUserId();
     const result = await exportAchieveXmlForUser(userId);
     const exportedAt = new Date();
     const xml = stampAchieveXml(result.xml, exportedAt);

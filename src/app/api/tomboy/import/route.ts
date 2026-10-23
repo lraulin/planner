@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-import { getCurrentUserId } from "@/lib/auth";
+import { findCurrentAccount } from "@/lib/auth";
 import { importTomboyFiles } from "@/lib/tomboy/import";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
@@ -10,8 +10,18 @@ const MAX_FILES = 600;
 
 /** POST multipart form: `.note` files selected directly or from a Tomboy sync folder. */
 export async function POST(request: Request) {
+  // Before the `try`: a fetch is owed a 401 it can read, not the 500 the catch would give.
+  const account = await findCurrentAccount();
+  if (!account)
+    return NextResponse.json(
+      {
+        ok: false,
+        error: { code: "unauthorized", message: "Sign in to import Tomboy notes." },
+      },
+      { status: 401 },
+    );
+  const userId = account.id;
   try {
-    const userId = await getCurrentUserId();
     if (
       !request.headers
         .get("content-type")
@@ -63,19 +73,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, data: { ...result, warnings } });
   } catch (error) {
-    const unauthorized =
-      error instanceof Error && error.message.toLowerCase().startsWith("unauthorized");
     return NextResponse.json(
       {
         ok: false,
         error: {
-          code: unauthorized ? "unauthorized" : "internal",
-          message: unauthorized
-            ? "Sign in to import Tomboy notes."
-            : safeErrorMessage(error, "tomboy.import", "Tomboy import failed."),
+          code: "internal",
+          message: safeErrorMessage(error, "tomboy.import", "Tomboy import failed."),
         },
       },
-      { status: unauthorized ? 401 : 500 },
+      { status: 500 },
     );
   }
 }

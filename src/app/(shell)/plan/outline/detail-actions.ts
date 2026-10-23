@@ -99,8 +99,8 @@ export async function importNodeItemsAction(params: {
   kind: NodeItemKind;
   rows: NodeItemValues[];
 }): Promise<{ ok: true; data: { created: number } } | { ok: false; error: string }> {
+  const userId = await getCurrentUserId();
   try {
-    const userId = await getCurrentUserId();
     if (params.rows.length === 0) {
       throw new Error("No rows to import.");
     }

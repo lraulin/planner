@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-import { getCurrentUserId } from "@/lib/auth";
+import { findCurrentAccount } from "@/lib/auth";
 import { importAmazonSlim } from "@/lib/amazon/import";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
@@ -11,8 +11,18 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
  * The zip is never accepted — preprocess it locally first.
  */
 export async function POST(request: Request) {
+  // Before the `try`: a fetch is owed a 401 it can read, not the 500 the catch would give.
+  const account = await findCurrentAccount();
+  if (!account)
+    return NextResponse.json(
+      {
+        ok: false,
+        error: { code: "unauthorized", message: "Sign in to import Amazon orders." },
+      },
+      { status: 401 },
+    );
+  const userId = account.id;
   try {
-    const userId = await getCurrentUserId();
     if (
       !request.headers
         .get("content-type")
@@ -35,8 +45,6 @@ export async function POST(request: Request) {
     revalidatePath("/", "layout");
     return NextResponse.json({ ok: true, data: result });
   } catch (error) {
-    const unauthorized =
-      error instanceof Error && error.message.toLowerCase().startsWith("unauthorized");
     const message = error instanceof Error ? error.message : "";
     const badSlim =
       message.startsWith("Not an Amazon") ||
@@ -47,13 +55,11 @@ export async function POST(request: Request) {
       {
         ok: false,
         error: {
-          code: unauthorized ? "unauthorized" : "internal",
-          message: unauthorized
-            ? "Sign in to import Amazon orders."
-            : safeErrorMessage(error, "amazon.import", "Amazon import failed."),
+          code: "internal",
+          message: safeErrorMessage(error, "amazon.import", "Amazon import failed."),
         },
       },
-      { status: unauthorized ? 401 : 500 },
+      { status: 500 },
     );
   }
 }

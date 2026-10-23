@@ -11,3 +11,16 @@ const DEFAULT_PATH = "/plan";
 export function safeCallbackPath(raw: string | null | undefined): string {
   return internalPath(raw) ?? DEFAULT_PATH;
 }
+
+/**
+ * Where to send a request whose session has lapsed: `/login`, carrying the page it was for.
+ *
+ * Pages under `/login` and `/signup` never become the callback — signing in would land
+ * back on the form — and neither does anything `internalPath` refuses, so a forged
+ * `x-pathname` cannot turn this into an open redirect.
+ */
+export function loginPathFor(returnTo: string | null | undefined): string {
+  const path = internalPath(returnTo);
+  if (!path || path === "/" || /^\/(login|signup)(\/|\?|$)/.test(path)) return "/login";
+  return `/login?${new URLSearchParams({ callbackUrl: path }).toString()}`;
+}
