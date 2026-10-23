@@ -146,7 +146,7 @@ and fix the userscript/parse so credits keep their sign (suspected non-ASCII min
 
 - [x] Replaying the Sep 14 Chase capture (fixture from the audit event) inserts 0 posted rows and
       leaves RTA unchanged.
-- [ ] A duplicate categorized charge written straight into the ledger overspends its envelope
+- [x] A duplicate categorized charge written straight into the ledger overspends its envelope
       and leaves current RTA unchanged; a bank headline change alone leaves RTA unchanged.
 - [x] Income arriving and assign/unassign are the only fold inputs that move RTA (unit tests), plus
       uncategorized activity and Reconcile adjustments. _(Reconcile adjustments: Task 6.)_

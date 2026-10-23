@@ -1,10 +1,18 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financeTransactions, users } from "@/db/schema";
+import {
+  financeAccounts,
+  financeBudgetAllocations,
+  financeBudgetCategories,
+  financeTransactions,
+  users,
+} from "@/db/schema";
+import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { findMonth } from "./envelope";
 import { seedBudget } from "./mutations";
-import { loadBudgetMismatch } from "./queries";
+import { loadBudget, loadBudgetMismatch } from "./queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -167,5 +175,100 @@ describeDb("loadBudgetMismatch", () => {
     expect(ownerMismatch.accounts).toHaveLength(1);
     expect(ownerMismatch.accounts[0]?.accountId).toBe(ownerAccountId);
     expect(ownerMismatch.unmatchedTransferCents).toBe(0);
+  });
+});
+
+/**
+ * D1's promise, end to end through `loadBudget`: bad data shows up where it belongs — an
+ * overspent envelope, a mismatch — and never as a different Ready to Assign.
+ */
+describeDb("Ready to Assign is ledger-derived", () => {
+  async function syncBalance(userId: string, accountId: string) {
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://test:test@example.invalid/simplefin",
+    });
+    const linkId = await linkAccount(userId, {
+      connectionId,
+      externalAccountId: `ext-${crypto.randomUUID()}`,
+      accountId,
+      institution: "Test Bank",
+    });
+    return async (balanceCents: number, asOf: string) =>
+      saveBalance(userId, {
+        linkId,
+        balanceCents,
+        availableCents: null,
+        asOf: new Date(asOf),
+      });
+  }
+
+  async function budgetedChecking() {
+    const userId = await makeUser();
+    const checkingId = await addAccount(userId, { name: "Checking" });
+    await addTx(userId, checkingId, "2026-07-01", "500.00");
+    const setBalance = await syncBalance(userId, checkingId);
+    await setBalance(46_000, "2026-08-21T12:00:00Z");
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+
+    const [category] = await db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          ne(financeBudgetCategories.kind, "income"),
+        ),
+      )
+      .limit(1);
+    await db
+      .insert(financeBudgetAllocations)
+      .values({ userId, month: MONTH, categoryId: category.id, amountCents: 5_000 });
+    const charge = {
+      userId,
+      accountId: checkingId,
+      transactionDate: "2026-08-10",
+      description: "GROCER",
+      amount: "-40.00",
+      budgetCategoryId: category.id,
+    };
+    await db.insert(financeTransactions).values(charge);
+    return { userId, checkingId, categoryId: category.id, charge, setBalance };
+  }
+
+  async function current(userId: string) {
+    const data = await loadBudget(userId, MONTH, db, {
+      todayKey: TODAY,
+      includeMovementEvents: false,
+    });
+    const month = findMonth(data.months, MONTH);
+    if (!month) throw new Error("no current month");
+    return { data, month };
+  }
+
+  it("lets a duplicate categorized charge overspend its envelope without moving Ready to Assign", async () => {
+    const { userId, categoryId, charge } = await budgetedChecking();
+    const before = await current(userId);
+    expect(before.month.categories[categoryId]?.balanceCents).toBe(1_000);
+
+    // The same charge written into the ledger a second time, as a duplicate import would.
+    await db.insert(financeTransactions).values(charge);
+
+    const after = await current(userId);
+    expect(after.month.categories[categoryId]?.balanceCents).toBe(-3_000);
+    expect(after.month.readyToAssignCents).toBe(before.month.readyToAssignCents);
+  });
+
+  it("does not move Ready to Assign when only the bank headline changes", async () => {
+    const { userId, checkingId, setBalance } = await budgetedChecking();
+    const before = await current(userId);
+
+    await setBalance(46_000 + 12_345, "2026-08-22T12:00:00Z");
+
+    const after = await current(userId);
+    expect(after.data.accountPoolCents - before.data.accountPoolCents).toBe(12_345);
+    expect(after.month.readyToAssignCents).toBe(before.month.readyToAssignCents);
+    const mismatchOf = (data: typeof before.data) =>
+      data.mismatch.accounts.find((row) => row.accountId === checkingId)?.mismatchCents;
+    expect((mismatchOf(after.data) ?? 0) - (mismatchOf(before.data) ?? 0)).toBe(12_345);
   });
 });
