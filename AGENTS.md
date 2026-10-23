@@ -115,6 +115,28 @@ non-trivial whether or not it was invoked by name. The part that always applies:
   repeats, a tight single-cause refactor beats N copies of the same patch.
 - **Say what the root cause was** in the report and in the commit body.
 
+### Production database
+
+Production is Neon. Reach it only through `scripts/prod.ts` (full detail:
+[`docs/production-access.md`](docs/production-access.md)), and run each command on its own,
+not inside a compound shell command, so the `.claude/settings.json` rules match it:
+
+- **Read** — `npx tsx scripts/prod.ts read "<sql>"`: read-only role, read-only transaction.
+  Use it to check real data before diagnosing or proposing a fix against it.
+- **Rehearse** — `npx tsx scripts/prod.ts branch scripts/<x>.ts …`: runs one repository
+  script against a throwaway Neon branch of production, deleted afterwards. Every
+  data-changing script (cutover, backfill, repair) gets its dry run here, and the receipt goes
+  to Lee.
+- **Apply** — `npx tsx scripts/prod.ts apply scripts/<x>.ts …`: takes a 30-day Neon snapshot,
+  then runs the script as the owner. Only after Lee has read the branch receipt and said yes;
+  Lee approves each run.
+
+**Schema migrations do not go through this.** They ship with the deploy
+(`scripts/migrate-on-deploy.mjs`) and are never applied by hand; destructive or
+data-transforming ones have a recovery gate first (`agent-os/standards/database/migrations.md`).
+Never print, paste, or export a production URL, and never point `DATABASE_URL` at Neon by
+hand.
+
 ### Agent OS & spec-driven development
 
 This repo uses [Agent OS](https://buildermethods.com/agent-os): product docs under
