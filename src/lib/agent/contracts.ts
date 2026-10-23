@@ -216,6 +216,19 @@ export const nodeSummarySchema = z.strictObject({
   path: z.string(),
 });
 
+/** search_nodes with fields: "compact" — no path, depth, or effort; the deadline as a day. */
+const compactNodeSchema = z.strictObject({
+  id,
+  parentId: nullableId,
+  type: nodeType,
+  name: z.string(),
+  state: nodeState.nullable(),
+  priorityLetter,
+  priorityRank: z.number().int().nullable(),
+  dueOn: dateKey.describe("Deadline as a calendar day, YYYY-MM-DD.").nullable(),
+  focus: z.boolean(),
+});
+
 /** A goal or project in load_weekly_plan: the summary minus path, type, depth, effort, focus. */
 const planNodeSchema = nodeSummarySchema.pick({
   id: true,
@@ -779,6 +792,19 @@ export const inputSchemas = {
     query: z.string().optional(),
     parentId: nullableId.optional(),
     includeCompleted: z.boolean().default(false),
+    dueAfter: dateKey
+      .describe(
+        "Inclusive: only items whose deadline day is on or after this YYYY-MM-DD. Excludes items with no deadline.",
+      )
+      .optional(),
+    dueBefore: dateKey
+      .describe(
+        "Inclusive: only items whose deadline day is on or before this YYYY-MM-DD. Excludes items with no deadline.",
+      )
+      .optional(),
+    overdue: z.boolean().optional(),
+    sort: z.enum(["outline", "deadline"]).optional(),
+    fields: z.enum(["summary", "compact"]).default("summary"),
     ...pageInputFields,
   }),
   get_node: z.strictObject({ id }),
@@ -1281,7 +1307,7 @@ export const outputSchemas = {
     weekAppointmentCount: z.number().int().min(0),
   }),
   search_nodes: z.strictObject({
-    nodes: z.array(nodeSummarySchema),
+    nodes: z.union([z.array(nodeSummarySchema), z.array(compactNodeSchema)]),
     pageInfo: pageInfoSchema,
   }),
   get_node: z.strictObject({ node: nodeDetailSchema }),

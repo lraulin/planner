@@ -9,6 +9,7 @@ import { inputSchemas, outputSchemas } from "./contracts";
 import { financeOverviewResponse } from "./financeTools";
 import { CONTEXT_OPEN_WORK_DEFAULT_LIMIT, contextWork } from "./outlineTools";
 import { weeklyPlanResponse } from "./planTools";
+import { filterOutlinePage } from "./search";
 import { buildPathMap, nodeSummary } from "./serialize";
 
 /**
@@ -355,6 +356,84 @@ describe("get_context response budget", () => {
 
   it("uses a fixture big enough that the full list would break the cap", () => {
     expect(bytes(contextWork(outline, 100))).toBeGreaterThan(GATEWAY_CAP_BYTES);
+  });
+});
+
+/**
+ * search_nodes on a bigger outline: the fixture above plus 400 dated tasks, so a due-date
+ * query has more matches than one page holds.
+ */
+function datedOutlineFixture(): OutlineNode[] {
+  const nodes = outlineFixture();
+  const projects = nodes.filter((n) => n.type === "project");
+  for (let index = 0; index < 400; index++) {
+    const parent = projects[index % projects.length];
+    nodes.push(
+      node({
+        id: uuid(),
+        type: "task",
+        name: `Dated task ${index}: Renew the vehicle registration and update the insurance card`,
+        parentId: parent.id,
+        depth: parent.depth + 1,
+        state: "not_started",
+        priorityLetter: index % 2 === 0 ? "A" : "B",
+        priorityRank: index % 9,
+        effortMinutes: 45,
+        effortLeftMinutes: 45,
+        deadline: new Date(`${shiftDateKey("2026-09-01", index % 90)}T12:00:00.000Z`),
+      }),
+    );
+  }
+  return nodes;
+}
+
+describe("search_nodes response budget", () => {
+  const outline = datedOutlineFixture();
+  const run = (args: Record<string, unknown>) => {
+    const parsed = inputSchemas.search_nodes.parse(args);
+    const page = filterOutlinePage(outline, { ...parsed, today: "2026-10-23" });
+    return { nodes: page.nodes, pageInfo: page.pageInfo };
+  };
+
+  it("keeps a default overdue page under 16 KB and on its output schema", () => {
+    const response = run({ overdue: true });
+    expect(response.nodes.length).toBeGreaterThan(0);
+    expect(response.pageInfo.hasMore).toBe(true);
+    expect(response.pageInfo.nextOffset).toBe(response.nodes.length);
+    expect(bytes(response)).toBeLessThan(BUDGET_BYTES);
+    expect(outputSchemas.search_nodes.safeParse(response).success).toBe(true);
+  });
+
+  it("uses a fixture where 50 full summary rows would break the cap", () => {
+    const paths = buildPathMap(outline);
+    const overdue = outline.filter(
+      (n) => n.deadline !== null && n.deadline < new Date("2026-10-23T00:00:00Z"),
+    );
+    expect(overdue.length).toBeGreaterThan(50);
+    const fifty = overdue.slice(0, 50).map((n) => nodeSummary(n, paths));
+    expect(bytes({ nodes: fifty })).toBeGreaterThan(GATEWAY_CAP_BYTES);
+  });
+
+  it("fits about three times as many compact rows in the same budget", () => {
+    const summary = run({ dueBefore: "2026-12-31", limit: 200 });
+    const compact = run({ dueBefore: "2026-12-31", fields: "compact", limit: 200 });
+    expect(bytes(compact)).toBeLessThan(BUDGET_BYTES);
+    expect(compact.nodes.length).toBeGreaterThanOrEqual(50);
+    expect(compact.nodes.length).toBeGreaterThan(2 * summary.nodes.length);
+    expect(outputSchemas.search_nodes.safeParse(compact).success).toBe(true);
+  });
+
+  it("pages through every match by following nextOffset", () => {
+    const seen = new Set<string>();
+    let offset: number | null = 0;
+    let total = 0;
+    while (offset !== null) {
+      const response = run({ overdue: true, fields: "compact", limit: 200, offset });
+      for (const row of response.nodes) seen.add(row.id);
+      total = response.pageInfo.total;
+      offset = response.pageInfo.nextOffset;
+    }
+    expect(seen.size).toBe(total);
   });
 });
 
