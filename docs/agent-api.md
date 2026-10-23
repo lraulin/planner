@@ -134,12 +134,12 @@ complete input/output JSON Schemas.
 
 Find outline items with compact paths and paging metadata.
 
-- Use when: Use to resolve a human name or filter open work before reading or changing it.
+- Use when: Use to resolve a human name, filter open work, or list what is due or overdue (dueBefore/dueAfter/overdue) before reading or changing it.
 - Avoid when: Use get_node when you already have an id and need full form fields.
-- Returns: A compact page of matching nodes plus total and next offset.
+- Returns: A page of matching nodes plus total and next offset. Due filters sort soonest deadline first; fields: compact returns slim rows (dueOn day, no path) for long lists. A page stops early (returned < limit, hasMore true) rather than pass 16 KB; follow nextOffset.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: core
-- Arguments: `{ type?, state?, focus?, query?, parentId?, includeCompleted=false, offset=0, limit=50 }`
+- Arguments: `{ type?, state?, focus?, query?, parentId?, includeCompleted=false, dueAfter?, dueBefore?, overdue?, sort?, fields="summary", offset=0, limit=50 }`
 - Output: `{ nodes*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the

@@ -1,4 +1,5 @@
 import type { NodeDetail } from "@/lib/detail/types";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { noteSnippet } from "@/lib/notes/snippet";
 import type { NoteNode } from "@/lib/notes/types";
 import type { OutlineNode } from "@/lib/tree/types";
@@ -39,6 +40,37 @@ export function nodeSummary(
     effortMinutes: node.effortMinutes,
     effortLeftMinutes: node.effortLeftMinutes,
     path: pathById.get(node.id) ?? node.name,
+  };
+}
+
+/**
+ * The slim row `search_nodes` returns with `fields: "compact"`: enough to pick an item and
+ * call get_node, without the path, depth, and effort that make a long list heavy. `dueOn`
+ * is the deadline's calendar day (deadlines are days, stored at UTC noon).
+ */
+export type AgentCompactNode = {
+  id: string;
+  parentId: string | null;
+  type: OutlineNode["type"];
+  name: string;
+  state: OutlineNode["state"];
+  priorityLetter: OutlineNode["priorityLetter"];
+  priorityRank: number | null;
+  dueOn: string | null;
+  focus: boolean;
+};
+
+export function compactNodeSummary(node: OutlineNode): AgentCompactNode {
+  return {
+    id: node.id,
+    parentId: node.parentId,
+    type: node.type,
+    name: node.name,
+    state: node.state,
+    priorityLetter: node.priorityLetter,
+    priorityRank: node.priorityRank,
+    dueOn: node.deadline ? toDateKey(node.deadline) : null,
+    focus: node.focus,
   };
 }
 

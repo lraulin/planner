@@ -11,6 +11,7 @@ import { loadNodeDetail } from "@/lib/detail/queries";
 import type { NodeDetailPatch } from "@/lib/detail/types";
 import { getWeeklyPlan } from "@/lib/planning/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
+import { readerTodayKey } from "@/lib/schedule/readerZone";
 import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
 import { weekRange } from "@/lib/schedule/range";
 import { createNodeOnce, moveNode } from "@/lib/tree/mutations";
@@ -125,6 +126,19 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
   };
 }
 
+function optionalOneOf<const T extends string>(
+  args: Record<string, unknown>,
+  key: string,
+  allowed: readonly T[],
+): T | undefined {
+  const value = optionalString(args, key);
+  if (value === undefined) return undefined;
+  if (!(allowed as readonly string[]).includes(value)) {
+    throw new AgentError("validation", `${key} must be one of: ${allowed.join(", ")}`);
+  }
+  return value as T;
+}
+
 export async function searchNodes(userId: string, args: Record<string, unknown>) {
   const outline = await loadOutline(userId);
   const filter: SearchNodesFilter = {
@@ -133,7 +147,24 @@ export async function searchNodes(userId: string, args: Record<string, unknown>)
     query: optionalString(args, "query"),
     offset: optionalNumber(args, "offset"),
     limit: optionalNumber(args, "limit"),
+    // The input schema has already checked these are YYYY-MM-DD and enum members.
+    dueAfter: optionalString(args, "dueAfter"),
+    dueBefore: optionalString(args, "dueBefore"),
+    overdue: optionalBoolean(args, "overdue"),
+    sort: optionalOneOf(args, "sort", ["outline", "deadline"]),
+    fields: optionalOneOf(args, "fields", ["summary", "compact"]),
   };
+  if (filter.overdue !== undefined) filter.today = readerTodayKey();
+  if (
+    filter.dueAfter !== undefined &&
+    filter.dueBefore !== undefined &&
+    filter.dueAfter > filter.dueBefore
+  ) {
+    throw new AgentError(
+      "validation",
+      `dueAfter ${filter.dueAfter} is later than dueBefore ${filter.dueBefore}; both are inclusive, so swap them`,
+    );
+  }
 
   if ("parentId" in args) {
     const p = args.parentId;

@@ -217,13 +217,19 @@ const definitions: AgentToolDefinition[] = [
     domain: "outline",
     summary: "Find outline items with compact paths and paging metadata.",
     useWhen:
-      "Use to resolve a human name or filter open work before reading or changing it.",
+      "Use to resolve a human name, filter open work, or list what is due or overdue (dueBefore/dueAfter/overdue) before reading or changing it.",
     avoidWhen: "Use get_node when you already have an id and need full form fields.",
-    returns: "A compact page of matching nodes plus total and next offset.",
+    returns:
+      "A page of matching nodes plus total and next offset. Due filters sort soonest deadline first; fields: compact returns slim rows (dueOn day, no path) for long lists. A page stops early (returned < limit, hasMore true) rather than pass 16 KB; follow nextOffset.",
     effects: read,
     exposure: "core",
     examples: [
       { title: "Find an open task", arguments: { query: "passport", type: "task" } },
+      { title: "What is overdue", arguments: { overdue: true, fields: "compact" } },
+      {
+        title: "Due by Friday",
+        arguments: { dueBefore: "2026-10-30", fields: "compact" },
+      },
     ],
     handler: searchNodes,
   }),
@@ -1047,6 +1053,11 @@ const fieldDescriptions: Record<string, string> = {
   weekStartsOn: "Weekday index, 0 for Sunday through 6 for Saturday.",
   window:
     "Insights window: 3m, 6m, 12m, 24m, ytd, qtd, or all. Default 12m. Ignored when from/to are set.",
+  overdue:
+    "true: only items whose deadline day is before today (America/New_York). false: only items that are not overdue.",
+  sort: "Row order: outline (tree order) or deadline (soonest first, undated last). Defaults to deadline when a due filter is set, else outline.",
+  fields:
+    "summary (default) returns full rows with path and effort; compact returns id, parentId, type, name, state, priority, dueOn, and focus only.",
   from: "Inclusive start date YYYY-MM-DD.",
   to: "Inclusive end date YYYY-MM-DD.",
   axis: "Bucket axis: month or pay-period. pay_period is accepted as an alias.",
