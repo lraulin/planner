@@ -20,6 +20,7 @@ import {
   type PushableAppointment,
 } from "@/lib/google/writeThrough";
 import { normalizeColorId } from "@/lib/google/eventColors";
+import type { GoogleOwnedFields } from "@/lib/google/mapping";
 import { assertNodeOwned } from "@/lib/tree/ownership";
 import { allDayRange } from "./allDay";
 import { sortDays, startOfWeek } from "./geometry";
@@ -235,6 +236,24 @@ export async function createAppointment(
   userId: string,
   input: AppointmentInput,
 ): Promise<Appointment | null> {
+  return (await createAppointmentWithOutcome(userId, input)).row;
+}
+
+export type CreateAppointmentOutcome = {
+  row: Appointment | null;
+  /**
+   * True when the target Google calendar already held this appointment, so the create
+   * linked to that event instead of inserting a duplicate (`findDuplicateEvent`). The row's
+   * Google-owned fields (title, times, notes, location) are then the existing event's.
+   */
+  linkedExisting: boolean;
+};
+
+/** {@link createAppointment}, plus whether it linked an existing Google event. */
+export async function createAppointmentWithOutcome(
+  userId: string,
+  input: AppointmentInput,
+): Promise<CreateAppointmentOutcome> {
   const allDay = input.allDay ?? false;
   const bounds = allDay ? allDayRange(input.startAt, input.endAt) : null;
   const startAt = bounds?.startAt ?? input.startAt;
@@ -293,14 +312,99 @@ export async function createAppointment(
       .limit(1);
     // The series exists in Google either way; a mirror that could not run yet just means
     // the rows appear on the next refresh.
-    return instance ?? null;
+    return { row: instance ?? null, linkedExisting: false };
+  }
+
+  if (pushed.pushed && pushed.existing) {
+    return {
+      row: await adoptExistingEvent(userId, values, pushed.existing, input),
+      linkedExisting: true,
+    };
   }
 
   const [row] = await db
     .insert(appointments)
     .values(pushed.pushed ? { ...values, ...pushed.stamp } : values)
     .returning();
-  return row;
+  return { row, linkedExisting: false };
+}
+
+/** Planner-owned columns a create may set; Google never holds these. */
+const PLANNER_OWNED_KEYS = [
+  "checkState",
+  "reminderMinutes",
+  "priorityLetter",
+  "priorityRank",
+  "projectId",
+  "contexts",
+  "private",
+  "organizerSourceNodeId",
+] as const satisfies readonly (keyof AppointmentInput & keyof NewAppointment)[];
+
+/**
+ * Store a create that matched an event already on the Google calendar.
+ *
+ * The event's Google-owned columns win over the create's own: Google is the source of
+ * truth for them, and the existing event is usually the richer copy (the one typed in by
+ * hand, with the confirmation number and phone). The create's planner-owned annotations
+ * (project, contexts, priority) are kept, because nothing else would carry them.
+ *
+ * When the mirror already holds that event, the same row is returned with only the
+ * annotations the caller actually passed laid over it, so a repeated create never makes a
+ * second local row either. The unique `(user_id, external_source, external_id)` index is
+ * the backstop for a mirror pass inserting the same event concurrently.
+ */
+export async function adoptExistingEvent(
+  userId: string,
+  values: NewAppointment,
+  existing: GoogleOwnedFields,
+  input: Partial<AppointmentInput> = {},
+): Promise<Appointment> {
+  const mirrored = await findMirroredRow(userId, existing.externalId);
+  if (mirrored) {
+    const annotations: Partial<NewAppointment> = {};
+    for (const key of PLANNER_OWNED_KEYS) {
+      if (input[key] !== undefined) {
+        Object.assign(annotations, { [key]: values[key] });
+      }
+    }
+    if (Object.keys(annotations).length === 0) return mirrored;
+    const [updated] = await db
+      .update(appointments)
+      .set({ ...annotations, updatedAt: new Date() })
+      .where(and(eq(appointments.id, mirrored.id), eq(appointments.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  const [inserted] = await db
+    .insert(appointments)
+    .values({ ...values, ...existing, userId })
+    .onConflictDoNothing()
+    .returning();
+  if (inserted) return inserted;
+  // A mirror pass stored the same event between the lookup and the insert.
+  const raced = await findMirroredRow(userId, existing.externalId);
+  if (!raced) throw new Error("Could not store the linked Google event.");
+  return raced;
+}
+
+async function findMirroredRow(
+  userId: string,
+  externalId: string,
+): Promise<Appointment | null> {
+  const [row] = await db
+    .select()
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.userId, userId),
+        eq(appointments.externalSource, "google"),
+        eq(appointments.externalId, externalId),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 export async function updateAppointment(

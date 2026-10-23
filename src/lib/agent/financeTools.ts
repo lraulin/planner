@@ -255,25 +255,34 @@ type FinanceOverviewInputs = {
   };
 };
 
-/** get_finance_overview's response from loaded data. Pure, so the size guard can drive it. */
+/** Newest coverage holes the overview lists; `holeCount` says how many exist. */
+export const OVERVIEW_HOLE_LIMIT = 10;
+/** Non-envelope category names the overview lists; `otherCategoryCount` says how many exist. */
+export const OVERVIEW_OTHER_CATEGORY_LIMIT = 40;
+
+/**
+ * get_finance_overview's response from loaded data. Pure, so the size guard can drive it.
+ *
+ * Ordered for a reader that may be cut off: the connector gateway keeps the first 20,000
+ * bytes of a response and silently drops the rest, so accounts (the reason most callers are
+ * here) come first and the long reference lists (groups, envelopes, legacy categories) last.
+ * Every list that grows with history rather than with the number of accounts is bounded:
+ * coverage holes (one per statement gap, years of them) and the category names left over
+ * from imports, which are not envelopes. Their counts say when there is more, and
+ * list_statements / get_spending_breakdown page the rest.
+ */
 export function financeOverviewResponse(input: FinanceOverviewInputs) {
   const history = rowsRange(input.rows);
   const options = insightsFilterOptions(input.rows);
+  const coverage = coverageGap(input.rows, input.statements);
+  const envelopeNames = new Set(input.budget.categories.map((row) => row.name));
+  const otherCategories = options.categories.filter((name) => !envelopeNames.has(name));
+  const newestHoles = [...coverage.holes]
+    .sort((left, right) =>
+      right.beforePeriodStart.localeCompare(left.beforePeriodStart),
+    )
+    .slice(0, OVERVIEW_HOLE_LIMIT);
   return {
-    envelopes: input.budget.categories.map((row) => ({
-      id: row.id,
-      name: row.name,
-      groupId: row.groupId,
-      kind: row.kind,
-      incomeRole: row.incomeRole,
-      expectedMonthlyIncomeCents: row.expectedMonthlyIncomeCents,
-    })),
-    groups: input.budget.groups.map((row) => ({
-      id: row.id,
-      name: row.name,
-      parentGroupId: row.parentGroupId,
-      kind: row.kind,
-    })),
     accounts: input.accounts.map((account) => agentAccount(account, input.pending)),
     history: {
       startKey: history?.startKey ?? null,
@@ -281,16 +290,47 @@ export function financeOverviewResponse(input: FinanceOverviewInputs) {
       transactionCount: input.rows.length,
     },
     unclassifiedCount: input.unclassifiedCount,
-    coverage: coverageGap(input.rows, input.statements),
-    categories: options.categories,
-    // The full merchant vocabulary was most of this response (hundreds of raw bank
-    // descriptions) and pushed it past the client's size limit. list_payees pages it.
-    merchantCount: options.merchants.length,
-    merchantsTool: "list_payees" as const,
     carryingCost: {
       interestCents: input.carrying.interestCents,
       feesCents: input.carrying.feesCents,
     },
+    coverage: {
+      completeFrom: coverage.completeFrom,
+      lateAccounts: coverage.lateAccounts,
+      unitemizedCents: coverage.unitemizedCents,
+      holeCount: coverage.holes.length,
+      holes: newestHoles,
+      holesTool: "list_statements" as const,
+      mismatches: coverage.mismatches,
+    },
+    groups: input.budget.groups.map((row) => ({
+      id: row.id,
+      name: row.name,
+      parentGroupId: row.parentGroupId,
+      kind: row.kind,
+    })),
+    // Income settings only on income envelopes; on the rest they were always
+    // "other"/null and cost ~60 bytes a row.
+    envelopes: input.budget.categories.map((row) => ({
+      id: row.id,
+      name: row.name,
+      groupId: row.groupId,
+      kind: row.kind,
+      ...(row.kind === "income"
+        ? {
+            incomeRole: row.incomeRole,
+            expectedMonthlyIncomeCents: row.expectedMonthlyIncomeCents,
+          }
+        : {}),
+    })),
+    // Envelope names are already in envelopes[]; this is what is left: names from imported
+    // history that no envelope carries.
+    otherCategoryCount: otherCategories.length,
+    otherCategories: otherCategories.slice(0, OVERVIEW_OTHER_CATEGORY_LIMIT),
+    // The full merchant vocabulary was most of this response (hundreds of raw bank
+    // descriptions) and pushed it past the client's size limit. list_payees pages it.
+    merchantCount: options.merchants.length,
+    merchantsTool: "list_payees" as const,
   };
 }
 

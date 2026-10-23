@@ -204,7 +204,15 @@ export type WeeklyPlanPayload = {
  */
 export async function loadWeeklyPlanPayload(
   userId: string,
-  options: { weekStart: Date; weekStartsOn?: number },
+  options: {
+    weekStart: Date;
+    weekStartsOn?: number;
+    /**
+     * Pull Google Calendar before reading the week, as `loadSchedule`'s `forceSync`. Agent
+     * callers pass it: they have no browser to run the after-paint pull the page relies on.
+     */
+    forceSync?: boolean;
+  },
 ): Promise<WeeklyPlanPayload> {
   const weekStartsOn = options.weekStartsOn ?? 0;
   const weekStart = startOfWeek(options.weekStart, weekStartsOn);
@@ -222,6 +230,7 @@ export async function loadWeeklyPlanPayload(
         loadSchedule(userId, {
           range: weekRange(weekStart, weekStartsOn),
           timeChartId: row?.timeChartId ?? null,
+          forceSync: options.forceSync,
         }),
       ),
       loadResultAreaReviews(userId),

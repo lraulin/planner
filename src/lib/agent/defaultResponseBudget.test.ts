@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { AnalyticsRow } from "@/lib/finances/analytics";
+import { coverageGap, type AnalyticsRow } from "@/lib/finances/analytics";
+import type { ReconcileStatement } from "@/lib/finances/reconcile";
 import type { FinanceAccountRow } from "@/lib/finances/types";
 import { insightsFilterOptions } from "@/lib/finances/insightsFilter";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { row } from "@/lib/tree/fixtures";
 import type { OutlineNode } from "@/lib/tree/types";
 import { inputSchemas, outputSchemas } from "./contracts";
-import { financeOverviewResponse } from "./financeTools";
+import {
+  financeOverviewResponse,
+  OVERVIEW_HOLE_LIMIT,
+  OVERVIEW_OTHER_CATEGORY_LIMIT,
+} from "./financeTools";
 import { CONTEXT_OPEN_WORK_DEFAULT_LIMIT, contextWork } from "./outlineTools";
 import { weeklyPlanResponse } from "./planTools";
 import { filterOutlinePage } from "./search";
@@ -202,6 +207,43 @@ function overviewFixture() {
   };
 }
 
+/**
+ * Monthly statements for every open account across the seven years, with a gap every few
+ * months where a PDF was never imported, plus the category names years of Achieve and bank
+ * imports leave behind that no envelope carries. The first fixture had neither (no
+ * statements, every row on an envelope name), which is how it measured 13.9 KB while Lee's
+ * real overview still ran near 29 KB: holes and leftover categories are the lists that grow
+ * with history.
+ */
+function historyHeavyFixture() {
+  const base = overviewFixture();
+  const statements: ReconcileStatement[] = [];
+  for (const acct of base.accounts.slice(0, 5)) {
+    let balance = -50000;
+    for (let month = 0; month < 80; month++) {
+      if (month % 4 === 3) continue; // a missing statement: one hole per gap
+      const periodStart = shiftDateKey("2020-01-01", month * 30);
+      const periodEnd = shiftDateKey(periodStart, 29);
+      statements.push({
+        id: uuid(),
+        accountId: acct.id,
+        accountName: acct.name,
+        periodStart,
+        periodEnd,
+        openingBalanceCents: balance,
+        closingBalanceCents: balance - 1234,
+      });
+      balance -= 1234;
+    }
+  }
+  const rows = base.rows.map((row, index) =>
+    index % 3 === 0
+      ? { ...row, derivedCategory: `Imported Category ${index % 180} (Legacy)` }
+      : row,
+  );
+  return { ...base, rows, statements };
+}
+
 describe("get_finance_overview response budget", () => {
   const input = overviewFixture();
   const response = financeOverviewResponse(input);
@@ -209,6 +251,42 @@ describe("get_finance_overview response budget", () => {
   it("stays under 16 KB and matches its output schema", () => {
     expect(bytes(response)).toBeLessThan(BUDGET_BYTES);
     expect(outputSchemas.get_finance_overview.safeParse(response).success).toBe(true);
+  });
+
+  it("leads with accounts, so a cut-off response still has the balances", () => {
+    // The gateway truncates silently from the end. Reference lists go last.
+    expect(Object.keys(response)[0]).toBe("accounts");
+    const keys = Object.keys(outputSchemas.get_finance_overview.parse(response));
+    expect(keys[0]).toBe("accounts");
+    expect(keys.indexOf("envelopes")).toBeGreaterThan(keys.indexOf("coverage"));
+  });
+
+  it("stays under 16 KB with years of statement holes and leftover categories", () => {
+    const heavy = historyHeavyFixture();
+    const full = financeOverviewResponse(heavy);
+    expect(full.coverage.holeCount).toBeGreaterThan(OVERVIEW_HOLE_LIMIT);
+    expect(full.coverage.holes).toHaveLength(OVERVIEW_HOLE_LIMIT);
+    expect(full.otherCategoryCount).toBeGreaterThan(OVERVIEW_OTHER_CATEGORY_LIMIT);
+    expect(full.otherCategories).toHaveLength(OVERVIEW_OTHER_CATEGORY_LIMIT);
+    expect(bytes(full)).toBeLessThan(BUDGET_BYTES);
+    expect(outputSchemas.get_finance_overview.safeParse(full).success).toBe(true);
+
+    // The unbounded lists alone would have broken the gateway cap.
+    const coverage = coverageGap(heavy.rows, heavy.statements);
+    const categories = insightsFilterOptions(heavy.rows).categories;
+    expect(
+      bytes({
+        ...full,
+        coverage: { ...full.coverage, holes: coverage.holes },
+        categories,
+      }),
+    ).toBeGreaterThan(GATEWAY_CAP_BYTES);
+  });
+
+  it("lists the newest holes first", () => {
+    const full = financeOverviewResponse(historyHeavyFixture());
+    const starts = full.coverage.holes.map((hole) => hole.beforePeriodStart);
+    expect(starts).toEqual([...starts].sort().reverse());
   });
 
   it("uses a fixture whose merchant list alone would have broken the cap", () => {

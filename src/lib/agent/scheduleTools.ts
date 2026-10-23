@@ -2,8 +2,9 @@
  * Agent tools over the weekly schedule: read a week, create / update / delete appointments.
  */
 
+import type { SyncStatus } from "@/lib/google/sync";
 import {
-  createAppointment,
+  createAppointmentWithOutcome,
   deleteAppointment,
   updateAppointment,
   type AppointmentInput,
@@ -31,8 +32,12 @@ export async function getWeekTool(userId: string, args: Record<string, unknown>)
     weekStartArg ? (parseDate(weekStartArg, "weekStart") ?? new Date()) : new Date(),
     weekStartsOn,
   );
+  // An agent has no browser to run the after-paint pull that keeps /schedule current, so
+  // it pulls here before reading. Without this, events added in Google never reached an
+  // agent at all: `loadSchedule` only reports a stale mirror, it does not refresh one.
   const schedule = await loadSchedule(userId, {
     range: weekRange(weekStart, weekStartsOn),
+    forceSync: true,
   });
   const plan = await getWeeklyPlan(userId, weekStart, weekStartsOn);
 
@@ -68,7 +73,21 @@ export async function getWeekTool(userId: string, args: Record<string, unknown>)
       projectId: o.projectId,
       checkState: o.checkState,
     })),
+    googleSync: agentSyncStatus(schedule.sync),
   };
+}
+
+/**
+ * The Google pull's outcome, small enough to ride on every read. `failed` and
+ * `not_linked` mean the rows are the last mirror, which may be missing recent Google edits.
+ */
+export function agentSyncStatus(sync: SyncStatus): {
+  state: SyncStatus["state"];
+  message?: string;
+} {
+  return "message" in sync
+    ? { state: sync.state, message: sync.message }
+    : { state: sync.state };
 }
 
 export async function createAppointmentTool(
@@ -93,7 +112,7 @@ export async function createAppointmentTool(
     contexts: optionalStringArray(args, "contexts"),
   };
 
-  const row = await createAppointment(userId, input);
+  const { row, linkedExisting } = await createAppointmentWithOutcome(userId, input);
   // Null only happens for a recurring create whose instances have not mirrored back yet,
   // and this tool takes no recurrence arguments — so reaching here means something changed
   // upstream and the caller should hear about it rather than get a half-built payload.
@@ -112,6 +131,7 @@ export async function createAppointmentTool(
       projectId: row.projectId,
       checkState: row.checkState,
     },
+    linkedExisting,
   };
 }
 

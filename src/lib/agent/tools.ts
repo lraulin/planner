@@ -363,10 +363,13 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("get_week", {
     domain: "schedule",
-    summary: "Read one week of appointments and expanded occurrences.",
-    useWhen: "Use when answering or planning around the calendar.",
+    summary:
+      "Read one week of appointments and expanded occurrences, pulling Google Calendar first.",
+    useWhen:
+      "Use when answering or planning around the calendar, and before create_appointment to check the slot is not already booked.",
     avoidWhen: "Use get_context if only the current appointment count is needed.",
-    returns: "Weekly plan summary, appointment masters, and occurrence times.",
+    returns:
+      "Weekly plan summary, appointment masters, occurrence times, and googleSync (the pull's outcome; failed means the rows may miss recent Google changes).",
     effects: read,
     exposure: "domain",
     handler: getWeekTool,
@@ -377,7 +380,8 @@ const definitions: AgentToolDefinition[] = [
     useWhen: "Use after the subject and exact start/end times are approved.",
     avoidWhen:
       "Do not retry automatically; Google synchronization is not atomic with local storage.",
-    returns: "The created appointment summary.",
+    returns:
+      "The created appointment summary and linkedExisting: true when Google already held an event at the same times with a matching title, which was linked instead of duplicated.",
     effects: write,
     exposure: "domain",
     handler: createAppointmentTool,
@@ -550,7 +554,7 @@ const definitions: AgentToolDefinition[] = [
     avoidWhen:
       "Do not use it for a dated series or a named transaction; those are the other finance tools. Do not treat ledgerBalanceCents as the current balance when mismatchCents is nonzero.",
     returns:
-      "Accounts with the working balance Dashboard shows (live + pending when the bank feed is linked, else statement-anchored; source, as-of time, posted and pending split, ledger sum and drift), the imported date range, unclassified count, coverage (late starts, holes, statement-anchored mismatches), category vocabulary, merchant count (names via list_payees), and headline interest/fees.",
+      "Accounts first, with the working balance Dashboard shows (live + pending when the bank feed is linked, else statement-anchored; source, as-of time, posted and pending split, ledger sum and drift); then the imported date range, unclassified count, headline interest/fees, coverage (late starts, the newest 10 holes with holeCount, statement-anchored mismatches), budget groups and envelopes, up to 40 non-envelope category names with otherCategoryCount, and merchant count (names via list_payees).",
     effects: read,
     exposure: "domain",
     handler: getFinanceOverviewTool,

@@ -105,8 +105,11 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
 
   const weekStart = startOfWeek(now, weekStartsOn);
   const plan = await getWeeklyPlan(userId, weekStart, weekStartsOn);
+  // Pull Google first so weekAppointmentCount counts events added there; an agent has no
+  // browser to run the after-paint refresh /schedule relies on.
   const schedule = await loadSchedule(userId, {
     range: weekRange(weekStart, weekStartsOn),
+    forceSync: true,
   });
 
   return {
