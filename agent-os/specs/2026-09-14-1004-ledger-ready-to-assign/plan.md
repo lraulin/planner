@@ -1,6 +1,6 @@
 # Ready to Assign from the ledger; bank pages stop writing posted history
 
-**Status: active**
+**Status: frozen / complete** (2026-10-23)
 Spec folder: `agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/`
 
 ## Spec relationships
@@ -268,7 +268,7 @@ uncategorized (that is what makes it an RTA term) but is excluded from `uncatego
 so it does not nag to be filed. The command is disabled with a reason when the account is
 off-budget, unseeded, or already matches.
 
-## Task 7: Chase sign fix and duplicate report **partial**
+## Task 7: Chase sign fix and duplicate report **done**
 
 D6 fix in `scripts/chase-pending.user.js` / `bankSnapshot.ts` parse with a test on the raw text —
 **not done overnight 2026-09-15.** D6 says to read the stored raw `amount` for `PAYMENT THANK
@@ -276,6 +276,11 @@ YOU - WEB` from the Sep 14 event's source evidence before writing the fix; that 
 the local dev database (production/Neon only, no credentials in the overnight environment), so
 the exact non-ASCII character was not confirmed and no fix was guessed at. See the night's report
 (`agent-os/overnight/2026-09-15.md`) for the recommendation.
+
+**D6 closed later, outside this spec's sessions:** the suspected cause was right. Chase prints card
+credits with a U+2212 minus, which the userscripts' `AMOUNT` pattern did not accept; fixed in
+`f8da69f9` (2026-10-06, both userscripts and `parseAmountCents`) and `66f0c335` (2026-10-12, the
+Chase `data-values` reader's own copy of the pattern).
 
 Read-only script `scripts/scrape-duplicate-report.ts` listing `scrape:*` posted rows on
 feed-covered accounts with an amount+date feed twin (Sep 13 Walmart, Capital One payment pairs) for
@@ -328,9 +333,31 @@ neither have accounts seeded nor its opening rewritten by the first user's run, 
 `queries.integration.test.ts` (the D1 acceptance box: duplicate categorized charge, headline
 change).
 
-## Task 9: Verify, freeze, roadmap
+## Task 9: Verify, freeze, roadmap **done**
 
 `npm run lint`, `typecheck`, `npm test` (integration ran, no skip warning), dev server +
 `npm run smoke` (touches `src/app/**` via Budget/Accounts/Activity). After deploy: Lee runs both
 bank-page scripts and a sync; RTA does not move; Budget card mismatch line matches Accounts.
 Freeze both files, record drift, update roadmap's Ready to Assign entries.
+
+2026-10-23: lint, typecheck, `npm test` (4741 unit, 1313 integration, no skip warning) and
+`npm run smoke` (64 routes) all pass. The post-deploy check was read from production's audit trail
+rather than one fresh run: every bank-page snapshot since D4 shipped (25, Sep 17 – Oct 7) and every
+SimpleFIN sync and alert email since Oct 15 (45) moved Ready to Assign by exactly its change in
+uncategorized activity and by nothing else. The Budget card and Accounts read one mismatch
+computation (`budgetMismatchOf`), and the cutover's apply asserted each account's figure against
+the Budget card. Task 7's duplicate report against a branch of production finds one pair, the
+YouTube charge behind the Capital One +16.95.
+
+**Drift from the plan:** D2's seed rule (change 6); the cutover writes the legacy total to the new
+sum rather than leaving it stale; production access for the dry run and apply came from
+`scripts/prod.ts` (`docs/production-access.md`), built in the same session.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Lee deletes the `scrape:capitalone` YouTube row `33fd65cf…` (Sep 22, −16.95); the Capital One
+  mismatch then reads 0.
+- `membership.ts`'s `assertLedgerIdentity` still passes `unmatchedTransferCents: 0`, with a comment
+  saying Task 4 would wire it. Task 4 put unmatched transfers in the mismatch line instead; the
+  identity check never got the real figure. Harmless while the set nets to 0, but the comment is
+  wrong and the check is weaker than D1's identity.

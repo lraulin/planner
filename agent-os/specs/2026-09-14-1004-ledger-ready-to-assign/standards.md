@@ -1,6 +1,6 @@
 # Standards for Ledger Ready to Assign
 
-Applied as of standards commit `30a9c769`. References, not copies — see AGENTS.md.
+Applied as of standards commit `30a9c769`; frozen 2026-10-23 at standards commit `dff043d6`. References, not copies — see AGENTS.md.
 
 - `agent-os/standards/development/clean-code.md` — "when the model is wrong, change the model":
   the recorded opening vs recomputed opening, and RTA vs bank pool, are the two-workaround signal.

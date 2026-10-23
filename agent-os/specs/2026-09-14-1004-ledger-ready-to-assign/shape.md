@@ -1,6 +1,6 @@
 # Ledger Ready to Assign — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-10-23)
 
 ## Scope
 

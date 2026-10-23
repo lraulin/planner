@@ -1336,6 +1336,14 @@ period)` so money already spent stops being held twice and only going over bites
   Dashboard). Savings intent is a Savings envelope, not an account exclusion. Account
   membership changes rebase opening once; existing off-budget savings were cut over
   without rewriting the ledger.
+- **✅ Ready to Assign from the ledger, shipped 2026-09-14; openings cut over 2026-10-23.**
+  `agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/`. Supersedes the entry above's
+  reconciliation to the pool: only income, assigning and uncategorized activity move Ready to
+  Assign, as in YNAB and Actual. A disagreement with the bank is an amber mismatch line linking
+  to Accounts, closed by fixing rows or by an audited Reconcile adjustment. Bank pages no longer
+  write posted history for SimpleFIN-covered cards. Each account carries its own opening,
+  seeded from statements by posted date; the cutover dropped Ready to Assign by the $122.09
+  the old single opening had overstated.
 - **Next — earmarked savings (open question, not yet designed).** Bills and recurring
   spend both accrue toward a charge that is _coming_. A `balance` + `none` target can now
   name a floor ("needed eventually") without funding Underfunded; what is still missing
