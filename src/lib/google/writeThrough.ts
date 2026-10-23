@@ -11,11 +11,19 @@
  */
 
 import type { Appointment } from "@/db/schema";
-import { deleteEvent, GoogleEventGoneError, insertEvent, patchEvent } from "./client";
+import {
+  deleteEvent,
+  GoogleEventGoneError,
+  insertEvent,
+  listEvents,
+  patchEvent,
+} from "./client";
+import { findDuplicateEvent } from "./dedupe";
 import {
   appointmentToGoogleEvent,
   type GoogleEvent,
   type GoogleEventWrite,
+  type GoogleOwnedFields,
 } from "./mapping";
 import { pushTargetCalendarId } from "./queries";
 
@@ -56,7 +64,18 @@ export type PushableAppointment = Parameters<typeof appointmentToGoogleEvent>[0]
 
 export type CreateResult =
   | { pushed: false }
-  | { pushed: true; recurring: false; stamp: ExternalStamp }
+  | { pushed: true; recurring: false; stamp: ExternalStamp; existing: null }
+  /**
+   * The calendar already held this appointment (`findDuplicateEvent`), so nothing was
+   * inserted. `existing` is that event's Google-owned columns: the caller stores *those*
+   * rather than its own input, because Google is the source of truth for them.
+   */
+  | {
+      pushed: true;
+      recurring: false;
+      stamp: ExternalStamp;
+      existing: GoogleOwnedFields;
+    }
   /**
    * A recurring create posts a *series*. Google owns its expansion, so there is no single
    * instance to stamp onto a local row — the caller runs a mirror pass and lets the
@@ -80,6 +99,26 @@ export async function pushCreate(
   if (!calendarId) return { pushed: false };
 
   const body = appointmentToGoogleEvent(appointment);
+
+  if (!body.recurrence?.length) {
+    const existing = await findExistingEvent(userId, calendarId, appointment);
+    if (existing) {
+      return {
+        pushed: true,
+        recurring: false,
+        stamp: {
+          externalSource: "google",
+          externalId: existing.externalId,
+          externalSeriesId: existing.externalSeriesId,
+          externalCalendarId: existing.externalCalendarId,
+          externalEtag: existing.externalEtag,
+          externalUpdatedAt: existing.externalUpdatedAt,
+        },
+        existing,
+      };
+    }
+  }
+
   const event = await insertEvent(userId, calendarId, body);
 
   if (body.recurrence?.length) {
@@ -89,7 +128,44 @@ export async function pushCreate(
 
   const stamp = stampFrom(event, calendarId);
   if (!stamp) throw new Error("Google did not return an id for the new event.");
-  return { pushed: true, recurring: false, stamp };
+  return { pushed: true, recurring: false, stamp, existing: null };
+}
+
+/**
+ * The live event on the target calendar this create would duplicate, if any.
+ *
+ * Best-effort by design: a failed lookup falls through to the insert, which is exactly the
+ * behaviour before this check existed. A Google that cannot list will usually refuse the
+ * insert too, and that error is the one worth showing. A series is never checked: its
+ * instances come back through the mirror, and matching one instance would not say the
+ * whole series already exists.
+ */
+async function findExistingEvent(
+  userId: string,
+  calendarId: string,
+  appointment: PushableAppointment,
+): Promise<GoogleOwnedFields | null> {
+  let events: GoogleEvent[];
+  try {
+    events = await listEvents(
+      userId,
+      calendarId,
+      appointment.startAt,
+      appointment.endAt,
+    );
+  } catch {
+    return null;
+  }
+  return findDuplicateEvent(
+    {
+      subject: appointment.subject,
+      startAt: appointment.startAt,
+      endAt: appointment.endAt,
+      allDay: appointment.allDay,
+    },
+    events,
+    calendarId,
+  );
 }
 
 /**

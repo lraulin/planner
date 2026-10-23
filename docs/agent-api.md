@@ -316,15 +316,15 @@ complete input/output JSON Schemas.
 
 ### `get_week`
 
-Read one week of appointments and expanded occurrences.
+Read one week of appointments and expanded occurrences, pulling Google Calendar first.
 
-- Use when: Use when answering or planning around the calendar.
+- Use when: Use when answering or planning around the calendar, and before create_appointment to check the slot is not already booked.
 - Avoid when: Use get_context if only the current appointment count is needed.
-- Returns: Weekly plan summary, appointment masters, and occurrence times.
+- Returns: Weekly plan summary, appointment masters, occurrence times, and googleSync (the pull's outcome; failed means the rows may miss recent Google changes).
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
 - Arguments: `{ weekStart?, weekStartsOn=0 }`
-- Output: `{ weekStart*, weekStartsOn*, plan*, appointments*, occurrences* }`
+- Output: `{ weekStart*, weekStartsOn*, plan*, appointments*, occurrences*, googleSync* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
@@ -335,11 +335,11 @@ Create one calendar appointment.
 
 - Use when: Use after the subject and exact start/end times are approved.
 - Avoid when: Do not retry automatically; Google synchronization is not atomic with local storage.
-- Returns: The created appointment summary.
+- Returns: The created appointment summary and linkedExisting: true when Google already held an event at the same times with a matching title, which was linked instead of duplicated.
 - Effects: write; destructive=false; retry=unsafe; confirmation=user_intent
 - Exposure: domain
 - Arguments: `{ subject?, startAt*, endAt*, location?, allDay?, projectId?, notes?, contexts? }`
-- Output: `{ appointment* }`
+- Output: `{ appointment*, linkedExisting* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.

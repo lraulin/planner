@@ -1315,8 +1315,23 @@ export const outputSchemas = {
       appointmentSchema.extend({ allDay: z.boolean(), location: z.string() }),
     ),
     occurrences: z.array(occurrenceSchema),
+    googleSync: z
+      .strictObject({
+        state: z.enum(["off", "ok", "skipped", "stale", "not_linked", "failed"]),
+        message: z.string().optional(),
+      })
+      .describe(
+        "Outcome of the Google Calendar pull this read ran first. ok means the rows include every Google change; failed or not_linked means they are the last mirror.",
+      ),
   }),
-  create_appointment: z.strictObject({ appointment: appointmentSchema }),
+  create_appointment: z.strictObject({
+    appointment: appointmentSchema,
+    linkedExisting: z
+      .boolean()
+      .describe(
+        "True when Google already held an event at the same times with a matching title, so Planner linked that event instead of creating a duplicate.",
+      ),
+  }),
   update_appointment: z.strictObject({ appointment: appointmentSchema }),
   delete_appointment: z.strictObject({ deleted: z.literal(true), id }),
   ensure_weekly_plan: z.strictObject({

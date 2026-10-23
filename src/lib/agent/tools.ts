@@ -357,10 +357,13 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("get_week", {
     domain: "schedule",
-    summary: "Read one week of appointments and expanded occurrences.",
-    useWhen: "Use when answering or planning around the calendar.",
+    summary:
+      "Read one week of appointments and expanded occurrences, pulling Google Calendar first.",
+    useWhen:
+      "Use when answering or planning around the calendar, and before create_appointment to check the slot is not already booked.",
     avoidWhen: "Use get_context if only the current appointment count is needed.",
-    returns: "Weekly plan summary, appointment masters, and occurrence times.",
+    returns:
+      "Weekly plan summary, appointment masters, occurrence times, and googleSync (the pull's outcome; failed means the rows may miss recent Google changes).",
     effects: read,
     exposure: "domain",
     handler: getWeekTool,
@@ -371,7 +374,8 @@ const definitions: AgentToolDefinition[] = [
     useWhen: "Use after the subject and exact start/end times are approved.",
     avoidWhen:
       "Do not retry automatically; Google synchronization is not atomic with local storage.",
-    returns: "The created appointment summary.",
+    returns:
+      "The created appointment summary and linkedExisting: true when Google already held an event at the same times with a matching title, which was linked instead of duplicated.",
     effects: write,
     exposure: "domain",
     handler: createAppointmentTool,

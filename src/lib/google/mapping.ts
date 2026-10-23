@@ -15,6 +15,7 @@ import type {
 } from "@/db/schema";
 import { allDayRange } from "@/lib/schedule/allDay";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
 import { normalizeColorId } from "./eventColors";
 
 /** The subset of Google's Event resource we read. */
@@ -248,22 +249,23 @@ export function buildRecurrenceRule(fields: RecurrenceFields): string[] | undefi
 }
 
 /**
- * The **server process's** IANA zone, which is not necessarily anybody's.
+ * The IANA zone Planner names on every event it writes to Google: the reader's zone,
+ * `READER_TIME_ZONE` (America/New_York).
  *
- * This was written as "the machine's zone — this is a single-user app running in its owner's
- * timezone", and both halves have since stopped being true: `specs/2026-08-01-1042-multi-user-accounts`
- * made the app multi-user, and a Vercel function runs in UTC. Nothing passes a zone in, so
- * every event Planner writes to Google from the deployed app is stamped `UTC` — which for a
- * recurring event is exactly the case `writeEventTime` below says the field exists for, since
- * Google expands the RRULE in the named zone.
+ * This used to be the **server process's** zone, on the theory that a single-user app runs
+ * in its owner's timezone. A Vercel function runs in UTC, so every event Planner wrote from
+ * the deployed app was stamped `timeZone: "UTC"` — visibly wrong in Google's event details,
+ * and wrong in effect for a recurring event, because Google expands an RRULE in the named
+ * zone: a weekly 9:00 AM Eastern series stamped UTC moves to 8:00 AM when DST ends.
  *
- * Left as-is deliberately rather than half-fixed: where the zone should come from (the
- * browser at write time, or a timezone stored on the account) is a product decision, and
- * guessing here would only move the wrongness somewhere harder to find. See the
- * 2026-08-07 overnight report.
+ * `READER_TIME_ZONE` is the server's existing answer to "which zone does the reader live
+ * in" (the Register's today, the finance agent's "this month"), so Google writes now agree
+ * with the rest of the server. A per-account zone, or the target calendar's own `timeZone`
+ * from the calendar list, would need a stored column; see
+ * `agent-os/specs/2026-10-23-1200-google-inbound-sync-and-write-zone/`.
  */
-export function localTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+export function writeTimeZone(): string {
+  return READER_TIME_ZONE;
 }
 
 /**
@@ -279,7 +281,7 @@ export function localTimeZone(): string {
 export function writeEventTime(
   at: Date,
   allDay: boolean,
-  timeZone: string = localTimeZone(),
+  timeZone: string = writeTimeZone(),
 ): GoogleEventTime {
   // PATCH merges. Leaving the unused field off keeps a prior `dateTime` beside a new
   // `date` (or the reverse), which Google rejects as "Invalid start time."
@@ -307,7 +309,7 @@ export function appointmentToGoogleEvent(
     | "recurrenceCount"
     | "recurrenceUntil"
   >,
-  timeZone: string = localTimeZone(),
+  timeZone: string = writeTimeZone(),
 ): GoogleEventWrite {
   const { transparency, eventType } = showAsToGoogle(appointment.showAs);
   // Always include: an omitted field on PATCH would leave a prior colour when the user

@@ -108,6 +108,32 @@ describe("writeEventTime", () => {
     );
     expect(writeEventTime(new Date(), false).timeZone).toBeTruthy();
   });
+
+  it("stamps the reader's zone by default, not the server's", () => {
+    // Regression: the default was the process zone, which is UTC on Vercel, so every event
+    // Planner wrote from production carried timeZone "UTC" (seen on the Oct 9 CAC event).
+    // The test runner's own zone must not leak in either way.
+    expect(writeEventTime(new Date(), false).timeZone).toBe("America/New_York");
+    expect(writeEventTime(new Date(), true).timeZone).toBe("America/New_York");
+    const body = appointmentToGoogleEvent({
+      subject: "Weekly",
+      location: "",
+      notes: "",
+      startAt: new Date("2026-10-27T13:00:00Z"),
+      endAt: new Date("2026-10-27T14:00:00Z"),
+      allDay: false,
+      showAs: "busy",
+      colorId: null,
+      recurrenceFrequency: "weekly",
+      recurrenceInterval: 1,
+      recurrenceByWeekday: [2],
+      recurrenceEnd: "never",
+      recurrenceCount: null,
+      recurrenceUntil: null,
+    });
+    expect(body.start.timeZone).toBe("America/New_York");
+    expect(body.end.timeZone).toBe("America/New_York");
+  });
 });
 
 describe("showAs mapping", () => {

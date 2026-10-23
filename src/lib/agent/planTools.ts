@@ -259,7 +259,12 @@ export async function loadWeeklyPlanTool(
   args: Record<string, unknown>,
 ) {
   const { weekStart, weekStartsOn } = planWeekArgs(args);
-  const payload = await loadWeeklyPlanPayload(userId, { weekStart, weekStartsOn });
+  // Pull Google first: an agent has no browser to run the page's after-paint refresh.
+  const payload = await loadWeeklyPlanPayload(userId, {
+    weekStart,
+    weekStartsOn,
+    forceSync: true,
+  });
   return weeklyPlanResponse(payload);
 }
 
