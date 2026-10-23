@@ -307,6 +307,14 @@ Dry run against the local copy of the real accounts (not production): 764.46 + 1
 974.14 − 449.49 = 439.81, the bank-verified Jul 31 positions to the cent, including the $60.02
 Chase and $10.00 Capital One carries; pool breakdown left over 0.00.
 
+**Production dry run, 2026-10-23** (on a Neon branch of production via `scripts/prod.ts branch`):
+the same four openings, Σ 439.81; Ready to Assign 634.84 → 512.75 (−122.09). Checking, Savings and
+Chase match their registers. Capital One shows a +16.95 mismatch, which is the 2026-10-08 audit's
+unplaced $16.95: the Sep 22 YouTube charge stored twice, as `scrape:capitalone` "YouTube"
+(`33fd65cf…`) and `api:simplefin` "Google YouTubePremium" (`bd919a9c…`), a page row left from
+before D4. The old single opening hid it (`openingPositionFor` absorbed it); after the cutover it
+is the Budget card's mismatch line until Lee deletes the scrape row. Pool breakdown left over 0.00.
+
 Tests: `openingSeed.test.ts` (anchor choice, posted-date carry in both directions, the Jul 17–18
 case); `openingCutover.integration.test.ts` (each seed path, dry run writes nothing, apply equals
 dry run, idempotent second run, a post-start duplicate stays out of a statement-seeded opening
