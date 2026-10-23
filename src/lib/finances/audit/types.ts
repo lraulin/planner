@@ -18,6 +18,7 @@ export type FinanceAuditKind =
   | "legacy_budget_movement"
   | "reconciliation_adjustment"
   | "history_source_cutover"
+  | "budget_opening_cutover"
   | "alert_email";
 
 export type FinanceAuditScope = {

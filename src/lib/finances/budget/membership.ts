@@ -80,7 +80,9 @@ function categorizedActivityThrough(
     .reduce((sum, month) => sum + month.totalIncomeCents + month.totalActivityCents, 0);
 }
 
-function snapshotOf(data: Awaited<ReturnType<typeof loadBudget>>): LedgerSnapshot {
+export function snapshotOf(
+  data: Awaited<ReturnType<typeof loadBudget>>,
+): LedgerSnapshot {
   const current =
     findMonth(data.months, monthKeyOf(data.todayKey)) ??
     data.months.find((month) => month.month === data.month) ??
@@ -97,7 +99,7 @@ function snapshotOf(data: Awaited<ReturnType<typeof loadBudget>>): LedgerSnapsho
   };
 }
 
-function assertLedgerIdentity(snapshot: LedgerSnapshot): void {
+export function assertLedgerIdentity(snapshot: LedgerSnapshot): void {
   ledgerIdentity({
     openingCents: snapshot.openingCents,
     categorizedActivityCents: snapshot.categorizedActivityCents,
@@ -136,7 +138,7 @@ async function requireOwnedAccount(
   return row;
 }
 
-async function writeOpeningCents(
+export async function writeOpeningCents(
   executor: FinanceExecutor,
   userId: string,
   startMonth: string,
