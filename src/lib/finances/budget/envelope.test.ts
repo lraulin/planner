@@ -679,7 +679,6 @@ describe("ledgerIdentity", () => {
     openingCents: 100_000,
     categorizedActivityCents: -10_000,
     uncategorizedActivityCents: -5_000,
-    unmatchedTransferCents: 0,
     // 100_000 − 10_000 − 5_000 = 85_000, split between Ready to Assign and an envelope.
     readyToAssignCents: 60_000,
     totalEnvelopeBalanceCents: 25_000,
@@ -697,16 +696,14 @@ describe("ledgerIdentity", () => {
     ).toThrow(/Ledger identity failed/);
   });
 
-  it("accounts for held, future-assigned and unmatched transfers", () => {
-    // Ledger pool: 100_000 − 10_000 − 5_000 + 5_000 (unmatched transfer) = 90_000, split
-    // across Ready to Assign, envelopes, held and future-assigned.
+  it("accounts for held and future-assigned money", () => {
+    // 85_000 split across Ready to Assign, envelopes, held and future-assigned.
     expect(() =>
       ledgerIdentity({
         ...base,
-        readyToAssignCents: 45_000,
+        readyToAssignCents: 40_000,
         heldForNextMonthCents: 15_000,
         assignedInFutureMonthsCents: 5_000,
-        unmatchedTransferCents: 5_000,
       }),
     ).not.toThrow();
   });

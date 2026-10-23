@@ -104,9 +104,6 @@ export function assertLedgerIdentity(snapshot: LedgerSnapshot): void {
     openingCents: snapshot.openingCents,
     categorizedActivityCents: snapshot.categorizedActivityCents,
     uncategorizedActivityCents: snapshot.uncategorizedActivityCents,
-    // Real transfer-flow rows are wired in `agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/`
-    // Task 4; a correctly paired set nets to 0, so 0 is the right value until then.
-    unmatchedTransferCents: 0,
     readyToAssignCents: snapshot.readyToAssignCents,
     totalEnvelopeBalanceCents: snapshot.totalEnvelopeBalanceCents,
     heldForNextMonthCents: snapshot.heldForNextMonthCents,

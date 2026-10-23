@@ -564,14 +564,21 @@ export function unmatchedTransferCents(
  *
  * `categorizedActivityCents` is `Σ (totalIncomeCents + totalActivityCents)` over every month
  * from the start through the one being checked — money already carrying an envelope.
- * `uncategorizedActivityCents` and `unmatchedTransferCents` are the current month's backlog
- * figures, the same ones the fold itself takes.
+ * `uncategorizedActivityCents` is the current month's backlog figure, the same one the fold
+ * itself takes.
+ *
+ * Unmatched transfers are deliberately not an input. D1 writes them on both sides (`ledgerPool
+ * = opening + rows`, rows including them; `= RTA + envelopes + held + future + unmatched`), and
+ * since no fold term counts an unpaired transfer leg (`budgetContributionSql` leaves it out of
+ * activity, so it never reaches Ready to Assign either) they cancel. An earlier version took them
+ * on the activity side only, which held solely because every caller passed 0 — the real figure
+ * would have failed the check whenever a transfer waited for its pair. They are reported as a
+ * mismatch instead (D3).
  */
 export type LedgerIdentityInput = {
   openingCents: number;
   categorizedActivityCents: number;
   uncategorizedActivityCents: number;
-  unmatchedTransferCents: number;
   readyToAssignCents: number;
   totalEnvelopeBalanceCents: number;
   heldForNextMonthCents: number;
@@ -580,9 +587,8 @@ export type LedgerIdentityInput = {
 
 /**
  * The ledger's own accounting identity (D1), asserted rather than derived: every dollar the
- * ledger's rows put in an on-budget account either has a job (an envelope balance), is held
- * for next month, is assigned in a future month, is a transfer leg waiting for its pair, or is
- * unassigned (Ready to Assign).
+ * ledger's budget rows put in an on-budget account either has a job (an envelope balance), is
+ * held for next month, is assigned in a future month, or is unassigned (Ready to Assign).
  *
  * No bank balance enters this — it is provably true by construction of `buildBudget` when
  * every input is what it claims to be, so a failure here means a caller miscounted (an
@@ -594,8 +600,7 @@ export function ledgerIdentity(input: LedgerIdentityInput): void {
   const ledgerPoolCents =
     cents(input.openingCents, "opening position") +
     cents(input.categorizedActivityCents, "categorized activity") +
-    cents(input.uncategorizedActivityCents, "uncategorized activity") +
-    cents(input.unmatchedTransferCents, "unmatched transfer");
+    cents(input.uncategorizedActivityCents, "uncategorized activity");
   const rhs =
     input.readyToAssignCents +
     input.totalEnvelopeBalanceCents +

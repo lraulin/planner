@@ -105,7 +105,6 @@ function identityHolds(data: Awaited<ReturnType<typeof loadBudget>>) {
       openingCents: data.settings.openingCents,
       categorizedActivityCents,
       uncategorizedActivityCents: current.uncategorizedActivityCents,
-      unmatchedTransferCents: 0,
       readyToAssignCents: current.readyToAssignCents,
       totalEnvelopeBalanceCents: current.totalBalanceCents,
       heldForNextMonthCents: current.bufferedCents,
@@ -221,6 +220,33 @@ describeDb("account membership rebase", () => {
     const opening = (await load(userId)).settings.openingCents;
     await updateAccount(userId, checkingId, { closedOn: "2026-08-20" });
     expect((await load(userId)).settings.openingCents).toBe(opening);
+    identityHolds(await load(userId));
+  });
+
+  it("changes membership while a transfer leg is still waiting for its pair", async () => {
+    // The identity check once took unmatched transfers on one side only, which held because
+    // every caller passed 0; the real figure would have refused this rebase.
+    const checkingId = await addAccount(userId, { name: "Checking", kind: "checking" });
+    const investId = await addAccount(userId, {
+      name: "Brokerage",
+      kind: "investment",
+      offBudget: true,
+    });
+    await addTx(userId, checkingId, "2026-07-15", "400.00");
+    await addTx(userId, investId, "2026-07-15", "250.00");
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId: checkingId,
+      transactionDate: "2026-08-10",
+      description: "TRANSFER TO SAVINGS",
+      amount: "-40.00",
+      flowOverride: "internal_transfer",
+    });
+    expect((await load(userId)).mismatch.unmatchedTransferCents).toBe(-4_000);
+
+    const receipt = await rebaseAccountMembership(userId, investId, false);
+    expect(receipt.transitions).toHaveLength(1);
     identityHolds(await load(userId));
   });
 
