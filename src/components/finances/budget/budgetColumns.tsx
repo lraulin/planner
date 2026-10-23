@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { DateText } from "@/components/date/DateText";
 import { billDueCue } from "@/lib/finances/budget/dueCue";
 import { AmountCell } from "@/components/grid/cells";
@@ -142,7 +142,7 @@ export function ActivityAmountLink({
   className?: string;
 }) {
   return (
-    <Link
+    <NavLink
       href={activityRegisterHref(categoryId, month)}
       onClick={stopRowClick}
       onPointerDown={stopRowClick}
@@ -151,7 +151,7 @@ export function ActivityAmountLink({
       } ${className}`}
     >
       {formatUsd(cents)}
-    </Link>
+    </NavLink>
   );
 }
 

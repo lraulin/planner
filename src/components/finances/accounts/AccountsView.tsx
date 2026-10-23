@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { useRouter } from "next/navigation";
 import type { BankConnectionRow, BankLinkRow } from "@/lib/banksync/queries";
 import {
@@ -397,9 +397,12 @@ export function AccountsView({
         >
           Import transactions
         </button>
-        <Link href="/finances/budget" className="ml-auto px-2 py-1 text-sm underline">
+        <NavLink
+          href="/finances/budget"
+          className="ml-auto px-2 py-1 text-sm underline"
+        >
           Budget
-        </Link>
+        </NavLink>
       </div>
       {snapshot.fallbackReason && (
         <div className="max-h-[45dvh] shrink-0 overflow-auto p-3">
@@ -435,9 +438,9 @@ export function AccountsView({
           <p key={connection.id} className="px-3 py-1 text-xs text-priority-a">
             {connection.label}:{" "}
             {connection.reauthRequiredAt ? "Reconnect bank" : "Match accounts"} in{" "}
-            <Link className="underline" href="/settings">
+            <NavLink className="underline" href="/settings">
               Settings
-            </Link>
+            </NavLink>
           </p>
         ))}
       <GridToolbar

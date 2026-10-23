@@ -11,7 +11,7 @@ import {
   useTransition,
   type ReactNode,
 } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import {
@@ -1573,12 +1573,12 @@ export function BudgetView({
         />
 
         <nav className="flex flex-wrap gap-4 text-xs text-ink-muted">
-          <Link className="underline" href="/finances/accounts">
+          <NavLink className="underline" href="/finances/accounts">
             Accounts
-          </Link>
-          <Link className="underline" href="/finances/bills?view=due-soon">
+          </NavLink>
+          <NavLink className="underline" href="/finances/bills?view=due-soon">
             Due soon · next 14 days
-          </Link>
+          </NavLink>
           {data.month === monthKeyOf(data.todayKey) && payday.dateKey ? (
             <span>Next payday {formatDate(payday.dateKey)}</span>
           ) : null}
@@ -2122,9 +2122,9 @@ function MonthBar({
         →
       </button>
       {todayHref ? (
-        <Link href={todayHref} className={button} title="Current month">
+        <NavLink href={todayHref} className={button} title="Current month">
           Today
-        </Link>
+        </NavLink>
       ) : null}
 
       <span className="ml-auto flex flex-wrap gap-2">

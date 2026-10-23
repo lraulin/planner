@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { financeUploadLimits } from "@/lib/finances/upload";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { packFileBatches } from "@/lib/import/batchFiles";
@@ -228,12 +228,12 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
             </p>
             {result.auditBatchId && (
               <p className="mt-1">
-                <Link
+                <NavLink
                   href={`/finances/activity?batch=${result.auditBatchId}`}
                   className="text-ink-muted underline decoration-rule underline-offset-2 hover:text-ink"
                 >
                   View Activity receipt
-                </Link>
+                </NavLink>
               </p>
             )}
             {result.warnings.length > 0 && (

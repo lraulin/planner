@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { useState, useTransition } from "react";
 import type { DiscussionItemSummary } from "@/lib/contacts/types";
 import { createDiscussionItemAction } from "@/app/(shell)/library/contacts/actions";
@@ -187,14 +187,14 @@ function ItemList({
                 {priority}
               </span>
             )}
-            <Link
+            <NavLink
               href={`/tasks?detail=${item.nodeId}`}
               className={`min-w-0 flex-1 truncate text-[0.8125rem] hover:underline ${
                 item.resolved ? "text-ink-faint line-through" : "text-ink"
               }`}
             >
               {item.name}
-            </Link>
+            </NavLink>
             {item.deadline &&
               (() => {
                 const dateKey = toDateKey(item.deadline);

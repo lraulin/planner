@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { TabToolbar } from "@/components/tabs/tabChrome";
 
@@ -62,25 +62,25 @@ export function DayHeader({
       {/* Links, not buttons: a day is a URL, so these must be openable in a new tab. Styled
           to match `ToolbarButton`, which renders a real `<button>` and cannot wrap one. */}
       <span className="flex items-center gap-1">
-        <Link
+        <NavLink
           href={href(shift(day, -step))}
           title={mode === "day" ? "Previous day" : "Previous week"}
           aria-label={mode === "day" ? "Previous day" : "Previous week"}
           className={navClass}
         >
           ‹
-        </Link>
-        <Link href={href(today)} className={navClass}>
+        </NavLink>
+        <NavLink href={href(today)} className={navClass}>
           Today
-        </Link>
-        <Link
+        </NavLink>
+        <NavLink
           href={href(shift(day, step))}
           title={mode === "day" ? "Next day" : "Next week"}
           aria-label={mode === "day" ? "Next day" : "Next week"}
           className={navClass}
         >
           ›
-        </Link>
+        </NavLink>
       </span>
 
       <span className="text-[0.8125rem] font-medium text-ink">

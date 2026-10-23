@@ -1,6 +1,6 @@
 "use client";
 import { useToast } from "@/components/shell/ToastProvider";
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 
 import {
   useCallback,
@@ -768,20 +768,20 @@ export function FinancesView({
       />
 
       {activityActive && activityView ? (
-        <Link
+        <NavLink
           className="border-b border-rule px-3 py-2 text-xs underline"
           href={budgetEnvelopeHref(activityView.categoryId, activityView.month)}
         >
           Return to Budget · {activityEnvelopeName} · {monthLabel(activityView.month)}
-        </Link>
+        </NavLink>
       ) : null}
       {reportActive ? (
-        <Link
+        <NavLink
           className="border-b border-rule px-3 py-2 text-xs underline"
           href="/finances/insights"
         >
           Return to Insights · report settings preserved
-        </Link>
+        </NavLink>
       ) : null}
       <AccountBalances accounts={accounts} />
 

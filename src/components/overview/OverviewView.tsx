@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { requestQuickCapture } from "@/components/capture/event";
@@ -146,14 +146,14 @@ export function OverviewView({
                           </span>
                         ) : null;
                       return "href" in action ? (
-                        <Link
+                        <NavLink
                           key={action.label}
                           href={action.href}
                           className={className}
                         >
                           <span>{action.label}</span>
                           {badge}
-                        </Link>
+                        </NavLink>
                       ) : (
                         <button
                           key={action.label}

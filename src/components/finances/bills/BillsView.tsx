@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useId, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { useRouter } from "next/navigation";
 import {
   setRecurringBillAction,
@@ -317,9 +317,9 @@ export function BillsView({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <div className="flex shrink-0 flex-wrap gap-3 border-b border-rule px-3 py-2 text-xs">
-        <Link className="underline" href="/finances/budget">
+        <NavLink className="underline" href="/finances/budget">
           Budget
-        </Link>
+        </NavLink>
         <button type="button" onClick={create}>
           + Bill
         </button>
@@ -481,18 +481,18 @@ export function BillsView({
         {opened ? (
           <div className="flex-1 space-y-3 overflow-auto p-3">
             <nav className="flex gap-3 text-xs">
-              <Link
+              <NavLink
                 className="underline"
                 href={budgetEnvelopeHref(opened.id, data.month)}
               >
                 Open in Budget
-              </Link>
-              <Link
+              </NavLink>
+              <NavLink
                 className="underline"
                 href={activityRegisterHref(opened.id, data.month)}
               >
                 View transactions
-              </Link>
+              </NavLink>
             </nav>
             {error ? (
               <p role="alert" className="text-sm text-priority-a">

@@ -35,16 +35,13 @@ type LinkProps = Omit<ComponentProps<typeof Link>, "children" | "href" | "prefet
 /**
  * Viewport prefetch for every in-app link — the one switch for it.
  *
- * `undefined` is Next's default: each visible link prefetches its route. Spec decision 6 turns
- * this to `false` ("every in-app link goes through `NavLink`") **if** click → last DOM change
- * on the five measured routes is not more than 20 ms worse on a production build. That gate
- * could not be measured in the implementing session (`plan.md`, Measurements), so it stays at
- * the default; flipping it is this one line plus the table in the spec. For a dynamic route
- * with no `loading.js` the prefetch carries no page data (`prefetching.md`), so the expected
- * result is a saving of ~35 requests per view for no slower click — but that is the claim the
- * gate exists to check, not a fact.
+ * Off, by spec decision 6: on a production build, click → last DOM change on the measured
+ * routes was no worse with it off (within ±10 ms of on, which made 32–48 prefetch requests per
+ * cold view; `plan.md`, Measurements). For a dynamic route with no `loading.js` the prefetch
+ * carries no page data (`prefetching.md`), so it bought nothing. The setting is honoured only
+ * because every in-app link goes through `NavLink`; a bare `next/link` prefetches again.
  */
-const PREFETCH: false | undefined = undefined;
+const PREFETCH = false;
 
 export function NavLink({
   className,

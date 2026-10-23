@@ -1,6 +1,6 @@
 "use client";
 import { useId, useState, useMemo } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@/components/grid/columns";
@@ -91,7 +91,7 @@ const reportColumns: ColumnDef<ReportCtx, ReportEnvelope>[] = [
         : `${{ spendingCents: "Spending", carryInCents: "Carry-in", assignedCents: "Assigned", activityCents: "Activity", balanceCents: "Available" }[id]} ${formatUsd(row.node[id])}`,
     sortValue: (row) => row.node[id],
     render: (row, ctx) => (
-      <Link
+      <NavLink
         className="tabular text-xs underline decoration-rule underline-offset-2"
         href={
           id === "spendingCents" || id === "activityCents"
@@ -100,7 +100,7 @@ const reportColumns: ColumnDef<ReportCtx, ReportEnvelope>[] = [
         }
       >
         {formatUsd(row.node[id])}
-      </Link>
+      </NavLink>
     ),
   })),
 ];
@@ -253,12 +253,12 @@ export function InsightsView({
             {title}
           </button>
         ))}
-        <Link
+        <NavLink
           className="ml-auto text-xs underline"
           href="/finances/register?view=uncategorized"
         >
           Categorize transactions
-        </Link>
+        </NavLink>
       </header>
       <div className="mb-3 flex flex-wrap gap-2">
         {balances ? (
@@ -369,7 +369,7 @@ export function InsightsView({
             </p>
           ) : null}
           <div className="mb-3 flex flex-wrap gap-5 text-sm">
-            <Link
+            <NavLink
               href={drill(expenseIds, range, {
                 uncategorized:
                   view.scope === "all" &&
@@ -379,11 +379,11 @@ export function InsightsView({
             >
               Spending{" "}
               <b className="tabular">{formatUsd(-sumReportActivity(spendRows))}</b>
-            </Link>
-            <Link href={drill(regularIds)}>
+            </NavLink>
+            <NavLink href={drill(regularIds)}>
               Actual regular income{" "}
               <b className="tabular">{formatUsd(sumReportActivity(incomeRows))}</b>
-            </Link>
+            </NavLink>
           </div>
           {view.scope === "savings" ? (
             <p className="mb-2 text-xs text-ink-muted">
@@ -482,7 +482,7 @@ export function InsightsView({
                       | "balanceCents";
                     return [
                       key,
-                      <Link
+                      <NavLink
                         key={key}
                         href={
                           key === "spendingCents" || key === "activityCents"
@@ -495,7 +495,7 @@ export function InsightsView({
                         className="tabular underline decoration-rule"
                       >
                         {formatUsd(members.reduce((sum, row) => sum + row[key], 0))}
-                      </Link>,
+                      </NavLink>,
                     ];
                   }),
               )
@@ -507,14 +507,14 @@ export function InsightsView({
       {view.report === "spending" ? (
         <>
           <div className="my-3 rounded border border-rule p-2 text-xs">
-            <Link
+            <NavLink
               className="underline"
               href={drill([], range, { uncategorized: true })}
             >
               Uncategorized: {uncategorized.length} row
               {uncategorized.length === 1 ? "" : "s"} ·{" "}
               {formatUsd(-sumReportActivity(uncategorized))}
-            </Link>
+            </NavLink>
             {uncategorized.length ? (
               <span className="ml-2 text-priority-b">
                 Categorize these to complete the cost-of-living report.
@@ -530,7 +530,7 @@ export function InsightsView({
             <ol className="mt-2 space-y-1">
               {secondaryPayees.map((payee) => (
                 <li key={payee.id}>
-                  <Link
+                  <NavLink
                     className="underline"
                     href={drill(expenseIds, range, {
                       payeeIds: [payee.id],
@@ -541,7 +541,7 @@ export function InsightsView({
                     })}
                   >
                     {payee.name} · {formatUsd(payee.cents)}
-                  </Link>
+                  </NavLink>
                 </li>
               ))}
             </ol>
@@ -558,7 +558,7 @@ export function InsightsView({
                 ["all", "Net movement", inflows - outflows],
               ] as const
             ).map(([direction, title, cents]) => (
-              <Link
+              <NavLink
                 key={direction}
                 href={drill(view.categoryIds, range, {
                   basis: "cashflow",
@@ -567,7 +567,7 @@ export function InsightsView({
                 })}
               >
                 {title} <b className="tabular">{formatUsd(cents)}</b>
-              </Link>
+              </NavLink>
             ))}
           </div>
           <CashFlowChart
@@ -640,9 +640,9 @@ export function InsightsView({
                 ? ` · All accounts itemize from ${coverage.completeFrom}`
                 : ""}
             </p>
-            <Link className="underline" href="/finances/statements">
+            <NavLink className="underline" href="/finances/statements">
               Review statements
-            </Link>
+            </NavLink>
           </details>
         </>
       ) : null}
@@ -671,7 +671,7 @@ export function InsightsView({
                 <div className="contents" key={label}>
                   <dt>{label}</dt>
                   <dd>
-                    <Link
+                    <NavLink
                       className="underline"
                       href={
                         label === "Activity"
@@ -680,17 +680,17 @@ export function InsightsView({
                       }
                     >
                       {formatUsd(cents)}
-                    </Link>
+                    </NavLink>
                   </dd>
                 </div>
               ))}
             </dl>
-            <Link
+            <NavLink
               className="inline-block min-h-tap underline"
               href={budgetEnvelopeHref(opened.id, month)}
             >
               Open in Budget
-            </Link>
+            </NavLink>
           </div>
         ) : null}
       </Drawer>

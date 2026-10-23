@@ -1,5 +1,5 @@
 import { Suspense, type ReactNode } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { getCurrentAccount } from "@/lib/auth";
 import { listInvites, serializeInvite, userCanInvite } from "@/lib/auth/invites";
@@ -31,7 +31,7 @@ function SettingsFrame({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <header className="pt-safe flex flex-none items-center gap-3 border-b border-rule bg-shell px-4 py-2 md:px-5">
-        <Link
+        <NavLink
           href="/outline"
           className="flex min-h-tap items-center text-[0.8125rem] font-semibold tracking-tight text-ink-muted hover:text-ink md:min-h-0"
         >
@@ -39,7 +39,7 @@ function SettingsFrame({ children }: { children: ReactNode }) {
             ←
           </span>
           Back to Planner
-        </Link>
+        </NavLink>
         <span aria-hidden className="text-ink-faint">
           /
         </span>

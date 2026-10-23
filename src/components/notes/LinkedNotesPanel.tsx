@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { LinkedNoteSummary } from "@/lib/detail/types";
@@ -86,7 +86,7 @@ export function LinkedNotesPanel({
         <ul className="divide-y divide-rule rounded border border-rule">
           {notes.map((note) => (
             <li key={note.id}>
-              <Link
+              <NavLink
                 href={notesPath(note.id)}
                 className="flex flex-col gap-0.5 px-3 py-2 hover:bg-surface-raised"
               >
@@ -111,7 +111,7 @@ export function LinkedNotesPanel({
                     <span className="truncate text-ink-faint">{note.snippet}</span>
                   )}
                 </span>
-              </Link>
+              </NavLink>
             </li>
           ))}
         </ul>

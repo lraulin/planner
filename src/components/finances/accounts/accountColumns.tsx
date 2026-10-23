@@ -5,7 +5,7 @@ import { DateText } from "@/components/date/DateText";
 import { accountKindLabel } from "@/lib/finances/accountKind";
 import { formatUsd } from "@/lib/finances/money";
 import type { OperationalAccount } from "@/lib/finances/accountOperations";
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { UrlLink } from "@/components/url/UrlLink";
 import { toDateKey } from "@/lib/schedule/geometry";
 
@@ -230,9 +230,9 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     sortValue: (row) => row.node.freshness,
     render: (row) =>
       row.node.needsConnection ? (
-        <Link href="/settings" className="text-xs text-priority-a underline">
+        <NavLink href="/settings" className="text-xs text-priority-a underline">
           Reconnect bank
-        </Link>
+        </NavLink>
       ) : (
         <Text value={row.node.freshness} />
       ),

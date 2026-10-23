@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { PriorityLetter } from "@/db/schema";
@@ -117,12 +117,12 @@ function OrganizerEmpty() {
           >
             Quick capture
           </button>
-          <Link
+          <NavLink
             href="/plan/overview"
             className="flex min-h-tap items-center justify-center rounded border border-rule px-4 text-[0.8125rem] text-ink hover:bg-surface-raised"
           >
             Back to Overview
-          </Link>
+          </NavLink>
         </div>
       </div>
     </div>
@@ -570,12 +570,12 @@ function OrganizerItemForm({
 
       <footer className="pb-safe sticky bottom-0 border-t border-rule bg-shell/95 px-4 py-3 backdrop-blur sm:px-6 md:px-8">
         <div className="mx-auto flex max-w-[72rem] items-center justify-between gap-3">
-          <Link
+          <NavLink
             href="/plan/overview"
             className="flex min-h-tap items-center rounded border border-rule px-4 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0 md:py-2"
           >
             Exit
-          </Link>
+          </NavLink>
           <div className="flex items-center gap-3">
             <span className="hidden text-[0.6875rem] text-ink-faint sm:block">
               {PROCESS_CHORD}

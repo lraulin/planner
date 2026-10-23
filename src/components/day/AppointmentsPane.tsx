@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import type { DayAppointment } from "@/lib/day/appointments";
 
 export type { DayAppointment };
@@ -42,12 +42,12 @@ export function AppointmentsPane({
         <h2 className="text-[0.75rem] font-semibold tracking-wide text-ink-muted uppercase">
           Appointments
         </h2>
-        <Link
+        <NavLink
           href={`/schedule?start=${dayKey}`}
           className="text-[0.6875rem] text-ink-faint hover:text-ink"
         >
           Schedule
-        </Link>
+        </NavLink>
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto px-3 py-2">

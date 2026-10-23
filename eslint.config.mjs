@@ -70,6 +70,29 @@ const eslintConfig = defineConfig([
     },
   },
 
+  // In-app links go through `NavLink`, which owns the prefetch switch and the pending-click
+  // feedback. A bare `next/link` silently prefetches again (immediate-navigation spec, D6).
+  // `/signup` renders outside the shell, so it keeps `next/link`.
+  {
+    files: ["src/**/*.tsx"],
+    ignores: ["src/components/shell/NavLink.tsx", "src/app/signup/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "next/link",
+              importNames: ["default"],
+              message:
+                "Use NavLink from @/components/shell/NavLink: it carries the prefetch switch and the pending-click feedback.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Warn-by-default rules worth failing on. With --max-warnings=0 the severity is
   // moot, but the intent should be explicit rather than implied by a CLI flag.
   {

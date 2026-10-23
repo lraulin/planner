@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { MarkdownEditor } from "@/components/notes/MarkdownEditor";
 import { useAutosave } from "@/components/notes/useAutosave";
 import { saveJournalAction } from "@/app/day/actions";
@@ -42,12 +42,12 @@ export function DailyNotesPane({
         <h2 className="text-[0.75rem] font-semibold tracking-wide text-ink-muted uppercase">
           Daily Notes
         </h2>
-        <Link
+        <NavLink
           href={`/notes?date=${day}`}
           className="text-[0.6875rem] text-ink-faint hover:text-ink"
         >
           Journal
-        </Link>
+        </NavLink>
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto p-2">

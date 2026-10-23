@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import Link from "next/link";
+import { NavLink } from "@/components/shell/NavLink";
 import { useRouter } from "next/navigation";
 import { ErrorBanner } from "@/components/tabs/tabChrome";
 import { buildChooserItems, defaultSettings } from "@/lib/chooser/views";
@@ -121,12 +121,12 @@ export function WeekPlanView({
             <h2 className="text-[0.75rem] font-semibold tracking-wide text-ink-muted uppercase">
               Master Tasks
             </h2>
-            <Link
+            <NavLink
               href="/chooser"
               className="text-[0.6875rem] text-ink-faint hover:text-ink"
             >
               Task Chooser
-            </Link>
+            </NavLink>
           </header>
 
           <ul className="min-h-0 flex-1 overflow-auto py-1">
@@ -185,7 +185,7 @@ export function WeekPlanView({
                   day === today ? "bg-surface-raised" : "",
                 ].join(" ")}
               >
-                <Link
+                <NavLink
                   href={`/schedule/day?date=${day}`}
                   className={[
                     "text-[0.75rem] hover:underline",
@@ -193,7 +193,7 @@ export function WeekPlanView({
                   ].join(" ")}
                 >
                   {columnLabel(day)}
-                </Link>
+                </NavLink>
               </header>
 
               <ul className="min-h-0 flex-1 overflow-auto p-1">
