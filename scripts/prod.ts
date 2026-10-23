@@ -31,10 +31,20 @@ import {
 } from "../src/lib/backup/productionAccess";
 import { redactSecrets } from "../src/lib/backup/redaction";
 
-/** Every value as Postgres prints it — numerics, dates and timestamps stay exact text. */
+/**
+ * Every value as Postgres prints it — numerics, dates and timestamps stay exact text. A stored
+ * `sslmode=require` is spelled out as the `verify-full` pg already treats it as, which keeps
+ * pg's deprecation warning out of every result.
+ */
 function client(connectionString: string): pg.Client {
+  const url = new URL(connectionString);
+  if (
+    ["prefer", "require", "verify-ca"].includes(url.searchParams.get("sslmode") ?? "")
+  ) {
+    url.searchParams.set("sslmode", "verify-full");
+  }
   return new pg.Client({
-    connectionString,
+    connectionString: url.toString(),
     types: { getTypeParser: () => (value: string) => value },
   });
 }
