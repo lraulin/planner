@@ -158,8 +158,8 @@ and fix the userscript/parse so credits keep their sign (suspected non-ASCII min
 - [x] Budget card shows the mismatch line (per account + unmatched transfers) and no reconciliation
       term; Activity Headline impact is RTA delta.
 - [x] Reconcile writes one audited adjustment that moves RTA by exactly the confirmed difference.
-- [ ] Production cutover dry-run receipt shows before/after RTA, per-account openings and their
-      seed source, mismatches; applied only after Lee reads it.
+- [x] Production cutover dry-run receipt shows before/after RTA, per-account openings and their
+      seed source, mismatches; applied only after Lee reads it. _(Applied by Lee 2026-10-23.)_
 
 ## Changes from original plan
 
@@ -285,7 +285,7 @@ Lee to delete by hand — **done**. Pure matcher + tests in
 whose page/feed descriptions share nothing. Zero matches on local dev data (expected — the
 production incident data isn't in the dev seed).
 
-## Task 8: Cutover **built; production dry run and apply pending Lee**
+## Task 8: Cutover **done**
 
 `scripts/ledger-rta-cutover.ts` modeled on `scripts/single-pool-cutover.ts`: dry-run/apply, seeds
 openings, receipt with before/after RTA, per-account openings and seed source, mismatches,
@@ -314,6 +314,11 @@ unplaced $16.95: the Sep 22 YouTube charge stored twice, as `scrape:capitalone` 
 (`33fd65cf…`) and `api:simplefin` "Google YouTubePremium" (`bd919a9c…`), a page row left from
 before D4. The old single opening hid it (`openingPositionFor` absorbed it); after the cutover it
 is the Budget card's mismatch line until Lee deletes the scrape row. Pool breakdown left over 0.00.
+
+**Applied 2026-10-23** by Lee through `scripts/prod.ts apply`, after Neon snapshot
+`pre-apply-2026-10-23T16-03-18-670Z`. The receipt matched the dry run line for line; production
+now stores the four openings, the legacy total reads 43981, and audit event
+`budget_opening_cutover` records the four changes.
 
 Tests: `openingSeed.test.ts` (anchor choice, posted-date carry in both directions, the Jul 17–18
 case); `openingCutover.integration.test.ts` (each seed path, dry run writes nothing, apply equals
