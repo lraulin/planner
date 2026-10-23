@@ -2,8 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(git ls-remote *)",
-      "Bash(security find-generic-password -s planner-production-backup-database-url -w)"
-    ]
+      "Bash(security find-generic-password -s planner-production-backup-database-url -w)",
+      "Bash(npx tsx scripts/prod.ts read *)",
+      "Bash(npx tsx scripts/prod.ts branch scripts/*)"
+    ],
+    "ask": ["Bash(npx tsx scripts/prod.ts apply scripts/*)"]
   },
   "hooks": {
     "Stop": [

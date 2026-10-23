@@ -32,6 +32,8 @@ const KEYCHAIN_HELPER_BINARY = path.join(
 export const BACKUP_DATABASE_SERVICE = "planner-production-backup-database-url";
 export const BACKUP_PASSPHRASE_SERVICE = "planner-production-backup-passphrase";
 export const BACKUP_NEON_API_SERVICE = "planner-production-backup-neon-api";
+/** The production owner URL, for `scripts/prod.ts apply` only (`docs/production-access.md`). */
+export const PRODUCTION_OWNER_SERVICE = "planner-production-owner-database-url";
 export const DEFAULT_BACKUP_DESTINATION =
   "/Users/leeraulin/Library/CloudStorage/Dropbox/Planner Backups";
 export const LAUNCH_AGENT_LABEL = "com.lraulin.planner-backup";
@@ -107,6 +109,19 @@ export async function readBackupSecrets(): Promise<BackupSecrets> {
     readKeychainSecret(BACKUP_PASSPHRASE_SERVICE),
   ]);
   return { databaseUrl, passphrase };
+}
+
+/** The read-only `planner_backup` URL, which `scripts/prod.ts read` uses as well. */
+export async function readProductionReadOnlyUrl(): Promise<string> {
+  return await readKeychainSecret(BACKUP_DATABASE_SERVICE);
+}
+
+export async function readProductionOwnerUrl(): Promise<string> {
+  return await readKeychainSecret(PRODUCTION_OWNER_SERVICE);
+}
+
+export async function storeProductionOwnerUrl(databaseUrl: string): Promise<void> {
+  await storeKeychainSecret(PRODUCTION_OWNER_SERVICE, databaseUrl);
 }
 
 export async function readBackupPassphrase(): Promise<string> {
