@@ -548,7 +548,7 @@ const definitions: AgentToolDefinition[] = [
     avoidWhen:
       "Do not use it for a dated series or a named transaction; those are the other finance tools. Do not treat ledgerBalanceCents as the current balance when mismatchCents is nonzero.",
     returns:
-      "Accounts with the working balance Dashboard shows (live + pending when the bank feed is linked, else statement-anchored; source, as-of time, posted and pending split, ledger sum and drift), the imported date range, unclassified count, coverage (late starts, holes, statement-anchored mismatches), category vocabulary, merchant count (names via list_payees), and headline interest/fees.",
+      "Accounts first, with the working balance Dashboard shows (live + pending when the bank feed is linked, else statement-anchored; source, as-of time, posted and pending split, ledger sum and drift); then the imported date range, unclassified count, headline interest/fees, coverage (late starts, the newest 10 holes with holeCount, statement-anchored mismatches), budget groups and envelopes, up to 40 non-envelope category names with otherCategoryCount, and merchant count (names via list_payees).",
     effects: read,
     exposure: "domain",
     handler: getFinanceOverviewTool,

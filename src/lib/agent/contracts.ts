@@ -1415,24 +1415,6 @@ export const outputSchemas = {
     metric: metricDetailSchema,
   }),
   get_finance_overview: z.strictObject({
-    envelopes: z.array(
-      z.strictObject({
-        id,
-        name: z.string(),
-        groupId: id.nullable(),
-        kind: z.enum(["income", "spending", "bill", "savings"]),
-        incomeRole: z.enum(["regular", "other"]),
-        expectedMonthlyIncomeCents: cents.nullable(),
-      }),
-    ),
-    groups: z.array(
-      z.strictObject({
-        id,
-        name: z.string(),
-        parentGroupId: id.nullable(),
-        kind: z.enum(["income", "spending", "bill", "savings"]),
-      }),
-    ),
     accounts: z.array(
       z.strictObject({
         id,
@@ -1458,12 +1440,23 @@ export const outputSchemas = {
       transactionCount: z.number().int().min(0),
     }),
     unclassifiedCount: z.number().int().min(0),
+    carryingCost: z.strictObject({
+      interestCents: cents,
+      feesCents: cents,
+    }),
     coverage: z.strictObject({
       completeFrom: dateKey.nullable(),
       lateAccounts: z.array(
         z.strictObject({ accountName: z.string(), firstSeen: dateKey }),
       ),
       unitemizedCents: cents,
+      holeCount: z
+        .number()
+        .int()
+        .min(0)
+        .describe(
+          "How many statement coverage holes exist; holes lists the newest 10.",
+        ),
       holes: z.array(
         z.strictObject({
           accountId: id,
@@ -1475,6 +1468,9 @@ export const outputSchemas = {
           discontinuityCents: cents,
         }),
       ),
+      holesTool: z
+        .literal("list_statements")
+        .describe("The tool that lists every hole beside its statement periods."),
       // Statement reconciliation, not the live position: these compare the register with
       // the newest statement close plus later rows, whatever accounts[].balanceSource is.
       // Own descriptions, because the flat field map describes the account-level figures.
@@ -1492,13 +1488,42 @@ export const outputSchemas = {
         }),
       ),
     }),
-    categories: z.array(z.string()),
+    groups: z.array(
+      z.strictObject({
+        id,
+        name: z.string(),
+        parentGroupId: id.nullable(),
+        kind: z.enum(["income", "spending", "bill", "savings"]),
+      }),
+    ),
+    envelopes: z.array(
+      z.strictObject({
+        id,
+        name: z.string(),
+        groupId: id.nullable(),
+        kind: z.enum(["income", "spending", "bill", "savings"]),
+        incomeRole: z
+          .enum(["regular", "other"])
+          .optional()
+          .describe("Income envelopes only."),
+        expectedMonthlyIncomeCents: cents
+          .nullable()
+          .optional()
+          .describe("Income envelopes only."),
+      }),
+    ),
+    otherCategoryCount: z
+      .number()
+      .int()
+      .min(0)
+      .describe("How many effective category names in history are not envelope names."),
+    otherCategories: z
+      .array(z.string())
+      .describe(
+        "Up to 40 effective category names from imported history that no envelope carries, alphabetical. Envelope names are in envelopes[].",
+      ),
     merchantCount: z.number().int().min(0),
     merchantsTool: z.literal("list_payees"),
-    carryingCost: z.strictObject({
-      interestCents: cents,
-      feesCents: cents,
-    }),
   }),
   get_cash_flow: z.strictObject({
     range: nullableDateRangeSchema,
