@@ -98,22 +98,64 @@ both pipelines.
 
 ## Acceptance criteria
 
-- [ ] **Replay:** the 2026-09-20 snapshot (`rawText` on the audit event) through the new planner
-      keeps the Chewy hold. With the statement rows added it is marked `postedAtBank`.
+- [x] **Replay:** the 2026-09-20 snapshot (`rawText` on the audit event) through the new planner
+      keeps the Chewy hold. With the statement rows added it is marked `postedAtBank`. —
+      `bankSnapshotReconcile.test.ts` "Sep 20 replay…"; and on 2026-10-24 the real `rawText` of
+      production audit event `0c9083ed` was run through today's `parseBankBrowserSnapshot` and
+      `planBankSnapshotReconciliation` with the deleted hold rebuilt from that event's
+      `before_fields`: no delete, the hold flagged unlisted. With a Chewy statement row added it is
+      marked `postedAtBank` on a feed-covered account, and posted in place on a page-sourced one
+      (`2026-09-23-1316-one-history-source-per-account` supersedes D2 there).
 - [ ] A capture whose posted table is absent or unreadable refuses; tested against saved HTML of
       the statement-close page.
-- [ ] Unit: `resolveLostHold` with `recentPosted` candidates; the `none` branch sets `unlisted_at`
-      and deletes nothing.
-- [ ] Integration: snapshot apply, sync apply, restore and resolve each with a second user who
-      fails to read, change and delete the first user's row.
-- [ ] No React component tests. `npm run smoke` after touching `src/app/**`.
-- [ ] `npm test` with no database skip warning.
+      **Open (2026-10-24):** no test exercises either userscript's region reading, and no saved
+      HTML of a statement-close page exists (change 2). See **Status 2026-10-24** below.
+- [x] Unit: `resolveLostHold` with `recentPosted` candidates; the `none` branch sets `unlisted_at`
+      and deletes nothing. — `bankSnapshotReconcile.test.ts` "D3: keeps and flags a vanished hold
+      when there is no successor, deleting nothing" and the D2 block; `feedPairing.test.ts`.
+- [x] Integration: snapshot apply, sync apply, restore and resolve each with a second user who
+      fails to read, change and delete the first user's row. — `bankSnapshotApply.integration`
+      "never touches another user's identical hold" / "refuses a second user…";
+      `banksync/mutations.integration` "keeps a hold nothing replaced and flags it, leaving another
+      user's alone"; `auditRestoreWrite.integration` "does not let a second user restore…" / "…read,
+      change or delete the restored row either"; resolve is the register delete,
+      `finances/mutations.integration` (`deleteTransaction(intruderId, …)` rejects).
+- [x] No React component tests. `npm run smoke` after touching `src/app/**`. — smoke 64/64 on
+      2026-10-24.
+- [x] `npm test` with no database skip warning. — 4,741 unit and 1,314 database tests on
+      2026-10-24, no skip.
+
+## Status 2026-10-24
+
+Everything is built and five of the six acceptance boxes are met. What holds the freeze:
+
+1. **The one open box.** D1's fail-closed reading in `scripts/capitalone-pending.user.js` and
+   `scripts/chase-pending.user.js` has never been run against a real statement-close page, by a
+   test or by a paste. Closing it needs the page's HTML: on the day a Capital One or Chase
+   statement closes, Lee saves the account's transaction page (File ▸ Save Page As…, HTML only)
+   with any personal details scrubbed; a test then loads the userscript against it and asserts
+   the capture refuses, or reads the region it can see.
+2. **Whether that is still worth doing.** Production on 2026-10-24: every account's
+   `history_source` is `simplefin` or `files`, and `applyBankBrowserSnapshot` refuses a paste for
+   any account not on the bank page (`2624052a`). The last snapshots were Capital One 2026-10-01
+   and Chase 2026-10-07; none ever carried `recentPosted`. The userscripts are not in use. If
+   they are retired, D1 and D2 are moot and the box should be superseded by a delta rather than
+   tested — Lee's call.
+
+**Task 1 (recover Chewy) is overtaken, not outstanding.** The Capital One statement import at
+17:34 UTC the same day re-delivered the charge as posted row `31376ae1` (Sep 18, −$51.29), filed
+in the same envelope the deleted hold had (`d19b9780…`). No restore event exists and none is
+needed; D4's restore would now refuse it as a duplicate.
+
+**Change 6's Accounts-page surface** was not built; the register badge and audited delete are the
+resolve path. Listed below as a follow-up.
 
 ## Follow-ups (not in this spec)
 
 - A balance-identity guard: refuse or warn when the projected register balance disagrees with the
   capture's own `currentBalance`.
 - Whether the alias table in `descriptionsOverlap` should be replaced by something structural.
+- An Accounts-page count of unlisted holds (change 6).
 
 ## Changes from original plan
 
