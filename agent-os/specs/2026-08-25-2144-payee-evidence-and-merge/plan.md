@@ -1,6 +1,6 @@
 # Payee evidence, merge from the envelope, and normalizer repair
 
-**Status: active**  
+**Status: frozen / complete** (2026-10-24)  
 Spec folder: `agent-os/specs/2026-08-25-2144-payee-evidence-and-merge/`
 
 ## Context
@@ -123,9 +123,9 @@ rows across 64 merchant strings — belongs to `scripts/amazon-orders-slim.ts` a
       against the real ledger before the migration runs.
 - [x] A second user cannot read, change, or delete the first user's payees, defaults, claims, or
       transactions through any new mutation (`*.integration.test.ts`, per `AGENTS.md`).
-- [~] lint, typecheck, `test:unit`, non-skipped database tests with Postgres up, production build,
-  and `npm run smoke` on a running dev server. Driven in a browser at desktop;
-  **390×844 still outstanding** (see Changes from original plan, row 5).
+- [x] lint, typecheck, `test:unit`, non-skipped database tests with Postgres up, production build,
+      and `npm run smoke` on a running dev server. Driven in a browser at desktop (2026-08-25)
+      and at 390×844 (2026-10-24, which closes row 5; see Task 8).
 
 ## Changes from original plan
 
@@ -166,14 +166,19 @@ residue family. Build city/state candidates as proposals; pin the three hazard n
 **Task 7 — `scripts/payee-merge-audit.ts`** ✅ **Done.**, read-only, no `--apply`. Run it against the ledger and
 read the output before any alias migration.
 
-**Task 8 — Verify and freeze.** 🔄 Gate green — lint, typecheck, 3,342 unit tests, 879 database
-tests with Postgres up (no skip warning), production build, and `npm run smoke` across all 60
-routes — and the flow was driven end to end in a browser at desktop width: the Files-here list,
-a held first default with its reason, the counted filing confirmation, Remove, and the merge
-dialog opening preselected. **Outstanding: the 390×844 pass.** Freeze once that is done. Full gate (see acceptance criteria), browser at both widths, then
-mark `plan.md` / `shape.md` **frozen / complete**, complete **Changes from original plan**, and
-record follow-ups as new work — chiefly **Amazon order-data categorization**, the largest remaining
-slice of the backlog.
+**Task 8 — Verify and freeze.** ✅ **Done 2026-10-24.** Gate green on 2026-08-25 — lint,
+typecheck, 3,342 unit tests, 879 database tests with Postgres up (no skip warning), production
+build, and `npm run smoke` across all 60 routes — and the flow was driven end to end in a browser
+at desktop width: the Files-here list, a held first default with its reason, the counted filing
+confirmation, Remove, and the merge dialog opening preselected.
+
+The 390×844 pass that held the freeze (row 5) ran on 2026-10-24, on Recurring spend's 15 payees:
+the list sits in the full-screen drawer with no horizontal overflow, each `Remove default` is a
+44px target, the misroute flag wraps under its payee, and ticking two payees opens the merge
+dialog as a bottom sheet with its preview (cancelled; nothing written). The local data had no held
+default and no waiting rows, so those two states were seen at desktop only. The full gate was
+green the same day: lint, typecheck, 4,741 unit and 1,314 database tests (no skip warning), build,
+and smoke (64 routes).
 
 ## Verification
 
@@ -193,3 +198,10 @@ slice of the backlog.
 > **Standing rule:** while this spec is active, material changes to requirements, design, or scope —
 > including feedback on what was built — update `plan.md` / `shape.md` and append a row to
 > **Changes from original plan**. Freeze when verified.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Amazon order-data categorization**, the largest remaining slice of the uncategorised backlog
+  (out of scope above). `2026-08-27-1202-amazon-subscribe-and-save` and
+  `2026-08-27-1521-amazon-order-totals-register-link` have since taken up Amazon receipts, but
+  neither files ordinary Amazon purchases by their items.

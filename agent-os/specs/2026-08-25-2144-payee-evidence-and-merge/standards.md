@@ -1,6 +1,6 @@
 # Standards — payee evidence, merge from the envelope, and normalizer repair
 
-**Status: active**
+**Status: frozen / complete** (2026-10-24), at standards commit `dff043d6`.
 
 Canonical standards are referenced rather than copied so this spec does not fork their
 instructions. Read these before implementation:
