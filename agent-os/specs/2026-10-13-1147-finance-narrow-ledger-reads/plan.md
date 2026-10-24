@@ -1,14 +1,12 @@
 # Finance pages read what they use, not the ledger
 
-**Status: active**
+**Status: frozen / complete** (2026-10-24)
 Spec folder: `agent-os/specs/2026-10-13-1147-finance-narrow-ledger-reads/`
 
-> Shaped 2026-10-13. Tasks 1-9 are built and on `master`, and Task 10's local verification
-> is done (see **Verification**). The spec stays **active** until two things that cannot be
-> done from a development machine are done: the production RSC timings after deploy, and a
-> decision on the `perf:routes` chain for Register (see **Changes** #11). _2026-10-23: the
-> chain criterion is now met (Changes #14); only the production timings remain._ Progress is in
-> **Changes from original plan** and **Verification**.
+> Shaped 2026-10-13; built 2026-10-13; verified locally 2026-10-13, the `perf:routes`
+> criterion met 2026-10-23 (Changes #14) and production re-measured 2026-10-24
+> (**Verification**). Frozen 2026-10-24 with `standards.md` pinned at `dff043d6`. Further
+> change opens a delta-spec.
 
 ## Spec relationships
 
@@ -227,8 +225,10 @@ search tools (whole-history questions). Budget (done 2026-10-12).
       commit; 0 of 150 queries made a describe trip (Changes #14). On the
       postgres.js tree it was not met by the tool's number (Changes #11)._
 - [x] Lint, typecheck, `npm test`, build, `npm run smoke` with the dev server up.
-- [ ] Production RSC timings for Accounts, Bills and Register re-measured after deploy and
-      recorded beside the 2026-10-12 figures. **Cannot be done before deploy.**
+- [x] Production RSC timings for Accounts, Bills and Register re-measured after deploy and
+      recorded beside the 2026-10-12 figures. _2026-10-24 (Verification, "Production after
+      deploy"): Accounts 305 → ~90 ms, Bills 510 → ~150 ms, Register 384–956 → ~120 ms median.
+      The figures include the node-postgres swap, which landed in between._
 
 ## Verification
 
@@ -381,6 +381,21 @@ Production RSC response, signed-in browser:
 | Bills    | 510 ms     |       |
 | Register | 384–956 ms |       |
 
+### Production after deploy (2026-10-24)
+
+Signed-in browser on production (`planner-lee-5344.vercel.app`, deploy of `77bf3ff0` or later:
+narrow reads, node-postgres, prefetch off). Each page was reached by client navigation straight
+after Register, which marks the page cache suspect, so every visit made a real RSC request.
+"Server" is the RSC request from start to last byte (Resource Timing), first-byte in
+parentheses; 4 runs, the first of each usually a cold function.
+
+| Route    | 2026-10-12 server | 2026-10-24 server, ms (TTFB)                    | RSC raw / transferred |
+| -------- | ----------------- | ----------------------------------------------- | --------------------- |
+| Accounts | 305 ms            | 113, 72, 68, 107 (47–73)                        | 54 kB / 9 kB          |
+| Budget   | 337 ms            | 213, 134, 112, 119 (44–83)                      | 389 kB / 51 kB        |
+| Bills    | 510 ms            | 156, 158, 135, 141 (53–71)                      | 452 kB / 52 kB        |
+| Register | 384–956 ms        | median 118 of 12; 98–187, one cold 466 (39–179) | 162 kB / 54 kB        |
+
 ## Changes from original plan
 
 | #   | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -457,3 +472,10 @@ One commit per task, pushed to `master`.
 > While this spec is **active**, a material change to requirements, design or scope updates
 > the relevant section and appends to **Changes from original plan**. Skip pure
 > implementation detail. Freeze when verified.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- The Register's first query built from the stored view (cookie replay or client-side first
+  preparation): a saved layout still costs one request per load (Changes #13).
+- Track-as-bill draft and Scenarios: full ledger reads behind a dialog and a secondary page (D11).
+- Insights windowing (D5).
