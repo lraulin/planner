@@ -154,8 +154,8 @@ hide/show and `budget.review` stay. `budget.structure.manage` is removed.
 - [x] `+ Bill` on the Bills section creates a bill from a typed name alone; it appears in the
       Bills table and the inspector shows Monthly with no amount.
 - [x] `+` on a group header creates an envelope inside that group, of that section's kind.
-- [ ] Enter in the composer creates and leaves the composer open, focused and empty.
-      **Not met (2026-10-24):** open and empty, but focus is lost — see Status below.
+- [x] Enter in the composer creates and leaves the composer open, focused and empty. — fixed
+      2026-10-24 (Gap 1 below); two bills typed back to back in the browser.
 - [x] Double-click an envelope name renames it in place; Escape reverts; Enter commits.
 - [x] A group header renames in place from its `⋮`.
 - [ ] `Move up` / `Move down` / `Move to group…` / `Change section` / `Hide` / `Delete…` all
@@ -196,11 +196,14 @@ every D8 command under Budget, and a long-press opens the row menu.
 are also pinned by `moveDestinations`' tests in `hierarchy.test.ts`; the round trip by
 `mutations.integration.test.ts` (`ec5b95d4`).
 
-**Gap 1 — the composer loses focus after Enter.** It creates the row and clears, but focus falls
+**Gap 1 (fixed) — the composer lost focus after Enter.** It creates the row and clears, but focus falls
 to `<body>`, so the next name cannot just be typed; Escape then does nothing because focus is not
 in the input. Cause: the input is `disabled={pending}` (`StructureComposer.tsx:103`), and
 `inputRef.current?.focus()` (`:86`) runs inside the transition while it is still disabled, so the
-call is ignored. Present since the composer shipped (`815b7246`).
+call is ignored. Present since the composer shipped (`815b7246`). **Fixed 2026-10-24:** the input is
+`readOnly` rather than `disabled` while the create is pending, so it keeps focus, and `submit`
+returns early while pending, so a second Enter cannot double-create. Driven in the browser: two
+bills typed back to back with Enter, focus on the empty input after each, then Escape closed it.
 
 **Gap 2 — Move up / Move down are visible no-ops.** `9037cedd` (2026-08-29, the day after this
 shipped, no spec) made the Budget tables and the picker sort by name and stop reading

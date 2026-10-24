@@ -70,7 +70,7 @@ export function StructureComposer({
 
   function submit() {
     const trimmed = name.trim();
-    if (trimmed === "") return;
+    if (trimmed === "" || pending) return;
     setError(null);
     startTransition(async () => {
       const result =
@@ -100,7 +100,10 @@ export function StructureComposer({
         ref={inputRef}
         autoFocus
         value={name}
-        disabled={pending}
+        // Read-only, not disabled, while the create is in flight: a disabled input drops
+        // focus and ignores `focus()`, so the run-of-envelopes gesture would end at <body>.
+        readOnly={pending}
+        aria-busy={pending}
         placeholder="Name"
         className="min-w-0 flex-1 rounded border border-rule bg-surface px-2 py-1 text-ink"
         onChange={(event) => setName(event.target.value)}
