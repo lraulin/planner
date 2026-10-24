@@ -148,6 +148,7 @@ export const ROUTE_CACHE_POLICIES: Readonly<Record<string, PolicyEntry>> = {
     policy: "self-patching",
     reason: "Local-first background sync passes no revalidation, then refreshes once.",
   },
+  "/library/brain": { policy: "uncached", reason: "Not a measured tab." },
   "/library/houses": { policy: "uncached", reason: "Not a measured tab." },
   "/library/jobs": { policy: "uncached", reason: "Not a measured tab." },
   "/library/residences": { policy: "uncached", reason: "Not a measured tab." },

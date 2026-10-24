@@ -379,6 +379,13 @@ const PAGES = {
       keywords:
         "house hunting home buying real estate listing for sale price beds baths",
     },
+    {
+      id: "brain",
+      label: "Brain",
+      segment: "brain",
+      status: "built",
+      keywords: "personalbrain thebrain mind map thoughts links graph network ideas",
+    },
   ],
 } as const satisfies Record<string, readonly PageEntry[]>;
 
