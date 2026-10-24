@@ -150,6 +150,30 @@ export async function startThoughtId(userId: string): Promise<string | null> {
   return row?.id ?? null;
 }
 
+export type ThoughtListRow = ThoughtRef & { isHome: boolean };
+
+/** Every thought, by name. For the agent's paged list; the page itself never loads them all. */
+export async function listThoughts(userId: string): Promise<ThoughtListRow[]> {
+  return db
+    .select({
+      id: brainThoughts.id,
+      name: brainThoughts.name,
+      typeId: brainThoughts.typeId,
+      color: brainThoughtTypes.color,
+      isHome: brainThoughts.isHome,
+    })
+    .from(brainThoughts)
+    .leftJoin(
+      brainThoughtTypes,
+      and(
+        eq(brainThoughtTypes.id, brainThoughts.typeId),
+        eq(brainThoughtTypes.userId, userId),
+      ),
+    )
+    .where(eq(brainThoughts.userId, userId))
+    .orderBy(asc(brainThoughts.name), asc(brainThoughts.id));
+}
+
 export async function homeThoughtId(userId: string): Promise<string | null> {
   const [row] = await db
     .select({ id: brainThoughts.id })

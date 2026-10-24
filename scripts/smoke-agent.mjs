@@ -197,6 +197,25 @@ const checks = [
     },
   },
   {
+    name: "brain domain lists its seven tools",
+    run: async () => {
+      const result = await call("list_tools", { domain: "brain" });
+      const names = result.payload?.data?.tools?.map((tool) => tool.name) ?? [];
+      return (
+        result.status === 200 &&
+        result.payload?.ok === true &&
+        names.length === 7 &&
+        names.includes("list_thoughts") &&
+        names.includes("get_thought") &&
+        names.includes("create_thought") &&
+        names.includes("update_thought") &&
+        names.includes("link_thoughts") &&
+        names.includes("unlink_thoughts") &&
+        names.includes("delete_thought")
+      );
+    },
+  },
+  {
     name: "finance overview reads",
     run: async () => {
       const result = await call("get_finance_overview", {});

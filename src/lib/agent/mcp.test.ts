@@ -85,6 +85,13 @@ const REQUIRED = [
   "create_house",
   "update_house",
   "delete_house",
+  "list_thoughts",
+  "get_thought",
+  "create_thought",
+  "update_thought",
+  "link_thoughts",
+  "unlink_thoughts",
+  "delete_thought",
 ] as const;
 
 describe("MCP catalog", () => {

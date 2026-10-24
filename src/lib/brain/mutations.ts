@@ -114,6 +114,8 @@ export type CreateThoughtInput = {
   note?: string;
   /** Create already linked to an existing thought; `relation` is what that thought is to the new one. */
   linkTo?: { thoughtId: string; relation: LinkRelation; label?: string };
+  typeId?: string;
+  tags?: string[];
   /** Retry safety for agents: the same source+id returns the thought it already made. */
   external?: { source: string; id: string };
 };
@@ -139,6 +141,7 @@ export async function createThought(
       if (existing) return { id: existing.id, created: false };
     }
     if (input.linkTo) await requireThought(tx, userId, input.linkTo.thoughtId);
+    if (input.typeId) await requireType(tx, userId, input.typeId);
 
     const [row] = await tx
       .insert(brainThoughts)
@@ -146,6 +149,7 @@ export async function createThought(
         userId,
         name,
         note: input.note ?? "",
+        typeId: input.typeId ?? null,
         externalSource: input.external?.source ?? null,
         externalId: input.external?.id ?? null,
       })
@@ -161,6 +165,7 @@ export async function createThought(
         input.linkTo.label,
       );
     }
+    if (input.tags?.length) await tagsIn(tx, userId, row.id, input.tags);
     return { id: row.id, created: true };
   });
 }
@@ -225,42 +230,49 @@ export async function deleteThought(userId: string, thoughtId: string) {
   if (rows.length === 0) throw new Error("Thought not found.");
 }
 
+async function tagsIn(
+  tx: Executor,
+  userId: string,
+  thoughtId: string,
+  names: string[],
+) {
+  const wanted = [...new Set(names.map((n) => cleanName(n, "Tag name")))];
+  await requireThought(tx, userId, thoughtId);
+  if (wanted.length > 0) {
+    await tx
+      .insert(brainTags)
+      .values(wanted.map((name) => ({ userId, name })))
+      .onConflictDoNothing();
+  }
+  const tagRows =
+    wanted.length === 0
+      ? []
+      : await tx
+          .select({ id: brainTags.id })
+          .from(brainTags)
+          .where(and(eq(brainTags.userId, userId), inArray(brainTags.name, wanted)));
+  await tx
+    .delete(brainThoughtTags)
+    .where(
+      and(
+        eq(brainThoughtTags.userId, userId),
+        eq(brainThoughtTags.thoughtId, thoughtId),
+      ),
+    );
+  if (tagRows.length > 0) {
+    await tx
+      .insert(brainThoughtTags)
+      .values(tagRows.map((t) => ({ userId, thoughtId, tagId: t.id })));
+  }
+}
+
 /** Replace the thought's tags with exactly these names, creating any that are new. */
 export async function setThoughtTags(
   userId: string,
   thoughtId: string,
   names: string[],
 ) {
-  const wanted = [...new Set(names.map((n) => cleanName(n, "Tag name")))];
-  await db.transaction(async (tx) => {
-    await requireThought(tx, userId, thoughtId);
-    if (wanted.length > 0) {
-      await tx
-        .insert(brainTags)
-        .values(wanted.map((name) => ({ userId, name })))
-        .onConflictDoNothing();
-    }
-    const tagRows =
-      wanted.length === 0
-        ? []
-        : await tx
-            .select({ id: brainTags.id })
-            .from(brainTags)
-            .where(and(eq(brainTags.userId, userId), inArray(brainTags.name, wanted)));
-    await tx
-      .delete(brainThoughtTags)
-      .where(
-        and(
-          eq(brainThoughtTags.userId, userId),
-          eq(brainThoughtTags.thoughtId, thoughtId),
-        ),
-      );
-    if (tagRows.length > 0) {
-      await tx
-        .insert(brainThoughtTags)
-        .values(tagRows.map((t) => ({ userId, thoughtId, tagId: t.id })));
-    }
-  });
+  await db.transaction((tx) => tagsIn(tx, userId, thoughtId, names));
 }
 
 /** Link `thoughtId` to `otherId`; `relation` says what `otherId` is to `thoughtId`. */
@@ -281,7 +293,7 @@ export async function unlinkThoughts(userId: string, a: string, b: string) {
     .delete(brainLinks)
     .where(pairWhere(userId, a, b))
     .returning({ id: brainLinks.id });
-  if (rows.length === 0) throw new Error("Those thoughts are not linked.");
+  if (rows.length === 0) throw new Error("Link not found between those thoughts.");
 }
 
 export async function setLinkLabel(userId: string, linkId: string, label: string) {

@@ -510,6 +510,55 @@ const houseDetailSchema = z.strictObject({
   routeError: z.string().nullable(),
 });
 
+// `type` collides with the global "Outline item type." description, so every Brain field that
+// is not self-explanatory carries its own `.describe()`.
+const thoughtTypeName = z
+  .string()
+  .describe(
+    "A thought type's name, e.g. Person, matched case-insensitively. Types are made on the Brain page; use a name already returned by get_thought or list_thoughts.",
+  );
+const thoughtRelation = z
+  .enum(["parent", "child", "jump"])
+  .describe(
+    "What the other thought is to this one: parent (above it), child (below it), or jump (a lateral, undirected link).",
+  );
+const thoughtLabel = z
+  .string()
+  .describe("Optional short text describing the link itself, e.g. works at.");
+const thoughtSummarySchema = z.strictObject({
+  id,
+  name: z.string(),
+  type: z.string().nullable().describe("The thought's type name, or null."),
+  isHome: z.boolean(),
+});
+const thoughtLinkedSchema = z.strictObject({
+  id,
+  name: z.string(),
+  label: z.string().describe("The link's label; empty when it has none."),
+});
+const thoughtDetailSchema = z.strictObject({
+  id,
+  name: z.string(),
+  note: z.string().describe("The thought's markdown note."),
+  type: z.string().nullable().describe("The thought's type name, or null."),
+  tags: strings,
+  isHome: z.boolean(),
+  parents: z.array(thoughtLinkedSchema),
+  children: z.array(thoughtLinkedSchema),
+  jumps: z.array(thoughtLinkedSchema),
+  siblings: z
+    .array(z.strictObject({ id, name: z.string() }))
+    .describe(
+      "Other children of this thought's parents. Derived, so they carry no link.",
+    ),
+});
+const thoughtInputFields = {
+  note: z.string().optional().describe("The thought's markdown note."),
+  tags: strings
+    .optional()
+    .describe("Replaces the thought's tags; new names are created."),
+};
+
 const jobSummarySchema = z.strictObject({
   id,
   employer: z.string(),
@@ -775,6 +824,7 @@ export const inputSchemas = {
         "finances",
         "history",
         "houses",
+        "brain",
         "all",
       ])
       .default("core"),
@@ -1164,6 +1214,41 @@ export const inputSchemas = {
   create_house: retryableObject(houseInputFields),
   update_house: z.strictObject({ id, ...houseInputFields }),
   delete_house: z.strictObject({ id }),
+  list_thoughts: z.strictObject({ query: z.string().optional(), ...pageInputFields }),
+  get_thought: z.strictObject({ id }),
+  create_thought: retryableObject({
+    name: z.string().min(1),
+    ...thoughtInputFields,
+    type: thoughtTypeName.optional(),
+    linkToId: id
+      .optional()
+      .describe("An existing thought to link the new one to; pair with relation."),
+    relation: thoughtRelation.optional(),
+    label: thoughtLabel.optional(),
+  }),
+  update_thought: z.strictObject({
+    id,
+    name: z.string().min(1).optional(),
+    ...thoughtInputFields,
+    type: thoughtTypeName.nullable().optional(),
+    home: z
+      .boolean()
+      .optional()
+      .describe(
+        "true makes this the Home thought (the page opens on it); false clears Home.",
+      ),
+  }),
+  link_thoughts: z.strictObject({
+    id,
+    otherId: id.describe("The thought being linked to `id`."),
+    relation: thoughtRelation,
+    label: thoughtLabel.optional(),
+  }),
+  unlink_thoughts: z.strictObject({
+    id,
+    otherId: id.describe("The thought to unlink from `id`."),
+  }),
+  delete_thought: z.strictObject({ id }),
 } as const;
 
 const healthOutput = z.strictObject({
@@ -1860,4 +1945,17 @@ export const outputSchemas = {
   create_house: z.strictObject({ house: houseDetailSchema, created: z.boolean() }),
   update_house: z.strictObject({ house: houseDetailSchema }),
   delete_house: z.strictObject({ deleted: z.literal(true), id }),
+  list_thoughts: z.strictObject({
+    thoughts: z.array(thoughtSummarySchema),
+    pageInfo: pageInfoSchema,
+  }),
+  get_thought: z.strictObject({ thought: thoughtDetailSchema }),
+  create_thought: z.strictObject({
+    thought: thoughtDetailSchema,
+    created: z.boolean(),
+  }),
+  update_thought: z.strictObject({ thought: thoughtDetailSchema }),
+  link_thoughts: z.strictObject({ thought: thoughtDetailSchema }),
+  unlink_thoughts: z.strictObject({ thought: thoughtDetailSchema }),
+  delete_thought: z.strictObject({ deleted: z.literal(true), id }),
 } as const;

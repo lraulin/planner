@@ -1133,3 +1133,110 @@ Permanently remove one house listing from the catalog.
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
+
+## Brain
+
+### `list_thoughts`
+
+Find thoughts in the Brain network by name or note text.
+
+- Use when: Use first, to resolve a thought id before reading, linking or changing it, and to check whether a thought already exists before creating one.
+- Avoid when: Use get_thought for a thought's note and neighbours; this returns names only.
+- Returns: A compact page of thought ids, names, types and Home flag, with total and next offset. Without a query it lists every thought by name.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ query?, offset=0, limit=50 }`
+- Output: `{ thoughts*, pageInfo* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `get_thought`
+
+Read one thought: its note, type, tags and its parents, children, jumps and siblings.
+
+- Use when: Use after list_thoughts resolves the thought, to read it or to see what it is linked to.
+- Avoid when: Do not use to scan the network; use list_thoughts.
+- Returns: The thought with its full note and each neighbour's id, name and link label. Siblings are derived from its parents and carry no link.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ id* }`
+- Output: `{ thought* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `create_thought`
+
+Add a thought, optionally linked to an existing one in the same call.
+
+- Use when: Use when capturing an idea that belongs in the network. Pass linkToId and relation to place it, so it is not left unlinked.
+- Avoid when: Do not create a duplicate: list_thoughts first, and link_thoughts when it exists.
+- Returns: The created or replayed thought with its neighbours, and whether this call created it. Retrying with the same externalSource and externalId returns the same thought.
+- Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ name*, note?, tags?, type?, linkToId?, relation?, label?, externalSource?, externalId? }`
+- Output: `{ thought*, created* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `update_thought`
+
+Change one thought's name, note, type, tags or Home status; unset fields stay as they are.
+
+- Use when: Use after resolving the thought id.
+- Avoid when: Do not use it to change links; use link_thoughts and unlink_thoughts. A new note replaces the old one entirely, so read it first to append.
+- Returns: The full thought after the update.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ id*, name?, note?, tags?, type?, home? }`
+- Output: `{ thought* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `link_thoughts`
+
+Link two thoughts as parent, child or jump, or change how they are already linked.
+
+- Use when: Use to connect existing thoughts. Two thoughts have one link, so linking an already-linked pair changes its kind or direction in place.
+- Avoid when: Do not use it to create a thought; create_thought can link as it creates.
+- Returns: The thought with its updated neighbours.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ id*, otherId*, relation*, label? }`
+- Output: `{ thought* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `unlink_thoughts`
+
+Remove the link between two thoughts, keeping both thoughts.
+
+- Use when: Use when two thoughts should no longer be connected.
+- Avoid when: Do not use it to remove a thought; use delete_thought.
+- Returns: The thought with its remaining neighbours.
+- Effects: write; destructive=true; retry=unsafe; confirmation=explicit
+- Exposure: domain
+- Arguments: `{ id*, otherId* }`
+- Output: `{ thought* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `delete_thought`
+
+Permanently delete one thought and its links.
+
+- Use when: Use only after the user explicitly intends that thought to be dropped.
+- Avoid when: Do not use it to detach a thought from one neighbour; use unlink_thoughts. Neighbours stay but may become unreachable except by search.
+- Returns: The deleted thought id and confirmation flag.
+- Effects: write; destructive=true; retry=unsafe; confirmation=explicit
+- Exposure: domain
+- Arguments: `{ id* }`
+- Output: `{ deleted*, id* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.

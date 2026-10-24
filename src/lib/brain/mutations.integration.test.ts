@@ -149,7 +149,7 @@ describeDb("brain mutations", () => {
       await linkThoughts(userId, a, "child", b);
       await unlinkThoughts(userId, b, a);
       expect(await linksOf(userId)).toEqual([]);
-      await expect(unlinkThoughts(userId, a, b)).rejects.toThrow("not linked");
+      await expect(unlinkThoughts(userId, a, b)).rejects.toThrow("Link not found");
     });
 
     it("deleting a thought removes its links but not its neighbours", async () => {

@@ -167,7 +167,7 @@ function initializeResult(params: unknown) {
       version: String(AGENT_CONTRACT_VERSION),
     },
     instructions:
-      "Planner personal planning tools. Start with get_context. For money questions start with get_finance_overview. For jobs, residences, or dated life facts use the history tools. For house-shopping listings — price, size, features, drive time to Lee's parents' house — use the houses tools; drive time computes automatically from the address, so check routeError rather than retrying it. Search before mutating and use ids from search or read results. Use capture_inbox for unprocessed ideas. Do not guess a parent or node id. If a tool's fields are unclear, call describe_tool with its name before calling it.",
+      "Planner personal planning tools. Start with get_context. For money questions start with get_finance_overview. For jobs, residences, or dated life facts use the history tools. For house-shopping listings — price, size, features, drive time to Lee's parents' house — use the houses tools; drive time computes automatically from the address, so check routeError rather than retrying it. For thoughts, links and ideas in the Brain network use the brain tools — list_thoughts before create_thought, so a thought is linked rather than duplicated. Search before mutating and use ids from search or read results. Use capture_inbox for unprocessed ideas. Do not guess a parent or node id. If a tool's fields are unclear, call describe_tool with its name before calling it.",
   };
 }
 

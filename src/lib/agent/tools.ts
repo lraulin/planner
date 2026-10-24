@@ -84,6 +84,15 @@ import {
   listHousesTool,
   updateHouseTool,
 } from "./houseTools";
+import {
+  createThoughtTool,
+  deleteThoughtTool,
+  getThoughtTool,
+  linkThoughtsTool,
+  listThoughtsTool,
+  unlinkThoughtsTool,
+  updateThoughtTool,
+} from "./brainTools";
 import { getScenarioTool, listScenariosTool } from "./scenarioTools";
 
 export const AGENT_CONTRACT_VERSION = 2 as const;
@@ -98,7 +107,8 @@ export type AgentToolDomain =
   | "metrics"
   | "finances"
   | "history"
-  | "houses";
+  | "houses"
+  | "brain";
 export type AgentToolExposure = "core" | "domain" | "legacy";
 export type AgentToolEffects = {
   kind: "read" | "write";
@@ -1010,6 +1020,92 @@ const definitions: AgentToolDefinition[] = [
     effects: destructiveWrite,
     exposure: "domain",
     handler: deleteHouseTool,
+  }),
+  defineTool("list_thoughts", {
+    domain: "brain",
+    summary: "Find thoughts in the Brain network by name or note text.",
+    useWhen:
+      "Use first, to resolve a thought id before reading, linking or changing it, and to check whether a thought already exists before creating one.",
+    avoidWhen:
+      "Use get_thought for a thought's note and neighbours; this returns names only.",
+    returns:
+      "A compact page of thought ids, names, types and Home flag, with total and next offset. Without a query it lists every thought by name.",
+    effects: read,
+    exposure: "domain",
+    examples: [{ title: "Find a thought", arguments: { query: "gardening" } }],
+    handler: listThoughtsTool,
+  }),
+  defineTool("get_thought", {
+    domain: "brain",
+    summary:
+      "Read one thought: its note, type, tags and its parents, children, jumps and siblings.",
+    useWhen:
+      "Use after list_thoughts resolves the thought, to read it or to see what it is linked to.",
+    avoidWhen: "Do not use to scan the network; use list_thoughts.",
+    returns:
+      "The thought with its full note and each neighbour's id, name and link label. Siblings are derived from its parents and carry no link.",
+    effects: read,
+    exposure: "domain",
+    handler: getThoughtTool,
+  }),
+  defineTool("create_thought", {
+    domain: "brain",
+    summary: "Add a thought, optionally linked to an existing one in the same call.",
+    useWhen:
+      "Use when capturing an idea that belongs in the network. Pass linkToId and relation to place it, so it is not left unlinked.",
+    avoidWhen:
+      "Do not create a duplicate: list_thoughts first, and link_thoughts when it exists.",
+    returns:
+      "The created or replayed thought with its neighbours, and whether this call created it. Retrying with the same externalSource and externalId returns the same thought.",
+    effects: keyedWrite,
+    exposure: "domain",
+    handler: createThoughtTool,
+  }),
+  defineTool("update_thought", {
+    domain: "brain",
+    summary:
+      "Change one thought's name, note, type, tags or Home status; unset fields stay as they are.",
+    useWhen: "Use after resolving the thought id.",
+    avoidWhen:
+      "Do not use it to change links; use link_thoughts and unlink_thoughts. A new note replaces the old one entirely, so read it first to append.",
+    returns: "The full thought after the update.",
+    effects: safeWrite,
+    exposure: "domain",
+    handler: updateThoughtTool,
+  }),
+  defineTool("link_thoughts", {
+    domain: "brain",
+    summary:
+      "Link two thoughts as parent, child or jump, or change how they are already linked.",
+    useWhen:
+      "Use to connect existing thoughts. Two thoughts have one link, so linking an already-linked pair changes its kind or direction in place.",
+    avoidWhen:
+      "Do not use it to create a thought; create_thought can link as it creates.",
+    returns: "The thought with its updated neighbours.",
+    effects: safeWrite,
+    exposure: "domain",
+    handler: linkThoughtsTool,
+  }),
+  defineTool("unlink_thoughts", {
+    domain: "brain",
+    summary: "Remove the link between two thoughts, keeping both thoughts.",
+    useWhen: "Use when two thoughts should no longer be connected.",
+    avoidWhen: "Do not use it to remove a thought; use delete_thought.",
+    returns: "The thought with its remaining neighbours.",
+    effects: destructiveWrite,
+    exposure: "domain",
+    handler: unlinkThoughtsTool,
+  }),
+  defineTool("delete_thought", {
+    domain: "brain",
+    summary: "Permanently delete one thought and its links.",
+    useWhen: "Use only after the user explicitly intends that thought to be dropped.",
+    avoidWhen:
+      "Do not use it to detach a thought from one neighbour; use unlink_thoughts. Neighbours stay but may become unreachable except by search.",
+    returns: "The deleted thought id and confirmation flag.",
+    effects: destructiveWrite,
+    exposure: "domain",
+    handler: deleteThoughtTool,
   }),
 ];
 

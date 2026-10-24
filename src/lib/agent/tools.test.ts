@@ -216,6 +216,22 @@ describe("agent tool registry", () => {
       "delete_house",
     ]);
     expect(houses.tools.every((tool) => tool.domain === "houses")).toBe(true);
+
+    const brain = (await dispatchAgentTool(
+      "list_tools",
+      { domain: "brain" },
+      UNUSED_USER_ID,
+    )) as { tools: { name: string; domain: string }[] };
+    expect(brain.tools.map((tool) => tool.name)).toEqual([
+      "list_thoughts",
+      "get_thought",
+      "create_thought",
+      "update_thought",
+      "link_thoughts",
+      "unlink_thoughts",
+      "delete_thought",
+    ]);
+    expect(brain.tools.every((tool) => tool.domain === "brain")).toBe(true);
   });
 
   it("keeps health compatible while pointing to contract discovery", async () => {
