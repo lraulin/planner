@@ -145,3 +145,13 @@ describe them in `references.md` instead). Commit and push.
 
 Unit tests for `neighbourhood`/`plex`/`drag`; integration test for gate flags (second user
 included); `npm run smoke`; browser pass via `run-planner` on desktop and phone width.
+
+## Verification record (2026-10-24, dev server + DB)
+
+- Esc on the drop-point input: input closed, "Gamma" never created, link count unchanged (2).
+- Autocomplete pick: typed "Alp", chose Alpha — thought count stayed 3 (no "Alp" created).
+- Relink in place: that pick flipped Hub→Alpha into Alpha→Hub (one row); dragging Hub's jump
+  gate onto Beta turned the child link into `jump` in place (still one row per pair).
+- 390px: stacked lists (Parents/Jumps), no plex canvas, no gates in the DOM.
+- Not exercised: Esc mid-drag (the driver's `pdrag` presses and releases atomically); covered
+  only by the `dropResult` unit tests and the keydown handler.
