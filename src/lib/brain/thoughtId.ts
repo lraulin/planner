@@ -7,3 +7,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function parseThoughtId(raw: string | string[] | undefined): string | null {
   return typeof raw === "string" && UUID.test(raw) ? raw : null;
 }
+
+/** Where a thought is shown. The address bar is the plex's history. */
+export function brainHref(thoughtId: string): string {
+  return `/library/brain?thought=${thoughtId}`;
+}

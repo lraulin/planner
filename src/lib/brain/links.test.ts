@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalLink, planLink, type LinkRow } from "./links";
+import { canonicalLink, mirrorRelation, planLink, type LinkRow } from "./links";
 
 const A = "00000000-0000-0000-0000-00000000000a";
 const B = "00000000-0000-0000-0000-00000000000b";
@@ -64,5 +64,17 @@ describe("planLink", () => {
       id: "L1",
       link: wanted,
     });
+  });
+});
+
+describe("mirrorRelation", () => {
+  it("describes the same stored link from the other thought", () => {
+    // A adds B as its child; B, asked about A, has a parent.
+    const fromA = canonicalLink(A, "child", B);
+    const fromB = canonicalLink(B, mirrorRelation("child"), A);
+    expect(fromB).toEqual(fromA);
+    expect(canonicalLink(B, mirrorRelation("jump"), A)).toEqual(
+      canonicalLink(A, "jump", B),
+    );
   });
 });

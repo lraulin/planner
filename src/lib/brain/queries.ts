@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { brainThoughtTypes, brainThoughts } from "@/db/schema";
+import { snippetAround } from "./snippet";
 import type {
   PlexData,
   PlexLink,
@@ -149,6 +150,15 @@ export async function startThoughtId(userId: string): Promise<string | null> {
   return row?.id ?? null;
 }
 
+export async function homeThoughtId(userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ id: brainThoughts.id })
+    .from(brainThoughts)
+    .where(and(eq(brainThoughts.userId, userId), eq(brainThoughts.isHome, true)))
+    .limit(1);
+  return row?.id ?? null;
+}
+
 export async function recentThoughts(
   userId: string,
   limit = 10,
@@ -182,8 +192,6 @@ export async function recentThoughts(
 function likePattern(text: string): string {
   return `%${text.replace(/[\\%_]/g, "\\$&")}%`;
 }
-
-const SNIPPET_CHARS = 80;
 
 /** Names first, then notes; case-insensitive substring. Empty query matches nothing. */
 export async function searchThoughts(
@@ -223,20 +231,12 @@ export async function searchThoughts(
     )
     .limit(limit);
 
-  return rows.map(({ note, nameHit, ...ref }) => {
-    const at = nameHit ? -1 : note.toLowerCase().indexOf(q.toLowerCase());
-    const start = Math.max(0, at - 20);
-    return {
-      ...ref,
-      snippet:
-        at < 0
-          ? ""
-          : note
-              .slice(start, start + SNIPPET_CHARS)
-              .replace(/\s+/g, " ")
-              .trim(),
-    };
-  });
+  return rows.map(({ note, nameHit, ...ref }) => ({
+    ...ref,
+    snippet: nameHit
+      ? ""
+      : snippetAround(note, note.toLowerCase().indexOf(q.toLowerCase())),
+  }));
 }
 
 export async function listTypes(userId: string): Promise<ThoughtType[]> {

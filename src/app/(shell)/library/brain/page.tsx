@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import {
+  homeThoughtId,
   listTags,
   listTypes,
   loadPlex,
@@ -25,9 +26,10 @@ export default async function BrainPage({
   const userId = await getCurrentUserId();
   const requested = parseThoughtId((await searchParams).thought);
 
-  const [asked, start, recent, types, tags] = await Promise.all([
+  const [asked, start, home, recent, types, tags] = await Promise.all([
     requested ? loadPlex(userId, requested) : null,
     requested ? null : startThoughtId(userId),
+    homeThoughtId(userId),
     recentThoughts(userId),
     listTypes(userId),
     listTags(userId),
@@ -42,7 +44,7 @@ export default async function BrainPage({
 
   return (
     <Suspense fallback={<div className="min-h-0 flex-1" />}>
-      <BrainView plex={plex} recent={recent} types={types} tags={tags} />
+      <BrainView plex={plex} homeId={home} recent={recent} types={types} tags={tags} />
     </Suspense>
   );
 }

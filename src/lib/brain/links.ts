@@ -3,6 +3,11 @@ import type { BrainLinkKind } from "@/db/schema";
 /** How the other thought relates to the one being edited, as the add-link input phrases it. */
 export type LinkRelation = "parent" | "child" | "jump";
 
+/** The same link seen from the other end: "X is my parent" is "I am X's child". */
+export function mirrorRelation(relation: LinkRelation): LinkRelation {
+  return relation === "parent" ? "child" : relation === "child" ? "parent" : "jump";
+}
+
 export type LinkRow = { id: string; fromId: string; toId: string; kind: BrainLinkKind };
 
 export type CanonicalLink = { fromId: string; toId: string; kind: BrainLinkKind };
