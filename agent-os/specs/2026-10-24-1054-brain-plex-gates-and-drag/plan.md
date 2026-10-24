@@ -1,6 +1,6 @@
 # Brain plex: TheBrain gates, curved links, drag to create and connect
 
-**Status: active**
+**Status: frozen — implemented 2026-10-24**
 Spec folder: `agent-os/specs/2026-10-24-1054-brain-plex-gates-and-drag/`
 
 ## Spec relationships
@@ -65,9 +65,13 @@ thought icons.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                   | Why                                                                                        |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 1   | `Plex` owns the drag-to-create state and floating `AddLinkInput`; `BrainView` gets `onLink` and `onCreateLinked` instead of `onCreateAt` | The held rubber band and drop point are plex-local; BrainView only needs the two mutations |
+| 2   | Jump and sibling zones keep a 72px gutter from the centre label (`SIDE_GUTTER` in `plex.ts`)                                             | With flush zones a jump curve was 12px long and invisible                                  |
+| 3   | The floating input is clamped 260px above the plex's bottom edge                                                                         | The plex clips overflow, which would hide the suggestion list                              |
+| 4   | Label width stays fixed (132px); no width estimate                                                                                       | Truncated labels already work, gates sit on the box edge                                   |
+| 5   | `ThoughtChip` is now a wrapper holding the label button and the four gates (gates are siblings of the button)                            | A gate press must never recentre                                                           |
 
 > While this spec is **active**, when we make a material change to requirements, design, or
 > scope (including from feedback on what was implemented), update the relevant sections and

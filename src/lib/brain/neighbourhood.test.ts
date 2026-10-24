@@ -34,7 +34,10 @@ describe("neighbourhood", () => {
       child("l2", "P", "S1"),
       child("l3", "P", "S2"),
     ]);
-    expect(h.siblings).toEqual(["S1", "S2"]);
+    expect(h.siblings).toEqual([
+      { thoughtId: "S1", viaParentId: "P" },
+      { thoughtId: "S2", viaParentId: "P" },
+    ]);
   });
 
   it("lists a sibling once when two parents share it", () => {
@@ -44,7 +47,8 @@ describe("neighbourhood", () => {
       child("l3", "P1", "S"),
       child("l4", "P2", "S"),
     ]);
-    expect(h.siblings).toEqual(["S"]);
+    // First parent wins, so the sibling has one line, not two.
+    expect(h.siblings).toEqual([{ thoughtId: "S", viaParentId: "P1" }]);
   });
 
   it("never lists the active thought, or a neighbour, as a sibling", () => {

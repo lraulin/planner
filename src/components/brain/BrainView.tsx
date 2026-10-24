@@ -399,6 +399,17 @@ export function BrainView({
               onOpen={open}
               onMenu={openMenuFor}
               onMore={(hiddenIds, _node, event) => openMore(hiddenIds, event)}
+              onLink={(thoughtId, relation, otherId) =>
+                void act(linkThoughtsAction(thoughtId, relation, otherId))
+              }
+              onCreateLinked={(thoughtId, relation, name) =>
+                void act(
+                  createThoughtAction({
+                    name,
+                    linkTo: { thoughtId, relation: mirrorRelation(relation) },
+                  }),
+                )
+              }
             />
           </div>
           <aside className="flex w-[26rem] flex-none flex-col border-l border-rule">

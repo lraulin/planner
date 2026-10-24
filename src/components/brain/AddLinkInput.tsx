@@ -15,7 +15,7 @@ const LABELS: Record<LinkRelation, string> = {
 const DEBOUNCE_MS = 150;
 
 /**
- * "Add child / parent / jump" on the active thought. Typing searches existing thoughts, and
+ * "Add child / parent / jump" on the active thought, or on whichever thought a gate drag began at. Typing searches existing thoughts, and
  * choosing one links it; Enter on text that matches nothing creates a new thought already
  * linked. Offering the existing ones first is what keeps this from minting a duplicate of a
  * thought that was already there.
@@ -26,12 +26,18 @@ export function AddLinkInput({
   onChoose,
   onCreate,
   onCancel,
+  placeholder,
+  cancelOnBlur = false,
 }: {
   relation: LinkRelation;
   activeId: string;
   onChoose: (otherId: string) => void;
   onCreate: (name: string) => void;
   onCancel: () => void;
+  /** Replaces the toolbar wording where the input floats over the plex. */
+  placeholder?: string;
+  /** Drop an empty input when focus leaves it, for an input that appeared on a drag. */
+  cancelOnBlur?: boolean;
 }) {
   const listId = useId();
   const [text, setText] = useState("");
@@ -81,7 +87,12 @@ export function AddLinkInput({
         aria-controls={listId}
         aria-label={`Add ${LABELS[relation]}`}
         value={text}
-        placeholder={`Add ${LABELS[relation]}: find a thought or type a new one`}
+        placeholder={
+          placeholder ?? `Add ${LABELS[relation]}: find a thought or type a new one`
+        }
+        onBlur={() => {
+          if (cancelOnBlur && !query) onCancel();
+        }}
         onChange={(event) => {
           setText(event.target.value);
           setHighlight(-1);

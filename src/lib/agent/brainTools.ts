@@ -83,7 +83,10 @@ async function thoughtDetail(userId: string, id: string) {
     parents: linked(hood.parents),
     children: linked(hood.children),
     jumps: linked(hood.jumps),
-    siblings: hood.siblings.map((sid) => ({ id: sid, name: nameOf(sid) })),
+    siblings: hood.siblings.map((s) => ({
+      id: s.thoughtId,
+      name: nameOf(s.thoughtId),
+    })),
   };
 }
 

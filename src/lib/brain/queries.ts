@@ -5,6 +5,7 @@ import { snippetAround } from "./snippet";
 import type {
   PlexData,
   PlexLink,
+  PlexThought,
   TagCount,
   ThoughtRef,
   ThoughtSearchHit,
@@ -35,6 +36,9 @@ type PlexRow = {
     name: string;
     type_id: string | null;
     color: number | null;
+    has_parents: boolean;
+    has_children: boolean;
+    has_jumps: boolean;
   }[];
 };
 
@@ -91,7 +95,20 @@ export async function loadPlex(
       (
         SELECT coalesce(
           json_agg(json_build_object(
-            'id', t.id, 'name', t.name, 'type_id', t.type_id, 'color', ty.color
+            'id', t.id, 'name', t.name, 'type_id', t.type_id, 'color', ty.color,
+            'has_parents', EXISTS (
+              SELECT 1 FROM brain_links x
+              WHERE x.user_id = ${userId} AND x.kind = 'child' AND x.to_id = t.id
+            ),
+            'has_children', EXISTS (
+              SELECT 1 FROM brain_links x
+              WHERE x.user_id = ${userId} AND x.kind = 'child' AND x.from_id = t.id
+            ),
+            'has_jumps', EXISTS (
+              SELECT 1 FROM brain_links x
+              WHERE x.user_id = ${userId} AND x.kind = 'jump'
+                AND (x.from_id = t.id OR x.to_id = t.id)
+            )
           ) ORDER BY t.name, t.id),
           '[]'::json
         )
@@ -113,9 +130,19 @@ export async function loadPlex(
     kind: l.kind,
     label: l.label,
   }));
-  const thoughts: Record<string, ThoughtRef> = {};
+  const thoughts: Record<string, PlexThought> = {};
   for (const t of row.thoughts) {
-    thoughts[t.id] = { id: t.id, name: t.name, typeId: t.type_id, color: t.color };
+    thoughts[t.id] = {
+      id: t.id,
+      name: t.name,
+      typeId: t.type_id,
+      color: t.color,
+      gates: {
+        parents: t.has_parents,
+        children: t.has_children,
+        jumps: t.has_jumps,
+      },
+    };
   }
   const a = row.active;
   return {

@@ -14,14 +14,78 @@ export type PlexNode = {
   more?: number;
 };
 
+export type Point = { x: number; y: number };
+
+/** The four gates of a thought, TheBrain's: top is its parents, bottom its children, the sides its jumps. */
+export type GateSide = "top" | "bottom" | "left" | "right";
+
+export type Orientation = "vertical" | "horizontal";
+
 export type PlexEdge = {
   key: string;
+  /** The stored link this draws; empty for a sibling line, which is derived. */
   linkId: string;
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
+  kind: "parent" | "child" | "jump" | "sibling";
+  /** A cubic Bézier from one thought's gate to another's. */
+  from: Point;
+  to: Point;
+  c1: Point;
+  c2: Point;
 };
+
+export function gatePoint(node: Rect, side: GateSide): Point {
+  switch (side) {
+    case "top":
+      return { x: node.x + node.w / 2, y: node.y };
+    case "bottom":
+      return { x: node.x + node.w / 2, y: node.y + node.h };
+    case "left":
+      return { x: node.x, y: node.y + node.h / 2 };
+    case "right":
+      return { x: node.x + node.w, y: node.y + node.h / 2 };
+  }
+}
+
+export function gateOrientation(side: GateSide): Orientation {
+  return side === "top" || side === "bottom" ? "vertical" : "horizontal";
+}
+
+/**
+ * Control points that leave `from` and arrive at `to` along the gate's own axis — straight
+ * down out of a bottom gate, straight in from the side at a jump gate — which is what makes
+ * the curve read as gate to gate. Signed, so it also works when `to` is behind `from`.
+ */
+export function controlPoints(
+  from: Point,
+  to: Point,
+  orientation: Orientation,
+): { c1: Point; c2: Point } {
+  if (orientation === "vertical") {
+    const dy = (to.y - from.y) / 2;
+    return { c1: { x: from.x, y: from.y + dy }, c2: { x: to.x, y: to.y - dy } };
+  }
+  const dx = (to.x - from.x) / 2;
+  return { c1: { x: from.x + dx, y: from.y }, c2: { x: to.x - dx, y: to.y } };
+}
+
+/** Where the curve is at its halfway point (t = 0.5), for hanging a link's label on it. */
+export function curveMidpoint(e: Pick<PlexEdge, "from" | "to" | "c1" | "c2">): Point {
+  return {
+    x: (e.from.x + 3 * e.c1.x + 3 * e.c2.x + e.to.x) / 8,
+    y: (e.from.y + 3 * e.c1.y + 3 * e.c2.y + e.to.y) / 8,
+  };
+}
+
+function edge(
+  key: string,
+  linkId: string,
+  kind: PlexEdge["kind"],
+  from: Point,
+  to: Point,
+  orientation: Orientation,
+): PlexEdge {
+  return { key, linkId, kind, from, to, ...controlPoints(from, to, orientation) };
+}
 
 export type PlexLayout = { nodes: PlexNode[]; edges: PlexEdge[] };
 
@@ -38,6 +102,9 @@ type Rect = { x: number; y: number; w: number; h: number };
 
 /** Share of the height given to each of the parents and children bands. */
 const BAND = 0.3;
+
+/** Clear space between the centre label and the jump and sibling zones beside it. */
+const SIDE_GUTTER = 72;
 
 /**
  * Positions for the active thought and its neighbours. The container is cut into disjoint
@@ -59,7 +126,10 @@ export function layoutPlex(
   const cx = width / 2;
   const cy = height / 2;
   const bandH = height * BAND;
-  const sideW = Math.max(0, (width - w) / 2 - gap - margin);
+  // Jumps and siblings keep a gutter from the centre so the curve between gates has room to
+  // be seen, but never at the cost of a zone narrower than one label.
+  const room = Math.max(0, (width - w) / 2 - gap - margin);
+  const sideW = room - Math.min(SIDE_GUTTER, Math.max(0, room - w));
   const midTop = bandH;
   const midH = height - 2 * bandH;
 
@@ -77,11 +147,11 @@ export function layoutPlex(
     { key: activeId, zone: "centre", x: cx - w / 2, y: cy - h / 2, w, h },
   ];
   const edges: PlexEdge[] = [];
-  const centre = { x: cx, y: cy };
+  const centreNode = nodes[0];
 
   const place = (
     zone: Exclude<PlexZone, "centre">,
-    items: { id: string; linkId?: string }[],
+    items: { id: string; linkId?: string; viaParentId?: string }[],
     rect: Rect,
     flow: "up" | "down" | "left" | "right",
   ) => {
@@ -97,12 +167,16 @@ export function layoutPlex(
     );
     const cap = across * layers;
     const shown = items.length > cap ? items.slice(0, cap - 1) : items;
-    const slots: { key: string; id?: string; linkId?: string; more?: number }[] =
-      shown.map((i) => ({
-        key: i.id,
-        id: i.id,
-        linkId: i.linkId,
-      }));
+    const slots: {
+      key: string;
+      linkId?: string;
+      viaParentId?: string;
+      more?: number;
+    }[] = shown.map((i) => ({
+      key: i.id,
+      linkId: i.linkId,
+      viaParentId: i.viaParentId,
+    }));
     if (shown.length < items.length) {
       slots.push({ key: `more:${zone}`, more: items.length - shown.length });
     }
@@ -132,18 +206,49 @@ export function layoutPlex(
         y = along;
       }
       nodes.push({ key: slot.key, zone, x, y, w, h, more: slot.more });
+      const node = nodes[nodes.length - 1];
       if (slot.linkId) {
-        edges.push({
-          key: slot.linkId,
-          linkId: slot.linkId,
-          x1: centre.x,
-          y1: centre.y,
-          x2: x + w / 2,
-          y2: y + h / 2,
-        });
+        const key = slot.linkId;
+        if (zone === "parents") {
+          edges.push(
+            edge(
+              key,
+              key,
+              "parent",
+              gatePoint(node, "bottom"),
+              gatePoint(centreNode, "top"),
+              "vertical",
+            ),
+          );
+        } else if (zone === "children") {
+          edges.push(
+            edge(
+              key,
+              key,
+              "child",
+              gatePoint(centreNode, "bottom"),
+              gatePoint(node, "top"),
+              "vertical",
+            ),
+          );
+        } else {
+          edges.push(
+            edge(
+              key,
+              key,
+              "jump",
+              gatePoint(centreNode, "left"),
+              gatePoint(node, "right"),
+              "horizontal",
+            ),
+          );
+        }
+      } else if (slot.viaParentId) {
+        siblingNodes.push({ node, viaParentId: slot.viaParentId });
       }
     });
   };
+  const siblingNodes: { node: PlexNode; viaParentId: string }[] = [];
 
   place(
     "parents",
@@ -165,10 +270,27 @@ export function layoutPlex(
   );
   place(
     "siblings",
-    hood.siblings.map((id) => ({ id })),
+    hood.siblings.map((s) => ({ id: s.thoughtId, viaParentId: s.viaParentId })),
     right,
     "right",
   );
+
+  // A sibling hangs off its own parent's child gate. A parent folded into "+N more" has no
+  // gate to draw from, so its siblings go without a line rather than with a wrong one.
+  for (const { node, viaParentId } of siblingNodes) {
+    const parent = nodes.find((n) => n.zone === "parents" && n.key === viaParentId);
+    if (!parent) continue;
+    edges.push(
+      edge(
+        `sibling:${node.key}`,
+        "",
+        "sibling",
+        gatePoint(parent, "bottom"),
+        gatePoint(node, "top"),
+        "vertical",
+      ),
+    );
+  }
 
   return { nodes, edges };
 }

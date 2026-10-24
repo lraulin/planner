@@ -2,7 +2,7 @@
 
 import type { MouseEvent } from "react";
 import type { Neighbourhood } from "@/lib/brain/neighbourhood";
-import type { ThoughtRef } from "@/lib/brain/types";
+import type { PlexThought } from "@/lib/brain/types";
 import { typeColor } from "./ThoughtChip";
 
 /**
@@ -16,7 +16,7 @@ export function BrainMobile({
   onMenu,
 }: {
   hood: Neighbourhood;
-  thoughts: Record<string, ThoughtRef>;
+  thoughts: Record<string, PlexThought>;
   onOpen: (thoughtId: string) => void;
   onMenu: (thoughtId: string, event: MouseEvent) => void;
 }) {
@@ -24,7 +24,7 @@ export function BrainMobile({
     { title: "Parents", ids: hood.parents.map((n) => n.thoughtId) },
     { title: "Children", ids: hood.children.map((n) => n.thoughtId) },
     { title: "Jumps", ids: hood.jumps.map((n) => n.thoughtId) },
-    { title: "Siblings", ids: hood.siblings },
+    { title: "Siblings", ids: hood.siblings.map((s) => s.thoughtId) },
   ].filter((group) => group.ids.length > 0);
 
   if (groups.length === 0) {

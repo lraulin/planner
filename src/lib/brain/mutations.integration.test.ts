@@ -284,9 +284,56 @@ describeDb("brain mutations", () => {
       const hood = neighbourhood(me, plex!.links);
       expect(hood.parents.map((p) => p.thoughtId)).toEqual([parent]);
       expect(hood.children.map((p) => p.thoughtId)).toEqual([kid]);
-      expect(hood.siblings).toEqual([sib]);
+      expect(hood.siblings).toEqual([{ thoughtId: sib, viaParentId: parent }]);
       expect(Object.keys(plex!.thoughts).sort()).toEqual([parent, me, sib, kid].sort());
       expect(plex!.thoughts[sib].name).toBe("Sib");
+    });
+
+    it("flags which gates of each thought have links, counting only its own user's", async () => {
+      const parent = await thought(userId, "Parent");
+      const me = await thought(userId, "Me");
+      const kid = await thought(userId, "Kid");
+      const pal = await thought(userId, "Pal");
+      await linkThoughts(userId, me, "parent", parent);
+      await linkThoughts(userId, me, "child", kid);
+      await linkThoughts(userId, pal, "jump", me);
+
+      const { thoughts } = (await loadPlex(userId, me))!;
+      expect(thoughts[me].gates).toEqual({
+        parents: true,
+        children: true,
+        jumps: true,
+      });
+      // A jump is undirected: it fills the jump gate at both ends and no other gate.
+      expect(thoughts[pal].gates).toEqual({
+        parents: false,
+        children: false,
+        jumps: true,
+      });
+      expect(thoughts[parent].gates).toEqual({
+        parents: false,
+        children: true,
+        jumps: false,
+      });
+      expect(thoughts[kid].gates).toEqual({
+        parents: true,
+        children: false,
+        jumps: false,
+      });
+    });
+
+    it("does not let another user's links fill a gate", async () => {
+      const other = await makeUser();
+      const mine = await thought(userId, "Mine");
+      const theirs = await thought(other, "Theirs");
+      await linkThoughts(other, theirs, "child", await thought(other, "T-kid"));
+      const { thoughts } = (await loadPlex(userId, mine))!;
+      expect(thoughts[mine].gates).toEqual({
+        parents: false,
+        children: false,
+        jumps: false,
+      });
+      expect(await loadPlex(userId, theirs)).toBeNull();
     });
 
     it("is null for a thought that does not exist", async () => {

@@ -1,6 +1,6 @@
 # Brain plex: gates, curved links, drag to create and connect — Shaping Notes
 
-**Status: active**
+**Status: frozen — implemented 2026-10-24**
 
 ## Scope
 

@@ -7,12 +7,17 @@ export type NeighbourLink = {
 
 export type Neighbour = { thoughtId: string; linkId: string };
 
+export type Sibling = { thoughtId: string; viaParentId: string };
+
 export type Neighbourhood = {
   parents: Neighbour[];
   children: Neighbour[];
   jumps: Neighbour[];
-  /** Other children of any parent. Derived, never stored, so they carry no link. */
-  siblings: string[];
+  /**
+   * Other children of any parent, each with the parent it came through (the first, when
+   * several apply). Derived, never stored, so they carry no link of their own.
+   */
+  siblings: Sibling[];
 };
 
 /**
@@ -54,10 +59,10 @@ export function neighbourhood(activeId: string, links: NeighbourLink[]): Neighbo
   }
 
   const parentIds = new Set(parents.map((p) => p.thoughtId));
-  const siblings: string[] = [];
+  const siblings: Sibling[] = [];
   for (const l of links) {
     if (l.kind === "child" && parentIds.has(l.fromId) && take(l.toId)) {
-      siblings.push(l.toId);
+      siblings.push({ thoughtId: l.toId, viaParentId: l.fromId });
     }
   }
 

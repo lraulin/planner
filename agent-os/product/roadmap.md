@@ -781,6 +781,8 @@ flavor; optional palette thinning).
   Markdown note per thought with autosave, coloured types, tags, link labels, search and
   recent. Durable, unlike Houses. `domain: brain` MCP tools (list/get/create/update/link/unlink/
   delete) so Grok can grow the network. Phone width falls back to stacked lists.
+  Extended by `specs/2026-10-24-1054-brain-plex-gates-and-drag`: TheBrain-style labels with
+  gates, curved gate-to-gate links, and drag from a gate to link or to create a thought.
 
 ### AI integration
 
