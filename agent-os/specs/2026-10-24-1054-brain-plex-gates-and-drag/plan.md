@@ -55,13 +55,13 @@ thought icons.
 
 ## Acceptance criteria
 
-- [ ] Plex shows thoughts as labels with four gates; filled gates where that thought has links that way, hollow otherwise
-- [ ] Parent/child/jump/sibling lines are curves joining the correct gates; labels still appear on hover/at midpoint
-- [ ] Dragging any visible thought's gate shows a live curve; dropping on another thought creates the right link kind/direction (or relinks the existing pair in place)
-- [ ] Dropping on empty canvas opens a name input at that point; typing a new name + Enter creates and links it; choosing an autocomplete hit links the existing thought; Esc cancels with nothing written
-- [ ] Clicking a label still recentres; right-click menus and commands unchanged
-- [ ] Light and dark themes both legible; phone width unchanged
-- [ ] `npm run lint && npm run typecheck && npm test` pass with DB tests actually run; `npm run smoke` passes
+- [x] Plex shows thoughts as labels with four gates; filled gates where that thought has links that way, hollow otherwise
+- [x] Parent/child/jump/sibling lines are curves joining the correct gates; labels still appear on hover/at midpoint
+- [x] Dragging any visible thought's gate shows a live curve; dropping on another thought creates the right link kind/direction (or relinks the existing pair in place)
+- [x] Dropping on empty canvas opens a name input at that point; typing a new name + Enter creates and links it; choosing an autocomplete hit links the existing thought; Esc cancels with nothing written
+- [x] Clicking a label still recentres; right-click menus and commands unchanged
+- [x] Light and dark themes both legible; phone width unchanged
+- [x] `npm run lint && npm run typecheck && npm test` pass with DB tests actually run; `npm run smoke` passes
 
 ## Changes from original plan
 
@@ -157,3 +157,6 @@ included); `npm run smoke`; browser pass via `run-planner` on desktop and phone 
   while held (1 dashed path); control run released without Esc opened the name input; with Esc
   pressed before release the band disappeared (0 paths), no input opened, and the database
   stayed at 1 thought / 0 links.
+- Neighbour to neighbour: with Hub centred and Alpha, Beta as its children, dragging Alpha's
+  jump gate onto Beta created `jump:Alpha>Beta` (alongside the two child links) and the centre
+  stayed on Hub.
