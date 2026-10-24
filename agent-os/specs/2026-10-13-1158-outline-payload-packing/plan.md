@@ -315,6 +315,26 @@ What it says, plainly:
   unchanged by design; the transport buffer the RSC parser holds is 80% smaller. Not
   measured separately.
 
+### Production after deploy (2026-10-24)
+
+Signed-in browser on production, same method as the 2026-10-12 figures in **Context**: client
+navigation to each tab straight after Register (so the page cache cannot serve it), Resource
+Timing for the RSC request. 3 runs each; the first of each is usually a cold function and,
+when it reuses the shared layout, smaller.
+
+| Tab               | 2026-10-12                       | 2026-10-24 raw / transferred | Server ms (TTFB)       |
+| ----------------- | -------------------------------- | ---------------------------- | ---------------------- |
+| Plan: Outline     | ~810–875 kB / ~85 kB, 160–230 ms | 290 kB / 81–83 kB            | 169, 105, 116 (55–83)  |
+| Plan: Tasks       | same                             | 316 kB / 93–94 kB            | 261, 206, 160 (53–175) |
+| Plan: Goals       | same                             | 290 kB / 82 kB               | 157, 109, 104 (60–109) |
+| Schedule calendar | same                             | 122 kB / 31 kB               | 93, 109, 102 (57–73)   |
+
+Raw bytes fell to about 35% on the Plan tabs (locally 20%: the rest of the page is not the
+outline). **Transferred bytes barely moved on the Plan tabs** (~85 → ~82 kB): the field names
+packing removed were the part that compressed best, so on the wire production's compression
+had already taken most of that saving. The calendar, a slice page, dropped to ~31 kB. Server
+time is down, but that includes the node-postgres swap and cannot be credited to packing.
+
 ### Verification run (Task 6)
 
 - **Rendered rows and cells.** Every grid route and page in the baseline capture, in its
@@ -348,10 +368,8 @@ polish.
 
 ## Still to do before this spec can freeze
 
-- **Post-deploy production measurement** (Task 6's last bullet): repeat the 2026-10-12
-  signed-in-browser measurement on production and record it beside the local figures. It
-  needs the deploy and a signed-in browser; it was not possible from the implementing
-  session.
+- ~~**Post-deploy production measurement**~~ — done 2026-10-24, see "Production after deploy"
+  above.
 - **`/metrics` criterion**: either accept the restatement above or tighten the slice; a
   decision for Lee.
 - **Hand check on Outline**: drag-to-reorder and the revert of a rejected edit.

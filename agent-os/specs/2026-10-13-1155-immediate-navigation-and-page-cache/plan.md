@@ -149,12 +149,11 @@ What shaping found (Next 16.3.8, read from `node_modules/next/dist`):
 - [x] Clicking a module, page tab or bottom-nav slot moves the active look within 50 ms on a
       production build, for the slowest route too (Register). _Production build 2026-10-23:
       1–5 ms on every route, Register 2 ms (Measurements). Dev: 3–15 ms._
-- [ ] A navigation that finishes under 300 ms shows no bar and no dimming. Register shows both.
+- [x] A navigation that finishes under 300 ms shows no bar and no dimming. Register shows both.
       _Dev, with RSC responses delayed over CDP: none under 300 ms, both from 300 ms, gone on
-      arrival. Register's own production latency (384–956 ms) not measured. On the local
-      production build every navigation finished under 100 ms, so neither appeared — the
-      "Register shows both" half needs deployed production, where Register may now be under
-      300 ms after the node-postgres swap._
+      arrival. The second sentence assumed Register stays slow; in production on 2026-10-24
+      its request took 98–187 ms (median 118 of 12, one cold 466), so it normally shows
+      neither — which is the rule working, not a gap (narrow-ledger-reads Verification)._
 - [x] Content is never replaced by a placeholder. There is no `loading.tsx` under `src/app`.
 - [x] Prefetch requests per fresh view: recorded before; zero after — or kept, with the numbers.
       _Production build: 32 / 48 / 40 (Tasks / Budget / Register) → 0 / 0 / 0, with the gate in

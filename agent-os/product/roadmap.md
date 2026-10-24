@@ -153,8 +153,9 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   one frame and only a navigation slower than 300 ms gets a bar and a veil (no skeletons). Eleven
   pages are cached in memory for 60 s through a per-route policy registry that fails closed, with
   explicit rules for own non-revalidating writes, focus return, the local day rolling over and
-  the three import panels. **Open:** the production-build timings and stale-data table, and the
-  prefetch gate (decision 6) — all need a signed-in production build. Follow-ups, as new work:
+  the three import panels. Prefetch is off (decision 6's gate met on a production build,
+  2026-10-23) and every in-shell link goes through `NavLink`, held by a lint rule. **Open:** the
+  stale-data rows that cannot be run (imports, Google, agent key). Follow-ups, as new work:
   server render cost and payload size (Plan ~810 kB, Register's server work).
 
 ### Still in Phase 1
@@ -1477,7 +1478,9 @@ period)` so money already spent stops being held twice and only going over bites
   menu opens. Equal to the old output byte for byte on a restored production backup.
   Follow-ups, none started: the Register's first query built from the stored view (a saved
   layout still costs one request a load), Track-as-bill draft and Scenarios (full reads
-  behind a dialog and a secondary page), and windowing Insights.
+  behind a dialog and a secondary page), and windowing Insights. Production 2026-10-24
+  (with node-postgres): Accounts 305 → ~90 ms, Bills 510 → ~150 ms, Register 384–956 →
+  ~120 ms median. Frozen.
 
 - **One round trip per query** (daily-use performance, 2026-10-22) —
   `specs/2026-10-12-2001-node-postgres-driver`. postgres.js gave way to node-postgres under
