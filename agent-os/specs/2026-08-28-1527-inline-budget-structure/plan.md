@@ -151,26 +151,68 @@ hide/show and `budget.review` stay. `budget.structure.manage` is removed.
 
 ## Acceptance criteria
 
-- [ ] `+ Bill` on the Bills section creates a bill from a typed name alone; it appears in the
+- [x] `+ Bill` on the Bills section creates a bill from a typed name alone; it appears in the
       Bills table and the inspector shows Monthly with no amount.
-- [ ] `+` on a group header creates an envelope inside that group, of that section's kind.
+- [x] `+` on a group header creates an envelope inside that group, of that section's kind.
 - [ ] Enter in the composer creates and leaves the composer open, focused and empty.
-- [ ] Double-click an envelope name renames it in place; Escape reverts; Enter commits.
-- [ ] A group header renames in place from its `⋮`.
+      **Not met (2026-10-24):** open and empty, but focus is lost — see Status below.
+- [x] Double-click an envelope name renames it in place; Escape reverts; Enter commits.
+- [x] A group header renames in place from its `⋮`.
 - [ ] `Move up` / `Move down` / `Move to group…` / `Change section` / `Hide` / `Delete…` all
       work from the row menu on all three tables and from the command catalog.
-- [ ] `Move to group…` never offers a destination that would cross a section boundary or nest
+      **Partly met (2026-10-24):** Move to group, Change section, Hide and Delete work from the
+      row menu; Move up / Move down change nothing visible, and Change section / Hide are not
+      in the catalog — see Status below.
+- [x] `Move to group…` never offers a destination that would cross a section boundary or nest
       a group inside its own descendant.
-- [ ] Deleting a non-empty group is disabled **with the reason**, not absent, and an empty
+- [x] Deleting a non-empty group is disabled **with the reason**, not absent, and an empty
       one can actually be deleted (needs `2026-08-28-1613-group-kind`; see Changes row 1).
-- [ ] `BudgetStructureDrawer.tsx` and `budget.structure.manage` no longer exist; nothing
+- [x] `BudgetStructureDrawer.tsx` and `budget.structure.manage` no longer exist; nothing
       references them.
-- [ ] Changing an envelope's section to Bills and back leaves a legal row both ways (facet
+- [x] Changing an envelope's section to Bills and back leaves a legal row both ways (facet
       stamped, then cleared).
-- [ ] The three budget tables still show the checkbox gutter and a working header select-all.
-- [ ] Every gesture has a tappable path below `md`.
-- [ ] lint, typecheck, `npm test` (unit **and** Postgres integration, no skip warning),
+- [x] The three budget tables still show the checkbox gutter and a working header select-all.
+- [x] Every gesture has a tappable path below `md`.
+- [x] lint, typecheck, `npm test` (unit **and** Postgres integration, no skip warning),
       `next build`, `npm run smoke`.
+
+## Status 2026-10-24
+
+Driven in the desktop app's browser pane at 1440×900 and 390×844 against the dev server, with
+throwaway `ZZ …` rows deleted afterwards; full gate green the same day (lint, typecheck, 4,741 unit
+and 1,314 database tests with no skip warning, build, smoke 64 routes).
+
+**Verified.** `+ Bill` created a bill whose inspector read Monthly / Active / no amount. `+ Group`
+in Bills created an empty group with `+` and `⋮`; its `+` opened "New bill in ZZ Audit Group" and
+created a bill inside it. Double-click rename: Escape reverted, Enter committed. The group renamed
+from `⋮` ▸ Rename. With members, the group's Delete… was disabled with "Move every subgroup and
+envelope out before deleting"; once empty it was enabled and deleted. Move to group… offered only
+the one Bills group. Change section to Regular spending cleared the bill facet (`cadence_months`
+null) and moved the row to that section's root; back to Bills stamped it again (monthly). Hide
+hid the row; Delete… confirmed with the drawer's copy. All three tables have a working header
+"Select all". Below `md` the section `+` buttons and group `+`/`⋮` are visible, the ⋯ menu lists
+every D8 command under Budget, and a long-press opens the row menu.
+`BudgetStructureDrawer` survives only in a historical comment in `hierarchy.ts`. Illegal moves
+are also pinned by `moveDestinations`' tests in `hierarchy.test.ts`; the round trip by
+`mutations.integration.test.ts` (`ec5b95d4`).
+
+**Gap 1 — the composer loses focus after Enter.** It creates the row and clears, but focus falls
+to `<body>`, so the next name cannot just be typed; Escape then does nothing because focus is not
+in the input. Cause: the input is `disabled={pending}` (`StructureComposer.tsx:103`), and
+`inputRef.current?.focus()` (`:86`) runs inside the transition while it is still disabled, so the
+call is ignored. Present since the composer shipped (`815b7246`).
+
+**Gap 2 — Move up / Move down are visible no-ops.** `9037cedd` (2026-08-29, the day after this
+shipped, no spec) made the Budget tables and the picker sort by name and stop reading
+`sort_key`; its body says "Move up/down still records a position; the page ignores it". Checked:
+Move envelope up rewrote the row's `sort_key` (`zx` → `zv`, ahead of its neighbour) and the table
+did not change. The commands are still offered in the row menu, the group menu and Organize ▸
+Budget. Lee's call: retire the commands (a delta superseding D6's reordering) or restore manual
+order.
+
+**Spec inconsistency, reported not resolved.** The criterion asks for Change section and Hide
+"from the command catalog", but D8's command list never included them, and neither exists as a
+command. They are row-menu only.
 
 ## Changes from original plan
 

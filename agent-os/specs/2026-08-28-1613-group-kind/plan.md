@@ -102,25 +102,42 @@ gone). `moveDestinations` becomes kind equality plus the descendant refusal — 
 
 ## Acceptance criteria
 
-- [ ] `+ Group` on a section creates a group that appears immediately, empty, with its `+`
+- [x] `+ Group` on a section creates a group that appears immediately, empty, with its `+`
       and `⋮`.
-- [ ] Deleting a group's last envelope leaves the group on screen, and its `Delete…` is now
+- [x] Deleting a group's last envelope leaves the group on screen, and its `Delete…` is now
       enabled.
-- [ ] A group created under Bills appears only in Bills; one created under Savings only in
+- [x] A group created under Bills appears only in Bills; one created under Savings only in
       Savings.
-- [ ] `Move to group…` offers only groups of the moving item's own kind, and never a
+- [x] `Move to group…` offers only groups of the moving item's own kind, and never a
       descendant of a moving group.
 - [ ] `Move up` / `Move down` reorder a **root-level** envelope against its own section's
       neighbours, not whatever shares its null parent.
-- [ ] Changing an envelope's section while it is in a group moves it to that section's root
+      **Not visibly met (2026-10-24):** the stored order is right (`budgetSiblings`), but the
+      page has sorted by name since `9037cedd`, so nothing moves on screen. See Gap 2 in
+      `2026-08-28-1527-inline-budget-structure`.
+- [x] Changing an envelope's section while it is in a group moves it to that section's root
       and leaves a legal row.
-- [ ] A fresh `seedBudget` creates no groups, and the page renders the same five envelopes in
+- [x] A fresh `seedBudget` creates no groups, and the page renders the same five envelopes in
       the same three tables.
-- [ ] The migration dissolves the seeded `Spending` and `Income` groups on existing data,
+- [x] The migration dissolves the seeded `Spending` and `Income` groups on existing data,
       moving their envelopes to their section roots, and deletes nothing else.
-- [ ] `groupPageSection` no longer exists; nothing references it.
-- [ ] lint, typecheck, `npm test` (unit **and** Postgres integration, no skip warning),
+- [x] `groupPageSection` no longer exists; nothing references it.
+- [x] lint, typecheck, `npm test` (unit **and** Postgres integration, no skip warning),
       `next build`, `npm run smoke`.
+
+## Status 2026-10-24
+
+Verified in the browser alongside `2026-08-28-1527-inline-budget-structure` (its **Status
+2026-10-24** has the detail). An empty Bills group showed at once with `+` and `⋮`; after its
+members left, the group stayed and its Delete… was enabled; Move to group… offered only Bills
+groups. Change section evicted a grouped bill to Regular spending's root with a legal row
+(facet cleared). Seeding: `mutations.integration.test.ts` "seeds the minimal preset with no
+groups at all". Migration: production on 2026-10-24 has nine groups, every one with a single
+`kind` and none named `Income` or `Spending`. `groupPageSection` survives only in a historical
+comment in `schema.ts`. Full gate green the same day.
+
+What holds the freeze is the one open box, Move up / Move down, which is the same gap as the
+inline spec's. Both specs freeze together (Task 5).
 
 ## Changes from original plan
 
