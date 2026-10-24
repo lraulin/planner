@@ -61,6 +61,23 @@ tool and the `tools/alfred/` packaging model this mirrors.
 - [ ] **Shortcut built on-device and run against real reminders** — the one step that
       cannot be done from the repo
 
+**What Lee runs (checked 2026-10-24).** Production has no `apple_reminders` nodes yet, so the
+Shortcut has never posted. The endpoint and auth the README describes are unchanged
+(`POST /api/agent/capture`, `Authorization: Bearer $PLANNER_AGENT_API_KEY`).
+
+1. On the Mac, against production: `PLANNER_BASE_URL=<production origin>`,
+   `PLANNER_AGENT_API_KEY=…` (plus `VERCEL_AUTOMATION_BYPASS_SECRET` if Deployment Protection is
+   on), then `tools/shortcuts/drain.sh` twice. Expect `created 2, skipped 0`, then
+   `created 0, skipped 2`. Delete the two sample tasks from the Inbox.
+2. On the iPhone, build the Shortcut step by step from `tools/shortcuts/README.md` ("Build the
+   Shortcut", sections 1–6), with the same origin and key in its text fields.
+3. "Hey Siri, remind me to …" twice, then run the Shortcut. Both appear under Inbox, and both
+   reminders are marked complete.
+4. Run it again with the list empty: a clean no-op.
+
+After that an agent confirms two `external_source = 'apple_reminders'` nodes in production and
+freezes this spec.
+
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code
