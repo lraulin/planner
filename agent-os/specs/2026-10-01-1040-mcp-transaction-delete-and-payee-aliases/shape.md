@@ -1,6 +1,6 @@
 # Delete transactions and edit payee aliases over MCP — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-10-24)
 
 ## Scope
 

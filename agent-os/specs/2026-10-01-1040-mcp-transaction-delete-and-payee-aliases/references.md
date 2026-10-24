@@ -1,6 +1,6 @@
 # References for delete transactions and edit payee aliases over MCP
 
-**Status: active**
+**Status: frozen / complete** (2026-10-24)
 
 ## Governing specs
 

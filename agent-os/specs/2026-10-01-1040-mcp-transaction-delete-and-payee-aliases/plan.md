@@ -1,6 +1,6 @@
 # Delete transactions and edit payee aliases over MCP
 
-**Status: active**
+**Status: frozen / complete** (2026-10-24)
 Spec folder: `agent-os/specs/2026-10-01-1040-mcp-transaction-delete-and-payee-aliases/`
 
 ## Spec relationships
@@ -82,19 +82,33 @@ editing aliases.
 
 ## Acceptance
 
-- [ ] `delete_transaction` deletes the user's rows and their split children in one transaction,
-      audits with origin Agent, and returns the receipt.
-- [ ] A foreign or missing id deletes nothing and returns `not_found`; a split child returns
-      `validation`.
-- [ ] Deleting one side of a transfer releases the partner's `transfer_group_id`.
-- [ ] `dryRun` on either tool writes nothing (no rows, no aliases, no audit events).
-- [ ] An alias add re-links matching rows and fills only uncategorized rows from the claim.
-- [ ] A conflicting alias is refused by default; `move` works off an unclaimed payee and is
-      refused off a claimed one.
-- [ ] Removing an alias splits its rows onto a payee of their own, reported in the receipt.
-- [ ] The Payees page remove and `upsert_subscription` recompute `payee_id`.
-- [ ] A second user cannot read, delete, or edit through either tool.
-- [ ] `docs/agent-api.md` regenerated; registry and MCP catalog tests list both tools.
+- [x] `delete_transaction` deletes the user's rows and their split children in one transaction,
+      audits with origin Agent, and returns the receipt. — `src/lib/agent/ledgerTools.integration.test.ts` "deletes a split
+      parent with its children and audits it as the agent"; `86c508f1`.
+- [x] A foreign or missing id deletes nothing and returns `not_found`; a split child returns
+      `validation`. — "deletes nothing when any id is another user's", "refuses a split child".
+      Missing and foreign ids are one check: `deleteTransactions` selects by `userId` and
+      reports every requested id it did not find.
+- [x] Deleting one side of a transfer releases the partner's `transfer_group_id`. — "releases
+      the surviving leg of a transfer".
+- [x] `dryRun` on either tool writes nothing (no rows, no aliases, no audit events). — "writes
+      nothing on a dry run" (rows and audit count), "changes nothing on a dry run" (aliases,
+      payee and category).
+- [x] An alias add re-links matching rows and fills only uncategorized rows from the claim. —
+      "moves the alias, re-links its rows, and files only the uncategorized one".
+- [x] A conflicting alias is refused by default; `move` works off an unclaimed payee and is
+      refused off a claimed one. — "refuses an alias another payee holds unless asked to move
+      it", "moves the alias…", "never moves an alias off a payee an envelope claims".
+- [x] Removing an alias splits its rows onto a payee of their own, reported in the receipt. —
+      "moves a removed alias's rows onto a payee of their own".
+- [x] The Payees page remove and `upsert_subscription` recompute `payee_id`. — "re-points rows
+      when the Payees page removes an alias", "files the rows a legacy matcher newly covers";
+      `dc32868b`.
+- [x] A second user cannot read, delete, or edit through either tool. — "deletes nothing when
+      any id is another user's", "does not let a second user edit the payee or borrow a
+      transaction's spelling".
+- [x] `docs/agent-api.md` regenerated; registry and MCP catalog tests list both tools. —
+      `npm run agent:docs:check` passes; both names are in `tools.test.ts` and `mcp.test.ts`.
 
 ## Tasks
 
@@ -103,7 +117,17 @@ editing aliases.
 3. `update_payee_aliases` and the two alias paths that skipped the recompute.
 4. `list_payees.transactionCount`, generated docs.
 
+Verified 2026-10-24: every box above against the named tests, which passed in the full gate that
+day (lint, typecheck, 4,741 unit and 1,314 database tests with no skip warning, build, smoke 64
+routes). Tasks 2–4 shipped on 2026-10-01 in `86c508f1`, `dc32868b` and `5ec69250`.
+
 ## Changes from original plan
 
-| What | Why |
-| ---- | --- |
+| What | Why                         |
+| ---- | --------------------------- |
+| None | The build matched the plan. |
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Rows still have no tombstone, so a deleted row whose source still writes the account can come
+  back on the next import; D1 answers it with a receipt warning only.

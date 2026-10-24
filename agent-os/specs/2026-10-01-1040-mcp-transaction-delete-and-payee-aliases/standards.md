@@ -1,8 +1,8 @@
 # Standards for delete transactions and edit payee aliases over MCP
 
-**Status: active**
+**Status: frozen / complete** (2026-10-24)
 
-Applied as of standards commit `866bae77`. References, not copies — recover the text with
+Applied as of standards commit `866bae77`; frozen 2026-10-24 at standards commit `dff043d6`. References, not copies — recover the text with
 `git show 866bae77:agent-os/standards/<path>`.
 
 - `agent-os/standards/api/agent-tools.md` — one registry entry per tool, strict schemas,
