@@ -1,6 +1,6 @@
 # Brain — a PersonalBrain clone as a Library page
 
-**Status: active**
+**Status: frozen / complete** (2026-10-24)
 Spec folder: `agent-os/specs/2026-10-24-0925-brain-library-page/`
 
 Root spec (no governing prior spec). References: Houses (`2026-09-17-0853-houses-library-page`,
@@ -47,26 +47,36 @@ v1 — they do not point at Notes, Contacts or outline nodes.
 
 ## Acceptance criteria
 
-- [ ] `/library/brain` appears in Library and the ⌘K palette; opens on Home → last visited → empty state with "Create first thought"
-- [ ] Plex shows parents above, children below, jumps left, siblings right; clicking any neighbour recentres with animation and updates `?thought=`; browser Back returns
-- [ ] Add child/parent/jump from the active thought; autocomplete links an existing thought instead of duplicating
-- [ ] A second link between the same two thoughts is impossible; re-linking changes kind/direction in place
-- [ ] Note autosaves; rename, type (coloured chip), tags, link labels (shown on edge hover/label) all persist
-- [ ] Search jumps to a thought by name or note text; recent list shows last visited
-- [ ] Delete asks for confirmation and removes the thought's links
-- [ ] Phone width shows the stacked-list fallback
-- [ ] A second user cannot read, link to, change, or delete the first user's thoughts, links, types or tags — at the mutation layer and over MCP
-- [ ] Grok can list/search, get (with neighbours), create (optionally linked), update, link, unlink, and delete thoughts
-- [ ] `npm run lint && npm run typecheck && npm test` pass (DB tests actually ran); `npm run smoke` and `npm run smoke:agent` pass
+- [x] `/library/brain` appears in Library and the ⌘K palette; opens on Home → last visited → empty state with "Create first thought"
+- [x] Plex shows parents above, children below, jumps left, siblings right; clicking any neighbour recentres with animation and updates `?thought=`; browser Back returns
+- [x] Add child/parent/jump from the active thought; autocomplete links an existing thought instead of duplicating
+- [x] A second link between the same two thoughts is impossible; re-linking changes kind/direction in place
+- [x] Note autosaves; rename, type (coloured chip), tags, link labels (shown on edge hover/label) all persist
+- [x] Search jumps to a thought by name or note text; recent list shows last visited
+- [x] Delete asks for confirmation and removes the thought's links
+- [x] Phone width shows the stacked-list fallback
+- [x] A second user cannot read, link to, change, or delete the first user's thoughts, links, types or tags — at the mutation layer and over MCP
+- [x] Grok can list/search, get (with neighbours), create (optionally linked), update, link, unlink, and delete thoughts
+- [x] `npm run lint && npm run typecheck && npm test` pass (DB tests actually ran); `npm run smoke` and `npm run smoke:agent` pass
 
 ## Changes from original plan
 
-| #   | Change                                                                                                                 | Why                                                                                                                               |
-| --- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Task 2 landed in commit `2df785ac`, not under a Brain message                                                          | A parallel session's `git commit` swept the staged migration into its own commit; it was already pushed, so history is left as is |
-| 2   | `brain_thought_types.color` is a `smallint` palette index 0–7 (CHECK), not a string key                                | `chartCatVar(index)` takes an index; the index follows the theme                                                                  |
-| 3   | `brain_thoughts.typeId` FK is composite with **no** ON DELETE action; `deleteThoughtType` clears its thoughts first    | `SET NULL` on a composite key would null `user_id` too                                                                            |
-| 4   | `linkTo.relation` on create and `linkThoughts(…, relation, otherId)` both mean "what the other thought is to this one" | One reading everywhere; a mirrored create was a trap                                                                              |
+| #   | Change                                                                                                                                                                                               | Why                                                                                                                               |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Task 2 landed in commit `2df785ac`, not under a Brain message                                                                                                                                        | A parallel session's `git commit` swept the staged migration into its own commit; it was already pushed, so history is left as is |
+| 2   | `brain_thought_types.color` is a `smallint` palette index 0–7 (CHECK), not a string key                                                                                                              | `chartCatVar(index)` takes an index; the index follows the theme                                                                  |
+| 3   | `brain_thoughts.typeId` FK is composite with **no** ON DELETE action; `deleteThoughtType` clears its thoughts first                                                                                  | `SET NULL` on a composite key would null `user_id` too                                                                            |
+| 4   | `linkTo.relation` on create and `linkThoughts(…, relation, otherId)` both mean "what the other thought is to this one"                                                                               | One reading everywhere; a mirrored create was a trap                                                                              |
+| 5   | The Recent list is the search box's empty state, not a separate panel                                                                                                                                | One control for "get me to a thought"; empty focus shows Recent, typing searches                                                  |
+| 6   | "Set type…" opens a menu at the pointer; Rename, Set type, Home, Unlink, Edit link label and Delete are in the row menu of any neighbour, but Add child/parent/jump and Edit tags only on the centre | The verbs that only make sense for the active thought are not offered on a neighbour                                              |
+| 7   | Visits are stamped by a client effect calling `markThoughtVisitedAction` (revalidates nothing), not during render                                                                                    | A GET render that writes is the wrong place for a write, and the stamp must not re-render the plex                                |
+| 8   | Edges fade in on recentre rather than sliding with the chips                                                                                                                                         | An SVG endpoint cannot be transitioned portably; chips slide, lines are underneath and fade                                       |
+| 9   | `+N more` opens a menu of the hidden neighbours                                                                                                                                                      | The plan only said the chip exists; a chip that cannot be opened loses thoughts                                                   |
+| 10  | MCP `type` is a **name that must already exist**; an unknown name fails before any write and lists the types                                                                                         | Agents should not mint types (and their colours) as a side effect; types are managed on the Brain page                            |
+| 11  | `createThought` takes `typeId` and `tags` inside its transaction                                                                                                                                     | A replayed `create_thought` returns `created: false` and skips them, so applying them afterwards would lose them on a retry       |
+| 12  | "Link not found between those thoughts." (was "…not linked")                                                                                                                                         | `errors.ts` classifies on "not found"; a foreign id and a missing link must answer the same way over MCP                          |
+| 13  | Search dropdown renders `fixed` against the input's rect                                                                                                                                             | The toolbar row clips overflow; found in the browser pass, not by any test                                                        |
+| 14  | The `frontend-design` skill was not run for Task 6                                                                                                                                                   | The page reuses the app's tokens, chip and menu components; no new visual language was introduced                                 |
 
 > While this spec is **active**, when we make a material change to requirements, design, or
 > scope (including from feedback on what was implemented), update the relevant sections and
@@ -151,3 +161,31 @@ cases; update the hardcoded tool counts (`mcp.test.ts`, `route.test.ts`, `tools.
 End-to-end: unit tests for `neighbourhood`/`plex`/`links`; integration tests for mutations,
 cross-user reads and MCP tools against Docker Postgres; `npm run smoke` for every route;
 manual browser pass via `run-planner` on desktop and narrow width.
+
+## As built
+
+- **Schema:** `src/db/schema.ts` — `brain_thoughts`, `brain_links`, `brain_thought_types`,
+  `brain_tags`, `brain_thought_tags`; migration `0104_bouncy_microbe` (landed in `2df785ac`).
+- **Pure logic:** `src/lib/brain/{neighbourhood,plex,links,snippet,thoughtId,commands}.ts`.
+- **Data:** `queries.ts` (`loadPlex` is one statement), `mutations.ts`; both user-scoped.
+- **Page:** `src/app/(shell)/library/brain/{page,actions}.tsx`; UI in `src/components/brain/`.
+- **MCP:** `src/lib/agent/brainTools.ts`, seven tools in `domain: brain`; `docs/agent-api.md`
+  regenerated.
+- **Verification (2026-10-24):** lint, typecheck, `npm test` (381 unit files / 90 integration
+  files, no DB skip), `npm run smoke` (65 routes) and `npm run smoke:agent` passed. Driven in a
+  browser: create, link all three kinds, recentre, Back, search by note, note/tags/type
+  persistence, delete, the `+N more` overflow and edge labels at 1280px, and the stacked lists at
+  390px.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Lee's own check on desktop and the deployed iPhone is still to come.** Anything found there
+  belongs in a delta-spec.
+- Agents cannot create or recolour types (Change 10). If that turns out to be wanted, add
+  `create_thought_type` rather than creating types implicitly.
+- Out of scope in v1, still out: `.brain` import, attachments/URLs per thought, links to
+  Notes/Contacts/outline nodes, Find integration, multiple brains, one-way jumps, drag-to-link,
+  second-degree neighbours, thought icons.
+- Edges cross behind chips when a zone wraps to several rows; a bundled or curved edge would read
+  better if large neighbourhoods become common.
+- No keyboard navigation between chips beyond Tab; arrow-key recentring was not built.

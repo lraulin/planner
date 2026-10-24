@@ -774,6 +774,13 @@ flavor; optional palette thinning).
   (list/get/create/update/delete) so Grok can fill it in from listings. **Deliberately
   disposable** — one table, one page, one MCP domain, expected to be deleted in one
   commit once the house hunt ends; not a durable product feature.
+- **✅ Brain.** `specs/2026-10-24-0925-brain-library-page`. A seventh Library page that clones
+  PersonalBrain: standalone **thoughts** joined by parent/child and jump links, explored through
+  the **plex** (active thought centred; parents above, children below, jumps left, siblings
+  right; click to recentre, with the active thought in `?thought=` so Back is the history).
+  Markdown note per thought with autosave, coloured types, tags, link labels, search and
+  recent. Durable, unlike Houses. `domain: brain` MCP tools (list/get/create/update/link/unlink/
+  delete) so Grok can grow the network. Phone width falls back to stacked lists.
 
 ### AI integration
 
