@@ -10,6 +10,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -4431,6 +4432,164 @@ export const houses = pgTable(
       .where(sql`${table.externalId} is not null`),
   ],
 );
+
+/** `child`: `fromId` is the parent of `toId`. `jump`: undirected, stored with `fromId < toId`. */
+export const BRAIN_LINK_KINDS = ["child", "jump"] as const;
+export type BrainLinkKind = (typeof BRAIN_LINK_KINDS)[number];
+
+/**
+ * A thought's identity and colour. `color` is an index into the categorical chart palette
+ * (`chartCatVar`), so a type follows the theme instead of storing a hex.
+ */
+export const brainThoughtTypes = pgTable(
+  "brain_thought_types",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: smallint("color").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // The target of the composite foreign keys that keep a thought's type the same user's.
+    unique("brain_thought_types_id_user_uq").on(table.id, table.userId),
+    uniqueIndex("brain_thought_types_user_name_uq").on(table.userId, table.name),
+    check("brain_thought_types_color", sql`${table.color} between 0 and 7`),
+  ],
+);
+
+export const brainThoughts = pgTable(
+  "brain_thoughts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Markdown. */
+    note: text("note").notNull().default(""),
+    typeId: uuid("type_id"),
+    isHome: boolean("is_home").notNull().default(false),
+    /** An instant, stamped on activation — the recent list needs no history table. */
+    lastVisitedAt: timestamp("last_visited_at", { withTimezone: true }),
+    externalSource: text("external_source"),
+    externalId: text("external_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // The target of every composite foreign key that points at a thought.
+    unique("brain_thoughts_id_user_uq").on(table.id, table.userId),
+    // No ON DELETE action: SET NULL would null `user_id` too. Deleting a type clears its
+    // thoughts first, in the same transaction.
+    foreignKey({
+      name: "brain_thoughts_type_user_fk",
+      columns: [table.typeId, table.userId],
+      foreignColumns: [brainThoughtTypes.id, brainThoughtTypes.userId],
+    }),
+    uniqueIndex("brain_thoughts_one_home_per_user_uq")
+      .on(table.userId)
+      .where(sql`${table.isHome}`),
+    index("brain_thoughts_user_visited_idx").on(
+      table.userId,
+      table.lastVisitedAt.desc(),
+    ),
+    uniqueIndex("brain_thoughts_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
+  ],
+);
+
+export const brainLinks = pgTable(
+  "brain_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    fromId: uuid("from_id").notNull(),
+    toId: uuid("to_id").notNull(),
+    kind: text("kind").$type<BrainLinkKind>().notNull(),
+    label: text("label").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "brain_links_from_user_fk",
+      columns: [table.fromId, table.userId],
+      foreignColumns: [brainThoughts.id, brainThoughts.userId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "brain_links_to_user_fk",
+      columns: [table.toId, table.userId],
+      foreignColumns: [brainThoughts.id, brainThoughts.userId],
+    }).onDelete("cascade"),
+    // One link per pair, whichever way round it was written: re-linking updates in place.
+    uniqueIndex("brain_links_pair_uq").on(
+      table.userId,
+      sql`least(${table.fromId}, ${table.toId})`,
+      sql`greatest(${table.fromId}, ${table.toId})`,
+    ),
+    index("brain_links_user_from_idx").on(table.userId, table.fromId),
+    index("brain_links_user_to_idx").on(table.userId, table.toId),
+    check("brain_links_not_self", sql`${table.fromId} <> ${table.toId}`),
+    check("brain_links_kind", sql`${table.kind} in ('child', 'jump')`),
+    // A jump has no direction, so it gets one canonical row.
+    check(
+      "brain_links_jump_ordered",
+      sql`${table.kind} <> 'jump' or ${table.fromId} < ${table.toId}`,
+    ),
+  ],
+);
+
+export const brainTags = pgTable(
+  "brain_tags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("brain_tags_id_user_uq").on(table.id, table.userId),
+    uniqueIndex("brain_tags_user_name_uq").on(table.userId, table.name),
+  ],
+);
+
+export const brainThoughtTags = pgTable(
+  "brain_thought_tags",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    thoughtId: uuid("thought_id").notNull(),
+    tagId: uuid("tag_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.thoughtId, table.tagId] }),
+    foreignKey({
+      name: "brain_thought_tags_thought_user_fk",
+      columns: [table.thoughtId, table.userId],
+      foreignColumns: [brainThoughts.id, brainThoughts.userId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "brain_thought_tags_tag_user_fk",
+      columns: [table.tagId, table.userId],
+      foreignColumns: [brainTags.id, brainTags.userId],
+    }).onDelete("cascade"),
+    index("brain_thought_tags_tag_idx").on(table.tagId),
+  ],
+);
+
+export type BrainThoughtType = typeof brainThoughtTypes.$inferSelect;
+export type BrainThought = typeof brainThoughts.$inferSelect;
+export type NewBrainThought = typeof brainThoughts.$inferInsert;
+export type BrainLink = typeof brainLinks.$inferSelect;
+export type BrainTag = typeof brainTags.$inferSelect;
 
 export type DailyItem = typeof dailyItems.$inferSelect;
 export type NewDailyItem = typeof dailyItems.$inferInsert;
