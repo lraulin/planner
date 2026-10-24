@@ -99,24 +99,49 @@ refunded or incomplete stays in review.
 
 ## Acceptance criteria
 
-- [ ] Active subscriptions create idempotent Bills under **Amazon Subscribe & Save**; a
+- [x] Active subscriptions create idempotent Bills under **Amazon Subscribe & Save**; a
       cancelled subscription such as the cat litter creates no Bill while a final order stays
-      matchable.
+      matchable. — `apply.integration.test.ts` "creates an S&S bill, skips cancelled, and splits
+      a mixed exact match" (a second apply creates nothing); `preview.test.ts` "creates a Bill
+      for an active subscription and not for a cancelled one".
 - [ ] A complete later snapshot proposes, but never automatically applies, price, cadence,
       exceptional-date or cancellation changes.
-- [ ] One charge can explain several orders, one order can contain several items, and rewards
-      or other payment components remain evidence without becoming a bank match.
-- [ ] Only one exact posted card candidate auto-matches. Pending rows, date/card drift,
-      duplicate candidates and existing splits remain review work.
-- [ ] Mixed charges split recognised subscription amounts to their Bills and preserve one
-      exact ordinary remainder in the previous category. Children always balance to the cent.
+- [x] One charge can explain several orders, one order can contain several items, and rewards
+      or other payment components remain evidence without becoming a bank match. —
+      `evidence.integration.test.ts` "…links several orders to one charge"; `match.test.ts`
+      "refuses pending, rewards, splits, date drift and duplicate candidates".
+- [x] Only one exact posted card candidate auto-matches. Pending rows, date/card drift,
+      duplicate candidates and existing splits remain review work. — `match.test.ts` "matches a
+      unique posted card charge", "refuses pending, rewards, splits, date drift and duplicate
+      candidates", "will not guess between two open accounts ending in the same four digits".
+- [x] Mixed charges split recognised subscription amounts to their Bills and preserve one
+      exact ordinary remainder in the previous category. Children always balance to the cent. —
+      `allocate.test.ts` "splits recognised subscription lines to their Bills and keeps an exact
+      remainder"; the apply integration test checks the children sum to the charge.
 - [ ] Re-pasting is a no-op for settled evidence and never overwrites a manual split, Bill
       name/group, reviewed mapping or existing Supply envelope.
-- [ ] Historical S&S lines map by ASIN only when exactly one subscription fits; duplicate-ASIN
-      histories require review.
-- [ ] Every new query and mutation is user-scoped; a second user cannot read, match, change or
-      delete the first user's Amazon evidence.
+- [x] Historical S&S lines map by ASIN only when exactly one subscription fits; duplicate-ASIN
+      histories require review. — `allocate.test.ts` "maps a historical S&S line by ASIN only
+      when exactly one subscription fits".
+- [x] Every new query and mutation is user-scoped; a second user cannot read, match, change or
+      delete the first user's Amazon evidence. — `evidence.integration.test.ts` "refuses a second
+      user every read, change and delete…"; `apply.integration.test.ts` "does not let a second
+      user apply against the first user's register".
 - [ ] Desktop and compact Orders flows expose the same import and review actions.
+
+**Open boxes (2026-10-24).** Checked against the tests, which passed in the full gate that day:
+
+- _Later snapshot proposes, never applies_: only cancellation has a test (`preview.test.ts`
+  "proposes cancellation only from a complete subscription snapshot"). Price, cadence and
+  exceptional-date drift are computed (`driftOf` in `preview.ts`) but no test asserts the
+  proposal, or that apply leaves the Bill alone.
+- _Re-pasting is a no-op…_: re-apply idempotence is tested (the apply integration test's second
+  run); not overwriting a manual split, a renamed Bill or group, a reviewed mapping or a Supply
+  envelope is not.
+- _Desktop and compact Orders_: to be checked during Lee's capture run.
+
+All three are checked with the real capture; see `2026-08-27-1521-amazon-order-totals-register-link`
+**Status 2026-10-24** for exactly what Lee runs.
 
 ## Changes from original plan
 

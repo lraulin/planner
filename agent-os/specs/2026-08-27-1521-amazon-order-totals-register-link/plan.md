@@ -246,6 +246,28 @@ whether the **userscript's selectors still match the live pages**. Specifically:
 4. Existing orders imported from the privacy zip get `derived` summaries on a re-import of
    the slim file — they were stored before the columns existed, so they are all null today.
 
+## Status 2026-10-24 — waiting on Lee's capture
+
+Production on 2026-10-24: no v2 capture has ever been pasted. All 3,792 `amazon_orders` rows have
+null summary columns, order `111-7959899-2189857` included, and the last Amazon write of any kind
+was 2026-08-27 (one subscription row). Everything else is built and tested.
+
+**What Lee runs (about ten minutes):**
+
+1. In the userscript manager, install or update `scripts/amazon-subscribe-save.user.js` to
+   **version 2.0** ("Planner: Amazon order snapshot").
+2. Signed in at amazon.com, open Your Orders; in the Planner panel the script adds, press
+   **Capture** (or **Full rescan** the first time). Wait for it to report the snapshot copied.
+3. In Planner, open **Finances ▸ Orders** and run **File ▸ Import Amazon subscription
+   snapshot…**. Paste (or **Paste from clipboard**), read the preview, then apply.
+4. Optionally, the derived-summary check: **File ▸ Import Amazon orders…** with the privacy-zip
+   slim file again, so orders imported before the summary columns existed get `derived` totals.
+
+**Then an agent checks**, read-only: order `111-7959899-2189857` stores $23.49 / −$1.17 / $1.34 /
+$23.66 with `summary_source = 'printed'` and links to its $23.66 `Visa ****3448` row; the four
+points under **What the real capture has to confirm**; and the S&S spec's still-open boxes. Both
+specs freeze together after that.
+
 ## Out of scope
 
 - Server-side Amazon login or credential storage.
