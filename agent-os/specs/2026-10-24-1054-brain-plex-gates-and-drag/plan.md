@@ -153,5 +153,7 @@ included); `npm run smoke`; browser pass via `run-planner` on desktop and phone 
 - Relink in place: that pick flipped Hub→Alpha into Alpha→Hub (one row); dragging Hub's jump
   gate onto Beta turned the child link into `jump` in place (still one row per pair).
 - 390px: stacked lists (Parents/Jumps), no plex canvas, no gates in the DOM.
-- Not exercised: Esc mid-drag (the driver's `pdrag` presses and releases atomically); covered
-  only by the `dropResult` unit tests and the keydown handler.
+- Esc mid-drag (held open with the driver's `swipe … | hold`): the rubber band is present
+  while held (1 dashed path); control run released without Esc opened the name input; with Esc
+  pressed before release the band disappeared (0 paths), no input opened, and the database
+  stayed at 1 thought / 0 links.
