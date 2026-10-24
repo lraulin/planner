@@ -211,6 +211,15 @@ import { createLifeEvent } from "@/lib/timeline/mutations";
 import { getLifeEvent, listLifeEvents } from "@/lib/timeline/queries";
 import { createHouse } from "@/lib/houses/mutations";
 import { getHouseDetail, listHouses } from "@/lib/houses/queries";
+import { createThought } from "@/lib/brain/mutations";
+import {
+  listTags,
+  listTypes,
+  loadPlex,
+  recentThoughts,
+  searchThoughts,
+  startThoughtId,
+} from "@/lib/brain/queries";
 
 /**
  * One invariant, every read path: **no query hands a user another user's rows.**
@@ -285,6 +294,7 @@ type Owned = {
   residenceId: string;
   lifeEventId: string;
   houseId: string;
+  thoughtId: string;
   inviteId: string;
 };
 
@@ -638,6 +648,7 @@ async function seedOwner(): Promise<Owned> {
   // No address: an address would trigger a real Nominatim/OSRM call, and this suite
   // doesn't mock `houses/geo.ts` the way `houses/mutations.integration.test.ts` does.
   const houseId = await createHouse(userId, { nickname: "Owner house" });
+  const { id: thoughtId } = await createThought(userId, { name: "Owner thought" });
 
   await writeUserSetting(userId, "shell", { v: 2, sidebarCollapsed: true });
 
@@ -684,6 +695,7 @@ async function seedOwner(): Promise<Owned> {
     residenceId,
     lifeEventId,
     houseId,
+    thoughtId,
     inviteId: invite.id,
   };
 }
@@ -1118,6 +1130,12 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await getLifeEvent(intruder, owner.lifeEventId)).toBeNull();
     expect(await listHouses(intruder)).toEqual([]);
     expect(await getHouseDetail(intruder, owner.houseId)).toBeNull();
+    expect(await loadPlex(intruder, owner.thoughtId)).toBeNull();
+    expect(await searchThoughts(intruder, "Owner")).toEqual([]);
+    expect(await recentThoughts(intruder)).toEqual([]);
+    expect(await startThoughtId(intruder)).toBeNull();
+    expect(await listTypes(intruder)).toEqual([]);
+    expect(await listTags(intruder)).toEqual([]);
   });
 
   /**

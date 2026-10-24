@@ -61,9 +61,12 @@ v1 — they do not point at Notes, Contacts or outline nodes.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                 | Why                                                                                                                               |
+| --- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Task 2 landed in commit `2df785ac`, not under a Brain message                                                          | A parallel session's `git commit` swept the staged migration into its own commit; it was already pushed, so history is left as is |
+| 2   | `brain_thought_types.color` is a `smallint` palette index 0–7 (CHECK), not a string key                                | `chartCatVar(index)` takes an index; the index follows the theme                                                                  |
+| 3   | `brain_thoughts.typeId` FK is composite with **no** ON DELETE action; `deleteThoughtType` clears its thoughts first    | `SET NULL` on a composite key would null `user_id` too                                                                            |
+| 4   | `linkTo.relation` on create and `linkThoughts(…, relation, otherId)` both mean "what the other thought is to this one" | One reading everywhere; a mirrored create was a trap                                                                              |
 
 > While this spec is **active**, when we make a material change to requirements, design, or
 > scope (including from feedback on what was implemented), update the relevant sections and
