@@ -1,9 +1,11 @@
 # Collapse Budget, Schedules and Commitments into one budget
 
-**Status: active** — reopened 2026-08-24 after the first real look at the page. The freeze
-below was premature: acceptance was confirmed by the implementer rather than by use, and two
-criteria that were ticked had no test behind them. Freeze again only once the page has been
-used.
+**Status: frozen / complete** (2026-10-24)
+
+_Reopened 2026-08-24 after the first real look at the page, because acceptance had been
+confirmed by the implementer rather than by use. Refrozen 2026-10-24 after two months of
+daily use and the frozen deltas listed under **Superseded since** below, every one of which
+was shaped from using this page._
 
 ## Context
 
@@ -313,6 +315,36 @@ them.
   plan**, move leftovers to **Follow-ups**.
 - Roadmap: close the Commitments/Schedules/parallel-systems line, and note that
   "Shortfall attribution" is now answered per bill envelope.
+
+**Done.** Every acceptance box above was ticked by 2026-08-24 and the roadmap entry
+("Budget, Schedules and Commitments merged into one budget, shipped 2026-08-24") landed then.
+The refreeze on 2026-10-24 re-checked the code: `finance_recurring_bills`,
+`finance_recurring_spend` and `finance_schedules` appear nowhere in `src/` except a historical
+comment in `src/lib/finances/mutations.ts`, and `src/app/(shell)/finances/` has no
+`schedules` or `commitments` route.
+
+## Superseded since
+
+Later frozen specs replaced parts of this one. Read them before treating a decision here as
+current:
+
+- `2026-08-24-0930-envelope-sections` — D6's section layout.
+- `2026-08-24-1311-budget-assign-options` — D4's Apply/Overwrite clicks become Assign.
+- `2026-08-24-1522-category-by-kind-and-history` — D3's claim column name and claim filing.
+- `2026-08-25-1154-month-ahead-zero-based` — D4's sinking of monthly bills; D8's pay-period
+  column.
+- `2026-08-25-1633-budget-inspector` — D6's bill columns on the grid move to the inspector.
+- `2026-08-28-0759-budget-single-export` — closes change 9's follow-up: one whole-budget
+  export file.
+- `2026-08-28-1000-ynab-target-engine` — D4's intrinsic bill demand.
+- `2026-09-05-1200-finances-envelope-workflow` — D5's Dashboard role, D7's forecasts and
+  paycheck-only expected income.
+- `2026-09-05-1401-bill-due-dates-and-lead-time` — D2, in part (claim-driven next-due).
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Change 1: the Budget grids still use `useGridState`, not `GridToolbar` / `useModuleViews`
+  like the other Finances grids. Still true on 2026-10-24.
 
 ---
 

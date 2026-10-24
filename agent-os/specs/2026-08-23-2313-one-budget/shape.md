@@ -1,6 +1,6 @@
 # Collapse Budget, Schedules and Commitments — Shaping Notes
 
-**Status: active** — reopened 2026-08-24; see `plan.md` for why the first freeze did not hold.
+**Status: frozen / complete** (2026-10-24) — reopened 2026-08-24, refrozen after use; see `plan.md`.
 
 ## Scope
 

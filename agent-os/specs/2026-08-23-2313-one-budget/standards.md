@@ -1,6 +1,6 @@
 # Standards for Collapse Budget, Schedules and Commitments
 
-Applied as of standards commit `eeeae93`. References, not copies — see AGENTS.md.
+Applied as of standards commit `eeeae93`; frozen 2026-10-24 at standards commit `dff043d6`. References, not copies — see AGENTS.md.
 
 - `agent-os/standards/database/migrations.md`
 - `agent-os/standards/development/clean-code.md`
