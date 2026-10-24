@@ -1,6 +1,6 @@
 # Category picker on every remaining chooser
 
-**Status: active**  
+**Status: frozen / complete** (2026-10-24)  
 Spec folder: `agent-os/specs/2026-08-30-1331-category-picker-everywhere/`
 
 ## Spec relationships
@@ -45,13 +45,13 @@ Hidden means two different jobs:
 
 ## Acceptance criteria
 
-- [ ] Move money **To** is the typeahead (Budget tree, typeahead, no New…, no Income, source omitted, no hidden, cannot clear). Open-list rows show Available; closed field is the name.
-- [ ] Assign → Manually **To** is the same picker (no New…, no Income, no hidden, cannot clear, no Available suffix).
-- [ ] Payees learned/fixed Category is the same picker (Income included, hidden marked, clearable to None, no New…).
-- [ ] Supplies **Funded from** is the same picker (no Income, hidden marked, clearable to —, no New…). Grid cell list is not clipped.
-- [ ] Register / drawer / splits / Set category still show New {type}…, still list hidden marked, and still clear Category on empty commit.
+- [x] Move money **To** is the typeahead (Budget tree, typeahead, no New…, no Income, source omitted, no hidden, cannot clear). Open-list rows show Available; closed field is the name.
+- [x] Assign → Manually **To** is the same picker (no New…, no Income, no hidden, cannot clear, no Available suffix).
+- [x] Payees learned/fixed Category is the same picker (Income included, hidden marked, clearable to None, no New…).
+- [x] Supplies **Funded from** is the same picker (no Income, hidden marked, clearable to —, no New…). Grid cell list is not clipped.
+- [x] Register / drawer / splits / Set category still show New {type}…, still list hidden marked, and still clear Category on empty commit.
 - [x] `categoryPickerSections` / `commitCategoryPicker` unit tests cover `includeCreate: false` (no sentinels, empty types drop), `allowClear: false` (empty draft restores), `detail` is not a filter token, and the destination catalog omit of hidden / hidden-group descendants. No React component tests.
-- [ ] lint, typecheck, `test:unit` (Postgres up), `next build`, `npm run smoke`. Driven in the browser: all four new surfaces plus one Register cell (create and hidden still present).
+- [x] lint, typecheck, `test:unit` (Postgres up), `next build`, `npm run smoke`. Driven in the browser: all four new surfaces plus one Register cell (create and hidden still present).
 
 **Verification state (2026-09-11, overnight).** The whole non-browser half of the last box is
 green: lint, typecheck, `test:unit` (341 files, 4217 tests), `test:integration` (62 files, 1052
@@ -69,6 +69,31 @@ closed-field name, hidden rows being _marked_, the Supplies cell list not being 
 code reading cannot settle. What the freeze still wants is exactly what change 5 below says: the
 Register spot-check and the 390×844 pass, in a browser.
 
+**Browser verification (2026-10-24).** Driven in the desktop app's browser pane against the dev
+server, with one test bill hidden so the hidden rules had something to show:
+
+- **Move money** from Other bills: the list is Budget tree order under section headings, with
+  Available right-aligned on every row; Other bills (the source), all three Income envelopes and
+  the hidden bill are absent, and there is no New… row. Typing `piz` leaves Pizza; Enter closes
+  the field on the name. Emptying the field and pressing Enter restores the previous destination.
+  The default is Ready to Assign, not the first envelope — see row 6.
+- **Assign → Manually**: same tree without Income, hidden or Available; defaults to
+  Discretionary, the first envelope in tree order; an empty commit restores it.
+- **Payees** drawer, Learned Category: Income included, the hidden bill listed and marked
+  `(hidden)`, no New…, placeholder None.
+- **Supplies** Funded from (Toothpaste): portalled list, not clipped by the grid; no Income, hidden
+  marked, placeholder —, no New….
+- **Register** drawer Category: New income… / New envelope… / New bill… / New savings… rows
+  present and the hidden bill marked. Clearing on an empty commit was not exercised on real
+  data; it is `commitCategoryPicker`'s default (`allowClear = true`), unit-tested in
+  `groupEnvelopeOptions.test.ts`.
+- **390×844**: the Register drawer and Move money lists fit the viewport (no horizontal scroll;
+  Move money's list opens upward above its field) and Move money is reachable from the row's
+  long-press menu.
+
+Gate the same day: lint, typecheck, 4,741 unit and 1,314 database tests (no skip warning),
+`next build`, and `npm run smoke` (64 routes).
+
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
@@ -81,6 +106,7 @@ code polish.
 | 3   | Task 4: Move money To and Assign Manual To use the typeahead (no create, no clear, hidden omitted; Available only on Move). |                                                                                                                                             |
 | 4   | Task 5: Payees learned/fixed Category is the typeahead (Income and hidden stay, clearable to None, no New…).                |                                                                                                                                             |
 | 5   | Task 6: Supplies Funded from is the typeahead (no Income, hidden stay, clearable to —, `listSupplyEnvelopes` deleted).      | Freeze still needs a Register spot-check and a 390×844 pass.                                                                                |
+| 6   | Move money's default destination is Ready to Assign, listed first; the first envelope is second.                            | `2026-09-07-1314-move-to-ready-to-assign` (`f1caf350`). Its Supersedes line does not name this spec's default-destination decision.         |
 
 ## Task 1: Save Spec Documentation
 
@@ -138,3 +164,7 @@ While this spec is **active**, when we make a material change to requirements, d
 or scope (including from feedback on what was implemented), update the relevant sections
 and append to **Changes from original plan**. Skip pure implementation details. Freeze
 when verified.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- None found. Cover-from stays the row-menu submenu it was (out of scope above).

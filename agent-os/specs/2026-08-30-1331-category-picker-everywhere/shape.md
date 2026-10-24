@@ -1,6 +1,6 @@
 # Category picker on every remaining chooser — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-10-24)
 
 ## Scope
 

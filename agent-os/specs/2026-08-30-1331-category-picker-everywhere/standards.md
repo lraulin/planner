@@ -1,6 +1,7 @@
 # Standards for Category picker on every remaining chooser
 
-Applied as of standards commit `21b01950bacd2f4726bf1166d83a4f0b15217d39`. References, not
+Applied as of standards commit `21b01950bacd2f4726bf1166d83a4f0b15217d39`; frozen 2026-10-24 at
+standards commit `dff043d6`. References, not
 copies — see AGENTS.md.
 
 - `agent-os/standards/components/ux-principles.md` — commit on Enter/blur/click, never on
