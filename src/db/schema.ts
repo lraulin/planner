@@ -1214,6 +1214,118 @@ export const googleContactSyncs = pgTable("google_contact_syncs", {
 });
 
 /**
+ * What a reminder occurrence is about. The sources themselves stay where they are
+ * (`reminder_at`, `reminder_minutes`, the bill schedule, the budget); this only says which
+ * one a row was armed from. See `agent-os/specs/2026-10-28-2101-reminders-and-push-notifications/`.
+ */
+export const reminderSourceKindEnum = pgEnum("reminder_source_kind", [
+  "task",
+  "project",
+  "appointment",
+  "bill",
+  "ready_to_assign",
+]);
+
+/**
+ * - `scheduled` — armed, waiting for `fire_at` (a snooze puts a row back here).
+ * - `fired` — pushed, and listed in the Reminders panel until acted on.
+ * - `dismissed` / `completed` — acted on from the panel or a notification.
+ * - `superseded` — the source changed or went away before the row was acted on.
+ */
+export const reminderStateEnum = pgEnum("reminder_state", [
+  "scheduled",
+  "fired",
+  "dismissed",
+  "completed",
+  "superseded",
+]);
+
+/**
+ * One time something should alert — Achieve's Reminders window, as rows.
+ *
+ * Without this table two things had nowhere to live: whether a reminder has fired, been
+ * dismissed or been snoozed, and what a scheduled callback (QStash, which cannot be
+ * cancelled cheaply) should check itself against. The row is both the panel's list and the
+ * guard that turns a stale callback into a no-op: the firing route acts only on a row that
+ * is still `scheduled` at the `fire_at` the message was published for.
+ *
+ * **`occurrence_key` names the source's occurrence including the time it was armed for**, so
+ * the unique index makes arming idempotent and a changed source (a moved reminder, a new
+ * lead time) arrives as a *different* key: the old row is superseded and a fresh one armed,
+ * rather than an armed row being rewritten underneath a message already in flight.
+ *
+ * `source_id` has no foreign key because it points into four tables. For
+ * `ready_to_assign` it is the user's own id — the budget is per user, not a row.
+ */
+export const reminderOccurrences = pgTable(
+  "reminder_occurrences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sourceKind: reminderSourceKindEnum("source_kind").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    occurrenceKey: text("occurrence_key").notNull(),
+    /** The moment the reminder is about: the reminder time, a block's start, a bill's day. */
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    /** When the source asked to be alerted. Fixed for the row; a snooze moves `fireAt`. */
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+    /** When the row fires next. Equal to `scheduledFor` until snoozed. */
+    fireAt: timestamp("fire_at", { withTimezone: true }).notNull(),
+    state: reminderStateEnum("state").notNull().default("scheduled"),
+    /** Snapshot for the notification and the panel, so neither needs the source to render. */
+    title: text("title").notNull(),
+    detail: text("detail").notNull().default(""),
+    firedAt: timestamp("fired_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("reminder_occurrences_source_uq").on(
+      table.userId,
+      table.sourceKind,
+      table.sourceId,
+      table.occurrenceKey,
+    ),
+    index("reminder_occurrences_user_state_idx").on(table.userId, table.state),
+    // The daily sweep's catch-up for anything whose callback never arrived.
+    index("reminder_occurrences_due_idx")
+      .on(table.fireAt)
+      .where(sql`${table.state} = 'scheduled'`),
+  ],
+);
+
+/**
+ * One browser or Home Screen app that has agreed to receive Web Push for a user.
+ *
+ * Integration state rather than a preference, so a table rather than `user_settings` — the
+ * same call `google_calendar_links` made. `endpoint` is the push service's capability URL for
+ * that one browser, so it is unique across users: signing a different account into the same
+ * browser and enabling notifications moves the subscription to that account.
+ */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    /** "iPhone", "Chrome on macOS" — so the device list can be read and pruned. */
+    label: text("label").notNull().default(""),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("push_subscriptions_endpoint_uq").on(table.endpoint),
+    index("push_subscriptions_user_idx").on(table.userId),
+  ],
+);
+
+/**
  * One run of the weekly planning wizard — Achieve's Weekly Planning Wizard, minus its
  * per-resource loop (resource pools are out of scope; see the spec).
  *
@@ -1366,6 +1478,10 @@ export type TimeChart = typeof timeCharts.$inferSelect;
 export type TimeChartArea = typeof timeChartAreas.$inferSelect;
 export type Appointment = typeof appointments.$inferSelect;
 export type NewAppointment = typeof appointments.$inferInsert;
+export type ReminderOccurrence = typeof reminderOccurrences.$inferSelect;
+export type ReminderSourceKind = (typeof reminderSourceKindEnum.enumValues)[number];
+export type ReminderState = (typeof reminderStateEnum.enumValues)[number];
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 export type GoogleCalendarLink = typeof googleCalendarLinks.$inferSelect;
 export type NewGoogleCalendarLink = typeof googleCalendarLinks.$inferInsert;
 /**

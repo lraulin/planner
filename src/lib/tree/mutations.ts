@@ -50,6 +50,8 @@ import { promoteUrlsFromTaskName } from "@/lib/url/taskNameLinks";
 import { loadOutline } from "./queries";
 import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
 import { shiftZonedDays } from "@/lib/schedule/zonedTime";
+import { rearmReminders, supersedeOrphanedReminders } from "@/lib/reminders/arm";
+import { autoReminderUpdate, writeReminder } from "@/lib/reminders/autoReminder";
 import { between } from "./sortKey";
 import type { Position } from "./types";
 import { isSelfOrDescendantVia, subtreeIdsVia } from "./ancestry";
@@ -304,9 +306,13 @@ export async function createNodeOnce(
   return result;
 }
 
-/** Deletes a node. Descendants and detail rows cascade. */
+/**
+ * Deletes a node. Descendants and detail rows cascade — and so do their reminders, which
+ * have no foreign key to cascade through, so they are closed by a sweep afterwards.
+ */
 export async function deleteNode(userId: string, nodeId: string): Promise<void> {
   await db.delete(nodes).where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+  await supersedeOrphanedReminders(userId);
 }
 
 export async function renameNode(
@@ -1226,6 +1232,7 @@ export async function setState(
   nodeId: string,
   state: NodeState,
 ): Promise<void> {
+  const touched = [nodeId];
   await db.transaction(async (tx) => {
     await applyStateTransition(tx, userId, nodeId, state);
 
@@ -1241,8 +1248,14 @@ export async function setState(
     // (it shelves until next time) but work did happen, so not-started ancestors still start.
     for (const change of cascadeStateChange(branch, nodeId, settled, state)) {
       await applyStateTransition(tx, userId, change.id, change.state);
+      touched.push(change.id);
     }
   });
+  // A completion settles reminders, and a repeating task's completion moves one.
+  await rearmReminders(
+    userId,
+    touched.map((id) => ({ kind: "node" as const, id })),
+  );
 }
 
 /**
@@ -1405,6 +1418,7 @@ export async function skipRecurrence(userId: string, nodeId: string): Promise<vo
     // completion goes through. Without this the line stays on the day you skipped.
     await syncDayLineToTargetStart(tx, userId, nodeId);
   });
+  await rearmReminders(userId, [{ kind: "node", id: nodeId }]);
 }
 
 export async function setFocus(
@@ -1519,15 +1533,38 @@ export async function setEffort(
     });
 }
 
+/**
+ * Set a deadline, and with it Achieve's auto-set reminder (`autoReminderUpdate`) when the
+ * reminder is empty or still the one the old deadline set.
+ */
 export async function setDeadline(
   userId: string,
   nodeId: string,
   deadline: Date | null,
 ): Promise<void> {
-  await db
-    .update(nodes)
-    .set({ deadline, updatedAt: new Date() })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+  const nextDeadline = deadline ? asCalendarDay(deadline) : null;
+  let type: NodeType | undefined;
+  await db.transaction(async (tx) => {
+    const [node] = await tx
+      .select({ id: nodes.id, type: nodes.type, deadline: nodes.deadline })
+      .from(nodes)
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+      .limit(1);
+    // A missing or foreign id is a no-op here, as for the module's other plain writes.
+    if (!node) return;
+    type = node.type;
+    const reminder = await autoReminderUpdate(tx, userId, node, nextDeadline);
+    await tx
+      .update(nodes)
+      .set({ deadline: nextDeadline, updatedAt: new Date() })
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    if (reminder !== undefined && (node.type === "task" || node.type === "project")) {
+      await writeReminder(tx, { id: nodeId, type: node.type }, reminder);
+    }
+  });
+  if (type === "task" || type === "project") {
+    await rearmReminders(userId, [{ kind: "node", id: nodeId }]);
+  }
 }
 
 /** Moves a node under a new parent and/or to a new position among its siblings. */

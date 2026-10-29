@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { rearmReminders } from "@/lib/reminders/arm";
 import {
   financeAccounts,
   financeBudgetCategories,
@@ -1274,6 +1275,8 @@ export async function upsertBillEnvelope(
   if (edit.payeeIds !== undefined) {
     await applyClaimedPayees(userId, categoryId, edit.payeeIds);
   }
+  // Its expected date, status or schedule may have moved, and with them its reminder.
+  await rearmReminders(userId, [{ kind: "bill", id: categoryId }]);
   return categoryId;
 }
 

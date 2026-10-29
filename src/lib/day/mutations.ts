@@ -16,6 +16,7 @@ import {
   createNode,
   reopenSettledAncestors,
 } from "@/lib/tree/mutations";
+import { rearmReminders } from "@/lib/reminders/arm";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
 import { assertNodeOwned } from "@/lib/tree/ownership";
@@ -167,8 +168,10 @@ export async function setDailyItemState(
   itemId: string,
   state: NodeState,
 ): Promise<void> {
+  let nodeId = null as string | null;
   await db.transaction(async (tx) => {
     const item = await requireItem(tx, userId, itemId);
+    nodeId = item.nodeId;
     // Completed *and* cancelled settle the day's record. Cancel is not a soft open state —
     // it is the deliberate "not doing this" mark, and it must stamp `completedAt` so the
     // line stays crossed off and does not forward or re-enter the open-day unique index.
@@ -214,6 +217,8 @@ export async function setDailyItemState(
         .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
     }
   });
+  // Ticking a repeating task here cycles it, which moves its reminder.
+  if (nodeId) await rearmReminders(userId, [{ kind: "node", id: nodeId }]);
 }
 
 /** Persist a batch of ABC assignments from a drag or a typed cell. */

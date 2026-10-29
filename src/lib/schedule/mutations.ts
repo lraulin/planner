@@ -22,6 +22,7 @@ import {
 import { normalizeColorId } from "@/lib/google/eventColors";
 import type { GoogleOwnedFields } from "@/lib/google/mapping";
 import { assertNodeOwned } from "@/lib/tree/ownership";
+import { rearmReminders } from "@/lib/reminders/arm";
 import { allDayRange } from "./allDay";
 import { sortDays, startOfWeek } from "./geometry";
 
@@ -254,6 +255,17 @@ export async function createAppointmentWithOutcome(
   userId: string,
   input: AppointmentInput,
 ): Promise<CreateAppointmentOutcome> {
+  const outcome = await storeNewAppointment(userId, input);
+  if (outcome.row) {
+    await rearmReminders(userId, [{ kind: "appointment", id: outcome.row.id }]);
+  }
+  return outcome;
+}
+
+async function storeNewAppointment(
+  userId: string,
+  input: AppointmentInput,
+): Promise<CreateAppointmentOutcome> {
   const allDay = input.allDay ?? false;
   const bounds = allDay ? allDayRange(input.startAt, input.endAt) : null;
   const startAt = bounds?.startAt ?? input.startAt;
@@ -475,6 +487,7 @@ export async function updateAppointment(
     .set(patch)
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
     .returning();
+  await rearmReminders(userId, [{ kind: "appointment", id }]);
   return row;
 }
 
@@ -495,6 +508,7 @@ export async function deleteAppointment(userId: string, id: string) {
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
     .returning({ id: appointments.id });
   if (deleted.length === 0) throw new Error("Appointment not found.");
+  await rearmReminders(userId, [{ kind: "appointment", id }]);
 }
 
 /**
@@ -512,6 +526,7 @@ export async function setAppointmentCheckState(
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
     .returning();
   if (!row) throw new Error("Appointment not found.");
+  await rearmReminders(userId, [{ kind: "appointment", id }]);
   return row;
 }
 
@@ -555,5 +570,6 @@ export async function rescheduleAppointment(
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
     .returning();
   if (!row) throw new Error("Appointment not found.");
+  await rearmReminders(userId, [{ kind: "appointment", id }]);
   return row;
 }

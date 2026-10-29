@@ -165,21 +165,34 @@ Hard constraints found while shaping:
 - [ ] Desktop Chrome shows Complete / Snooze on the notification and both work.
 - [ ] No per-minute job exists; Neon stays scaled to zero between the daily cron and actual
       firings.
-- [ ] Integration tests: a second user cannot list, snooze, dismiss or complete the first
+- [x] Integration tests: a second user cannot list, snooze, dismiss or complete the first
       user's occurrences, or read/delete their push subscriptions; arming twice creates one
       row.
-- [ ] Unit tests cover occurrence derivation per source, the auto-reminder rule, snooze
+- [x] Unit tests cover occurrence derivation per source, the auto-reminder rule, snooze
       times in the reader zone across DST, and the firing validity check.
-- [ ] `npm run smoke` passes with the dev server running.
+- [x] `npm run smoke` passes with the dev server running.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                                                                                       | Why                                                                                                                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | The occurrence row also stores `scheduled_for` (the time the source asked for, fixed) beside `fire_at` (moved by a snooze) and `due_at` (the moment it is about — a block's start). `occurrence_key` embeds the scheduled time, and validity is "does the source still produce this key at `scheduled_for`". | A snoozed row's `fire_at` no longer says what the source wanted, and a changed lead must arm a _new_ row rather than rewrite one whose message is in flight. |
+| 2   | Arming reaches 5 minutes into the past: a reminder set a minute ago fires at once, one from an hour ago never does. A `superseded` row whose key comes back (reminder moved and moved back) is revived; a dismissed or fired one is not.                                                                     | Without a grace a just-set reminder could never fire; without revival the unique key would block the original time forever.                                  |
+| 3   | Recurrence cycling now moves `reminder_at` by whole days on the reader's clock (`shiftZonedDays`). It used to re-encode it as a calendar day (UTC noon).                                                                                                                                                     | That turned a 3 PM reminder into 8 AM on the first cycle — invisible while reminders never fired.                                                            |
+| 4   | The root `/` redirect carries its query string through to `/plan`.                                                                                                                                                                                                                                           | `/?reminders=open` lost its flag on the first hop.                                                                                                           |
+| 5   | The desktop bell sits on the application menu bar, not the page bar.                                                                                                                                                                                                                                         | `PageBar` renders nothing for a module with fewer than two pages, so the bell would vanish in most of the app.                                               |
+| 6   | On the phone the panel is the shared `ModalShell` bottom sheet (85 dvh), not a full-screen sheet.                                                                                                                                                                                                            | `modal-pattern.md`: every dialog becomes the same sheet below `md`.                                                                                          |
+| 7   | Four switches, not five: tasks and projects share one. Notification preferences save through a server action that re-arms the week ahead, instead of the client settings queue.                                                                                                                              | One Reminder field means the same thing on both forms; re-arming on save makes "project blocks: on" apply today.                                             |
+| 8   | Ready to Assign is checked at the call sites (import route, bank sync action, alert route), not inside `importFinanceCsvFiles` / `syncAll` / `applyAlertEmail`.                                                                                                                                              | "Writes Lee isn't watching" is a property of the caller; inside the lib functions every test import would load the whole budget.                             |
+| 9   | Completing a reminder for a **local repeating** appointment master marks the reminder done but does not check off the appointment.                                                                                                                                                                           | The master's check state is the whole series'. (All production appointments are Google instances, so this is the rare case.)                                 |
+| 10  | Pushes carry `TTL` one hour, and the panel's Snooze offers 5 min / 15 min / 1 hour / Tomorrow.                                                                                                                                                                                                               | A reminder delivered hours late is noise; "Tomorrow" is at the morning time from Settings.                                                                   |
+
+Verified locally on 2026-10-29: unit + integration suites (no skips), smoke (65/65 on a fresh
+dev server), the panel on desktop and at 390 px, Settings → Notifications, service worker
+registration in Chrome, and a real Web Push through FCM to Chrome rendered by `sw.js`.
 
 > While this spec is **active**, when we make a material change to requirements, design,
 > or scope (including from feedback on what was implemented), update the relevant sections

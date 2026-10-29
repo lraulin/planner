@@ -13,7 +13,7 @@ import { AgentError } from "./errors";
  * feeding it the raw values would need a length check that is itself an early return. SHA-256
  * makes both sides 32 bytes whatever was sent, so the key's length leaks nothing either.
  */
-function secretsMatch(a: string, b: string): boolean {
+export function secretsMatch(a: string, b: string): boolean {
   return timingSafeEqual(
     createHash("sha256").update(a).digest(),
     createHash("sha256").update(b).digest(),

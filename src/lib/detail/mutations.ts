@@ -32,6 +32,8 @@ import {
   toDateKey,
 } from "@/lib/schedule/geometry";
 import { isStateEdit } from "./formState";
+import { rearmReminders } from "@/lib/reminders/arm";
+import { autoReminderUpdate } from "@/lib/reminders/autoReminder";
 import { stateFromDates } from "./stateFromDates";
 import { between } from "@/lib/tree/sortKey";
 import { RESULT_AREA_STATE_REFUSAL } from "@/lib/tree/lifecycle";
@@ -334,6 +336,8 @@ async function requireNode(tx: Executor, userId: string, nodeId: string) {
       state: nodes.state,
       deferredDate: nodes.deferredDate,
       targetStartDate: nodes.targetStartDate,
+      // The deadline before this save, which the auto-set reminder is measured against.
+      deadline: nodes.deadline,
       // Read so a patch carrying only half a priority can supply the other half from the
       // row rather than silently clearing it.
       priorityLetter: nodes.priorityLetter,
@@ -564,6 +568,28 @@ export async function saveNodeDetail(
       );
     }
 
+    // Achieve's auto-set reminder follows a deadline change. Worked out before the side table
+    // is written, while the stored reminder is still the one the old deadline set — see
+    // `autoReminderUpdate` for how an edited reminder in the same save is told apart.
+    const sideDraft =
+      node.type === "task"
+        ? values.task
+        : node.type === "project"
+          ? values.project
+          : undefined;
+    const draftReminder =
+      sideDraft?.reminderAt === undefined ? undefined : asDate(sideDraft.reminderAt);
+    const autoReminder =
+      core.deadline !== undefined
+        ? await autoReminderUpdate(
+            tx,
+            userId,
+            node,
+            asDate(core.deadline),
+            draftReminder,
+          )
+        : undefined;
+
     if (node.type === "result_area") {
       const set = pick(values.resultArea, RESULT_AREA_KEYS);
       // Category is handled separately: Achieve treats it as top-level organisation, so
@@ -598,6 +624,9 @@ export async function saveNodeDetail(
       }
     } else if (node.type === "project") {
       const set = pick(values.project, PROJECT_KEYS);
+      // A moment, like the task's; coerced for a JSON caller that sent an ISO string.
+      if (set.reminderAt != null) set.reminderAt = asDate(set.reminderAt);
+      if (autoReminder !== undefined) set.reminderAt = autoReminder;
       if (hasValues(set)) {
         await tx
           .insert(projectDetails)
@@ -619,6 +648,7 @@ export async function saveNodeDetail(
             key === "reminderAt" ? parsed : asCalendarDay(parsed);
         }
       }
+      if (autoReminder !== undefined) set.reminderAt = autoReminder;
       // Record dates: local midnight, never in the future.
       for (const key of ["actualStartDate", "dateCompleted"] as const) {
         if (key in set) {
@@ -747,6 +777,13 @@ export async function saveNodeDetail(
     (savedType === "goal" || savedType === "project")
   ) {
     await applyResultAreaId(userId, nodeId, values.resultAreaId);
+  }
+
+  // The reminder may have been set, moved by a deadline, cycled by a completion or made moot
+  // by one. Every save, because the drawer posts its whole draft and telling which of those
+  // happened would be a second copy of the logic that decides what fires.
+  if (savedType === "task" || savedType === "project") {
+    await rearmReminders(userId, [{ kind: "node", id: nodeId }]);
   }
 }
 

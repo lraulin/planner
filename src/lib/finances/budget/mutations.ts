@@ -11,6 +11,7 @@ import {
   type EnvelopeKind,
 } from "@/db/schema";
 import { localDateKey } from "@/lib/schedule/geometry";
+import { rearmReminders, supersedeOrphanedReminders } from "@/lib/reminders/arm";
 import { parseBudget, serializeBudget } from "@/lib/settings/finances";
 import { readSetting } from "@/lib/settings/queries";
 import { writeUserSetting } from "@/lib/settings/mutations";
@@ -824,6 +825,18 @@ export async function updateBudgetCategory(
   categoryId: string,
   edit: BudgetCategoryEdit,
 ): Promise<void> {
+  await writeBudgetCategory(userId, categoryId, edit);
+  // Becoming or ceasing to be a bill decides whether it has a reminder at all.
+  if (edit.kind !== undefined) {
+    await rearmReminders(userId, [{ kind: "bill", id: categoryId }]);
+  }
+}
+
+async function writeBudgetCategory(
+  userId: string,
+  categoryId: string,
+  edit: BudgetCategoryEdit,
+): Promise<void> {
   const category = await requireCategory(userId, categoryId);
   const nextKind = edit.kind ?? category.kind;
   if (
@@ -1087,6 +1100,7 @@ export async function deleteBudgetCategory(
       ],
     });
   });
+  await supersedeOrphanedReminders(userId);
 }
 
 /** Remove an empty organisational group. Money-bearing descendants must be moved first. */

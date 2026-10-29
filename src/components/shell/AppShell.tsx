@@ -13,6 +13,8 @@ import { MobileNav } from "./MobileNav";
 import { NavigationFreshness } from "./NavigationFreshness";
 import { NavigationSurface } from "./NavigationSurface";
 import { Sidebar } from "./Sidebar";
+import { RemindersPanel } from "@/components/reminders/RemindersPanel";
+import { RemindersProvider } from "@/components/reminders/RemindersProvider";
 
 /**
  * The chrome every signed-in module sits inside.
@@ -50,19 +52,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <CommandProvider>
       <RowClipboardProvider>
-        <div className="flex h-full min-h-0">
-          <Sidebar />
+        {/*
+          Reminders sit inside the command provider (they register View ▸ Reminders) and above
+          both of their bells — the menu bar's on desktop and the header's on the phone.
+        */}
+        <RemindersProvider>
+          <div className="flex h-full min-h-0">
+            <Sidebar />
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <MobileHeader />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <MobileHeader />
 
-            {/*
+              {/*
               Application menu above the page bar: the catalog belongs to the app, not the
               current tab (`navigation.md`). `ApplicationMenu` hides itself on focused flows.
             */}
-            <ApplicationMenu />
+              <ApplicationMenu />
 
-            {/*
+              {/*
               Here rather than inside each module for the same reason the sidebar is: five
               surfaces reading one registry is what stops them disagreeing, and the four modules
               that grew their own switcher grew three different ones. `PageBar` returns `null`
@@ -72,20 +79,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               a page switch. Every route is `force-dynamic`, so the fallback is theoretical — but
               the bailout it guards against is a build-time error, not a runtime one.
             */}
-            <Suspense fallback={null}>
-              <PageBar />
-            </Suspense>
+              <Suspense fallback={null}>
+                <PageBar />
+              </Suspense>
 
-            {/*
+              {/*
               The content area. Owns the drawer's containing block and the slow-navigation bar
               (`NavigationSurface`); the page is its only child.
             */}
-            <NavigationSurface>{children}</NavigationSurface>
+              <NavigationSurface>{children}</NavigationSurface>
 
-            <MobileNav />
-          </div>
+              <MobileNav />
+            </div>
 
-          {/*
+            {/*
           The Commands panel is a column of this row, on the far edge from the sidebar — the two
           rails frame the grid the way Achieve's did. Here rather than in each module page because
           it reads `useCommands()`, and one mount gives all sixteen modules the panel at once,
@@ -95,14 +102,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           the drawer is a modal surface about one record, and two 208px+ panes competing for the
           right edge would leave the grid nothing.
         */}
-          <CommandsPanel />
+            <CommandsPanel />
 
-          <NavigationFreshness />
-          <FileCommands />
-          <CommandKeys />
-          <CommandPalette />
-          <QuickCapture />
-        </div>
+            <NavigationFreshness />
+            <FileCommands />
+            <CommandKeys />
+            <CommandPalette />
+            <QuickCapture />
+            <RemindersPanel />
+          </div>
+        </RemindersProvider>
       </RowClipboardProvider>
     </CommandProvider>
   );

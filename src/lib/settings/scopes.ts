@@ -35,6 +35,7 @@ export const SCOPE_KINDS = [
   "budget",
   "timeline",
   "find",
+  "notifications",
 ] as const;
 export type ScopeKind = (typeof SCOPE_KINDS)[number];
 
@@ -174,6 +175,13 @@ export const DISPLAY_SCOPE = "display";
 /** Which way the Library Timeline page is drawing itself, and the ribbon's zoom. */
 export const TIMELINE_SCOPE = "timeline";
 
+/**
+ * What reminds you, and when: per-kind switches, the deadline auto-reminder, the project-block
+ * lead and the morning time. Configuration like `payday`, read by the server when it arms
+ * reminders. Which devices receive them is not here — that is `push_subscriptions`.
+ */
+export const NOTIFICATIONS_SCOPE = "notifications";
+
 const KIND_LABELS: Record<ScopeKind, string> = {
   grid: "Grid",
   views: "Saved views",
@@ -189,6 +197,7 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   budget: "Budget setup",
   timeline: "Timeline",
   find: "Advanced Find",
+  notifications: "Notifications",
 };
 
 /** `projects.active-status` → `Projects / Active status`. */

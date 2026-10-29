@@ -305,6 +305,16 @@ function PanelIcon() {
   );
 }
 
+/** Reminders: a bell — Achieve's Reminders window, and the shell's badge. */
+export function ReminderBellIcon() {
+  return (
+    <Glyph>
+      <path d="M5.5 13.5V9a4.5 4.5 0 0 1 9 0v4.5l1.25 1.5H4.25z" />
+      <path d="M8.5 17h3" />
+    </Glyph>
+  );
+}
+
 /** Saved views: a disk, shared by Save / Update / Rename / Delete view. */
 function ViewSaveIcon() {
   return (
@@ -472,6 +482,7 @@ export const COMMAND_ICONS: Record<CommandIcon, () => React.ReactElement> = {
   import: ImportIcon,
   settings: SettingsIcon,
   "sign-out": SignOutIcon,
+  reminders: ReminderBellIcon,
 };
 
 /**
