@@ -71,6 +71,7 @@ chart"` survives a rewrite. `"calls db.update with the right args"` does not.
 | Integration tests      | `foo.integration.test.ts`, real Postgres, one fresh user per test                                               |
 | Run everything         | `npm test`                                                                                                      |
 | Run only the fast ones | `npm run test:unit` — the whole unit suite in about two seconds                                                 |
+| Find clock time bombs  | `npm run test:future` — the suite again with the clock moved 45, 200 and 500 days ahead                         |
 | Gates                  | pre-commit (lint, typecheck, unit), pre-push (everything, Postgres started first), and CI on every pull request |
 
 The two suites are Vitest **projects** (`unit` and `integration`), selected by name rather
@@ -100,3 +101,11 @@ instead of skipping: a workflow whose Postgres service never came up is a broken
 a developer convenience, and a skip there would report green for database code that never
 ran. That covers the branches a hook structurally cannot — anything opened as a pull request
 without passing through this machine, Dependabot's bumps above all.
+
+**A test must not depend on what day it runs.** A fixture dated "this September" read
+against `new Date()` passes until October, then fails the gate on an unchanged tree. That
+broke pushes on 2026-10-01 and 2026-10-10. Pass "today" into the code under test (the
+`todayKey` parameters on `loadBudget` and `applyAlertEmail` exist for this) or derive
+fixture dates from it. `npm run test:future` runs the suite with the clock moved forward;
+run it after adding tests that touch dates, and before trusting a gate that went red on
+code nobody changed.
