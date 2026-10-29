@@ -193,6 +193,11 @@ code polish.
 Verified locally on 2026-10-29: unit + integration suites (no skips), smoke (65/65 on a fresh
 dev server), the panel on desktop and at 390 px, Settings → Notifications, service worker
 registration in Chrome, and a real Web Push through FCM to Chrome rendered by `sw.js`.
+The bill (alerts when uncharged, superseded when a charge lands first) and Ready to Assign
+(notifies once, resolves on recovery) paths are covered by
+`src/lib/reminders/finance.integration.test.ts`; production on 2026-10-29 has migration
+`0105` applied. Still open: Vercel env vars, the iPhone walkthrough, the Neon scale-to-zero
+check, then freeze.
 
 > While this spec is **active**, when we make a material change to requirements, design,
 > or scope (including from feedback on what was implemented), update the relevant sections
