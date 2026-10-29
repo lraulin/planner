@@ -133,6 +133,8 @@ const history: Row[] = [
 ];
 
 async function rowsOf(userId: string, accountId: string) {
+  // Ordered for the same reason as classifiedRows in reclassify.integration.test.ts: these
+  // reads are compared positionally, and SQL promises no order without one.
   return db
     .select({
       description: financeTransactions.description,
@@ -145,7 +147,8 @@ async function rowsOf(userId: string, accountId: string) {
         eq(financeTransactions.userId, userId),
         eq(financeTransactions.accountId, accountId),
       ),
-    );
+    )
+    .orderBy(financeTransactions.id);
 }
 
 async function accountOf(accountId: string) {
