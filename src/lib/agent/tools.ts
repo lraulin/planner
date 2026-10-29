@@ -399,7 +399,8 @@ const definitions: AgentToolDefinition[] = [
   defineTool("update_appointment", {
     domain: "schedule",
     summary: "Update one calendar appointment.",
-    useWhen: "Use after identifying the appointment and intended changes.",
+    useWhen:
+      'Use after identifying the appointment and intended changes. On one occurrence of a repeating Google event this edits the whole series, like Google Calendar\'s "All events": the series keeps its own first date and takes the new time, length, and fields. Moving it to another date is refused.',
     avoidWhen:
       "Do not retry automatically; Google synchronization is not atomic with local storage.",
     returns: "The updated appointment summary.",

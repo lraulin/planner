@@ -7,6 +7,7 @@ import {
   GoogleApiError,
   GoogleEventGoneError,
   GoogleNotLinkedError,
+  SeriesDateChangeError,
 } from "@/lib/google/errors";
 
 export type AgentErrorCode =
@@ -82,6 +83,9 @@ function fromGoogleError(err: Error): AgentError | null {
   }
   if (err instanceof GoogleEventGoneError) {
     return new AgentError("not_found", err.message);
+  }
+  if (err instanceof SeriesDateChangeError) {
+    return new AgentError("validation", err.message);
   }
   if (err instanceof GoogleApiError) {
     const transient = err.status >= 500 || err.status === 429;
