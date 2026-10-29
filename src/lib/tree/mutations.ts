@@ -48,6 +48,8 @@ import {
 import type { LetterDropZone } from "@/lib/priority/letterRank";
 import { promoteUrlsFromTaskName } from "@/lib/url/taskNameLinks";
 import { loadOutline } from "./queries";
+import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
+import { shiftZonedDays } from "@/lib/schedule/zonedTime";
 import { between } from "./sortKey";
 import type { Position } from "./types";
 import { isSelfOrDescendantVia, subtreeIdsVia } from "./ancestry";
@@ -786,8 +788,12 @@ function moveDates(r: Recurrence, shift: number, next: Date, asOfDay: string) {
       targetEndDate: move(r.targetEndDate),
     },
     task: {
-      // Reminder is an instant-ish nudge; still normalize so a bare date does not drift.
-      reminderAt: move(r.reminderAt),
+      // The reminder is an instant, not a calendar day: it moves by the same whole days and
+      // keeps its time of day on the reader's clock. Re-encoding it as a calendar day (UTC
+      // noon) turned a 3 PM reminder into an 8 AM one on the first cycle.
+      reminderAt: r.reminderAt
+        ? shiftZonedDays(r.reminderAt, shift, READER_TIME_ZONE)
+        : null,
     },
   };
 }

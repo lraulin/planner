@@ -4,6 +4,8 @@ import { nodes, taskCompletions, taskDetails, users } from "@/db/schema";
 import type { RecurrenceFrequency } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { fromDateKey, shiftDateKey } from "@/lib/schedule/geometry";
+import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
+import { zonedWallTime } from "@/lib/schedule/zonedTime";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
@@ -1492,6 +1494,25 @@ describeDb("tree mutations", () => {
         const [node] = await loadOutline(userId);
         expect(localKey(node.deadline!)).toBe("2026-01-09");
         expect(node.deadline!.getTime()).toBeLessThan(Date.now());
+      });
+
+      it("moves the reminder by whole days and keeps its time of day", async () => {
+        // A reminder is an instant, not a calendar day. Re-encoding it as one (UTC noon)
+        // turned a 3:30 PM reminder into an 8 AM one on the first cycle. Whole days on the
+        // reader's clock, so it also stays at 3:30 PM across a daylight-saving change.
+        const task = await ruleTask(
+          {
+            recurrenceFrequency: "daily",
+            reminderAt: zonedWallTime(daysFromToday(6), 15 * 60 + 30, READER_TIME_ZONE),
+          },
+          { deadline: day(daysFromToday(7)) },
+        );
+
+        await setState(userId, task, "completed");
+
+        expect((await taskRow(task)).reminderAt?.toISOString()).toBe(
+          zonedWallTime(daysFromToday(7), 15 * 60 + 30, READER_TIME_ZONE).toISOString(),
+        );
       });
 
       it("gives a dateless routine a start and defer date, and still no deadline", async () => {
