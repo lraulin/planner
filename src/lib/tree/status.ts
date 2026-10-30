@@ -239,6 +239,10 @@ function moreUrgent(a: ScheduleStatus, b: ScheduleStatus): ScheduleStatus {
  * Local status for every node, then child→parent propagation for the bands Achieve rolls
  * up. Parents before children in `nodes` (outline depth-first order) is fine — we walk
  * bottom-up via recursion with memoization.
+ *
+ * A settled parent over an open, urgent child is not a case to special-case here: the
+ * completion cascade (`completionCascade.ts`) forbids that state. Seeing it means some write
+ * path bypassed the cascade, and that path is the bug.
  */
 export function scheduleStatusById(
   nodes: OutlineNode[],

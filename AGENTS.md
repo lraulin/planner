@@ -13,6 +13,13 @@ Personal project in Lee's personal GitHub (`lraulin/planner`).
   logical change per commit; an imperative subject naming the effect, under 72 characters
   and _not_ Conventional Commits; a body explaining why whenever the diff is not
   self-evident. Since nobody reviews these before they land, the message is the record.
+- **Other agents may be working in this checkout, on the same git index.** Stage explicit
+  paths and commit with a pathspec (`git add <paths>`, then `git commit -m … -- <paths>`),
+  never `git add -A`, and check `git show --stat HEAD` afterwards. Wait out an existing
+  `.git/index.lock` rather than deleting it.
+- **A worktree has no `.env.local`** (it is untracked), so the hooks fail with
+  `DATABASE_URL is not set`. Export `DATABASE_URL` from `.env.example` for that one command;
+  do not copy `.env.local` in.
 
 ### Achieve Planner reference (how AP was meant to work)
 
@@ -30,16 +37,22 @@ ambiguous, or before deliberately diverging from Achieve:
 Do not re-scrape the Effexis website unless the user asks; `docs/achieve-planner/` is the
 local source of truth.
 
-### Actual Budget reference (how zero-based budgeting works)
+### Budget references: Actual Budget and YNAB
 
-The Finances module's envelope budget reimplements
-[Actual Budget](https://github.com/actualbudget/actual) (MIT). Its formulas are load-bearing and
-easy to get subtly wrong, so before changing any budget number:
+The Finances module's envelope budget started from
+[Actual Budget](https://github.com/actualbudget/actual) (MIT), and Actual still defines the
+envelope arithmetic. But **where Actual and YNAB disagree, YNAB is the default answer** — the
+target engine and the Assign gesture are already YNAB-shaped. The one standing exception is
+**credit cards, where Actual's model is kept on purpose**: a card balance is negative money in
+the one pool, with no payment categories, permanently. Never propose configuration whose only
+purpose is to make a behavior adjustable; pick the right behavior.
+
+The formulas are load-bearing and easy to get subtly wrong, so before changing any budget number:
 
 1. Read [`docs/actual-budget/README.md`](docs/actual-budget/README.md) — it maps each concern to
-   the file in `../actual` that defines it.
-2. Prefer **their semantics** over a plausible-looking reinvention. Where we diverge, the spec
-   that diverged says so.
+   the file in `../actual` that defines it, and lists where we diverge.
+2. Prefer **the reference's semantics** over a plausible-looking reinvention. Where we diverge,
+   the spec that diverged says so.
 
 Clone the reference beside this repo (`git clone https://github.com/actualbudget/actual ../actual`);
 it is not vendored.
@@ -71,15 +84,9 @@ are the one gate that cannot be automated into a hook:
   mocking Drizzle, no tests that restate the implementation.
 - `npm run test:unit` passing does **not** mean the database tests ran — they skip when
   Postgres is down. Check for the skip warning after changing `mutations.ts` or
-  `queries.ts`. Pushing no longer lets that slide: `.husky/pre-push` starts the container
-  itself (unless the tests' `DATABASE_URL` already answers a query) and stops hard if
-  Docker is not running, and in CI (`CI` set) an unreachable database throws rather than
-  skipping — `.github/workflows/ci.yml` is the gate for branches that never reach this
-  machine, Dependabot's above all.
-- **Unit tests run non-isolated**, which is what makes the whole unit suite ~2s. Files
-  sharing a worker share module registries, so a unit test must not mutate module-level
-  state. `npm test` chains `test:unit` then `test:integration` because Vitest applies
-  isolation and worker count per process, not per project.
+  `queries.ts`. `.husky/pre-push` and CI do not let it slide.
+- **Unit tests run non-isolated**: files sharing a worker share module registries, so a
+  unit test must not mutate module-level state.
 - **A green gate is not proof the app runs.** Nothing above evaluates a `"use server"`
   module: the tests never import one, and `next build` compiles the routes without
   rendering them because every page is `force-dynamic`. That gap once shipped a
@@ -173,43 +180,23 @@ costs ~11k tokens to read and ~11k to write again. The frozen-record concern is 
 answered by **pinning, not copying**: at freeze, record the standards commit SHA.
 `git show <sha>:agent-os/standards/<path>` recovers exactly what applied.
 
-#### Agent OS workflows (Claude Code, Grok, Copilot, and Codex)
+#### Agent OS workflows
 
-**Every workflow lives, in full, in `.agents/skills/<name>/SKILL.md`.** That is the one
-file to read and the one file to edit. No harness owns the canonical copy; the three
-locations below are pointers into it, so a change made in one place is a change everywhere.
+**Every workflow lives, in full, in `.agents/skills/<name>/SKILL.md`** — the one file to
+read and the one file to edit. Each harness reaches it through a pointer;
+[`.agents/skills/README.md`](.agents/skills/README.md) says how, and how to add a workflow.
 
-- **Codex** reads `.agents/skills/` natively — invoke as `$shape-spec`, `$fix-bug`,
-  `$inject-standards`, `$discover-standards`, `$index-standards`, `$plan-product`, or
-  `$overnight`. Its user-local aliases, when installed, are `/prompts:<workflow>`.
-- **Claude Code** reads the same folder through the directory symlink `.claude/skills`
-  → `../.agents/skills`, which is what makes these auto-apply when relevant. The flat
-  one-line shims in `.claude/commands/*.md` provide the explicit `/<name>` slash commands,
-  and are what **Grok** discovers (it does not descend into subdirectories).
-- **Copilot** reads `.github/prompts/*.prompt.md`, each a thin pointer to the same
-  `SKILL.md`.
-
-**These are meant to fire on their own.** A feature request should pull in `/shape-spec`,
-a bug report `/fix-bug`, and coding work the relevant standards, without being asked. The
-sole exception is **`/overnight`**, which runs only when explicitly invoked by name —
-`allow_implicit_invocation: false` in its `agents/openai.yaml`, and its skill description
-forbids inferring it.
-
-Adding a workflow means: write `.agents/skills/<name>/SKILL.md` (with `name` and a
-trigger-shaped `description` in frontmatter), then add the two pointers —
-`.claude/commands/<name>.md` and `.github/prompts/<name>.prompt.md` — plus
-`agents/openai.yaml` if Codex needs display metadata.
+**These are meant to fire on their own.** A feature request should pull in `/shape-spec`, a
+bug report `/fix-bug`, and coding work the relevant standards, without being asked. The sole
+exception is **`/overnight`**, which runs only when invoked by name and asks no questions.
 
 **Always edit at the real `.agents/skills/...` path, never through `.claude/skills/...`.**
-Git refuses to process a path "beyond a symbolic link", so staging a file by its
-`.claude/skills/` path fails — and it fails inside lint-staged's backup step, which
-reports it as an unexplained "git error" during `git commit` rather than as a bad path.
+Git refuses a path beyond a symlink, and lint-staged reports that as an unexplained "git
+error" during `git commit`.
 
-When asking the user structured questions from these flows, use the native facility:
-`AskUserQuestion` (Claude), `ask_user_question` (Grok), `vscode_askQuestions` (Copilot),
-or `request_user_input` in Codex plan mode. If Codex has no structured-question facility
-in the active mode, ask one concise direct question instead. **Exception: `/overnight`
-forbids questions entirely** — nobody is awake to answer.
+Ask structured questions with the harness's own facility — `AskUserQuestion` (Claude),
+`ask_user_question` (Grok), `request_user_input` (Codex plan mode), `vscode_askQuestions`
+(Copilot). Without one, ask one concise direct question.
 
 #### Spec lifecycle
 
