@@ -66,6 +66,36 @@ rules with a `?? fallback` or an `as` cast** — handle the missing case or thro
 invariant. The over-cap files listed in `eslint.config.mjs` may only shrink. The React
 Compiler is on, so new code adds no `useMemo`/`useCallback` for performance.
 
+### Duplicate code: Deslop
+
+Every harness gets the `deslop` MCP server (live duplicate-code analysis), started by
+`scripts/deslop-mcp.sh` from the Deslop VS Code extension's bundled binary: `.mcp.json`
+(Claude Code), `.codex/config.toml` (Codex), `.cursor/mcp.json` (Cursor, and Grok through
+it); Copilot gets it from the extension. Agent reference: <https://deslop.live/docs/for-ai/>.
+
+- **Call `find-similar` before authoring** any function, helper, component, query, fixture,
+  test setup, or other unit longer than a few lines — with the draft as `snippet` +
+  `language` (`typescript` or `tsx`), or as `path` + `start_byte`/`end_byte`. Before the
+  keystroke that creates the copy; checking it afterwards is cure, not prevention.
+  - A cluster of kind `identical` or `nearly_identical`: do not write the copy. Reuse the
+    canonical occurrence, extracting a helper if needed.
+  - No `clusters` but a hit in `existing`: the code already lives there once. Call it or
+    extract it.
+  - `loosely_similar` or `same_behavior`: read the canonical occurrence and decide; bias
+    toward reuse. `structural_only` means the shape alone matched — usually sibling
+    boilerplate, but read it.
+  - Both empty: write it.
+- **Removing existing duplication** starts from `duplicates` (`{"detail":"summary","limit":5}`,
+  or with `path` for one file), then `cluster-by-id`, `compare-pair`, `merge-plan`. Query
+  `duplicates` again afterwards to confirm the cluster is gone.
+- **Never silence a finding** by widening thresholds, hiding a cluster, or reshaping code
+  into a trivially different form. "This looks new" is the intuition the tool overrules.
+- **If the server is unavailable**, read `.deslop/cache/live-report.json` (it may lag recent
+  edits), or run the extension's bundled CLI from the repo root —
+  `~/.vscode/extensions/nimblesite.deslop-live-*/bin/*/deslop . --notext --nohtml --no-color`
+  — and read `.deslop/deslop-report.json`. A failed call or a stale report never proves
+  there is no duplicate.
+
 ### Tests
 
 Full rules: `agent-os/standards/development/testing.md`. The short version, because tests
