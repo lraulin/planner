@@ -22,13 +22,15 @@ import {
 } from "@/lib/finances/budget/envelope";
 import {
   BudgetOperationRefused,
+  performBudgetOperation,
+} from "@/lib/finances/budget/moveMoney";
+import {
   createBudgetCategory,
   createCategoryGroup,
-  performBudgetOperation,
   renameCategoryGroup,
-  setTransactionBudgetCategories,
   updateBudgetCategory,
 } from "@/lib/finances/budget/mutations";
+import { setTransactionBudgetCategories } from "@/lib/finances/budget/filing";
 import {
   loadBudget,
   type BudgetCategoryRow,

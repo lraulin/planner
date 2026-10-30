@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildBudget, findMonth } from "@/lib/finances/budget/envelope";
-import { BudgetOperationRefused } from "@/lib/finances/budget/mutations";
+import { BudgetOperationRefused } from "@/lib/finances/budget/moveMoney";
 import type { BudgetCategoryRow, BudgetGroupRow } from "@/lib/finances/budget/queries";
 import { budgetAgentError, budgetMonthResponse } from "./budgetTools";
 import { AgentError } from "./errors";

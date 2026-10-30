@@ -26,10 +26,8 @@ import {
   setPayeeNotACommitment,
   updatePayeeDetails,
 } from "./mutations";
-import {
-  deleteBudgetCategory,
-  setTransactionBudgetCategory,
-} from "../budget/mutations";
+import { deleteBudgetCategory } from "../budget/mutations";
+import { setTransactionBudgetCategory } from "../budget/filing";
 import { applyPayeeAutoCategories } from "./claims";
 import { addPayeeAlias } from "./aliases";
 import { getPayee, listAliasRows, listPayees, previewPayeeMerge } from "./queries";

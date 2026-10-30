@@ -41,7 +41,6 @@ const OVERSIZE_FILES = [
   "src/lib/detail/mutations.ts",
   "src/lib/finances/analytics.ts",
   "src/lib/finances/bankSnapshotApply.ts",
-  "src/lib/finances/budget/mutations.ts",
   "src/lib/finances/budget/queries.ts",
   "src/lib/finances/import.ts",
   "src/lib/finances/mutations.ts",

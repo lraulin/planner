@@ -6,9 +6,9 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
 import {
   createBudgetCategory,
-  setTransactionBudgetCategory,
   createCategoryGroup,
 } from "@/lib/finances/budget/mutations";
+import { setTransactionBudgetCategory } from "@/lib/finances/budget/filing";
 import {
   reclassifyTransactions,
   splitTransaction,

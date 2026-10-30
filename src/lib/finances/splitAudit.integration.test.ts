@@ -187,7 +187,7 @@ describeDb("split reader audit", () => {
   });
 
   it("refuses to put an envelope on the parent instead of its children", async () => {
-    const { setTransactionBudgetCategory } = await import("./budget/mutations");
+    const { setTransactionBudgetCategory } = await import("./budget/filing");
     await splitTransaction(userId, appleId, [
       { amountCents: -1378, budgetCategoryId: software },
       { amountCents: -2119, budgetCategoryId: fitness },

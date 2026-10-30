@@ -17,7 +17,7 @@ import {
   setPayeeAutoCategory,
 } from "./mutations";
 import { payeeEvidenceForCategory } from "./queries";
-import { fileWaitingChargesForPayee } from "../budget/mutations";
+import { fileWaitingChargesForPayee } from "../budget/filing";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;

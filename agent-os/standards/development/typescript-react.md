@@ -81,7 +81,7 @@ function priorityOf(node: Node) {
   must decide what it means, instead of silently falling through. A `default` satisfies
   the rule, so use one only when "everything else alike" is truly the answer. Where a new
   variant could need different handling — above all where the switch gates a check, as
-  `touchedRefs` in `src/lib/finances/budget/mutations.ts` gates ownership — list the cases.
+  `touchedRefs` in `src/lib/finances/budget/moveMoney.ts` gates ownership — list the cases.
 - **Discriminated unions for states**, not a bag of optionals:
   `{ ok: true; data: T } | { ok: false; error: string }` (see `ActionResult`).
 - **`as const` and `satisfies` for literal tables** — checked against the shape, keeps the

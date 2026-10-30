@@ -12,7 +12,7 @@
  *
  * Pure by design: this module only turns an already-known difference into the row to insert.
  * Finding that difference is `loadBudgetMismatch`'s job (`budget/queries.ts`, D3's own
- * formula); writing the row and its audit trail is `reconcileAccount` (`budget/mutations.ts`).
+ * formula); writing the row and its audit trail is `reconcileAccount` (`budget/reconcileAccount.ts`).
  */
 
 function cents(value: number, what: string): number {

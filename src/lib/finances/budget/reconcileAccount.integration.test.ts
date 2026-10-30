@@ -5,7 +5,8 @@ import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { seedBudget, reconcileAccount } from "./mutations";
+import { seedBudget } from "./mutations";
+import { reconcileAccount } from "./reconcileAccount";
 import { loadBudget, loadBudgetMismatch } from "./queries";
 import { loadFinanceAuditEvent, listFinanceAuditEvents } from "../audit/queries";
 
@@ -120,7 +121,7 @@ describeDb("reconcileAccount", () => {
       .where(eq(financeTransactions.id, receipt.transactionId!));
     expect(row).toMatchObject({
       // reconcileAccount stamps real wall-clock today, not the seeded TODAY — see
-      // src/lib/finances/budget/mutations.ts's `localDateKey(new Date())`.
+      // src/lib/finances/budget/reconcileAccount.ts's `localDateKey(new Date())`.
       transactionDate: localDateKey(new Date()),
       amount: "12.34",
       externalSource: "reconcile",
