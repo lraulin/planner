@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { rearmReminders } from "@/lib/reminders/arm";
 import {
   financeAccounts,
   financeBudgetCategories,
@@ -1274,6 +1275,8 @@ export async function upsertBillEnvelope(
   if (edit.payeeIds !== undefined) {
     await applyClaimedPayees(userId, categoryId, edit.payeeIds);
   }
+  // Its expected date, status or schedule may have moved, and with them its reminder.
+  await rearmReminders(userId, [{ kind: "bill", id: categoryId }]);
   return categoryId;
 }
 
@@ -1344,6 +1347,9 @@ function todayInUtc(): string {
  * (`agent-os/specs/2026-08-26-2022-split-transactions/` D9). Payee especially: identity is
  * derived from the bank's description with no per-row override, and the bank says Apple.
  */
+/** Audit origin for a split written from outside the Register (e.g. the agent API). */
+export type SplitWriteOptions = { auditOrigin?: string };
+
 export type SplitChildInput = {
   id?: string;
   /** Signed cents, same convention as the parent. */
@@ -1471,6 +1477,7 @@ async function writeSplitChildren(
   userId: string,
   parent: SplitParentRow,
   children: readonly SplitChildInput[],
+  origin = "Register",
 ): Promise<void> {
   const now = new Date();
   await db.transaction(async (tx) => {
@@ -1576,7 +1583,7 @@ async function writeSplitChildren(
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await writeFinanceAuditEvent(tx, userId, {
       kind: "transaction_split",
-      origin: "Register",
+      origin,
       summary: `${parent.isParent ? "Changed" : "Split"} a transaction into ${children.length} part${children.length === 1 ? "" : "s"}.`,
       scope,
       beforeCheckpoint,
@@ -1606,6 +1613,7 @@ export async function splitTransaction(
   userId: string,
   transactionId: string,
   children: readonly SplitChildInput[],
+  options: SplitWriteOptions = {},
 ): Promise<void> {
   const parent = await requireSplitParent(userId, transactionId);
   requireSplittable(parent);
@@ -1623,7 +1631,7 @@ export async function splitTransaction(
     inherited.map((child) => child.budgetCategoryId),
   );
 
-  await writeSplitChildren(userId, parent, inherited);
+  await writeSplitChildren(userId, parent, inherited, options.auditOrigin);
 }
 
 /**
@@ -1636,11 +1644,12 @@ export async function updateSplitChildren(
   userId: string,
   transactionId: string,
   children: readonly SplitChildInput[],
+  options: SplitWriteOptions = {},
 ): Promise<void> {
   const parent = await requireSplitParent(userId, transactionId);
   if (!parent.isParent) throw new Error("That transaction is not split.");
   if (children.length === 0) {
-    await unsplitTransaction(userId, transactionId);
+    await unsplitTransaction(userId, transactionId, options);
     return;
   }
 
@@ -1650,7 +1659,7 @@ export async function updateSplitChildren(
     children.map((child) => child.budgetCategoryId),
   );
 
-  await writeSplitChildren(userId, parent, children);
+  await writeSplitChildren(userId, parent, children, options.auditOrigin);
   await markAmazonMatchSplitProtected(userId, transactionId);
 }
 
@@ -1664,6 +1673,7 @@ export async function updateSplitChildren(
 export async function unsplitTransaction(
   userId: string,
   transactionId: string,
+  options: SplitWriteOptions = {},
 ): Promise<void> {
   const parent = await requireSplitParent(userId, transactionId);
   if (!parent.isParent) return;
@@ -1714,7 +1724,7 @@ export async function unsplitTransaction(
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await writeFinanceAuditEvent(tx, userId, {
       kind: "transaction_split",
-      origin: "Register",
+      origin: options.auditOrigin ?? "Register",
       summary: "Removed a transaction split.",
       scope,
       beforeCheckpoint,

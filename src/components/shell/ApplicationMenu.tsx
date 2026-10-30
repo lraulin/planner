@@ -7,6 +7,7 @@ import { CommandGlyph } from "@/components/icons/commandIcons";
 import { OPEN_PALETTE } from "@/lib/commands/chords";
 import type { Command } from "@/lib/commands/registry";
 import { isFocusedFlow } from "@/lib/navigation/pages";
+import { RemindersBell } from "@/components/reminders/RemindersPanel";
 import { openCommandPalette } from "./commandEvent";
 import { useCommands, useRegisterCommands } from "./CommandProvider";
 import { useFileCommands } from "./globalCommands";
@@ -82,7 +83,8 @@ function ApplicationMenuBar() {
   return (
     <div className="relative z-50 hidden min-w-0 max-w-full items-center gap-2 border-b border-rule bg-surface px-3 py-1.5 md:flex">
       <CommandMenuBar commands={menuCommands} />
-      <div className="ml-auto flex flex-none items-center">
+      <div className="ml-auto flex flex-none items-center gap-1">
+        <RemindersBell className="h-7 w-7" />
         <CommandsPanelToggle
           open={panelOpen}
           onToggle={() => setPanelOpen(!panelOpen)}

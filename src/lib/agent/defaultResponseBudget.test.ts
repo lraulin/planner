@@ -6,6 +6,10 @@ import { insightsFilterOptions } from "@/lib/finances/insightsFilter";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { row } from "@/lib/tree/fixtures";
 import type { OutlineNode } from "@/lib/tree/types";
+import { buildBudget, findMonth } from "@/lib/finances/budget/envelope";
+import type { BudgetCategoryRow, BudgetGroupRow } from "@/lib/finances/budget/queries";
+import { budgetRows } from "@/lib/finances/budget/rows";
+import { BUDGET_MONTH_MAX_LIMIT, budgetMonthResponse } from "./budgetTools";
 import { inputSchemas, outputSchemas } from "./contracts";
 import {
   financeOverviewResponse,
@@ -641,5 +645,157 @@ describe("load_weekly_plan response budget", () => {
   it("drops paths from the rows; parentId still links them up", () => {
     expect(response.projects[0]).not.toHaveProperty("path");
     expect(response.projects.every((project) => project.parentId !== null)).toBe(true);
+  });
+});
+
+// — get_budget_month ————————————————————————————————————————————————————————————
+
+const BUDGET_INCOME = new Set(["Payroll", "VA", "Interest"]);
+const BUDGET_EXPENSE_KINDS = ["spending", "bill", "savings"] as const;
+
+/**
+ * Lee's 50 envelopes in 12 groups with long names, every one funded, spent and with a goal,
+ * so every optional field is present and every figure has seven digits.
+ */
+function budgetFixture(names: readonly string[]) {
+  const groups: BudgetGroupRow[] = [
+    {
+      id: uuid(),
+      parentGroupId: null,
+      name: "Paychecks & Benefits Income",
+      kind: "income",
+      sortKey: "a",
+      hidden: false,
+    },
+  ];
+  for (const kind of BUDGET_EXPENSE_KINDS) {
+    for (let index = 0; index < 4; index++) {
+      groups.push({
+        id: uuid(),
+        parentGroupId: null,
+        name: `${kind} group ${index} — Subscriptions & Household`,
+        kind,
+        sortKey: String.fromCharCode(98 + index),
+        hidden: false,
+      });
+    }
+  }
+  const categories: BudgetCategoryRow[] = names.map((name, index) => {
+    const kind = BUDGET_INCOME.has(name)
+      ? ("income" as const)
+      : BUDGET_EXPENSE_KINDS[index % 3];
+    const inKind = groups.filter((group) => group.kind === kind);
+    return {
+      id: uuid(),
+      groupId: inKind[index % inKind.length].id,
+      name,
+      sortKey: String(index).padStart(3, "0"),
+      hidden: false,
+      notes: "Long note that the agent response does not carry, about this envelope.",
+      kind,
+      isIncome: kind === "income",
+      bill:
+        kind === "bill"
+          ? {
+              status: "active",
+              cancelledOn: null,
+              url: "https://example.com/account/billing",
+              cadenceMonths: 1,
+              cadenceDays: null,
+              dueDay: 15,
+              leadDays: 0,
+              anchorDate: "2026-01-15",
+              scheduled: true,
+              expectedCents: 123_456,
+            }
+          : null,
+      target: null,
+      incomeRole: "other",
+      expectedMonthlyIncomeCents: null,
+    };
+  });
+  const months = buildBudget({
+    categories: categories.map((row) => ({
+      id: row.id,
+      groupId: row.groupId,
+      incomeRole: "other",
+      expectedMonthlyIncomeCents: null,
+      isIncome: row.isIncome,
+    })),
+    allocations: categories
+      .filter((row) => !row.isIncome)
+      .map((row) => ({
+        month: "2026-10-01",
+        categoryId: row.id,
+        amountCents: 1_234_567,
+        carryover: false,
+        snoozed: false,
+      })),
+    activity: categories.map((row) => ({
+      month: "2026-10-01",
+      categoryId: row.id,
+      amountCents: row.isIncome ? 9_876_543 : -1_111_111,
+    })),
+    buffered: [],
+    startMonth: "2026-01-01",
+    endMonth: "2027-10-01",
+    openingCents: 1_000_000,
+  });
+  const month = findMonth(months, "2026-10-01")!;
+  const goals = Object.fromEntries(
+    categories.map((row) => [`2026-10-01|${row.id}`, 1_500_000]),
+  );
+  return {
+    groups,
+    categories,
+    months,
+    month,
+    goals,
+    uncategorizedCount: 1234,
+    uncategorizedCents: -9_876_543,
+  };
+}
+
+describe("get_budget_month default response", () => {
+  const fixture = budgetFixture(ENVELOPE_NAMES);
+  const response = budgetMonthResponse(fixture, { includeHidden: false });
+
+  it("stays under 16 KB and matches its output schema", () => {
+    expect(bytes(response)).toBeLessThan(BUDGET_BYTES);
+    expect(outputSchemas.get_budget_month.parse(response)).toBeDefined();
+  });
+
+  it("fits all of Lee's envelopes on the first page", () => {
+    expect(response.pageInfo.hasMore).toBe(false);
+    expect(response.envelopes.length + response.income.length).toBe(
+      ENVELOPE_NAMES.length,
+    );
+  });
+
+  it("keeps a full maximum page under the gateway cap", () => {
+    const many = Array.from(
+      { length: BUDGET_MONTH_MAX_LIMIT + 10 },
+      (_, index) => `${ENVELOPE_NAMES[index % ENVELOPE_NAMES.length]} — extra ${index}`,
+    );
+    const page = budgetMonthResponse(budgetFixture(many), {
+      includeHidden: false,
+      limit: BUDGET_MONTH_MAX_LIMIT,
+    });
+    expect(page.envelopes).toHaveLength(BUDGET_MONTH_MAX_LIMIT);
+    expect(bytes(page)).toBeLessThan(GATEWAY_CAP_BYTES);
+  });
+
+  it("uses a fixture whose page-shaped rows would have broken the cap", () => {
+    // What handing the Budget page's own rows and month fold back would have cost.
+    const pageShape = {
+      rows: budgetRows(
+        fixture.groups,
+        fixture.categories,
+        fixture.month,
+        fixture.goals,
+      ),
+      month: fixture.month,
+    };
+    expect(bytes(pageShape)).toBeGreaterThan(GATEWAY_CAP_BYTES);
   });
 });

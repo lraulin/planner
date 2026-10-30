@@ -6,6 +6,7 @@ import {
   CheckboxField,
   ContextsField,
   DateField,
+  DateTimeField,
   EffortField,
   FieldGrid,
   MoneyField,
@@ -18,7 +19,12 @@ import {
 import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
-import { CoreHeaderFields, ResultAreaField, type DetailFormProps } from "./formShared";
+import {
+  CoreHeaderFields,
+  REMINDER_HINT,
+  ResultAreaField,
+  type DetailFormProps,
+} from "./formShared";
 
 const SENSITIVITY_OPTIONS: { value: Sensitivity; label: string }[] = [
   { value: "normal", label: "Normal" },
@@ -83,6 +89,12 @@ export function projectTabs(props: DetailFormProps): FormTab[] {
                 value={values.deferredDate}
                 onChange={(deferredDate) => patch({ deferredDate })}
                 hint="Postpones this and everything under it. Leave empty and set State to Postponed to shelve it indefinitely."
+              />
+              <DateTimeField
+                label="Reminder"
+                value={project.reminderAt ?? null}
+                onChange={(reminderAt) => patchProject({ reminderAt })}
+                hint={REMINDER_HINT}
               />
             </FieldGrid>
           </Section>

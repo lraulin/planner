@@ -28,6 +28,7 @@ import { AchieveTransferPanel } from "./AchieveTransferPanel";
 import { GoogleCalendarPanel } from "./GoogleCalendarPanel";
 import { BankSyncPanel } from "./BankSyncPanel";
 import { PayCadencePanel } from "./PayCadencePanel";
+import { NotificationsPanel } from "./NotificationsPanel";
 import { FinanceImportPanel } from "@/components/finances/FinanceImportPanel";
 import { AmazonImportPanel } from "./AmazonImportPanel";
 import { RedNotebookImportPanel } from "./RedNotebookImportPanel";
@@ -43,6 +44,11 @@ const SECTIONS = [
     id: "views-layout",
     label: "Views & layout",
     description: "Inspect and restore saved presentation choices by module.",
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    description: "Which devices receive reminders, and what reminds you when.",
   },
   {
     id: "connections",
@@ -188,6 +194,7 @@ export function SettingsPage({
 
           {sectionId === "general" && <GeneralPanel />}
           {sectionId === "views-layout" && <ViewsLayoutPanel />}
+          {sectionId === "notifications" && <NotificationsPanel />}
           {sectionId === "connections" && (
             <div className="[&_button]:min-h-tap [&_label]:min-h-tap md:[&_button]:min-h-0 md:[&_label]:min-h-0">
               <GoogleCalendarPanel

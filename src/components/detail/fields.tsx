@@ -526,6 +526,79 @@ export function DateField({
   );
 }
 
+/** `YYYY-MM-DDTHH:mm` on the reader's own clock — what a `datetime-local` input speaks. */
+function toLocalDateTimeText(value: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}
+
+/**
+ * An **instant** — a reminder — edited as a date and time on the reader's clock.
+ *
+ * The opposite kind from `DateField`: no UTC-noon encoding, because a reminder is a moment,
+ * not a calendar day (`dates.md`). Local getters are right here for the same reason they are
+ * wrong there: the browser's zone is the reader's, and that is whose 9:00 is meant.
+ *
+ * Commits on blur (and Enter) rather than on every change: a `datetime-local` fires `change`
+ * as each segment is typed, and a reminder half-typed into tomorrow-at-midnight is a real,
+ * armable value nobody meant.
+ */
+export function DateTimeField({
+  label,
+  value,
+  onChange,
+  hint,
+  className,
+}: {
+  label: string;
+  value: Date | null;
+  onChange: (value: Date | null) => void;
+  hint?: string;
+  className?: string;
+}) {
+  const id = useId();
+  const external = value ? toLocalDateTimeText(new Date(value)) : "";
+  const [text, setText] = useState(external);
+  // A new value from outside — the draft re-seeded after a save that auto-set the reminder —
+  // replaces whatever was in the box.
+  const [seen, setSeen] = useState(external);
+  if (external !== seen) {
+    setSeen(external);
+    setText(external);
+  }
+
+  function commit() {
+    if (text === external) return;
+    if (text === "") {
+      onChange(null);
+      return;
+    }
+    // No offset in the text, so this parses on the browser's clock — the reader's.
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) {
+      setText(external);
+      return;
+    }
+    onChange(parsed);
+  }
+
+  return (
+    <Field label={label} htmlFor={id} hint={hint} className={className}>
+      <input
+        id={id}
+        type="datetime-local"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") commit();
+        }}
+        className={`tabular ${INPUT_CLASS}`}
+      />
+    </Field>
+  );
+}
+
 /**
  * A calendar day stored as a `YYYY-MM-DD` string rather than a timestamp.
  *

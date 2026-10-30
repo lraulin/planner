@@ -62,6 +62,10 @@ export function buildCsp({ nonce, isDev }: CspOptions): string {
     // against that — it was reverted once because it turned out not to be necessary.
     `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
 
+    // The reminders service worker (`public/sw.js`). Same origin only; without this
+    // directive it would fall back to script-src, whose 'strict-dynamic' ignores 'self'.
+    "worker-src 'self'",
+
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

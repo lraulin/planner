@@ -1,5 +1,6 @@
 "use server";
 
+import { checkReadyToAssignQuietly } from "@/lib/reminders/arm";
 import { revalidatePath } from "next/cache";
 import { claimSetupToken, fetchAccounts } from "@/lib/banksync/client";
 import { institutionOf, linkCandidates } from "@/lib/banksync/mapping";
@@ -174,6 +175,7 @@ export async function deleteConnectionAction(
 export async function syncAction(): Promise<DataActionResult<SyncResult>> {
   return runWithData(async (userId) => {
     const result = await syncAll(userId);
+    await checkReadyToAssignQuietly(userId);
     // The register and its balances are server-rendered, so the next navigation must not
     // serve a cached copy of what this just changed.
     revalidatePath("/", "layout");

@@ -44,6 +44,14 @@ import {
   loadSchedule,
 } from "@/lib/schedule/queries";
 import { weekRange } from "@/lib/schedule/range";
+import {
+  listFiredReminders,
+  listOpenOccurrences,
+  listPushDevices,
+  loadAppointmentReminderSources,
+  loadBillReminderSources,
+  loadNodeReminderSources,
+} from "@/lib/reminders/queries";
 import { createContact, createDiscussionItem } from "@/lib/contacts/mutations";
 import {
   getContactDetail,
@@ -1202,6 +1210,21 @@ describeDb("a second user reads none of the first user's rows", () => {
       v: 2,
       sidebarCollapsed: true,
     });
+  });
+
+  it("reminder sources, the Reminders panel and push devices", async () => {
+    const byId = { ids: [owner.taskId] };
+    expect(await loadNodeReminderSources(intruder, byId)).toEqual([]);
+    expect((await loadNodeReminderSources(owner.userId, byId)).length).toBe(1);
+    const appointment = { ids: [owner.appointmentId] };
+    expect(await loadAppointmentReminderSources(intruder, appointment)).toEqual([]);
+    expect(
+      (await loadAppointmentReminderSources(owner.userId, appointment)).length,
+    ).toBe(1);
+    expect(await loadBillReminderSources(intruder, owner.day)).toEqual([]);
+    expect(await listOpenOccurrences(intruder, [owner.taskId])).toEqual([]);
+    expect(await listFiredReminders(intruder)).toEqual([]);
+    expect(await listPushDevices(intruder)).toEqual([]);
   });
 
   it("the result-area picker every detail form loads", async () => {

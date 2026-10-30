@@ -4,6 +4,7 @@ import { AgentError } from "@/lib/agent/errors";
 import { errorResponse } from "@/lib/agent/envelope";
 import { getAgentUserId } from "@/lib/auth/identity";
 import { AlertRejected, applyAlertEmail } from "@/lib/finances/alertIngestWrite";
+import { checkReadyToAssignQuietly } from "@/lib/reminders/arm";
 
 const MAX_BODY_BYTES = 512 * 1024;
 
@@ -57,6 +58,8 @@ export async function POST(request: Request) {
       plainText,
       htmlBody,
     });
+    // A card hold lands in the budget with nobody looking at it.
+    await checkReadyToAssignQuietly(userId);
     return NextResponse.json({ ok: true, data: result });
   } catch (err) {
     if (err instanceof AlertRejected) {

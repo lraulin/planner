@@ -18,9 +18,10 @@ import { buildCsp, createNonce } from "@/lib/security/csp";
  * - `/signup` (invite redeem; the page is public, creating an account still needs a token)
  * - `/api/auth/*` (Better Auth)
  * - `/api/agent/*`, `/api/finances/alerts` and `/api/mcp` (Bearer / OAuth checked in the route handler)
+ * - `/api/reminders/fire` (QStash signature) and `/api/cron/*` (`CRON_SECRET`), checked in the
+ *   route handler — schedulers have no session, and a cron does not follow redirects, so
+ *   gating it here would silently stop every run
  * - `/.well-known/*` and `/api/oauth/*` (MCP OAuth discovery and token/register)
- * - `/api/cron/*` (Vercel Cron; `CRON_SECRET` checked in the route handler, and a cron
- *   does not follow redirects, so gating it here would silently stop every run)
  * - `/api/health` (public by design; reports nothing user-identifying)
  */
 export function proxy(request: NextRequest) {
@@ -58,10 +59,11 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/agent") ||
     pathname === "/api/finances/alerts" ||
+    pathname === "/api/reminders/fire" ||
+    pathname.startsWith("/api/cron/") ||
     pathname.startsWith("/api/mcp") ||
     pathname.startsWith("/api/oauth") ||
     pathname.startsWith("/.well-known") ||
-    pathname.startsWith("/api/cron/") ||
     pathname === "/api/health"
   ) {
     return proceed();

@@ -20,6 +20,7 @@ import {
   type MirrorWindow,
   type RemoteEvent,
 } from "./mirror";
+import { rearmAppointments } from "@/lib/reminders/arm";
 import { markCalendarsSynced, refreshCalendarLinks } from "./mutations";
 import { enabledCalendarLinks } from "./queries";
 
@@ -160,6 +161,11 @@ export async function syncWindow(
   }
 
   await markCalendarsSynced(userId, fetchedCalendarIds);
+
+  // A project block made in Google on the phone has to alert like one made here.
+  if (plan.toInsert.length + plan.toUpdate.length + plan.toDelete.length > 0) {
+    await rearmAppointments(userId);
+  }
 
   const status: SyncStatus = {
     state: "ok",

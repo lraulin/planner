@@ -8,6 +8,7 @@ import {
   CheckboxField,
   ContextsField,
   DateField,
+  DateTimeField,
   EffortField,
   FieldGrid,
   MoneyField,
@@ -23,7 +24,7 @@ import { skipRecurrenceAction } from "@/app/(shell)/plan/outline/actions";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import { TaskContactPanel } from "@/components/contacts/TaskContactPanel";
 import type { FormTab } from "./FormTabs";
-import { CoreHeaderFields, type DetailFormProps } from "./formShared";
+import { CoreHeaderFields, REMINDER_HINT, type DetailFormProps } from "./formShared";
 
 /** Local today for `max` on record dates — re-read each render so midnight is not sticky. */
 function todayKey() {
@@ -107,6 +108,12 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
                 value={values.deferredDate}
                 onChange={(deferredDate) => patch({ deferredDate })}
                 hint="Postpones it until this date. Leave empty and set State to Postponed to shelve it indefinitely."
+              />
+              <DateTimeField
+                label="Reminder"
+                value={task.reminderAt ?? null}
+                onChange={(reminderAt) => patchTask({ reminderAt })}
+                hint={REMINDER_HINT}
               />
               <EffortField
                 label="Lead time"

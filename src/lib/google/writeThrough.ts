@@ -11,19 +11,25 @@
  */
 
 import type { Appointment } from "@/db/schema";
+import { daysBetweenKeys, shiftDateKey, zonedDateKey } from "@/lib/schedule/geometry";
 import {
   deleteEvent,
+  getEvent,
   GoogleEventGoneError,
   insertEvent,
   listEvents,
   patchEvent,
 } from "./client";
+import { SeriesDateChangeError } from "./errors";
 import { findDuplicateEvent } from "./dedupe";
 import {
   appointmentToGoogleEvent,
   type GoogleEvent,
+  type GoogleEventTime,
   type GoogleEventWrite,
   type GoogleOwnedFields,
+  writeEventTime,
+  writeTimeZone,
 } from "./mapping";
 import { pushTargetCalendarId } from "./queries";
 
@@ -169,16 +175,18 @@ async function findExistingEvent(
 }
 
 /**
- * Patch the Google-owned fields of an existing event.
+ * What a local edit of a Google event means.
  *
- * Only rows that carry an external ref are pushed; a local-only row stays local. Returns
- * the refreshed etag/updated stamp, or null when there was nothing to push.
+ * - `series` — the drawer's save and the connector's `update_appointment`. On an occurrence
+ *   of a repeating event this is Google Calendar's **"All events"**: the series keeps its
+ *   own first date and takes the occurrence's new time, duration, and other fields.
+ * - `occurrence` — dragging in the week grid. On an occurrence this is Google's **"This
+ *   event"**: only that one moves, and the rest of the series is untouched.
  *
- * A 404/410 from Google means the event was deleted elsewhere. Unlike `pushDelete`, which
- * treats gone as success (the goal was absence), a patch that cannot land must not write
- * locally — the two would diverge. The error is rewritten to a clear user-facing sentence
- * so the drawer does not surface a calendar-id blob or a bare "Internal error".
+ * For a one-off event the two are the same edit.
  */
+export type EditScope = "series" | "occurrence";
+
 /**
  * Which Google event a local edit targets, and the body to PATCH onto it.
  *
@@ -187,12 +195,28 @@ async function findExistingEvent(
  * series, and the recurrence field is conditional. Kept pure so its test needs neither a
  * Google token nor a mocked client — the standard's "prefer real values over mocks", and
  * the reason the unit suite has no `vi.mock` left to leak across a shared worker.
+ *
+ * A `series` patch aimed at a series id still carries the *occurrence's* start and end;
+ * `pushUpdate` re-anchors those onto the series' own first date with `anchorToSeries`
+ * before sending, since only Google knows that date.
  */
 export function buildUpdatePatch(
   row: { externalId: string; externalSeriesId: string | null },
   merged: PushableAppointment,
+  scope: EditScope = "series",
 ): { targetEventId: string; patch: Partial<GoogleEventWrite> } {
   const body = appointmentToGoogleEvent(merged);
+
+  if (scope === "occurrence") {
+    // The instance id edits that occurrence alone (Google records it as an exception).
+    // Only the times move: every other field is the occurrence's own, so resending it
+    // would at best be a no-op, and a recurrence on an instance is a 400.
+    return {
+      targetEventId: row.externalId,
+      patch: { start: body.start, end: body.end },
+    };
+  }
+
   // Recurrence is omitted for one-offs so a PATCH cannot invent a series. When the
   // merged row *has* a rule we send it: converting a repeating timed event to all-day
   // otherwise leaves Google's timed UNTIL beside date-only start/end, which it rejects
@@ -208,26 +232,168 @@ export function buildUpdatePatch(
   return { targetEventId: row.externalSeriesId || row.externalId, patch };
 }
 
+/** Calendar day of a Google time: its `date`, or its `dateTime`'s day in `timeZone`. */
+function dayKeyOf(time: GoogleEventTime, timeZone: string): string | null {
+  if (time.date) return time.date;
+  if (time.dateTime) return zonedDateKey(new Date(time.dateTime), timeZone);
+  return null;
+}
+
+/** Wall-clock `HH:mm:ss` of an RFC 3339 instant in `timeZone`. */
+function wallTimeOf(dateTime: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hourCycle: "h23",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(dateTime));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  return `${part("hour")}:${part("minute")}:${part("second")}`;
+}
+
+/**
+ * Refuse a `series` edit that moves the opened occurrence to another day.
+ *
+ * `previousStart` is the occurrence as stored, `start` the edited one, both written the
+ * way `writeEventTime` writes them. See `SeriesDateChangeError` for why this is refused
+ * rather than guessed at.
+ */
+export function assertSeriesDayUnchanged(
+  start: GoogleEventTime,
+  previousStart: GoogleEventTime,
+  timeZone: string = writeTimeZone(),
+): void {
+  if (dayKeyOf(start, timeZone) !== dayKeyOf(previousStart, timeZone)) {
+    throw new SeriesDateChangeError();
+  }
+}
+
+/**
+ * Move a `series` patch built from one occurrence onto the series' own first date.
+ *
+ * The root cause this exists for: the local table holds only instances, so the drawer and
+ * the connector edit a series *through* one of its occurrences, and the patch carried
+ * that occurrence's start. PATCHing a series master's `start` sets its DTSTART, so opening
+ * the third Monday and changing only the title re-anchored the series on the third Monday
+ * and dropped the first two.
+ *
+ * Keeps `seriesStart`'s calendar day and takes the edited occurrence's wall-clock time of
+ * day, duration (as an end-day offset plus an end time), and all-day flag — Google
+ * Calendar's "All events". Timed values are written as floating local times with a named
+ * zone, which Google accepts and which keeps 9:00 at 9:00 whichever side of a DST change
+ * the series began; a fixed UTC instant computed from November's offset would put an
+ * August start an hour off. The day itself must not change; see `assertSeriesDayUnchanged`.
+ */
+export function anchorToSeries(
+  patch: Partial<GoogleEventWrite>,
+  previousStart: GoogleEventTime,
+  seriesStart: GoogleEventTime,
+  timeZone: string = writeTimeZone(),
+): Partial<GoogleEventWrite> {
+  const { start, end } = patch;
+  if (!start || !end) return patch;
+  assertSeriesDayUnchanged(start, previousStart, timeZone);
+
+  const anchorDay = dayKeyOf(seriesStart, timeZone);
+  const startDay = dayKeyOf(start, timeZone);
+  const endDay = dayKeyOf(end, timeZone);
+  if (!anchorDay || !startDay || !endDay) {
+    throw new Error("Google returned a repeating event without a start.");
+  }
+  const endDayOffset = daysBetweenKeys(startDay, endDay);
+
+  if (start.date) {
+    return {
+      ...patch,
+      start: { date: anchorDay, dateTime: null, timeZone },
+      end: { date: shiftDateKey(anchorDay, endDayOffset), dateTime: null, timeZone },
+    };
+  }
+  if (!start.dateTime || !end.dateTime) {
+    throw new Error("A timed event needs a start and end time.");
+  }
+  return {
+    ...patch,
+    start: {
+      date: null,
+      dateTime: `${anchorDay}T${wallTimeOf(start.dateTime, timeZone)}`,
+      timeZone,
+    },
+    end: {
+      date: null,
+      dateTime: `${shiftDateKey(anchorDay, endDayOffset)}T${wallTimeOf(end.dateTime, timeZone)}`,
+      timeZone,
+    },
+  };
+}
+
+/**
+ * Patch the Google-owned fields of an existing event.
+ *
+ * Only rows that carry an external ref are pushed; a local-only row stays local. Returns
+ * the refreshed etag/updated stamp, or null when there was nothing to push.
+ *
+ * A `series` edit of an occurrence reads the series master first, for the first date
+ * `anchorToSeries` keeps. It is still one PATCH of the existing series id — never an
+ * insert — so Google's series, its id, and its exceptions survive, and the next mirror
+ * pass brings the moved occurrences back as ordinary rows.
+ *
+ * A 404/410 from Google means the event was deleted elsewhere. Unlike `pushDelete`, which
+ * treats gone as success (the goal was absence), a patch that cannot land must not write
+ * locally — the two would diverge. The error is rewritten to a clear user-facing sentence
+ * so the drawer does not surface a calendar-id blob or a bare "Internal error".
+ */
 export async function pushUpdate(
   userId: string,
   row: Pick<
     Appointment,
-    "externalSource" | "externalId" | "externalCalendarId" | "externalSeriesId"
+    | "externalSource"
+    | "externalId"
+    | "externalCalendarId"
+    | "externalSeriesId"
+    | "startAt"
+    | "allDay"
   >,
   merged: PushableAppointment,
+  scope: EditScope = "series",
 ): Promise<Partial<ExternalStamp> | null> {
   if (row.externalSource !== "google" || !row.externalId || !row.externalCalendarId) {
     return null;
   }
 
-  const { targetEventId, patch } = buildUpdatePatch(
+  const built = buildUpdatePatch(
     { externalId: row.externalId, externalSeriesId: row.externalSeriesId },
     merged,
+    scope,
   );
+  let patch = built.patch;
+  const editsSeriesFromOccurrence = scope === "series" && Boolean(row.externalSeriesId);
+  const previousStart = writeEventTime(row.startAt, row.allDay);
+  // Before any network: a refused edit should cost nothing.
+  if (editsSeriesFromOccurrence && patch.start) {
+    assertSeriesDayUnchanged(patch.start, previousStart);
+  }
 
   let event;
   try {
-    event = await patchEvent(userId, row.externalCalendarId, targetEventId, patch);
+    if (editsSeriesFromOccurrence) {
+      const series = await getEvent(
+        userId,
+        row.externalCalendarId,
+        built.targetEventId,
+      );
+      if (!series.start) {
+        throw new Error("Google returned a repeating event without a start.");
+      }
+      patch = anchorToSeries(patch, previousStart, series.start);
+    }
+    event = await patchEvent(
+      userId,
+      row.externalCalendarId,
+      built.targetEventId,
+      patch,
+    );
   } catch (error) {
     if (error instanceof GoogleEventGoneError) {
       throw new GoogleEventGoneError(GOOGLE_EVENT_GONE_MESSAGE);

@@ -22,6 +22,7 @@ import {
 import { normalizeColorId } from "@/lib/google/eventColors";
 import type { GoogleOwnedFields } from "@/lib/google/mapping";
 import { assertNodeOwned } from "@/lib/tree/ownership";
+import { rearmReminders } from "@/lib/reminders/arm";
 import { allDayRange } from "./allDay";
 import { sortDays, startOfWeek } from "./geometry";
 
@@ -254,6 +255,17 @@ export async function createAppointmentWithOutcome(
   userId: string,
   input: AppointmentInput,
 ): Promise<CreateAppointmentOutcome> {
+  const outcome = await storeNewAppointment(userId, input);
+  if (outcome.row) {
+    await rearmReminders(userId, [{ kind: "appointment", id: outcome.row.id }]);
+  }
+  return outcome;
+}
+
+async function storeNewAppointment(
+  userId: string,
+  input: AppointmentInput,
+): Promise<CreateAppointmentOutcome> {
   const allDay = input.allDay ?? false;
   const bounds = allDay ? allDayRange(input.startAt, input.endAt) : null;
   const startAt = bounds?.startAt ?? input.startAt;
@@ -466,7 +478,8 @@ export async function updateAppointment(
     patch.recurrenceUntil = input.recurrenceUntil;
 
   // Push before writing locally: if Google rejects the change, the mutation throws and the
-  // stored row still matches what Google holds.
+  // stored row still matches what Google holds. On an occurrence of a Google series this
+  // edits the whole series but keeps its first date ("All events"); see `EditScope`.
   const stamp = await pushUpdate(userId, existing, pushableFrom(existing, patch));
   if (stamp) Object.assign(patch, stamp);
 
@@ -475,6 +488,7 @@ export async function updateAppointment(
     .set(patch)
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
     .returning();
+  await rearmReminders(userId, [{ kind: "appointment", id }]);
   return row;
 }
 
@@ -495,6 +509,7 @@ export async function deleteAppointment(userId: string, id: string) {
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
     .returning({ id: appointments.id });
   if (deleted.length === 0) throw new Error("Appointment not found.");
+  await rearmReminders(userId, [{ kind: "appointment", id }]);
 }
 
 /**
@@ -512,6 +527,7 @@ export async function setAppointmentCheckState(
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
     .returning();
   if (!row) throw new Error("Appointment not found.");
+  await rearmReminders(userId, [{ kind: "appointment", id }]);
   return row;
 }
 
@@ -546,7 +562,12 @@ export async function rescheduleAppointment(
 
   // Dragging a Google event in the week grid moves it in Google. For an instance of a
   // series this moves that occurrence only, which is what Google's own UI does too.
-  const stamp = await pushUpdate(userId, existing, pushableFrom(existing, patch));
+  const stamp = await pushUpdate(
+    userId,
+    existing,
+    pushableFrom(existing, patch),
+    "occurrence",
+  );
   if (stamp) Object.assign(patch, stamp);
 
   const [row] = await db
@@ -555,5 +576,6 @@ export async function rescheduleAppointment(
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
     .returning();
   if (!row) throw new Error("Appointment not found.");
+  await rearmReminders(userId, [{ kind: "appointment", id }]);
   return row;
 }

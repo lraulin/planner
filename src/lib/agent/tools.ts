@@ -78,6 +78,17 @@ import {
 } from "./historyTools";
 import { deleteTransactionTool, updatePayeeAliasesTool } from "./ledgerTools";
 import {
+  createBudgetEnvelopeTool,
+  createBudgetGroupTool,
+  getBudgetMonthTool,
+  moveBudgetMoneyTool,
+  setBudgetAssignmentTool,
+  setTransactionCategoryTool,
+  splitTransactionTool,
+  updateBudgetEnvelopeTool,
+  updateBudgetGroupTool,
+} from "./budgetTools";
+import {
   createHouseTool,
   deleteHouseTool,
   getHouseTool,
@@ -399,7 +410,8 @@ const definitions: AgentToolDefinition[] = [
   defineTool("update_appointment", {
     domain: "schedule",
     summary: "Update one calendar appointment.",
-    useWhen: "Use after identifying the appointment and intended changes.",
+    useWhen:
+      'Use after identifying the appointment and intended changes. On one occurrence of a repeating Google event this edits the whole series, like Google Calendar\'s "All events": the series keeps its own first date and takes the new time, length, and fields. Moving it to another date is refused.',
     avoidWhen:
       "Do not retry automatically; Google synchronization is not atomic with local storage.",
     returns: "The updated appointment summary.",
@@ -835,6 +847,200 @@ const definitions: AgentToolDefinition[] = [
     effects: read,
     exposure: "domain",
     handler: getScenarioTool,
+  }),
+  defineTool("get_budget_month", {
+    domain: "finances",
+    summary:
+      "Read one budget month: each envelope's assigned, activity and available, plus income and Ready to Assign.",
+    useWhen:
+      "Use before any budget edit to get envelope and group ids and the month's numbers, or to answer what is left in an envelope.",
+    avoidWhen:
+      "Use get_finance_overview for balances and the envelope list without money, and get_spending_breakdown for spending history across months.",
+    returns:
+      "summary (income, from last month, last month overspent, assigned, activity, available, held, assigned in future months, uncategorized activity, readyToAssignCents), uncategorized {count, cents}, groups, income envelopes with receivedCents, a page of expense envelopes in Budget page order { id, name, kind, groupId, assignedCents, activityCents, availableCents, goalCents? }, hiddenEnvelopeCount and pageInfo. Hidden envelopes still count in summary.",
+    effects: read,
+    exposure: "domain",
+    examples: [
+      { title: "This month", arguments: {} },
+      {
+        title: "A named month with hidden envelopes",
+        arguments: { month: "2026-10", includeHidden: true },
+      },
+    ],
+    handler: getBudgetMonthTool,
+  }),
+  defineTool("create_budget_group", {
+    domain: "finances",
+    summary:
+      "Create a budget group inside one section (spending, bill, savings or income).",
+    useWhen: "Use when the user wants envelopes gathered under a new heading.",
+    avoidWhen:
+      "Do not create a group just to hold one envelope unless asked; an envelope can sit at the section root.",
+    returns: "created: true and the group { id, name, kind, parentGroupId, hidden }.",
+    effects: write,
+    exposure: "domain",
+    examples: [
+      { title: "A Pets group", arguments: { name: "Pets", kind: "spending" } },
+    ],
+    handler: createBudgetGroupTool,
+  }),
+  defineTool("update_budget_group", {
+    domain: "finances",
+    summary: "Rename a budget group.",
+    useWhen: "Use when the user renames a group on the Budget page's terms.",
+    avoidWhen: "Do not use to move envelopes; use update_budget_envelope with groupId.",
+    returns: "The group { id, name, kind, parentGroupId, hidden } after the rename.",
+    effects: safeWrite,
+    exposure: "domain",
+    examples: [
+      {
+        title: "Rename a group",
+        arguments: { id: "00000000-0000-4000-8000-000000000010", name: "Pets & Vet" },
+      },
+    ],
+    handler: updateBudgetGroupTool,
+  }),
+  defineTool("create_budget_envelope", {
+    domain: "finances",
+    summary:
+      "Create an envelope (category), optionally inside a group: spending, savings, bill or income.",
+    useWhen:
+      "Use when the user wants a new envelope, e.g. a Vet / Pet Medical fund before moving money into it.",
+    avoidWhen:
+      "Do not create one that get_budget_month already lists under the same name; refused as a conflict. A new envelope starts at $0; fund it with move_budget_money or set_budget_assignment.",
+    returns:
+      "created: true and the envelope { id, name, kind, groupId, groupName, hidden, notes }.",
+    effects: write,
+    exposure: "domain",
+    examples: [
+      {
+        title: "A savings envelope in a group",
+        arguments: {
+          name: "Vet / Pet Medical",
+          kind: "savings",
+          groupId: "00000000-0000-4000-8000-000000000010",
+        },
+      },
+    ],
+    handler: createBudgetEnvelopeTool,
+  }),
+  defineTool("update_budget_envelope", {
+    domain: "finances",
+    summary:
+      "Rename, move, change the section of, hide (archive) or unhide an envelope.",
+    useWhen:
+      "Use to rename an envelope, move it to another group, or archive one the user no longer uses (hidden: true keeps its history and balance).",
+    avoidWhen:
+      "Do not hide an envelope that still holds money without saying so; its available balance stays counted. There is no delete tool.",
+    returns:
+      "The envelope { id, name, kind, groupId, groupName, hidden, notes } after the edit.",
+    effects: safeWrite,
+    exposure: "domain",
+    examples: [
+      {
+        title: "Archive an envelope",
+        arguments: { id: "00000000-0000-4000-8000-000000000011", hidden: true },
+      },
+    ],
+    handler: updateBudgetEnvelopeTool,
+  }),
+  defineTool("set_budget_assignment", {
+    domain: "finances",
+    summary: "Set or adjust how much is assigned to one envelope in one month.",
+    useWhen:
+      "Use to fund an envelope from Ready to Assign (amountCents sets it, adjustCents adds or removes).",
+    avoidWhen:
+      "Use move_budget_money to take money from another envelope. Assigning more than Ready to Assign holds is allowed, as on the Budget page, and comes back as a warning.",
+    returns:
+      "applied, the envelope's assigned and available after, previousAssignedCents, readyToAssignCents after, and warnings (e.g. Ready to Assign went negative).",
+    effects: write,
+    exposure: "domain",
+    examples: [
+      {
+        title: "Add $50 to Groceries",
+        arguments: {
+          month: "2026-10",
+          envelopeId: "00000000-0000-4000-8000-000000000012",
+          adjustCents: 5000,
+        },
+      },
+    ],
+    handler: setBudgetAssignmentTool,
+  }),
+  defineTool("move_budget_money", {
+    domain: "finances",
+    summary: "Move money between two envelopes in one month, atomically.",
+    useWhen:
+      "Use when the user moves money from one envelope to another, e.g. $623.65 from House to Vet / Pet Medical.",
+    avoidWhen:
+      "Do not use to fund from Ready to Assign; use set_budget_assignment. A move larger than the source's available balance is refused with nothing changed, never clamped.",
+    returns:
+      "moved, amountCents, both envelopes' assigned and available after the move, and readyToAssignCents (unchanged).",
+    effects: write,
+    exposure: "domain",
+    examples: [
+      {
+        title: "House to Vet / Pet Medical",
+        arguments: {
+          month: "2026-10",
+          fromEnvelopeId: "00000000-0000-4000-8000-000000000013",
+          toEnvelopeId: "00000000-0000-4000-8000-000000000014",
+          amountCents: 62365,
+        },
+      },
+    ],
+    handler: moveBudgetMoneyTool,
+  }),
+  defineTool("set_transaction_category", {
+    domain: "finances",
+    summary: "File transactions to an envelope, or make them uncategorized.",
+    useWhen:
+      "Use to recategorize rows found with search_transactions. Filing also teaches the payee that envelope, as filing on the register does.",
+    avoidWhen:
+      "Do not use on a split row; use split_transaction. Off-budget rows and transfers between budget accounts are skipped.",
+    returns: "The envelope, the ids updated, and the ids skipped with a reason.",
+    effects: safeWrite,
+    exposure: "domain",
+    examples: [
+      {
+        title: "File a vet bill",
+        arguments: {
+          ids: ["00000000-0000-4000-8000-000000000001"],
+          envelopeId: "00000000-0000-4000-8000-000000000014",
+        },
+      },
+    ],
+    handler: setTransactionCategoryTool,
+  }),
+  defineTool("split_transaction", {
+    domain: "finances",
+    summary:
+      "Split one transaction across envelopes, replace its split, or unsplit it.",
+    useWhen:
+      "Use when one charge covers several envelopes, e.g. a Target run that was groceries and gifts.",
+    avoidWhen:
+      "Lines must sum exactly to the row's amount, with the same sign. Transfers and split lines cannot be split.",
+    returns:
+      "The row's id, amountCents, split, and its lines { id, amountCents, envelopeId, envelopeName, notes }.",
+    effects: safeWrite,
+    exposure: "domain",
+    examples: [
+      {
+        title: "Split a $100 charge",
+        arguments: {
+          id: "00000000-0000-4000-8000-000000000001",
+          splits: [
+            { amountCents: -6000, envelopeId: "00000000-0000-4000-8000-000000000012" },
+            { amountCents: -4000, envelopeId: "00000000-0000-4000-8000-000000000015" },
+          ],
+        },
+      },
+      {
+        title: "Unsplit",
+        arguments: { id: "00000000-0000-4000-8000-000000000001", splits: [] },
+      },
+    ],
+    handler: splitTransactionTool,
   }),
   defineTool("list_jobs", {
     domain: "history",

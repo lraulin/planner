@@ -15,6 +15,13 @@ import { FieldGrid, PriorityField, SelectField, TextField } from "./fields";
  * What every detail form is handed. The drawer owns the draft and the item wiring; a form
  * is just a declaration of which fields go on which tab.
  */
+/**
+ * Shared by the Task and Project forms' Reminder field. The auto-set rule runs on the server
+ * at save, so the field fills in after a save that set a deadline — the hint says so.
+ */
+export const REMINDER_HINT =
+  "Alerts your devices then. Saving a deadline fills this in, unless you set it yourself.";
+
 export type DetailFormProps = {
   detail: NodeDetail;
   /** The row the drawer was opened from, which already carries the subtree rollups. */

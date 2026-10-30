@@ -72,6 +72,15 @@ describe("buildCsp", () => {
     expect(policy).not.toContain("plaid.com");
   });
 
+  // `strict-dynamic` makes CSP3 browsers ignore 'self' in script-src, and worker-src falls
+  // back to script-src — so without its own directive the reminders service worker would not
+  // register at all in production.
+  it("lets the same-origin service worker register, and nothing else", () => {
+    for (const policy of [prod(), dev()]) {
+      expect(directive(policy, "worker-src")).toBe("worker-src 'self'");
+    }
+  });
+
   it("refuses framing and plugins, and pins base and form targets", () => {
     const policy = prod();
     expect(directive(policy, "frame-ancestors")).toBe("frame-ancestors 'none'");

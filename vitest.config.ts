@@ -27,17 +27,18 @@ export default defineConfig({
      * its own users with `crypto.randomUUID()` emails and drops them in `afterAll`, so files
      * never contend for shared rows.
      *
-     * Isolation and worker count are deliberately *not* set here. Vitest 3.2.7 builds a single
-     * Tinypool from the root config, so `isolate` and the worker count are per-process, not
-     * per-project — set on a project they are accepted and silently ignored (verified:
-     * `poolOptions.forks.maxForks: 1` on this project still ran 8-way). They live on the
-     * `test:unit` and `test:integration` invocations in package.json instead, which is why
-     * `npm test` chains those two scripts rather than running one vitest.
+     * Isolation and worker count are deliberately *not* set here. They were moved out when
+     * Vitest 3.2.7 built a single Tinypool from the root config, so `isolate` and the worker
+     * count were per-process, not per-project: set on a project they were accepted and
+     * silently ignored (verified then: `poolOptions.forks.maxForks: 1` on this project still
+     * ran 8-way). They live on the `test:unit` and `test:integration` invocations in
+     * package.json instead, which is why `npm test` chains those two scripts rather than
+     * running one vitest.
      *
-     * The worker count is spelled `--maxWorkers`, not `--poolOptions.forks.maxForks`: Vitest 4
-     * removed `poolOptions` and refuses the old flag as an unknown option, while `--maxWorkers`
-     * means the same thing on 3.2.7 and on 4. Whether Vitest 4 honours these per project is
-     * unverified; re-check before moving them into the config.
+     * The worker count is spelled `--maxWorkers`: Vitest 4 removed `poolOptions`, and the
+     * installed Vitest 5 still refuses the old flag. Vitest 5's types accept `isolate` and
+     * `maxWorkers` on a project, but whether it honours them per project is unverified;
+     * check that before moving them into the config.
      */
     projects: [
       {

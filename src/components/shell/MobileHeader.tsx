@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { RemindersBell } from "@/components/reminders/RemindersPanel";
 import { isFocusedFlow } from "@/lib/navigation/pages";
 import { destinationLabel } from "./modules";
 import { OverflowMenu } from "./OverflowMenu";
@@ -32,6 +33,7 @@ export function MobileHeader() {
         <h1 className="min-w-0 flex-1 truncate text-[0.9375rem] font-semibold tracking-tight text-ink">
           {destinationLabel(presented, "Planner")}
         </h1>
+        <RemindersBell className="h-tap w-tap" />
         {!isFocusedFlow(pathname) && <OverflowMenu label="More commands" />}
       </div>
     </header>

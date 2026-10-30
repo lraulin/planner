@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { findCurrentAccount } from "@/lib/auth";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
 import { isPdfBytes } from "@/lib/finances/pdf";
+import { checkReadyToAssignQuietly } from "@/lib/reminders/arm";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -106,6 +107,8 @@ export async function POST(request: Request) {
       auditBatchId:
         typeof requestedAuditBatchId === "string" ? requestedAuditBatchId : undefined,
     });
+    // An import changes the budget while the register, not the budget, is on screen.
+    await checkReadyToAssignQuietly(userId);
     revalidatePath("/", "layout");
 
     const warnings =

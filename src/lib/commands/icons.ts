@@ -49,6 +49,7 @@ export const COMMAND_ICON_IDS = [
   "import",
   "settings",
   "sign-out",
+  "reminders",
 ] as const;
 
 export type CommandIcon = (typeof COMMAND_ICON_IDS)[number];

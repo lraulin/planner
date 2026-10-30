@@ -11,6 +11,7 @@ import {
   type EnvelopeKind,
 } from "@/db/schema";
 import { localDateKey } from "@/lib/schedule/geometry";
+import { rearmReminders, supersedeOrphanedReminders } from "@/lib/reminders/arm";
 import { parseBudget, serializeBudget } from "@/lib/settings/finances";
 import { readSetting } from "@/lib/settings/queries";
 import { writeUserSetting } from "@/lib/settings/mutations";
@@ -38,6 +39,7 @@ import {
   categoryMonth,
   findMonth,
   monthKeyOf,
+  monthName,
   prevMonthKey,
   type BudgetMonth,
   type MonthKey,
@@ -403,9 +405,36 @@ function editFor(
  * is a snapshot, and two tabs assigning at once would otherwise each compute a clamp against
  * a stale Ready to Assign. Deciding here means the clamp is always against what is stored.
  */
+/**
+ * A budget operation refused for a reason the caller can act on, written for the user.
+ *
+ * Distinct from the plain `Error`s above so an API caller can tell "you asked for more than
+ * the envelope holds" apart from a fault, without matching on message text.
+ */
+export class BudgetOperationRefused extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BudgetOperationRefused";
+  }
+}
+
+export type BudgetOperationOptions = {
+  /** Audit origin; the Budget page's own edits keep the default. */
+  auditOrigin?: string;
+  /**
+   * Refuse a transfer the source cannot cover in full instead of clamping it.
+   *
+   * The page clamps a Move to what the source holds, which is right under a cursor that can
+   * see the result. A caller that cannot see it would otherwise be told "moved" about an
+   * amount it never asked for (`agent-os/specs/2026-10-30-0900-mcp-budget-editing/` D4).
+   */
+  exact?: boolean;
+};
+
 export async function performBudgetOperation(
   userId: string,
   operation: BudgetOperation,
+  options: BudgetOperationOptions = {},
 ): Promise<{ applied: boolean; note: string }> {
   const data = await loadBudget(userId, operation.month);
   if (!data.configured) throw new Error("Set the budget up first.");
@@ -419,10 +448,24 @@ export async function performBudgetOperation(
     await requireCategory(userId, ref.id);
   }
 
+  if (options.exact && operation.kind === "transfer") {
+    const available = categoryMonth(month, operation.from.id).balanceCents;
+    if (operation.amountCents > available) {
+      throw new BudgetOperationRefused(
+        `${operation.from.name} has ${formatUsd(Math.max(0, available))} available in ${monthName(operation.month)}; move at most that.`,
+      );
+    }
+  }
+
   const edit = editFor(operation, month, data.months, expenses, data.todayKey);
   if (isEmptyEdit(edit)) return { applied: false, note: "" };
 
-  await applyEdit(userId, edit, budgetOperationAuditKind(operation));
+  await applyEdit(
+    userId,
+    edit,
+    budgetOperationAuditKind(operation),
+    options.auditOrigin,
+  );
   return { applied: true, note: edit.note };
 }
 
@@ -458,6 +501,7 @@ async function applyEdit(
   userId: string,
   edit: BudgetEdit,
   auditKind: FinanceAuditKind,
+  origin = "Budget",
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const month = edit.buffered?.month ?? edit.allocations[0]?.month;
@@ -535,7 +579,7 @@ async function applyEdit(
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await writeFinanceAuditEvent(tx, userId, {
       kind: auditKind,
-      origin: "Budget",
+      origin,
       summary: edit.note || "Updated budget allocations",
       scope,
       beforeCheckpoint,
@@ -824,6 +868,18 @@ export async function updateBudgetCategory(
   categoryId: string,
   edit: BudgetCategoryEdit,
 ): Promise<void> {
+  await writeBudgetCategory(userId, categoryId, edit);
+  // Becoming or ceasing to be a bill decides whether it has a reminder at all.
+  if (edit.kind !== undefined) {
+    await rearmReminders(userId, [{ kind: "bill", id: categoryId }]);
+  }
+}
+
+async function writeBudgetCategory(
+  userId: string,
+  categoryId: string,
+  edit: BudgetCategoryEdit,
+): Promise<void> {
   const category = await requireCategory(userId, categoryId);
   const nextKind = edit.kind ?? category.kind;
   if (
@@ -1087,6 +1143,7 @@ export async function deleteBudgetCategory(
       ],
     });
   });
+  await supersedeOrphanedReminders(userId);
 }
 
 /** Remove an empty organisational group. Money-bearing descendants must be moved first. */
@@ -1312,6 +1369,7 @@ export async function setTransactionBudgetCategories(
   userId: string,
   transactionIds: readonly string[],
   categoryId: string | null,
+  options: { auditOrigin?: string } = {},
 ): Promise<BulkCategoryResult> {
   const unique = [...new Set(transactionIds)];
   if (unique.length === 0) return { updated: [], skipped: [] };
@@ -1424,7 +1482,7 @@ export async function setTransactionBudgetCategories(
       const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
       await writeFinanceAuditEvent(tx, userId, {
         kind: "transaction_change",
-        origin: "Budget filing",
+        origin: options.auditOrigin ?? "Budget filing",
         summary: `${categoryId === null ? "Unfiled" : "Filed"} ${assignable.length} transaction${assignable.length === 1 ? "" : "s"}.`,
         scope,
         beforeCheckpoint,
