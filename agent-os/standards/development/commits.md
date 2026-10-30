@@ -1,6 +1,6 @@
 # Commits
 
-Agents commit and push here at their own discretion — `CLAUDE.md` says so, and that is not
+Agents commit and push here at their own discretion — `AGENTS.md` says so, and that is not
 going to change. So there is no reviewer standing between a bad commit and `master`. What
 that removes is the safety net; what it does not remove is the reader. The reader is a
 future agent running `git log -S` or `git blame` on a line it is about to change, six

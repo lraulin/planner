@@ -254,4 +254,5 @@ in [`docs/production-backup-recovery.md`](docs/production-backup-recovery.md).
   identities are resolved separately in `src/lib/auth/identity.ts` — the session user, the
   dev-bypass user (`AUTH_DEV_USER_EMAIL`), and the account agent tools act as
   (`PLANNER_AGENT_USER_EMAIL`, Bearer `PLANNER_AGENT_API_KEY`).
-- `CLAUDE.md` is a symlink to `AGENTS.md`, so all coding agents read the same instructions.
+- `AGENTS.md` holds the agent instructions. Claude Code (by default when there is no
+  `CLAUDE.md`), Codex and Cursor read it natively, so there is no `CLAUDE.md` symlink.
