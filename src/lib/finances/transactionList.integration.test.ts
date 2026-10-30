@@ -105,11 +105,8 @@ describeDb("the register row reads", () => {
 
     // Unbalance it behind the mutation's back: the imbalance is the parent minus the sum
     // the aggregate read, so it moves with the children, by exactly that amount.
-    // By amount: the two children are written together, so their order is not a handle.
-    const child = (await listSplitChildren(ownerId, parentId)).find(
-      (entry) => entry.amountCents === -1_250,
-    );
-    if (!child) throw new Error("the -12.50 child was not found");
+    const [child] = await listSplitChildren(ownerId, parentId);
+    expect(child.amountCents).toBe(-1_250);
     await db
       .update(financeTransactions)
       .set({ amount: "-12.00" })
