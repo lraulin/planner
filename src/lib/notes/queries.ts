@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { notes } from "@/db/schema";
+import { nodeTypeEnum, noteFlagEnum, notes } from "@/db/schema";
+import { oneOf, oneOfOrNull } from "@/lib/oneOf";
 import { deriveNotes } from "./derive";
 import { filterRequiresBody, notePassesFilter, type NoteFilter } from "./filter";
 import { noteSnippet } from "./snippet";
@@ -71,7 +72,7 @@ export async function loadNote(
     subject: raw.subject as string,
     body: raw.body as string,
     noteDate: raw.note_date ? new Date(raw.note_date as string) : null,
-    flag: raw.flag as NoteRow["flag"],
+    flag: oneOf(noteFlagEnum.enumValues, raw.flag, "notes.flag"),
     contexts: (raw.contexts as string[] | null) ?? [],
     collapsed: Boolean(raw.collapsed),
     depth: 0,
@@ -79,7 +80,7 @@ export async function loadNote(
     contactId: (raw.contact_id as string | null) ?? null,
     contactName: null,
     nodeName: (raw.node_name as string | null) ?? null,
-    nodeType: (raw.node_type as NoteRow["nodeType"]) ?? null,
+    nodeType: oneOfOrNull(nodeTypeEnum.enumValues, raw.node_type, "nodes.type"),
     createdAt: new Date(raw.created_at as string),
     updatedAt: new Date(raw.updated_at as string),
     childCount,
@@ -258,7 +259,7 @@ function mapTreeRow(r: Record<string, unknown>): NoteRow {
     subject: r.subject as string,
     body: r.body as string,
     noteDate: r.note_date ? new Date(r.note_date as string) : null,
-    flag: r.flag as NoteRow["flag"],
+    flag: oneOf(noteFlagEnum.enumValues, r.flag, "notes.flag"),
     contexts: (r.contexts as string[] | null) ?? [],
     collapsed: Boolean(r.collapsed),
     depth: Number(r.depth),
@@ -266,7 +267,7 @@ function mapTreeRow(r: Record<string, unknown>): NoteRow {
     contactId: (r.contact_id as string | null) ?? null,
     contactName: null,
     nodeName: (r.node_name as string | null) ?? null,
-    nodeType: (r.node_type as NoteRow["nodeType"]) ?? null,
+    nodeType: oneOfOrNull(nodeTypeEnum.enumValues, r.node_type, "nodes.type"),
     createdAt: new Date(r.created_at as string),
     updatedAt: new Date(r.updated_at as string),
   };

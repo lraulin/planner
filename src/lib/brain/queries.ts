@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { brainThoughtTypes, brainThoughts } from "@/db/schema";
+import { BRAIN_LINK_KINDS, brainThoughtTypes, brainThoughts } from "@/db/schema";
+import { oneOf } from "@/lib/oneOf";
 import { snippetAround } from "./snippet";
 import type {
   PlexData,
@@ -28,7 +29,8 @@ type PlexRow = {
     id: string;
     from_id: string;
     to_id: string;
-    kind: "child" | "jump";
+    /** Text from the database; narrowed to `BrainLinkKind` where the row is mapped. */
+    kind: string;
     label: string;
   }[];
   thoughts: {
@@ -127,7 +129,7 @@ export async function loadPlex(
     id: l.id,
     fromId: l.from_id,
     toId: l.to_id,
-    kind: l.kind,
+    kind: oneOf(BRAIN_LINK_KINDS, l.kind, "brain_links.kind"),
     label: l.label,
   }));
   const thoughts: Record<string, PlexThought> = {};

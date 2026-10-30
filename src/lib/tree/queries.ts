@@ -1,5 +1,12 @@
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
+import {
+  nodeStateEnum,
+  nodeTypeEnum,
+  priorityLetterEnum,
+  recurrenceFrequencyEnum,
+} from "@/db/schema";
+import { oneOf, oneOfOrNull } from "@/lib/oneOf";
 import { derive } from "./derive";
 import type { OutlineNode, OutlineRow } from "./types";
 
@@ -74,14 +81,22 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
   const rows: OutlineRow[] = result.rows.map((r) => ({
     id: r.id as string,
     parentId: (r.parent_id as string | null) ?? null,
-    type: r.type as OutlineRow["type"],
+    type: oneOf(nodeTypeEnum.enumValues, r.type, "nodes.type"),
     name: r.name as string,
     sortKey: r.sort_key as string,
-    priorityLetter: (r.priority_letter as OutlineRow["priorityLetter"]) ?? null,
+    priorityLetter: oneOfOrNull(
+      priorityLetterEnum.enumValues,
+      r.priority_letter,
+      "nodes.priority_letter",
+    ),
     priorityRank: r.priority_rank === null ? null : Number(r.priority_rank),
-    tcPriorityLetter: (r.tc_priority_letter as OutlineRow["tcPriorityLetter"]) ?? null,
+    tcPriorityLetter: oneOfOrNull(
+      priorityLetterEnum.enumValues,
+      r.tc_priority_letter,
+      "nodes.tc_priority_letter",
+    ),
     tcPriorityRank: r.tc_priority_rank === null ? null : Number(r.tc_priority_rank),
-    state: r.state as OutlineRow["state"],
+    state: oneOfOrNull(nodeStateEnum.enumValues, r.state, "nodes.state"),
     deadline: r.deadline ? new Date(r.deadline as string) : null,
     focus: Boolean(r.focus),
     collapsed: Boolean(r.collapsed),
@@ -118,8 +133,15 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
     costHigh: r.cost_high === null ? null : Number(r.cost_high),
     costToDate: r.cost_to_date === null ? null : Number(r.cost_to_date),
     deferredDate: r.deferred_date ? new Date(r.deferred_date as string) : null,
+    // Null only for a node with no task_details row: a non-task never repeats.
     recurrenceFrequency:
-      (r.recurrence_frequency as OutlineRow["recurrenceFrequency"]) ?? "none",
+      r.recurrence_frequency === null
+        ? "none"
+        : oneOf(
+            recurrenceFrequencyEnum.enumValues,
+            r.recurrence_frequency,
+            "task_details.recurrence_frequency",
+          ),
     color: (r.color as string | null) ?? null,
     category: (r.category as string | null) ?? null,
     importance: r.importance === null ? null : Number(r.importance),

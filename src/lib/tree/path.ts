@@ -7,7 +7,8 @@
 
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import type { NodeType } from "@/db/schema";
+import { nodeTypeEnum, type NodeType } from "@/db/schema";
+import { oneOf } from "@/lib/oneOf";
 
 export type NodePathSegment = {
   id: string;
@@ -64,7 +65,7 @@ export async function loadNodeChain(
     id: r.id as string,
     parentId: (r.parent_id as string | null) ?? null,
     name: r.name as string,
-    type: r.type as NodeType,
+    type: oneOf(nodeTypeEnum.enumValues, r.type, "nodes.type"),
   }));
 }
 
