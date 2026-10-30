@@ -11,6 +11,7 @@ import type {
   FinanceMoneyCheckpoint,
 } from "@/lib/finances/audit/types";
 import { exactBankSnapshots } from "@/lib/finances/audit/export";
+import { latestSide, pairCheckpointRows } from "@/lib/finances/audit/checkpointPairs";
 import { monthLabel } from "@/lib/finances/budget/envelope";
 import { formatUsd } from "@/lib/finances/money";
 import { financeAuditActionLabel } from "./activityColumns";
@@ -31,12 +32,12 @@ function CheckpointRail({
       <p className="text-[0.8125rem] text-ink-muted">No checkpoint was recorded.</p>
     );
   }
-  const beforeAccounts = new Map(before.accounts.map((row) => [row.accountId, row]));
-  const afterAccounts = new Map(after.accounts.map((row) => [row.accountId, row]));
-  const beforeBudgets = new Map(before.budgets.map((row) => [row.month, row]));
-  const afterBudgets = new Map(after.budgets.map((row) => [row.month, row]));
-  const accountIds = [...new Set([...beforeAccounts.keys(), ...afterAccounts.keys()])];
-  const budgetMonths = [...new Set([...beforeBudgets.keys(), ...afterBudgets.keys()])];
+  const accounts = pairCheckpointRows(
+    before.accounts,
+    after.accounts,
+    (row) => row.accountId,
+  );
+  const budgets = pairCheckpointRows(before.budgets, after.budgets, (row) => row.month);
 
   return (
     <div className="flex flex-col gap-4">
@@ -51,10 +52,9 @@ function CheckpointRail({
         </span>
       </div>
 
-      {accountIds.map((accountId) => {
-        const prior = beforeAccounts.get(accountId);
-        const account = afterAccounts.get(accountId);
-        const display = account ?? prior!;
+      {accounts.map(({ key: accountId, pair }) => {
+        const { before: prior, after: account } = pair;
+        const display = latestSide(pair);
         return (
           <div key={accountId}>
             <h4 className="mb-1 text-[0.8125rem] font-medium text-ink">
@@ -67,7 +67,7 @@ function CheckpointRail({
                   ? moneyChange(prior.workingCents, account.workingCents)
                   : account
                     ? `Added at ${formatUsd(account.workingCents)}`
-                    : `Removed at ${formatUsd(prior!.workingCents)}`}
+                    : `Removed at ${formatUsd(prior.workingCents)}`}
               </span>
               <span className="text-ink-muted">Selected pending</span>
               <span className="tabular text-right text-ink">
@@ -89,19 +89,14 @@ function CheckpointRail({
         );
       })}
 
-      {budgetMonths.map((month) => {
-        const prior = beforeBudgets.get(month);
-        const budget = afterBudgets.get(month);
-        const display = budget ?? prior!;
-        const beforeEnvelopes = new Map(
-          (prior?.envelopes ?? []).map((envelope) => [envelope.envelopeId, envelope]),
+      {budgets.map(({ key: month, pair }) => {
+        const { before: prior, after: budget } = pair;
+        const display = latestSide(pair);
+        const envelopes = pairCheckpointRows(
+          prior?.envelopes ?? [],
+          budget?.envelopes ?? [],
+          (envelope) => envelope.envelopeId,
         );
-        const afterEnvelopes = new Map(
-          (budget?.envelopes ?? []).map((envelope) => [envelope.envelopeId, envelope]),
-        );
-        const envelopeIds = [
-          ...new Set([...beforeEnvelopes.keys(), ...afterEnvelopes.keys()]),
-        ];
         return (
           <div key={month} className="border-t border-rule pt-3">
             <h4 className="mb-1 text-[0.8125rem] font-medium text-ink">
@@ -132,14 +127,13 @@ function CheckpointRail({
             </div>
             <details className="mt-2 text-[0.8125rem]">
               <summary className="min-h-tap cursor-pointer text-ink-muted md:min-h-0">
-                {envelopeIds.length} envelope{" "}
-                {envelopeIds.length === 1 ? "checkpoint" : "checkpoints"}
+                {envelopes.length} envelope{" "}
+                {envelopes.length === 1 ? "checkpoint" : "checkpoints"}
               </summary>
               <div className="mt-2 flex flex-col gap-2 pl-3">
-                {envelopeIds.map((envelopeId) => {
-                  const old = beforeEnvelopes.get(envelopeId);
-                  const envelope = afterEnvelopes.get(envelopeId);
-                  const envelopeDisplay = envelope ?? old!;
+                {envelopes.map(({ key: envelopeId, pair: envelopePair }) => {
+                  const { before: old, after: envelope } = envelopePair;
+                  const envelopeDisplay = latestSide(envelopePair);
                   return (
                     <div key={envelopeId}>
                       <p className="font-medium text-ink">
@@ -150,7 +144,7 @@ function CheckpointRail({
                           ? `Assigned ${moneyChange(old.assignedCents, envelope.assignedCents)} · Activity ${moneyChange(old.activityCents, envelope.activityCents)} · Available ${moneyChange(old.availableCents, envelope.availableCents)}`
                           : envelope
                             ? `Added · Available ${formatUsd(envelope.availableCents)}`
-                            : `Removed · Available ${formatUsd(old!.availableCents)}`}
+                            : `Removed · Available ${formatUsd(old.availableCents)}`}
                       </p>
                     </div>
                   );

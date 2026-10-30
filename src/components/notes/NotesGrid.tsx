@@ -413,9 +413,8 @@ export function NotesGrid({
         setError(result.error);
         return;
       }
-      if (result.data) {
-        setDetails((current) => ({ ...current, [result.data!.id]: result.data! }));
-      }
+      const note = result.data;
+      if (note) setDetails((current) => ({ ...current, [note.id]: note }));
     });
     return () => {
       cancelled = true;

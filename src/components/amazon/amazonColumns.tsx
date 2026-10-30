@@ -17,14 +17,14 @@ export type AmazonColumnCtx = {
 export const AMAZON_COLUMN_IDS = AMAZON_VISIBLE_COLUMN_IDS;
 
 function accessors(id: AmazonFieldId) {
-  const field = amazonFields[id];
+  const { filterKind, filterValue, sortValue } = amazonFields[id];
   return {
-    filterKind: field.filterKind,
-    filterValue: field.filterValue
-      ? (row: NodeGridRow<AmazonItemListRow>) => field.filterValue!(row.node)
+    filterKind,
+    filterValue: filterValue
+      ? (row: NodeGridRow<AmazonItemListRow>) => filterValue(row.node)
       : undefined,
-    sortValue: field.sortValue
-      ? (row: NodeGridRow<AmazonItemListRow>) => field.sortValue!(row.node)
+    sortValue: sortValue
+      ? (row: NodeGridRow<AmazonItemListRow>) => sortValue(row.node)
       : undefined,
   };
 }

@@ -91,8 +91,7 @@ export function after(prev: string): string {
  * or end of the list, which makes this usable for every insert position.
  */
 export function between(prev: string | null, next: string | null): string {
-  if (prev === null && next === null) return first();
-  if (prev === null) return before(next!);
+  if (prev === null) return next === null ? first() : before(next);
   if (next === null) return after(prev);
 
   assertValid(prev, "previous key");

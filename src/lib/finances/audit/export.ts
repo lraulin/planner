@@ -23,6 +23,7 @@ import {
   type YamlValue,
 } from "@/lib/grid/exportCsv";
 import { formatUsd } from "@/lib/finances/money";
+import { latestSide, pairCheckpointRows } from "./checkpointPairs";
 import { financeAuditActionLabel } from "./labels";
 import type { FinanceAuditEvent, FinanceMoneyCheckpoint } from "./types";
 
@@ -94,12 +95,12 @@ function checkpointSection(
   before: FinanceMoneyCheckpoint,
   after: FinanceMoneyCheckpoint,
 ): ActivityCheckpointSection {
-  const beforeAccounts = new Map(before.accounts.map((row) => [row.accountId, row]));
-  const afterAccounts = new Map(after.accounts.map((row) => [row.accountId, row]));
-  const beforeBudgets = new Map(before.budgets.map((row) => [row.month, row]));
-  const afterBudgets = new Map(after.budgets.map((row) => [row.month, row]));
-  const accountIds = [...new Set([...beforeAccounts.keys(), ...afterAccounts.keys()])];
-  const budgetMonths = [...new Set([...beforeBudgets.keys(), ...afterBudgets.keys()])];
+  const accounts = pairCheckpointRows(
+    before.accounts,
+    after.accounts,
+    (row) => row.accountId,
+  );
+  const budgets = pairCheckpointRows(before.budgets, after.budgets, (row) => row.month);
 
   return {
     accountPool: moneyChange(before.accountPoolCents, after.accountPoolCents),
@@ -107,10 +108,9 @@ function checkpointSection(
       before.selectedPendingCents,
       after.selectedPendingCents,
     ),
-    accounts: accountIds.map((accountId) => {
-      const prior = beforeAccounts.get(accountId);
-      const account = afterAccounts.get(accountId);
-      const display = account ?? prior!;
+    accounts: accounts.map(({ pair }) => {
+      const { before: prior, after: account } = pair;
+      const display = latestSide(pair);
       return {
         name: display.accountName,
         working:
@@ -118,7 +118,7 @@ function checkpointSection(
             ? moneyChange(prior.workingCents, account.workingCents)
             : account
               ? `Added at ${formatUsd(account.workingCents)}`
-              : `Removed at ${formatUsd(prior!.workingCents)}`,
+              : `Removed at ${formatUsd(prior.workingCents)}`,
         selectedPending:
           prior && account
             ? moneyChange(prior.selectedPendingCents, account.selectedPendingCents)
@@ -129,19 +129,14 @@ function checkpointSection(
             : "—",
       };
     }),
-    budgets: budgetMonths.map((month) => {
-      const prior = beforeBudgets.get(month);
-      const budget = afterBudgets.get(month);
-      const display = budget ?? prior!;
-      const beforeEnvelopes = new Map(
-        (prior?.envelopes ?? []).map((envelope) => [envelope.envelopeId, envelope]),
+    budgets: budgets.map(({ key: month, pair }) => {
+      const { before: prior, after: budget } = pair;
+      const display = latestSide(pair);
+      const envelopes = pairCheckpointRows(
+        prior?.envelopes ?? [],
+        budget?.envelopes ?? [],
+        (envelope) => envelope.envelopeId,
       );
-      const afterEnvelopes = new Map(
-        (budget?.envelopes ?? []).map((envelope) => [envelope.envelopeId, envelope]),
-      );
-      const envelopeIds = [
-        ...new Set([...beforeEnvelopes.keys(), ...afterEnvelopes.keys()]),
-      ];
       return {
         month: month.slice(0, 7),
         readyToAssign:
@@ -159,10 +154,9 @@ function checkpointSection(
                 budget.uncategorizedActivityCents,
               )
             : formatUsd(display.uncategorizedActivityCents),
-        envelopes: envelopeIds.map((envelopeId) => {
-          const old = beforeEnvelopes.get(envelopeId);
-          const envelope = afterEnvelopes.get(envelopeId);
-          const envelopeDisplay = envelope ?? old!;
+        envelopes: envelopes.map(({ pair: envelopePair }) => {
+          const { before: old, after: envelope } = envelopePair;
+          const envelopeDisplay = latestSide(envelopePair);
           return {
             name: envelopeDisplay.envelopeName,
             detail:
@@ -170,7 +164,7 @@ function checkpointSection(
                 ? `Assigned ${moneyChange(old.assignedCents, envelope.assignedCents)} · Activity ${moneyChange(old.activityCents, envelope.activityCents)} · Available ${moneyChange(old.availableCents, envelope.availableCents)}`
                 : envelope
                   ? `Added · Available ${formatUsd(envelope.availableCents)}`
-                  : `Removed · Available ${formatUsd(old!.availableCents)}`,
+                  : `Removed · Available ${formatUsd(old.availableCents)}`,
           };
         }),
       };

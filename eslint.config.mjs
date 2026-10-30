@@ -81,6 +81,17 @@ const eslintConfig = defineConfig([
     },
   },
 
+  // A `!` tells the compiler a value exists without checking it, so the crash lands far from
+  // the cause. Application code handles the missing case or throws naming the invariant
+  // (development/typescript-react.md). Tests keep `!`: a wrong guess there fails the test.
+  {
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+      "@typescript-eslint/no-non-null-assertion": "error",
+    },
+  },
+
   // In-app links go through `NavLink`, which owns the prefetch switch and the pending-click
   // feedback. A bare `next/link` silently prefetches again (immediate-navigation spec, D6).
   // `/signup` renders outside the shell, so it keeps `next/link`.

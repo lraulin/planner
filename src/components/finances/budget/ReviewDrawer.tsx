@@ -182,10 +182,11 @@ function DismissButton({
           : undefined
       }
       onClick={() => {
-        if (entry.payeeId === null) return;
+        const { payeeId } = entry;
+        if (payeeId === null) return;
         onError("");
         startTransition(async () => {
-          const result = await setPayeeNotACommitmentAction(entry.payeeId!, true);
+          const result = await setPayeeNotACommitmentAction(payeeId, true);
           if (!result.ok) {
             onError(result.error);
             return;

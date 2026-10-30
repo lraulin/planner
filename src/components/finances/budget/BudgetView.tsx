@@ -953,6 +953,9 @@ export function BudgetView({
   }
 
   if (!month) return null;
+  // The menu builders below are function declarations, which TypeScript does not narrow
+  // through. Past the guard the month exists, so they read it from here.
+  const shownMonth = month;
 
   const ctx: BudgetColumnCtx = {
     pending,
@@ -1297,6 +1300,7 @@ export function BudgetView({
     const sources = coverSources(rows, row.id);
     const ref = { id: row.id, name: row.name };
     const overspent = row.balanceCents < 0;
+    const { bill } = row;
     const snoozeReason = snoozeUnavailableReason(
       row,
       data.month,
@@ -1311,13 +1315,13 @@ export function BudgetView({
           ? undefined
           : `${row.name} is not overspent, so there is nothing to cover`,
         disabled:
-          !overspent || (sources.length === 0 && month!.readyToAssignCents <= 0),
+          !overspent || (sources.length === 0 && shownMonth.readyToAssignCents <= 0),
         items: [
           {
-            label: `Ready to Assign (${formatUsd(Math.max(0, month!.readyToAssignCents))})`,
-            disabled: month!.readyToAssignCents <= 0,
+            label: `Ready to Assign (${formatUsd(Math.max(0, shownMonth.readyToAssignCents))})`,
+            disabled: shownMonth.readyToAssignCents <= 0,
             title:
-              month!.readyToAssignCents <= 0
+              shownMonth.readyToAssignCents <= 0
                 ? "Nothing is left to assign this month"
                 : undefined,
             onSelect: () =>
@@ -1412,7 +1416,7 @@ export function BudgetView({
           },
         })),
       },
-      ...(row.bill
+      ...(bill
         ? ([
             "separator" as const,
             {
@@ -1422,9 +1426,9 @@ export function BudgetView({
             },
             {
               label: "Open URL",
-              disabled: row.bill.url === "",
-              title: row.bill.url === "" ? "No URL saved for this bill" : row.bill.url,
-              onSelect: () => window.open(withScheme(row.bill!.url), "_blank"),
+              disabled: bill.url === "",
+              title: bill.url === "" ? "No URL saved for this bill" : bill.url,
+              onSelect: () => window.open(withScheme(bill.url), "_blank"),
             },
           ] satisfies MenuItem[])
         : []),

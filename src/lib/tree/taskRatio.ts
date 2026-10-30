@@ -29,8 +29,7 @@ export function taskRatio(projectId: string, nodes: readonly OutlineNode[]): str
   // never empties, and being synchronous it takes the request with it.
   const stack = [...(byParent.get(projectId) ?? [])];
   const seen = new Set<string>([projectId]);
-  while (stack.length) {
-    const node = stack.pop()!;
+  for (let node = stack.pop(); node; node = stack.pop()) {
     if (seen.has(node.id)) continue;
     seen.add(node.id);
     if (node.type === "task") {

@@ -92,7 +92,7 @@ export function selectProjectsForCommitment(
   const today = options.today ?? null;
   const leafOnly = options.leafOnly ?? true;
   const projectParentIds = new Set(
-    nodes.filter((n) => n.type === "project" && n.parentId).map((n) => n.parentId!),
+    nodes.flatMap((n) => (n.type === "project" && n.parentId ? [n.parentId] : [])),
   );
 
   return nodes.filter((n) => {

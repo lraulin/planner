@@ -255,12 +255,7 @@ export function registerFacets(
 ): Record<string, string[]> {
   const preparedLedger = annotateCategoryAssignability(ledger, ctx.offBudgetAccountIds);
   return collectDistinctValues(
-    REGISTER_FIELDS.map((field) => ({
-      id: field.id,
-      filterValue: field.filterValue
-        ? (row: TransactionListRow) => field.filterValue!(row)
-        : undefined,
-    })),
+    REGISTER_FIELDS.map((field) => ({ id: field.id, filterValue: field.filterValue })),
     viewRows(preparedLedger, query, ctx),
   );
 }
@@ -347,7 +342,8 @@ function narrowest(values: readonly (string | null)[], pick: "max" | "min") {
  * `2026-09-03-1307-register-date-presets` D6.
  */
 export function registerDateBound(query: RegisterQuery): RegisterDateBound | null {
-  if (query.viewId !== "all" || query.today === null) return null;
+  const { today } = query;
+  if (query.viewId !== "all" || today === null) return null;
   const filter = query.filters.date;
   if (filter === undefined) return null;
 
@@ -384,7 +380,7 @@ export function registerDateBound(query: RegisterQuery): RegisterDateBound | nul
           };
   } else {
     if (filter.ids.length === 0) return null;
-    const ranges = filter.ids.map((id) => calendarBandRange(id, query.today!));
+    const ranges = filter.ids.map((id) => calendarBandRange(id, today));
     if (ranges.some((range) => range === null)) return null;
     const known = ranges.filter(
       (range): range is { from: string; to: string } => range !== null,

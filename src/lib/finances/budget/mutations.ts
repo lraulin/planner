@@ -1241,10 +1241,13 @@ export async function moveBudgetStructureItem(
   );
   if (!placement) throw new Error("That item cannot move there.");
 
+  // resolveBudgetDrop placed it, so it is in the structure.
   const movingKind =
     moving.kind === "group"
-      ? structure.groups.find((group) => group.id === moving.id)!.kind
-      : structure.categories.find((category) => category.id === moving.id)!.kind;
+      ? structure.groups.find((group) => group.id === moving.id)?.kind
+      : structure.categories.find((category) => category.id === moving.id)?.kind;
+  if (!movingKind)
+    throw new Error(`placed budget item ${moving.id} is not in the structure`);
   const siblings = budgetSiblings(
     structure.groups,
     structure.categories,

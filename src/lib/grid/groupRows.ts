@@ -74,8 +74,8 @@ export function buildGroupRows<TRow, TNode, TDimension extends string>(
   const stack: Frame[] = [];
 
   function closeTo(depth: number) {
-    while (stack.length > depth) {
-      const frame = stack.pop()!;
+    // Order is irrelevant: each frame writes only its own header's count.
+    for (const frame of stack.splice(depth)) {
       const header = out[frame.rowIndex];
       if (header.kind === "group") header.count = frame.count;
     }

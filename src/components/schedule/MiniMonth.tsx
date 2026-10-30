@@ -71,10 +71,11 @@ export function MiniMonth({
           </div>
         ))}
         {cells.map((c, i) => {
-          if (!c.date || c.day == null) {
+          const { date, day } = c;
+          if (!date || day == null) {
             return <div key={`e-${i}`} />;
           }
-          const key = cellDateKey(year, mon, c.day);
+          const key = cellDateKey(year, mon, day);
           const isSelected = key === selectedKey;
           const isToday = key === todayKey;
           const isMarked = markedDays?.has(key) ?? false;
@@ -82,7 +83,7 @@ export function MiniMonth({
             <button
               key={key}
               type="button"
-              onClick={() => onSelectDay(c.date!)}
+              onClick={() => onSelectDay(date)}
               className={[
                 "relative rounded py-0.5 tabular",
                 isSelected
@@ -92,7 +93,7 @@ export function MiniMonth({
                     : "text-ink hover:bg-surface-raised",
               ].join(" ")}
             >
-              {c.day}
+              {day}
               {isMarked && (
                 <span
                   aria-hidden

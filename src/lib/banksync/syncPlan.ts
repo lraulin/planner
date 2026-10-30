@@ -226,16 +226,16 @@ export function planSync(input: SyncPlanInput): SyncPlan {
   // Stored pending rows inside the window that the provider stopped reporting. Either they
   // posted under a new id, or the bank dropped them — and the feed cannot say which, so what
   // happens to each is decided below, once the posted candidates are known.
-  const vanished: { accountId: string; row: ExistingRow }[] = [];
+  const vanished: { accountId: string; row: ExistingRow; externalId: string }[] = [];
   for (const [accountId, seen] of seenByAccount) {
     for (const row of existingByAccount.get(accountId) ?? []) {
       if (!row.pending || !row.externalId) continue;
       if (row.transactionDate < windowStart) continue;
       if (seen.has(row.externalId)) continue;
-      vanished.push({ accountId, row });
+      vanished.push({ accountId, row, externalId: row.externalId });
     }
   }
-  const deleted = new Set(vanished.map(({ row }) => row.externalId));
+  const deleted = new Set(vanished.map(({ externalId }) => externalId));
 
   // Cross-source dedup, per account, using `crossSource.ts` rather than the CSV importer's
   // matcher — a live feed and a statement disagree on dates and wrap descriptions in ways
@@ -275,8 +275,7 @@ export function planSync(input: SyncPlanInput): SyncPlan {
   const deletes: string[] = [];
   const carries: SyncCarry[] = [];
   const unlisted: string[] = [];
-  for (const { accountId, row } of vanished) {
-    const externalId = row.externalId!;
+  for (const { accountId, row, externalId } of vanished) {
     const candidates: {
       pairable: PairableRow;
       target: SyncCarry["to"];
@@ -312,7 +311,12 @@ export function planSync(input: SyncPlanInput): SyncPlan {
     }
     const successor = candidates.find(
       (candidate) => candidate.pairable.id === resolution.postedId,
-    )!;
+    );
+    if (!successor) {
+      throw new Error(
+        `lost hold ${externalId} paired with a row outside its candidates`,
+      );
+    }
     deletes.push(externalId);
     const carry = carryableFields(stateOf(row), successor.state);
     if (Object.keys(carry).length > 0) {

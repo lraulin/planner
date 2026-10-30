@@ -760,14 +760,15 @@ export async function replaceCommitmentPayeesInTransaction(
   const held = selected.find(
     (payee) => payee.claimedId !== null && payee.claimedId !== claim.id,
   );
-  if (held) {
+  const heldBy = held?.claimedId;
+  if (held && heldBy) {
     const [owner] = await tx
       .select({ name: financeBudgetCategories.name })
       .from(financeBudgetCategories)
       .where(
         and(
           eq(financeBudgetCategories.userId, userId),
-          eq(financeBudgetCategories.id, held.claimedId!),
+          eq(financeBudgetCategories.id, heldBy),
         ),
       );
     throw new Error(

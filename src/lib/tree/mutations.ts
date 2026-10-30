@@ -808,12 +808,7 @@ function moveDates(r: Recurrence, shift: number, next: Date, asOfDay: string) {
  * Whether this completion is the series' last, so the task finishes for real instead of
  * cycling. `completionsSoFar` excludes the completion being recorded right now.
  */
-function seriesEnds(
-  r: Recurrence,
-  next: Date | null,
-  completionsSoFar: number,
-): boolean {
-  if (!next) return true;
+function seriesEnds(r: Recurrence, next: Date, completionsSoFar: number): boolean {
   // A missing count is "ends after N times" with no N, which is not an instruction to
   // stop — reading it as 1 would silently finish the task on its very first completion.
   if (r.end === "count" && r.endCount != null) {
@@ -964,8 +959,8 @@ export async function applyStateTransition(
 
   // The one path on which a repeating task stays completed: its series is over. Its dates
   // are left where they are, so the record reads as the last occurrence rather than as one
-  // that never happened.
-  if (seriesEnds(recurrence, next, completionsSoFar)) {
+  // that never happened. No next occurrence at all ends it too.
+  if (!next || seriesEnds(recurrence, next, completionsSoFar)) {
     await finish();
     // The series is over, so nothing follows it onto a future day — but the day line still
     // gets checked off, exactly as it would for any other task being finished.
@@ -1007,8 +1002,8 @@ export async function applyStateTransition(
   //
   // Which fields get *created* when they were empty is the part that matters. See
   // `moveDates` below.
-  const shift = anchor ? daysBetween(anchor, next!) : 0;
-  const dates = moveDates(recurrence, shift, next!, completedDayKey);
+  const shift = anchor ? daysBetween(anchor, next) : 0;
+  const dates = moveDates(recurrence, shift, next, completedDayKey);
 
   await tx
     .update(nodes)

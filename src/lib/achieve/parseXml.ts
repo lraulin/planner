@@ -29,13 +29,13 @@ export function stripSchema(xml: string): string {
  */
 export function parseAchXml(xml: string): AchDocument {
   const stripped = stripSchema(xml);
-  const rootOpen = stripped.match(/<AchieveDB\b[^>]*>/i);
+  const rootOpen = /<AchieveDB\b[^>]*>/i.exec(stripped);
   const rootClose = stripped.lastIndexOf("</AchieveDB>");
   if (!rootOpen || rootClose < 0) {
     throw new Error("Not an Achieve Full XML file: missing <AchieveDB> root");
   }
 
-  const body = stripped.slice(rootOpen.index! + rootOpen[0].length, rootClose);
+  const body = stripped.slice(rootOpen.index + rootOpen[0].length, rootClose);
   const tables: Record<string, AchRow[]> = {};
   let majorDatabaseVersion: number | null = null;
   let databaseVersion: number | null = null;

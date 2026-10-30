@@ -1588,12 +1588,16 @@ async function writeSplitChildren(
       scope,
       beforeCheckpoint,
       afterCheckpoint,
-      changes: ids.map((id) => ({
-        entityType: id === parent.id ? "transaction" : "transaction_split_child",
-        entityIdentity: id,
-        before: beforeById.has(id) ? transactionAuditFields(beforeById.get(id)!) : null,
-        after: afterById.has(id) ? transactionAuditFields(afterById.get(id)!) : null,
-      })),
+      changes: ids.map((id) => {
+        const before = beforeById.get(id);
+        const after = afterById.get(id);
+        return {
+          entityType: id === parent.id ? "transaction" : "transaction_split_child",
+          entityIdentity: id,
+          before: before ? transactionAuditFields(before) : null,
+          after: after ? transactionAuditFields(after) : null,
+        };
+      }),
     });
   });
 }

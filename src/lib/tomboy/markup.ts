@@ -84,11 +84,12 @@ function parseXmlFragment(source: string): XmlNode[] {
 
     if (token.startsWith("/")) {
       const closeName = tagName(token.slice(1));
-      if (stack.length === 1 || stack[stack.length - 1].name !== closeName) {
+      const frame = stack.pop();
+      const parent = stack.at(-1);
+      if (!frame || !parent || frame.name !== closeName) {
         throw new Error(`Unexpected closing </${closeName}> in note content.`);
       }
-      const frame = stack.pop()!;
-      stack[stack.length - 1].children.push({
+      parent.children.push({
         type: "element",
         name: frame.name,
         children: frame.children,

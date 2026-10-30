@@ -23,7 +23,8 @@ export function InvitesPanel({ initialInvites }: { initialInvites: InviteListIte
         setError(result.ok ? "Could not create the invite." : result.error);
         return;
       }
-      setInvites((rows) => [result.data!, ...rows]);
+      const invite = result.data;
+      setInvites((rows) => [invite, ...rows]);
     } finally {
       setPending(false);
     }

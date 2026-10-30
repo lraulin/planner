@@ -40,14 +40,14 @@ function isSplitChild(row: RegisterTransactionRow): boolean {
 export const FINANCE_COLUMN_IDS = REGISTER_VISIBLE_COLUMN_IDS;
 
 function accessors(id: RegisterFieldId) {
-  const field = registerFields[id];
+  const { filterKind, filterValue, sortValue } = registerFields[id];
   return {
-    filterKind: field.filterKind,
-    filterValue: field.filterValue
-      ? (row: NodeGridRow<RegisterTransactionRow>) => field.filterValue!(row.node)
+    filterKind,
+    filterValue: filterValue
+      ? (row: NodeGridRow<RegisterTransactionRow>) => filterValue(row.node)
       : undefined,
-    sortValue: field.sortValue
-      ? (row: NodeGridRow<RegisterTransactionRow>) => field.sortValue!(row.node)
+    sortValue: sortValue
+      ? (row: NodeGridRow<RegisterTransactionRow>) => sortValue(row.node)
       : undefined,
   };
 }

@@ -965,16 +965,14 @@ export async function findCommitmentCandidatesTool(
   const review = await loadReviewCandidates(userId);
   const query = (optionalString(args, "query") ?? "").trim().toLocaleLowerCase();
   const rows = review
-    .filter((entry) => entry.payeeId !== null)
     .filter(
       (entry) => query === "" || entry.merchant.toLocaleLowerCase().includes(query),
     )
-    .map((entry) => ({
-      payeeId: entry.payeeId!,
-      payeeName: entry.merchant,
-      typicalCents: entry.typicalCents,
-      chargeCount: entry.chargeCount,
-    }));
+    .flatMap(({ payeeId, merchant, typicalCents, chargeCount }) =>
+      payeeId === null
+        ? []
+        : [{ payeeId, payeeName: merchant, typicalCents, chargeCount }],
+    );
   const page = paginate(
     rows,
     pageBounds(optionalNumber(args, "offset"), optionalNumber(args, "limit")),

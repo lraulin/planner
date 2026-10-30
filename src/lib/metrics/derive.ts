@@ -167,11 +167,13 @@ export function dateKeyOrdinal(dateKey: string): number {
 
 /** Inverse of {@link dateKeyOrdinal}. */
 export function ordinalToDateKey(ordinal: number): string {
-  const d = new Date(ordinal * 86_400_000);
-  const y = d.getUTCFullYear();
-  const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${mo}-${day}`;
+  const { y, m, d } = ordinalToDateParts(ordinal);
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+function ordinalToDateParts(ordinal: number): { y: number; m: number; d: number } {
+  const date = new Date(ordinal * 86_400_000);
+  return { y: date.getUTCFullYear(), m: date.getUTCMonth() + 1, d: date.getUTCDate() };
 }
 
 /**
@@ -323,12 +325,10 @@ export function niceTimeTicks(
   if (unit === "day") {
     // Start at domain min so daily series line up with the first sample day.
     for (let t = lo; t <= hi; t += step) {
-      const dateKey = ordinalToDateKey(t);
-      const p = parseDateParts(dateKey)!;
-      raw.push({ dateKey, ...p });
+      raw.push({ dateKey: ordinalToDateKey(t), ...ordinalToDateParts(t) });
     }
   } else if (unit === "month") {
-    const start = parseDateParts(minKey)!;
+    const start = ordinalToDateParts(lo);
     // First month-start on or after minDate.
     let y = start.y;
     let m = start.m;
@@ -350,8 +350,8 @@ export function niceTimeTicks(
       if (raw.length > 64) break;
     }
   } else {
-    const startY = parseDateParts(minKey)!.y;
-    const endY = parseDateParts(maxKey)!.y;
+    const startY = ordinalToDateParts(lo).y;
+    const endY = ordinalToDateParts(hi).y;
     // First year tick on or after min (Jan 1).
     let y = startY;
     if (minKey > yearKey(y)) y += 1;

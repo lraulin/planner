@@ -71,6 +71,10 @@ async function nextSortKey(tx: Executor, userId: string): Promise<string> {
 
 function numericString(n: number | null | undefined): string | null {
   if (n === null || n === undefined) return null;
+  return finiteString(n);
+}
+
+function finiteString(n: number): string {
   if (!Number.isFinite(n)) throw new Error("Value must be a finite number.");
   return String(n);
 }
@@ -247,7 +251,7 @@ export async function createMetricEntryOnce(
         entryDate: input.entryDate,
         entryType: input.entryType ?? "new_total",
         target: numericString(input.target),
-        value: numericString(input.value)!,
+        value: finiteString(input.value),
         externalSource: input.external?.source ?? null,
         externalId: input.external?.id ?? null,
       })
@@ -341,7 +345,7 @@ export async function importMetricEntries(
           entryDate: input.entryDate,
           entryType: input.entryType ?? "new_total",
           target: numericString(input.target),
-          value: numericString(input.value)!,
+          value: finiteString(input.value),
         })
         .returning({ id: metricEntries.id });
       createdIds.push(row.id);

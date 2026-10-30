@@ -494,15 +494,18 @@ function applyDesired(
 
   let available = Math.max(0, rta) + freed;
   const increases = participants
-    .filter((envelope) => {
+    .flatMap((envelope) => {
       const desired = desiredOf.get(envelope.id);
-      return desired !== undefined && desired > envelope.assignedCents;
+      return desired !== undefined && desired > envelope.assignedCents
+        ? [{ envelope, desired }]
+        : [];
     })
-    .sort((left, right) => compareUnderfunded(left, right, month, indexOf));
+    .sort((left, right) =>
+      compareUnderfunded(left.envelope, right.envelope, month, indexOf),
+    );
 
   const increaseLines: AssignLine[] = [];
-  for (const envelope of increases) {
-    const desired = desiredOf.get(envelope.id)!;
+  for (const { envelope, desired } of increases) {
     const want = desired - envelope.assignedCents;
     const given = Math.min(want, available);
     available -= given;

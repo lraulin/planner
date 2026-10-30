@@ -128,8 +128,7 @@ export function descendantGroupIds(
 
   const found = new Set<string>();
   const stack = [...(children.get(rootId) ?? [])];
-  while (stack.length > 0) {
-    const id = stack.pop()!;
+  for (let id = stack.pop(); id !== undefined; id = stack.pop()) {
     if (id === rootId) throw new Error("Budget groups contain a cycle.");
     if (found.has(id)) continue;
     found.add(id);
@@ -329,19 +328,20 @@ export function resolveBudgetDrop(
   const targetGroup = target.kind === "group" ? groupById.get(target.id) : undefined;
   const targetCategory =
     target.kind === "category" ? categoryById.get(target.id) : undefined;
-  if ((!movingGroup && !movingCategory) || (!targetGroup && !targetCategory))
-    return null;
-  if (zone === "inside" && !targetGroup) return null;
+  const movingKind = movingCategory?.kind ?? movingGroup?.kind;
+  if (!movingKind || (!targetGroup && !targetCategory)) return null;
+  // The group dropped into: null for a before/after drop, undefined for a drop inside a
+  // category, which has nothing to drop into.
+  const insideOf = zone === "inside" ? targetGroup : null;
+  if (insideOf === undefined) return null;
 
-  const parentGroupId =
-    zone === "inside"
-      ? targetGroup!.id
-      : (targetGroup?.parentGroupId ?? targetCategory?.groupId ?? null);
+  const parentGroupId = insideOf
+    ? insideOf.id
+    : (targetGroup?.parentGroupId ?? targetCategory?.groupId ?? null);
 
   // One column comparison, where this used to walk every descendant envelope to guess a
   // section: a group states its own (`agent-os/specs/2026-08-28-1613-group-kind/` D7). The
   // section root accepts anything of its own kind, which is what a null parent means here.
-  const movingKind = movingCategory ? movingCategory.kind : movingGroup!.kind;
   const destinationKind = parentGroupId
     ? (groupById.get(parentGroupId)?.kind ?? null)
     : null;
@@ -355,13 +355,13 @@ export function resolveBudgetDrop(
   const siblings = budgetSiblings(groups, categories, parentGroupId, movingKind).filter(
     (item) => item.kind !== moving.kind || item.id !== moving.id,
   );
-  if (zone === "inside") {
+  if (insideOf) {
     const previous = siblings.at(-1) ?? null;
     return {
       parentGroupId,
       previous,
       next: null,
-      depth: (budgetGroupDepths(groups).get(targetGroup!.id) ?? 0) + 1,
+      depth: (budgetGroupDepths(groups).get(insideOf.id) ?? 0) + 1,
     };
   }
 
@@ -401,7 +401,8 @@ export function moveDestinations(
     moving.kind === "category"
       ? categories.find((entry) => entry.id === moving.id)
       : undefined;
-  if (!movingGroup && !movingCategory) return [];
+  const movingKind = movingCategory?.kind ?? movingGroup?.kind;
+  if (!movingKind) return [];
 
   const parentId = movingGroup
     ? movingGroup.parentGroupId
@@ -411,8 +412,6 @@ export function moveDestinations(
     ? descendantGroupIds(groups, movingGroup.id)
     : new Set<string>();
   if (movingGroup) excluded.add(movingGroup.id);
-
-  const movingKind = movingCategory ? movingCategory.kind : movingGroup!.kind;
 
   return groups.filter(
     (entry) =>

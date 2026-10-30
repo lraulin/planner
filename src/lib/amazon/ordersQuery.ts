@@ -127,12 +127,7 @@ export function prepareAmazonOrders(
   query: AmazonOrdersQuery,
 ): AmazonOrdersPrepared {
   const facets = collectDistinctValues(
-    AMAZON_FIELDS.map((field) => ({
-      id: field.id,
-      filterValue: field.filterValue
-        ? (row: AmazonItemListRow) => field.filterValue!(row)
-        : undefined,
-    })),
+    AMAZON_FIELDS.map((field) => ({ id: field.id, filterValue: field.filterValue })),
     items,
   );
   const matched = passingRows(items, query, amazonFilterValues, FIELD_KINDS);

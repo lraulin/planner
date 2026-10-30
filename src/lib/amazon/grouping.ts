@@ -159,23 +159,24 @@ export function amazonGroupOrderTotals(
   rows: readonly GridRow<AmazonItemListRow>[],
 ): Map<string, AmazonGroupTotals> {
   const totals = new Map<string, AmazonGroupTotals>();
-  const counted = new Map<string, Set<string>>();
-  const stack: { id: string; depth: number }[] = [];
+  // Each open group carries its own running totals and the orders already counted in it.
+  const stack: { depth: number; current: AmazonGroupTotals; seen: Set<string> }[] = [];
   for (const row of rows) {
     if (row.kind === "group") {
       while (stack.length > 0 && stack[stack.length - 1].depth >= row.depth) {
         stack.pop();
       }
-      totals.set(row.id, { grandTotalCents: null, unreconciledOrders: 0 });
-      counted.set(row.id, new Set());
-      stack.push({ id: row.id, depth: row.depth });
+      const current: AmazonGroupTotals = {
+        grandTotalCents: null,
+        unreconciledOrders: 0,
+      };
+      totals.set(row.id, current);
+      stack.push({ depth: row.depth, current, seen: new Set() });
       continue;
     }
-    for (const frame of stack) {
-      const seen = counted.get(frame.id)!;
+    for (const { current, seen } of stack) {
       if (seen.has(row.node.amazonOrderId)) continue;
       seen.add(row.node.amazonOrderId);
-      const current = totals.get(frame.id)!;
       if (row.node.orderGrandTotalCents !== null) {
         current.grandTotalCents =
           (current.grandTotalCents ?? 0) + row.node.orderGrandTotalCents;

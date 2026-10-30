@@ -15,14 +15,14 @@ import { walkUp } from "./walkUp";
  */
 export function derive(rows: OutlineRow[]): OutlineNode[] {
   const byId = new Map<string, OutlineRow>();
-  const childIds = new Map<string, string[]>();
+  const childRows = new Map<string, OutlineRow[]>();
 
   for (const row of rows) {
     byId.set(row.id, row);
     if (row.parentId) {
-      const siblings = childIds.get(row.parentId);
-      if (siblings) siblings.push(row.id);
-      else childIds.set(row.parentId, [row.id]);
+      const siblings = childRows.get(row.parentId);
+      if (siblings) siblings.push(row);
+      else childRows.set(row.parentId, [row]);
     }
   }
 
@@ -166,7 +166,7 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
 
   for (let i = rows.length - 1; i >= 0; i--) {
     const row = rows[i];
-    const children = childIds.get(row.id) ?? [];
+    const children = childRows.get(row.id) ?? [];
 
     if (children.length === 0) {
       const effort = row.effortMinutes;
@@ -184,7 +184,7 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     let actual = row.actualEffortMinutes ?? 0;
     let weighted = 0;
 
-    for (const childId of children) {
+    for (const { id: childId } of children) {
       // A cycle or a child that has not been visited yet has no rollup. Skip it
       // rather than treating the missing bag as zero effort.
       const child = rollups.get(childId);
@@ -211,8 +211,10 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
 
     const lap = lapFor(row.id);
     const projectPriority = projectPriorityFor(row.id);
-    const rollup = rollups.get(row.id)!;
-    const children = childIds.get(row.id) ?? [];
+    const rollup = rollups.get(row.id);
+    // The backwards pass above gives every row one.
+    if (!rollup) throw new Error(`outline row ${row.id} has no rollup`);
+    const children = childRows.get(row.id) ?? [];
 
     return {
       ...row,
@@ -231,10 +233,7 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
           : 0,
       childCount: children.length,
       hasChildren: children.length > 0,
-      hasActiveChildren: children.some((id) => {
-        const child = byId.get(id)!;
-        return !isSettled(child.state);
-      }),
+      hasActiveChildren: children.some((child) => !isSettled(child.state)),
       hidden: parentHidden,
       shelf: shelfFor(row.id),
     };

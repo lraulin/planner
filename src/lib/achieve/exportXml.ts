@@ -165,27 +165,24 @@ export function buildAchieveXml(
   }
 
   // Categories from result areas.
-  const categoryNames: string[] = [];
-  const categoryIdByName = new Map<string, string>();
+  // A category's id is a function of its name, so a result area finds its category's id
+  // without a lookup that could miss.
+  const categoryNames = new Set<string>();
   for (const { row } of exported) {
     if (row.type !== "result_area") continue;
-    const name = (row.category ?? "").trim() || "Uncategorized";
-    if (!categoryIdByName.has(name)) {
-      const id = syntheticGuid(`cat:${name}`);
-      categoryIdByName.set(name, id);
-      categoryNames.push(name);
-    }
+    categoryNames.add((row.category ?? "").trim() || "Uncategorized");
   }
+  const categoryId = (name: string) => syntheticGuid(`cat:${name}`);
 
   // Stable Achieve-style GUIDs derived from our ids so re-export is deterministic.
   const achId = (id: string) => syntheticGuid(`node:${id}`);
 
   const parts: string[] = [`<?xml version="1.0" standalone="yes"?>`, `<AchieveDB>`];
 
-  categoryNames.forEach((name, i) => {
+  [...categoryNames].forEach((name, i) => {
     parts.push(
       element("ResultAreaCategories", {
-        CategoryId: categoryIdByName.get(name)!,
+        CategoryId: categoryId(name),
         Name: name,
         WorkRelated: name.toLowerCase() === "work" ? "true" : "false",
         __ORDINAL__: String(i),
@@ -204,7 +201,7 @@ export function buildAchieveXml(
     parts.push(
       element("ResultAreas", {
         ResultAreaId: achId(row.id),
-        CategoryId: categoryIdByName.get(catName)!,
+        CategoryId: categoryId(catName),
         Name: row.name,
         Description: row.description ?? "",
         ParentResultAreaId: parent,
@@ -223,7 +220,7 @@ export function buildAchieveXml(
     if (row.type !== "goal") continue;
     counts.goal++;
     const parentRow = exportParentId ? byId.get(exportParentId) : null;
-    const parentGoal = parentRow?.type === "goal" ? achId(exportParentId!) : null;
+    const parentGoal = parentRow?.type === "goal" ? achId(parentRow.id) : null;
     const resultAreaId = nearestOfType(row.id, "result_area", byId);
     // Prefer a direct project child as the Achieve ProjectId link.
     const linkedProject = exported.find(
@@ -238,8 +235,7 @@ export function buildAchieveXml(
         ResultAreaId: resultAreaId ? achId(resultAreaId) : undefined,
         ParentGoalId: !row.isDream ? parentGoal : undefined,
         ParentDreamId: row.isDream ? parentGoal : undefined,
-        DreamId:
-          !row.isDream && parentRow?.isDream ? achId(exportParentId!) : undefined,
+        DreamId: !row.isDream && parentRow?.isDream ? achId(parentRow.id) : undefined,
         ProjectId: linkedProject ? achId(linkedProject.row.id) : undefined,
         Definition: row.definition ?? row.description ?? "",
         Purpose: row.purpose,
@@ -274,7 +270,7 @@ export function buildAchieveXml(
     if (row.type !== "project") continue;
     counts.project++;
     const parentRow = exportParentId ? byId.get(exportParentId) : null;
-    const parentProject = parentRow?.type === "project" ? achId(exportParentId!) : null;
+    const parentProject = parentRow?.type === "project" ? achId(parentRow.id) : null;
     const resultAreaId = nearestOfType(row.id, "result_area", byId);
     if (!resultAreaId) {
       warnings.push(
@@ -332,7 +328,7 @@ export function buildAchieveXml(
     if (row.type !== "task") continue;
     counts.task++;
     const parentRow = exportParentId ? byId.get(exportParentId) : null;
-    const parentTask = parentRow?.type === "task" ? achId(exportParentId!) : null;
+    const parentTask = parentRow?.type === "task" ? achId(parentRow.id) : null;
     const projectId = nearestOfType(row.id, "project", byId);
     const resultAreaId = nearestOfType(row.id, "result_area", byId);
     if (!projectId && !parentTask) {

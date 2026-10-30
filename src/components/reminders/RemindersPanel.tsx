@@ -166,6 +166,8 @@ function ReminderRow({ reminder, now }: { reminder: PanelReminder; now: Date }) 
     navigate(href);
   }
 
+  const { blockProjectId } = reminder;
+
   return (
     <li className="px-4 py-3">
       <div className="flex items-start gap-3">
@@ -209,10 +211,10 @@ function ReminderRow({ reminder, now }: { reminder: PanelReminder; now: Date }) 
         >
           Open
         </button>
-        {reminder.blockProjectId && (
+        {blockProjectId && (
           <button
             type="button"
-            onClick={() => go(viewTasksHref(reminder.blockProjectId!))}
+            onClick={() => go(viewTasksHref(blockProjectId))}
             className={ACTION}
           >
             View tasks

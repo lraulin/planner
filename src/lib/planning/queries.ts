@@ -83,7 +83,6 @@ export async function loadPreviousRewrites(
   const earlier = plans.filter((p) => p.weekStart < beforeWeekStart);
   if (earlier.length === 0) return new Map();
 
-  const byPlanId = new Map(earlier.map((p) => [p.id, p.weekStart]));
   const entries = await db
     .select({
       planId: weeklyPlanEntries.planId,
@@ -110,7 +109,7 @@ export async function loadPreviousRewrites(
       if (result.has(entry.nodeId)) continue;
       result.set(entry.nodeId, {
         rewrite: entry.rewrite,
-        weekStart: byPlanId.get(plan.id)!,
+        weekStart: plan.weekStart,
       });
     }
   }

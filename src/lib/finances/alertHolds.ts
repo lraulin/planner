@@ -157,7 +157,13 @@ export async function retireAlertHolds(
 
     if (resolution.outcome === "carry") {
       taken.add(resolution.postedId);
-      const carry = carryableFields(hold, stateById.get(resolution.postedId)!);
+      const successorState = stateById.get(resolution.postedId);
+      if (!successorState) {
+        throw new Error(
+          `alert hold ${hold.id} paired with a row outside its candidates`,
+        );
+      }
+      const carry = carryableFields(hold, successorState);
       if (Object.keys(carry).length > 0) {
         await executor
           .update(financeTransactions)

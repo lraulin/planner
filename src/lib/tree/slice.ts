@@ -577,31 +577,28 @@ function gatherByGroupKeys(
     if (level >= groupBy.length || items.length <= 1) return items;
 
     const dim = groupBy[level];
-    const buckets = new Map<string, Prepared[]>();
-    const order: string[] = [];
+    // In first-seen order; a group is labelled by its first item, as the header shows it.
+    const groups = new Map<string, Bucket>();
 
     for (const item of items) {
-      const { key } = groupKey(dim, item, today);
-      const bucket = buckets.get(key);
-      if (bucket) {
-        bucket.push(item);
+      const { key, label } = groupKey(dim, item, today);
+      const group = groups.get(key);
+      if (group) {
+        group.items.push(item);
       } else {
-        buckets.set(key, [item]);
-        order.push(key);
+        groups.set(key, { key, label, items: [item] });
       }
     }
 
-    sortGroupKeys(dim, order, buckets, today);
-
-    const out: Prepared[] = [];
-    for (const key of order) {
-      out.push(...partition(buckets.get(key)!, level + 1));
-    }
-    return out;
+    return sortBuckets(dim, [...groups.values()]).flatMap((group) =>
+      partition(group.items, level + 1),
+    );
   }
 
   return partition(kept, 0);
 }
+
+type Bucket = { key: string; label: string; items: Prepared[] };
 
 /**
  * Header order within one level, in place.
@@ -619,38 +616,27 @@ function gatherByGroupKeys(
  *   column sort and the dropdown. First-seen would put headers in whatever order those
  *   states happened to appear in the outline.
  */
-function sortGroupKeys(
-  dim: GroupBy,
-  order: string[],
-  buckets: Map<string, Prepared[]>,
-  today: string | null,
-): void {
+function sortBuckets(dim: GroupBy, buckets: Bucket[]): Bucket[] {
   if (dim === "category") {
-    order.sort((a, b) => {
-      const labelA = groupKey(dim, buckets.get(a)![0], today).label;
-      const labelB = groupKey(dim, buckets.get(b)![0], today).label;
-      return compareCategories(labelA, labelB);
-    });
-    return;
+    return buckets.sort((a, b) => compareCategories(a.label, b.label));
   }
-
   if (dim === "priorityLetter") {
-    order.sort(
-      (a, b) => rankOf(a, PRIORITY_LETTER_ORDER) - rankOf(b, PRIORITY_LETTER_ORDER),
+    return buckets.sort(
+      (a, b) =>
+        rankOf(a.key, PRIORITY_LETTER_ORDER) - rankOf(b.key, PRIORITY_LETTER_ORDER),
     );
-    return;
   }
-
   if (dim === "deadlineBand") {
-    order.sort(
-      (a, b) => rankOf(a, DEADLINE_BAND_ORDER) - rankOf(b, DEADLINE_BAND_ORDER),
+    return buckets.sort(
+      (a, b) => rankOf(a.key, DEADLINE_BAND_ORDER) - rankOf(b.key, DEADLINE_BAND_ORDER),
     );
-    return;
   }
-
   if (dim === "state") {
-    order.sort((a, b) => rankOf(a, STATE_ORDER) - rankOf(b, STATE_ORDER));
+    return buckets.sort(
+      (a, b) => rankOf(a.key, STATE_ORDER) - rankOf(b.key, STATE_ORDER),
+    );
   }
+  return buckets;
 }
 
 /** Position in a fixed order; anything unrecognised sorts last rather than first. */
@@ -688,8 +674,8 @@ function emitGrouped(
   const stack: Frame[] = [];
 
   function closeTo(depth: number) {
-    while (stack.length > depth) {
-      const frame = stack.pop()!;
+    // Order is irrelevant: each frame writes only its own header's count.
+    for (const frame of stack.splice(depth)) {
       const row = out[frame.rowIndex];
       if (row.kind === "group") row.count = frame.count;
     }
