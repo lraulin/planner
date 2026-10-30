@@ -189,6 +189,22 @@ export async function listEvents(
   return out;
 }
 
+/**
+ * One event by id. Used to read a series master — its own start, which no instance row
+ * stores — before editing the series from one of its occurrences.
+ */
+export async function getEvent(
+  userId: string,
+  calendarId: string,
+  eventId: string,
+): Promise<GoogleEvent> {
+  const token = await getGoogleAccessToken(userId);
+  return (await googleFetch(
+    token,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+  )) as GoogleEvent;
+}
+
 export async function insertEvent(
   userId: string,
   calendarId: string,

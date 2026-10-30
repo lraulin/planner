@@ -348,7 +348,7 @@ complete input/output JSON Schemas.
 
 Update one calendar appointment.
 
-- Use when: Use after identifying the appointment and intended changes.
+- Use when: Use after identifying the appointment and intended changes. On one occurrence of a repeating Google event this edits the whole series, like Google Calendar's "All events": the series keeps its own first date and takes the new time, length, and fields. Moving it to another date is refused.
 - Avoid when: Do not retry automatically; Google synchronization is not atomic with local storage.
 - Returns: The updated appointment summary.
 - Effects: write; destructive=false; retry=unsafe; confirmation=user_intent

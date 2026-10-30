@@ -3,6 +3,7 @@ import {
   GoogleApiError,
   GoogleEventGoneError,
   GoogleNotLinkedError,
+  SeriesDateChangeError,
 } from "@/lib/google/errors";
 import {
   AgentError,
@@ -114,6 +115,14 @@ describe("toAgentError", () => {
     );
     expect(mapped.code).toBe("not_found");
     expect(mapped.message).toBe("This event no longer exists in Google Calendar.");
+  });
+
+  it("maps a refused series date change to validation with its guidance", () => {
+    // Not "internal": the caller can fix this by keeping the date or dragging one occurrence.
+    const mapped = toAgentError(new SeriesDateChangeError());
+    expect(mapped.code).toBe("validation");
+    expect(mapped.message).toMatch(/only the time/);
+    expect(mapped.errorId).toBeUndefined();
   });
 
   it("reports a Google 5xx as a retryable upstream failure with the status", () => {

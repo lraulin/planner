@@ -478,7 +478,8 @@ export async function updateAppointment(
     patch.recurrenceUntil = input.recurrenceUntil;
 
   // Push before writing locally: if Google rejects the change, the mutation throws and the
-  // stored row still matches what Google holds.
+  // stored row still matches what Google holds. On an occurrence of a Google series this
+  // edits the whole series but keeps its first date ("All events"); see `EditScope`.
   const stamp = await pushUpdate(userId, existing, pushableFrom(existing, patch));
   if (stamp) Object.assign(patch, stamp);
 
@@ -561,7 +562,12 @@ export async function rescheduleAppointment(
 
   // Dragging a Google event in the week grid moves it in Google. For an instance of a
   // series this moves that occurrence only, which is what Google's own UI does too.
-  const stamp = await pushUpdate(userId, existing, pushableFrom(existing, patch));
+  const stamp = await pushUpdate(
+    userId,
+    existing,
+    pushableFrom(existing, patch),
+    "occurrence",
+  );
   if (stamp) Object.assign(patch, stamp);
 
   const [row] = await db
