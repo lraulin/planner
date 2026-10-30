@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,9 +13,9 @@ import {
   taskDetails,
   timeChartAreas,
   timeCharts,
-  users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { loadOutline } from "@/lib/tree/queries";
 import { importAchieveXml, writeMappedOutline } from "./import";
 import { mapOutline } from "./mapOutline";
@@ -31,25 +31,7 @@ const fixture = readFileSync(
   "utf8",
 );
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `achieve-import-${crypto.randomUUID()}@localhost`,
-      name: "Achieve Import Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("achieve-import");
 
 describeDb("importAchieveXml", () => {
   let userId: string;

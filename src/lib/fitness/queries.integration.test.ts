@@ -1,8 +1,6 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { users } from "@/db/schema";
+import { beforeEach, describe, expect, it } from "vitest";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { createExercise, createSession, replaceSession } from "./mutations";
 import { planDraftFromDetail } from "./sessionDraft";
 import {
@@ -17,22 +15,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("fitness queries");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("test");
 
 describeDb("repeatable titles and last-time preference", () => {
   let userId: string;

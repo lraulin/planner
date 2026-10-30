@@ -1,10 +1,11 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeBudgetCategories, users } from "@/db/schema";
+import { financeBudgetCategories } from "@/db/schema";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import { listSplitChildren, listTransactions } from "@/lib/finances/queries";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { applyAmazonSnapshotText } from "./apply";
 import { listAmazonItems, listAmazonSubscriptions } from "./queries";
 import { parseAmazonOrderSummary } from "./orderSummary";
@@ -15,25 +16,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("amazon snapshot apply");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `amazon-apply-${crypto.randomUUID()}@localhost`,
-      name: "Amazon Apply Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("amazon-apply");
 
 function snapshotText() {
   return serializeAmazonSnapshot({

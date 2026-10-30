@@ -1,8 +1,9 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { nodes, users } from "@/db/schema";
+import { nodes } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { setTcPriorities } from "@/lib/tree/priorityWrites";
 import { loadOutline } from "@/lib/tree/queries";
@@ -18,16 +19,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("tc priority");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `tc-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("tc");
 
 async function makeTask(userId: string, name: string): Promise<string> {
   return createNode({ userId, type: "task", parentId: null, name });
@@ -45,12 +37,6 @@ async function rankingOf(userId: string): Promise<string[]> {
     )
     .map((row) => `${row.name}→${row.tcPriorityLetter}${row.tcPriorityRank}`);
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("setTcPriorities", () => {
   it("persists a batch and reads it back through loadOutline", async () => {

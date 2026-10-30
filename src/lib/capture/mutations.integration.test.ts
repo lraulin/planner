@@ -1,8 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { nodes, users } from "@/db/schema";
+import { nodes } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { loadNodeDetail } from "@/lib/detail/queries";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { createNode, deleteNode, renameNode } from "@/lib/tree/mutations";
@@ -21,16 +22,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("capture mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("test");
 
 /** The outline as indented names, for readable assertions. */
 async function outlineOf(userId: string): Promise<string[]> {
@@ -46,12 +38,6 @@ async function nodeById(userId: string, id: string) {
     .limit(1);
   return node;
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("ensureInbox", () => {
   let userId: string;

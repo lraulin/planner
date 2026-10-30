@@ -1,8 +1,8 @@
-import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { financeStatements, users } from "@/db/schema";
+import { financeStatements } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles } from "./import";
 import { splitTransaction } from "./mutations";
 import {
@@ -16,25 +16,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("statements view");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `statements-view-${crypto.randomUUID()}@localhost`,
-      name: "Statements View Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("statements-view");
 
 const HEADER = "Transaction Date,Post Date,Description,Category,Type,Amount,Memo";
 

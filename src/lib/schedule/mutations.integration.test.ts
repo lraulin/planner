@@ -1,8 +1,8 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { appointments, users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { appointments } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import {
   createAppointment,
@@ -42,19 +42,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("schedule mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `test-${crypto.randomUUID()}@localhost`,
-      name: "Test User",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("test");
 
 /**
  * `createAppointment` returns null only when a recurring create is waiting on a mirror
@@ -77,12 +65,6 @@ function hourAt(key: string) {
   startAt.setHours(9, 0, 0, 0);
   return { startAt, endAt: new Date(startAt.getTime() + 60 * 60_000) };
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("time charts", () => {
   let userId: string;

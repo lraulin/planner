@@ -1,8 +1,6 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { users } from "@/db/schema";
+import { beforeEach, describe, expect, it } from "vitest";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { dispatchAgentTool } from "./tools";
@@ -17,20 +15,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("move_node agent tool");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `move-node-${crypto.randomUUID()}@localhost`, name: "Move Node" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) await db.delete(users).where(eq(users.id, id));
-});
+const makeUser = testUsers("move-node");
 
 type Moved = { node: { id: string; parentId: string | null; path: string } };
 

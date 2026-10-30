@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -9,9 +9,9 @@ import {
   financeSupplyGroups,
   financeSupplyItems,
   financeSupplyOptions,
-  users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { monthKeyOf } from "@/lib/finances/budget/envelope";
 import { localDateKey } from "@/lib/schedule/geometry";
 import {
@@ -38,16 +38,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("supply mutations");
 
-async function makeUser(label: string): Promise<string> {
-  const [row] = await db
-    .insert(users)
-    .values({
-      email: `supplies-${label}-${crypto.randomUUID()}@example.com`,
-      name: label,
-    })
-    .returning({ id: users.id });
-  return row.id;
-}
+const makeUser = testUsers("supplies");
 
 const CAT_FOOD = {
   name: "Canned Cat Food",
@@ -93,11 +84,6 @@ describeDb("supply worksheet", () => {
   beforeEach(async () => {
     owner = await makeUser("owner");
     intruder = await makeUser("intruder");
-  });
-
-  afterEach(async () => {
-    if (owner) await db.delete(users).where(eq(users.id, owner));
-    if (intruder) await db.delete(users).where(eq(users.id, intruder));
   });
 
   it("prices an item from its in-use option and leaves comparisons inert", async () => {

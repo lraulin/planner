@@ -1,8 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeTransactions, users } from "@/db/schema";
+import { financeTransactions } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import {
   reclassifyTransactions,
@@ -17,25 +18,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("finance reclassify");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `finance-reclassify-${crypto.randomUUID()}@localhost`,
-      name: "Finance Reclassify Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("finance-reclassify");
 
 const CHASE_HEADER = "Transaction Date,Post Date,Description,Category,Type,Amount,Memo";
 const CAPONE_BANK_HEADER =

@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -7,7 +7,6 @@ import {
   financeBudgetCategories,
   financeTransactions,
   reminderOccurrences,
-  users,
 } from "@/db/schema";
 import { seedBudget } from "@/lib/finances/budget/mutations";
 import { upsertBillEnvelope } from "@/lib/finances/mutations";
@@ -15,6 +14,7 @@ import { shiftDateKey } from "@/lib/schedule/geometry";
 import { READER_TIME_ZONE, readerTodayKey } from "@/lib/schedule/readerZone";
 import { zonedWallTime } from "@/lib/schedule/zonedTime";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { checkReadyToAssign, fireOccurrence } from "./arm";
 import { listFiredReminders } from "./queries";
 
@@ -28,22 +28,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("finance reminders");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("test");
 
 async function checking(userId: string): Promise<string> {
   const [row] = await db
@@ -154,14 +139,12 @@ describeDb("Ready to Assign", () => {
         ),
       )
       .limit(1);
-    await db
-      .insert(financeBudgetAllocations)
-      .values({
-        userId,
-        month: MONTH,
-        categoryId: category.id,
-        amountCents: 1_000_000,
-      });
+    await db.insert(financeBudgetAllocations).values({
+      userId,
+      month: MONTH,
+      categoryId: category.id,
+      amountCents: 1_000_000,
+    });
 
     expect(await checkReadyToAssign(userId, NOW)).toBe("notified");
     // Still negative after the next import: one notice per episode, not one per write.

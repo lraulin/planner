@@ -1,7 +1,7 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { contactItems, contacts, users } from "@/db/schema";
+import { contactItems, contacts } from "@/db/schema";
 import {
   createContact,
   createContactItem,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/contacts/mutations";
 import { loadContacts } from "@/lib/contacts/queries";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import type { RemoteContactItem, RemoteGoogleContact } from "./mapping";
 import { applyGoogleContactSync, clearGoogleContactMirror } from "./mutations";
 import { getGoogleContactSync } from "./queries";
@@ -17,25 +18,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("google contacts sync");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `google-contacts-${crypto.randomUUID()}@localhost`,
-      name: "Google Contacts Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("google-contacts");
 
 function remoteItem(
   kind: RemoteContactItem["kind"],

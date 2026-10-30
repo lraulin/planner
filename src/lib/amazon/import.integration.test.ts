@@ -1,10 +1,8 @@
-import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { users } from "@/db/schema";
+import { describe, expect, it } from "vitest";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import { listTransactions } from "@/lib/finances/queries";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { importAmazonSlim } from "./import";
 import { deleteAmazonItem } from "./mutations";
 import { getAmazonItem, listAmazonItems, listAmazonItemsByIds } from "./queries";
@@ -14,25 +12,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("amazon import");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `amazon-import-${crypto.randomUUID()}@localhost`,
-      name: "Amazon Import Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("amazon-import");
 
 function slimDoc(overrides?: Partial<SlimAmazonOrders>): string {
   const document: SlimAmazonOrders = {

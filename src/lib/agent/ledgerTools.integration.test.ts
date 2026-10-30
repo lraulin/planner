@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -8,9 +8,9 @@ import {
   financePayeeAliases,
   financePayees,
   financeTransactions,
-  users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { normalizeMerchant } from "@/lib/finances/classify/merchant";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
 import { reclassifyTransactions } from "@/lib/finances/mutations";
@@ -22,23 +22,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("ledger agent tools");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `ledger-agent-${crypto.randomUUID()}@localhost`,
-      name: "Ledger Agent Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) await db.delete(users).where(eq(users.id, id));
-});
+const makeUser = testUsers("ledger-agent");
 
 async function makeAccount(userId: string, name = "Card"): Promise<string> {
   const [account] = await db

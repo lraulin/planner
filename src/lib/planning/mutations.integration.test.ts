@@ -1,8 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { nodes, users } from "@/db/schema";
+import { nodes } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { createTimeChart } from "@/lib/schedule/mutations";
 import { initialStateForType } from "@/lib/tree/lifecycle";
 import {
@@ -35,16 +36,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("weekly planning mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("test");
 
 let sortKeyCounter = 0;
 
@@ -70,12 +62,6 @@ async function makeNode(
 /** A Wednesday. Its Sunday-start week begins on 2026-07-26. */
 const midWeek = () => new Date(2026, 6, 29, 15, 30);
 const sundayOfThatWeek = () => new Date(2026, 6, 26);
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("weekly plans", () => {
   let userId: string;

@@ -1,8 +1,8 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { financeAccounts, financeTransactions, users } from "@/db/schema";
+import { financeAccounts, financeTransactions } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { optionsFilter } from "@/lib/grid/customFilter";
 import { createBudgetCategory } from "./budget/mutations";
 import {
@@ -23,23 +23,7 @@ const reachable = await databaseReachable();
 const describeDb = reachable ? describe : describe.skip;
 if (!reachable) warnDatabaseSkipped("register reads");
 
-const created: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `register-reads-${crypto.randomUUID()}@localhost`,
-      name: "Register reads test",
-    })
-    .returning({ id: users.id });
-  created.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of created) await db.delete(users).where(eq(users.id, id));
-});
+const makeUser = testUsers("register-reads");
 
 async function makeAccount(
   userId: string,

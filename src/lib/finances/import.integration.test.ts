@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -7,9 +7,9 @@ import {
   financeBudgetCategories,
   financeCaptureCoverage,
   financeTransactions,
-  users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
 import { deleteTransaction, updateAccount, updateTransaction } from "./mutations";
@@ -22,25 +22,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("finance import");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `finance-test-${crypto.randomUUID()}@localhost`,
-      name: "Finance Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("finance-test");
 
 const CHASE_HEADER = "Transaction Date,Post Date,Description,Category,Type,Amount,Memo";
 const CAPONE_CARD_HEADER =

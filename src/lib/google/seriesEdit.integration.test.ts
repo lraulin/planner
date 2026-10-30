@@ -1,10 +1,11 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { accounts, appointments, users } from "@/db/schema";
+import { accounts, appointments } from "@/db/schema";
 import { updateAppointmentTool } from "@/lib/agent/scheduleTools";
 import { rescheduleAppointment, updateAppointment } from "@/lib/schedule/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 
 /**
  * Editing a Google series from one of its later occurrences.
@@ -90,22 +91,18 @@ function fakeGoogle() {
 
 const patches = () => calls.filter((c) => c.method === "PATCH");
 
-const createdUserIds: string[] = [];
+const makeUser = testUsers("test");
 
 async function makeLinkedUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
+  const userId = await makeUser();
   await db.insert(accounts).values({
-    userId: user.id,
+    userId,
     accountId: `google-${crypto.randomUUID()}`,
     providerId: "google",
     accessToken: "token",
     accessTokenExpiresAt: new Date(Date.now() + 60 * 60_000),
   });
-  return user.id;
+  return userId;
 }
 
 /** One mirrored occurrence of the series, as `syncWindow` stores it. */
@@ -143,11 +140,6 @@ async function readRow(userId: string, id: string) {
 beforeEach(fakeGoogle);
 afterEach(() => {
   vi.unstubAllGlobals();
-});
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
 });
 
 describeDb("editing a Google series from a later occurrence", () => {

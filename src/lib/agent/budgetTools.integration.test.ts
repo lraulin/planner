@@ -1,13 +1,9 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  financeAccounts,
-  financeAuditEvents,
-  financeTransactions,
-  users,
-} from "@/db/schema";
+import { financeAccounts, financeAuditEvents, financeTransactions } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { monthKeyOf } from "@/lib/finances/budget/envelope";
 import { seedBudget } from "@/lib/finances/budget/mutations";
@@ -23,23 +19,7 @@ if (!dbReachable) warnDatabaseSkipped("budget agent tools");
 const TODAY = localDateKey(new Date());
 const MONTH = monthKeyOf(TODAY).slice(0, 7);
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `budget-agent-${crypto.randomUUID()}@localhost`,
-      name: "Budget Agent Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) await db.delete(users).where(eq(users.id, id));
-});
+const makeUser = testUsers("budget-agent");
 
 async function call<Name extends Parameters<typeof dispatchAgentTool>[0]>(
   name: Name,

@@ -1,8 +1,6 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { users } from "@/db/schema";
+import { beforeEach, describe, expect, it } from "vitest";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { createJob } from "@/lib/jobs/mutations";
 import { createResidence } from "@/lib/residences/mutations";
 import { loadChronology, loadLifeHistory } from "./chronology";
@@ -18,25 +16,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("timeline mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `timeline-test-${crypto.randomUUID()}@localhost`,
-      name: "Timeline Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("timeline-test");
 
 describeDb("life event mutations", () => {
   let userId: string;

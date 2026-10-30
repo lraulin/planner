@@ -1,12 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { users } from "@/db/schema";
+import { beforeAll, describe, expect, it } from "vitest";
 import { createContact } from "@/lib/contacts/mutations";
 import { createNodeItem, saveNodeDetail } from "@/lib/detail/mutations";
 import { createNote } from "@/lib/notes/mutations";
 import { createNode } from "@/lib/tree/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { loadFindCorpus } from "./queries";
 import { FIND_FIELD_CLASSES, FIND_SOURCE_IDS } from "./types";
 
@@ -14,22 +12,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("find corpus");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `find-${crypto.randomUUID()}@localhost`, name: "Find Test" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("find");
 
 describeDb("loadFindCorpus", () => {
   let userId: string;

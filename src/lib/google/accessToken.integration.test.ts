@@ -1,5 +1,4 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { describe, expect, it, vi } from "vitest";
 
 /**
  * `getGoogleAccessToken` is called from inside Bearer-authenticated requests — the MCP
@@ -23,25 +22,17 @@ vi.mock("next/headers", () => ({
 }));
 
 const { db } = await import("@/db");
-const { accounts, users } = await import("@/db/schema");
+const { accounts } = await import("@/db/schema");
 const { databaseReachable, warnDatabaseSkipped } =
   await import("@/lib/testing/database");
+const { testUsers } = await import("@/lib/testing/users");
 const { getGoogleAccessToken } = await import("./client");
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("google access token in a bearer request");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("test");
 
 // No `issuer`: Better Auth 1.7.3 and later leave it null on the rows they write.
 async function linkGoogle(userId: string, accessToken: string): Promise<void> {
@@ -52,12 +43,6 @@ async function linkGoogle(userId: string, accessToken: string): Promise<void> {
     accessToken,
   });
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("getGoogleAccessToken inside a Bearer-authenticated request", () => {
   it("returns the linked user's token although the request has no session cookie", async () => {

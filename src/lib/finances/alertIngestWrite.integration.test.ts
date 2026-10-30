@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -6,9 +6,9 @@ import {
   financeAuditEvents,
   financeBudgetCategories,
   financeTransactions,
-  users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { AlertRejected, applyAlertEmail, type AlertPush } from "./alertIngestWrite";
 import { retireAlertHolds } from "./alertHolds";
 import { seedBudget } from "./budget/mutations";
@@ -17,16 +17,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("alert ingest");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `alert-${crypto.randomUUID()}@localhost`, name: "Alert Test" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("alert");
 
 async function makeCard(
   userId: string,
@@ -109,10 +100,6 @@ async function addFeedRow(
     .returning({ id: financeTransactions.id });
   return row.id;
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) await db.delete(users).where(eq(users.id, id));
-});
 
 describeDb("alert holds", () => {
   it("writes one pending, negative hold and treats a re-push as a no-op", async () => {

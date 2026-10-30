@@ -1,12 +1,13 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { nodes, taskCompletions, taskDetails, users } from "@/db/schema";
+import { nodes, taskCompletions, taskDetails } from "@/db/schema";
 import type { RecurrenceFrequency } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { fromDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
 import { zonedWallTime } from "@/lib/schedule/zonedTime";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
   createNode,
@@ -36,31 +37,13 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("tree mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `test-${crypto.randomUUID()}@localhost`,
-      name: "Test User",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("test");
 
 /** The outline as "depth:name" strings, for readable assertions. */
 async function outlineOf(userId: string): Promise<string[]> {
   const rows = await loadOutline(userId);
   return rows.map((r) => `${"  ".repeat(r.depth)}${r.name}`);
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("tree mutations", () => {
   let userId: string;

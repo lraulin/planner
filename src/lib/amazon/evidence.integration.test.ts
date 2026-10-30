@@ -1,14 +1,10 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  amazonOrderItems,
-  financeAccounts,
-  financeTransactions,
-  users,
-} from "@/db/schema";
+import { amazonOrderItems, financeAccounts, financeTransactions } from "@/db/schema";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { approveAmazonChargeMatch } from "./apply";
 import { importAmazonSlim } from "./import";
 import {
@@ -37,25 +33,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("amazon snapshot evidence");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `amazon-sns-${crypto.randomUUID()}@localhost`,
-      name: "Amazon SNS Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("amazon-sns");
 
 function snapshot(overrides?: Partial<AmazonSnapshot>): AmazonSnapshot {
   return {

@@ -1,24 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { amazonOrderItems, amazonOrders, users } from "@/db/schema";
+import { amazonOrderItems, amazonOrders } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { listAmazonRepeatPurchases } from "./queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("supply suggestion queries");
 
-async function makeUser(label: string): Promise<string> {
-  const [row] = await db
-    .insert(users)
-    .values({
-      email: `supply-q-${label}-${crypto.randomUUID()}@example.com`,
-      name: label,
-    })
-    .returning({ id: users.id });
-  return row.id;
-}
+const makeUser = testUsers("supply-q");
 
 async function buy(
   userId: string,
@@ -68,11 +59,6 @@ describeDb("listAmazonRepeatPurchases", () => {
   beforeEach(async () => {
     owner = await makeUser("owner");
     intruder = await makeUser("intruder");
-  });
-
-  afterEach(async () => {
-    if (owner) await db.delete(users).where(eq(users.id, owner));
-    if (intruder) await db.delete(users).where(eq(users.id, intruder));
   });
 
   it("aggregates repeat buys and reports the latest name and price", async () => {

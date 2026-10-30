@@ -1,8 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { dailyItems, nodes, users } from "@/db/schema";
+import { dailyItems, nodes } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { createNode } from "@/lib/tree/mutations";
 import { moveNode } from "@/lib/tree/nodeMoves";
@@ -35,16 +36,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("day mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("test");
 
 /** A task under a project, which is what the chooser and the day list both work with. */
 async function makeTask(userId: string, name: string): Promise<string> {
@@ -85,12 +77,6 @@ const WED = dayKey(3);
 
 const todayKey = () => dayKey(0);
 const tomorrowKey = () => dayKey(1);
-
-afterAll(async () => {
-  for (const userId of createdUserIds) {
-    await db.delete(users).where(eq(users.id, userId));
-  }
-});
 
 describeDb("daily item basics", () => {
   let userId: string;

@@ -1,8 +1,9 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeBudgetCategories, users } from "@/db/schema";
+import { financeBudgetCategories } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import {
   createBudgetCategory,
   updateBudgetCategory,
@@ -23,23 +24,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("scenario agent tools");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `scenarios-agent-${crypto.randomUUID()}@localhost`,
-      name: "Scenarios Agent Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) await db.delete(users).where(eq(users.id, id));
-});
+const makeUser = testUsers("scenarios-agent");
 
 async function seed(userId: string) {
   const pay = await createBudgetCategory(userId, { name: "Pay", kind: "income" });

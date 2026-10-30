@@ -1,10 +1,8 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { users } from "@/db/schema";
+import { beforeEach, describe, expect, it } from "vitest";
 import { listPlanEntries } from "@/lib/planning/queries";
 import { ensureWeeklyPlan } from "@/lib/planning/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { dispatchAgentTool } from "./tools";
 
@@ -12,23 +10,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("agent tool contracts");
 
-const userIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `agent-contract-${crypto.randomUUID()}@localhost`,
-      name: "Agent Contract Test",
-    })
-    .returning({ id: users.id });
-  userIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of userIds) await db.delete(users).where(eq(users.id, id));
-});
+const makeUser = testUsers("agent-contract");
 
 describeDb("agent tool contract database behavior", () => {
   let userId: string;

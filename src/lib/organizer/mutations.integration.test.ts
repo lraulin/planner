@@ -1,17 +1,11 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import {
-  appointments,
-  nodes,
-  notes,
-  projectDetails,
-  taskDetails,
-  users,
-} from "@/db/schema";
+import { appointments, nodes, notes, projectDetails, taskDetails } from "@/db/schema";
 import { and, count, eq } from "drizzle-orm";
 import { captureItems } from "@/lib/capture/mutations";
 import { parseCapture } from "@/lib/capture/parse";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { assignPriorityAmongSiblings } from "@/lib/tree/priorityWrites";
 import { createNode } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
@@ -24,19 +18,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("organizer mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `organizer-${crypto.randomUUID()}@localhost`,
-      name: "Organizer User",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("organizer");
 
 async function capture(userId: string, text: string): Promise<string> {
   const result = await captureItems({ userId, items: parseCapture(text) });
@@ -77,10 +59,6 @@ function calendarOutcome(): Extract<OrganizerOutcome, { kind: "calendar" }> {
     notes: "Bring the draft",
   };
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) await db.delete(users).where(eq(users.id, id));
-});
 
 describeDb("organizeInboxItem", () => {
   let userId: string;

@@ -1,10 +1,10 @@
-import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { bankConnections, googleCalendarLinks, users } from "@/db/schema";
+import { bankConnections, googleCalendarLinks } from "@/db/schema";
 import type { SyncResult } from "@/lib/banksync/sync";
 import type { MirrorWindow } from "@/lib/google/mirror";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import {
   bankSyncUserIds,
   calendarSyncUserIds,
@@ -16,16 +16,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("cron jobs");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `cron-test-${crypto.randomUUID()}@localhost`, name: "Cron Test" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("cron-test");
 
 async function addBankConnection(userId: string): Promise<void> {
   await db
@@ -44,12 +35,6 @@ const emptyBank: SyncResult = {
   reclassified: false,
   auditBatchId: null,
 };
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("scheduled syncs", () => {
   it("bank sync runs once for each user with a connection and for nobody else", async () => {

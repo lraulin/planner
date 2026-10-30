@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { recordSourceState } from "./sourceStateWrite";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -10,10 +10,10 @@ import {
   financeBudgetCategories,
   financeCaptureCoverage,
   financeTransactions,
-  users,
 } from "@/db/schema";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { loadFinanceAuditEvent, listFinanceAuditEvents } from "./audit/queries";
 import { seedBudget } from "./budget/mutations";
 import { categoryMonth, findMonth } from "./budget/envelope";
@@ -29,7 +29,6 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("bank snapshot apply");
 
-const createdUserIds: string[] = [];
 const MONTH = "2026-08-01";
 /**
  * The 36-hour scrape hold is measured from this instant. A hard-coded Aug 29 2026
@@ -91,21 +90,7 @@ function snapshot(overrides: Partial<BankBrowserSnapshotV1> = {}): string {
   return `${PLANNER_BANK_SNAPSHOT_HEADER}\n${JSON.stringify(body, null, 2)}\n`;
 }
 
-async function makeUser(name = "Bank Snapshot Test"): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `bank-snapshot-${crypto.randomUUID()}@localhost`,
-      name,
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) await db.delete(users).where(eq(users.id, id));
-});
+const makeUser = testUsers("bank-snapshot");
 
 describeDb("applyBankBrowserSnapshot", () => {
   let userId: string;

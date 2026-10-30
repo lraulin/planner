@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -7,9 +7,9 @@ import {
   financeAccountSourceState,
   financeAccounts,
   financeTransactions,
-  users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { linkAccount } from "@/lib/banksync/mutations";
 import {
@@ -30,16 +30,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("source state");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("test");
 
 /** A linked account, so there is a headline for the sources to compete over. */
 async function makeLinkedAccount(userId: string): Promise<string> {
@@ -529,8 +520,4 @@ describeDb("cross-user isolation", () => {
       balanceSource: "feed",
     });
   });
-});
-
-afterAll(async () => {
-  for (const id of createdUserIds) await db.delete(users).where(eq(users.id, id));
 });

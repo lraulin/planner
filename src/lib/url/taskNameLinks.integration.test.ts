@@ -1,8 +1,9 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
-import { nodeItems, nodes, users } from "@/db/schema";
+import { nodeItems, nodes } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { captureItems } from "@/lib/capture/mutations";
 import { parseCapture } from "@/lib/capture/parse";
 import { createNode, renameNode } from "@/lib/tree/mutations";
@@ -17,19 +18,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("task name URL links");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `url-task-${crypto.randomUUID()}@localhost`,
-      name: "Test User",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("url-task");
 
 async function nodeName(userId: string, nodeId: string): Promise<string> {
   const [row] = await db
@@ -74,12 +63,6 @@ function mockTitleFetch(titleByUrl: Record<string, string | null>) {
     }),
   );
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("promoteUrlsFromTaskName", () => {
   let userId: string;

@@ -1,8 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { dailyItems, goalDetails, nodes, taskDetails, users } from "@/db/schema";
+import { dailyItems, goalDetails, nodes, taskDetails } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import { loadOutline } from "./queries";
@@ -14,20 +15,7 @@ const reachable = await databaseReachable();
 const describeDb = reachable ? describe : describe.skip;
 if (!reachable) warnDatabaseSkipped("command deck tree mutations");
 
-const userIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `command-${crypto.randomUUID()}@localhost`, name: "Command Test" })
-    .returning({ id: users.id });
-  userIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const userId of userIds) await db.delete(users).where(eq(users.id, userId));
-});
+const makeUser = testUsers("command");
 
 describeDb("shared command mutations", () => {
   let userId: string;

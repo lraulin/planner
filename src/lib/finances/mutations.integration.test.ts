@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -6,7 +6,6 @@ import {
   financeBudgetCategories,
   financeCategoryGroups,
   financeTransactions,
-  users,
 } from "@/db/schema";
 import {
   createBudgetCategory,
@@ -19,6 +18,7 @@ import {
   type BudgetCategoryRow,
 } from "./budget/queries";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { lastChargeByEnvelope, lastChargeOnBill } from "./billLastCharge";
 import { loadRecurringBills } from "./dashboardQueries";
@@ -51,25 +51,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("finance mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `finance-mutations-${crypto.randomUUID()}@localhost`,
-      name: "Finance Mutations Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("finance-mutations");
 
 const chaseFile: ImportFile = {
   name: "Chase9910_Activity_20260812.csv",

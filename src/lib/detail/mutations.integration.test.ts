@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
 import { goalDetails, nodeItems, nodes, taskDetails, users } from "@/db/schema";
 import { createContact, deleteContact } from "@/lib/contacts/mutations";
@@ -11,6 +11,7 @@ import {
   toDateKey,
 } from "@/lib/schedule/geometry";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { setState } from "@/lib/tree/stateTransitions";
 import {
@@ -37,19 +38,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("detail mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `detail-test-${crypto.randomUUID()}@localhost`,
-      name: "Test User",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("detail-test");
 
 /** `completedAt` is not part of the detail payload, so read it straight from the table. */
 async function completedAtOf(nodeId: string): Promise<Date | null> {
@@ -60,12 +49,6 @@ async function completedAtOf(nodeId: string): Promise<Date | null> {
     .limit(1);
   return row?.completedAt ?? null;
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 /**
  * Not a database test, but it lives here because it is about the same failure the rest of

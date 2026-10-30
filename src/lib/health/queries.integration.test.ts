@@ -1,32 +1,22 @@
-import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { bankConnections, users } from "@/db/schema";
+import { bankConnections } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { loadHealth } from "./queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("health queries");
 
-const createdUserIds: string[] = [];
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("health");
 
 describeDb("loadHealth", () => {
   it("reports the database up and a just-synced connection as fresh", async () => {
-    const [user] = await db
-      .insert(users)
-      .values({ email: `health-${crypto.randomUUID()}@localhost`, name: "Health" })
-      .returning({ id: users.id });
-    createdUserIds.push(user.id);
+    const userId = await makeUser("Health");
     const now = new Date();
     await db.insert(bankConnections).values({
-      userId: user.id,
+      userId,
       accessUrl: "https://user:pass@bridge.invalid/simplefin",
       lastSyncedAt: now,
     });
@@ -40,7 +30,7 @@ describeDb("loadHealth", () => {
       now.getTime(),
     );
     // Nothing in the body identifies a user or carries the access URL.
-    expect(JSON.stringify(report)).not.toContain(user.id);
+    expect(JSON.stringify(report)).not.toContain(userId);
     expect(JSON.stringify(report)).not.toContain("bridge.invalid");
   });
 });

@@ -1,8 +1,6 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { users } from "@/db/schema";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { createNode, deleteNode } from "@/lib/tree/mutations";
 import {
   createNote,
@@ -36,28 +34,13 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("notes mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("test");
 
 /** Titles in the order `loadNotes` returns them, with depth as leading dots. */
 async function shape(userId: string): Promise<string[]> {
   const notes = await loadNotes(userId);
   return notes.map((note) => `${".".repeat(note.depth)}${note.title}`);
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("creating notes", () => {
   let userId: string;

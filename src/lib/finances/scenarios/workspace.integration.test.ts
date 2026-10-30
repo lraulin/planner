@@ -1,13 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
   financeBudgetCategories,
   financeTransactions,
-  users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { monthKeyOf, shiftMonthKey } from "@/lib/finances/budget/envelope";
 import {
   createBudgetCategory,
@@ -34,16 +34,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("scenario workspace");
 
-async function makeUser(label: string): Promise<string> {
-  const [row] = await db
-    .insert(users)
-    .values({
-      email: `scenario-ws-${label}-${crypto.randomUUID()}@example.com`,
-      name: label,
-    })
-    .returning({ id: users.id });
-  return row.id;
-}
+const makeUser = testUsers("scenario-ws");
 
 async function makeBill(
   userId: string,
@@ -125,11 +116,6 @@ describeDb("scenario workspace", () => {
       })
       .returning({ id: financeAccounts.id });
     accountId = account.id;
-  });
-
-  afterEach(async () => {
-    if (owner) await db.delete(users).where(eq(users.id, owner));
-    if (intruder) await db.delete(users).where(eq(users.id, intruder));
   });
 
   it("starts a fresh scenario equal to the Bills page's after-bills remainder", async () => {

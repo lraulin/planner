@@ -1,14 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  appointments,
-  nodes,
-  reminderOccurrences,
-  taskDetails,
-  users,
-} from "@/db/schema";
+import { appointments, nodes, reminderOccurrences, taskDetails } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
 import { zonedMinuteOfDay } from "@/lib/schedule/zonedTime";
@@ -38,22 +33,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("reminders");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("test");
 
 const MINUTE = 60_000;
 

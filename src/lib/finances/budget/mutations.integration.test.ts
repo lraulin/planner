@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { loadInsightsRows } from "../dashboardQueries";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
@@ -7,11 +7,11 @@ import {
   financeBudgetAllocations,
   financeBudgetCategories,
   financeTransactions,
-  users,
 } from "@/db/schema";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { linkAccount, saveConnection } from "@/lib/banksync/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import {
   applyBudgetTemplates,
   assignBudget,
@@ -48,25 +48,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("budget mutations");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `budget-${crypto.randomUUID()}@localhost`,
-      name: "Budget Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("budget");
 
 const TODAY = "2026-08-22";
 const MONTH = "2026-08-01";

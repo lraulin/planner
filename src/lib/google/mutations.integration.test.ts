@@ -1,8 +1,9 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { accounts, appointments, contacts, users } from "@/db/schema";
+import { accounts, appointments, contacts } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import type { GoogleCalendarListEntry } from "./client";
 import {
   clearCalendarLinks,
@@ -32,16 +33,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("google calendar links");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `test-${crypto.randomUUID()}@localhost`, name: "Test User" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("test");
 
 function entry(over: Partial<GoogleCalendarListEntry> = {}): GoogleCalendarListEntry {
   return { id: "personal@example.com", summary: "Personal", ...over };
@@ -91,12 +83,6 @@ async function appointmentSubjects(userId: string): Promise<string[]> {
     .where(eq(appointments.userId, userId));
   return rows.map((r) => r.subject).sort();
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("refreshCalendarLinks", () => {
   it("stores the calendars Google reports", async () => {

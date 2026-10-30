@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -6,9 +6,9 @@ import {
   financeBudgetAllocations,
   financeBudgetCategories,
   financeTransactions,
-  users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { seedBudget } from "../budget/mutations";
 import { captureFinanceMoneyCheckpoint } from "./checkpoints";
 import { writeFinanceAuditEvent } from "./writes";
@@ -18,22 +18,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("finance audit queries");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({ email: `audit-${crypto.randomUUID()}@localhost`, name: "Audit Test" })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
+const makeUser = testUsers("audit");
 
 const TODAY = "2026-08-22";
 const MONTH = "2026-08-01";

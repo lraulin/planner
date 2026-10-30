@@ -1,8 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeBudgetCategories, users } from "@/db/schema";
+import { financeBudgetCategories } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import { createBudgetCategory } from "@/lib/finances/budget/mutations";
 import { listTransactions } from "@/lib/finances/queries";
@@ -19,23 +20,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("bill agent tools");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `bill-agent-${crypto.randomUUID()}@localhost`,
-      name: "Bill Agent",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
-
-afterAll(async () => {
-  for (const id of createdUserIds) await db.delete(users).where(eq(users.id, id));
-});
+const makeUser = testUsers("bill-agent");
 
 type SavedBill = {
   id: string;

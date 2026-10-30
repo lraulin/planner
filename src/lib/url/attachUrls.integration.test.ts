@@ -1,8 +1,9 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
-import { nodeItems, users } from "@/db/schema";
+import { nodeItems } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { ATTACH_KIND_REFUSAL, ATTACH_NO_LINK, attachUrlsToNode } from "./attachUrls";
 
@@ -15,19 +16,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("attach URLs from clipboard");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `attach-url-${crypto.randomUUID()}@localhost`,
-      name: "Test User",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("attach-url");
 
 async function attachmentsOf(
   userId: string,
@@ -63,12 +52,6 @@ function mockTitleFetch(titleByUrl: Record<string, string | null>) {
     }),
   );
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id));
-  }
-});
 
 describeDb("attachUrlsToNode", () => {
   let userId: string;

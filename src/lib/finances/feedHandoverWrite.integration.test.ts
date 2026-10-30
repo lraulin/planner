@@ -1,13 +1,13 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
   financeBudgetCategories,
   financeTransactions,
-  users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { testUsers } from "@/lib/testing/users";
 import { retireCoveredScrapeRows } from "./feedHandoverWrite";
 import { seedBudget } from "./budget/mutations";
 import { categoryMonth, findMonth } from "./budget/envelope";
@@ -18,19 +18,7 @@ const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
 if (!dbReachable) warnDatabaseSkipped("feed handover");
 
-const createdUserIds: string[] = [];
-
-async function makeUser(): Promise<string> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `feed-handover-${crypto.randomUUID()}@localhost`,
-      name: "Feed Handover Test",
-    })
-    .returning({ id: users.id });
-  createdUserIds.push(user.id);
-  return user.id;
-}
+const makeUser = testUsers("feed-handover");
 
 async function makeAccount(userId: string): Promise<string> {
   const [account] = await db
@@ -111,10 +99,6 @@ async function idsOn(userId: string, accountId: string): Promise<string[]> {
     );
   return rows.flatMap((row) => (row.externalId ? [row.externalId] : [])).sort();
 }
-
-afterAll(async () => {
-  for (const id of createdUserIds) await db.delete(users).where(eq(users.id, id));
-});
 
 describeDb("retireCoveredScrapeRows", () => {
   let userId: string;
