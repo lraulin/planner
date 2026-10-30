@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { PriorityLetter } from "@/db/schema";
 import type { DetailNode, DetailWire } from "@/lib/tree/wireSlices";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { useOutline } from "@/components/grid/useOutline";
 import type { GridRow } from "@/lib/tree/slice";
 import type { WishListRow } from "@/lib/detail/wishTypes";
@@ -24,7 +25,6 @@ import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { outlineSelectPath } from "@/lib/url/viewState";
 import { ToolbarSelect } from "./tabChrome";
-import { isTypingTarget } from "@/lib/keyboard";
 import {
   wishesColumns,
   WISHES_COLUMN_IDS,
@@ -216,9 +216,6 @@ export function WishesGrid({
     [],
   );
 
-  const selectedWish = selectedId
-    ? (rows.find((row) => row.id === selectedId) ?? null)
-    : null;
   const detailNode = detailNodeId ? (byNodeId.get(detailNodeId) ?? null) : null;
 
   const columnCtx: WishesColumnCtx = useMemo(
@@ -319,21 +316,7 @@ export function WishesGrid({
     [selectedIds, capabilitiesFor],
   );
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (detailNodeId) return;
-      if (isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [detailNodeId, selectedWish, setDetailNodeId, copySelectionAsText, move]);
+  useArrowKeySelection(move, Boolean(detailNodeId));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

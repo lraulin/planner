@@ -45,6 +45,7 @@ import {
   listAccountsAction,
   setTransactionBudgetCategoriesAction,
 } from "@/app/(shell)/finances/actions";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { useToday } from "@/components/grid/useToday";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
@@ -66,7 +67,6 @@ import { filterActive, optionsFilter } from "@/lib/grid/customFilter";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { idsForFieldEdit } from "@/lib/grid/selection";
-import { isTypingTarget } from "@/lib/keyboard";
 import { useRegisterSource } from "./useRegisterSource";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
@@ -734,22 +734,7 @@ export function FinancesView({
     [capabilitiesFor],
   );
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (openId || pendingDelete.length > 0 || isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, pendingDelete, move]);
+  useArrowKeySelection(move, Boolean(openId || pendingDelete.length > 0));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

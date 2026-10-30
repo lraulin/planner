@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar } from "@/components/grid/GridToolbar";
@@ -14,7 +15,6 @@ import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { resultTarget } from "@/lib/find/targets";
 import type { FindResult } from "@/lib/find/types";
-import { isTypingTarget } from "@/lib/keyboard";
 import type { GridRow } from "@/lib/tree/slice";
 import { findColumns, type FindColumn, type FindColumnCtx } from "./findColumns";
 
@@ -141,22 +141,7 @@ export function FindResults({
     [capabilitiesFor],
   );
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [move]);
+  useArrowKeySelection(move);
 
   return (
     <>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import type { ResidenceGridRow, ResidenceListRow } from "@/lib/residences/types";
 import type { GridRow } from "@/lib/tree/slice";
 import {
@@ -9,6 +9,7 @@ import {
   listResidencesAction,
 } from "@/app/(shell)/library/residences/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
@@ -21,7 +22,6 @@ import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useToday } from "@/components/grid/useToday";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { spanDuration } from "@/lib/history/span";
-import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { ResidenceDrawer } from "./ResidenceDrawer";
 import {
@@ -191,22 +191,7 @@ export function ResidencesView({
     [capabilitiesFor],
   );
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (openId || pendingDelete || isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, pendingDelete, move]);
+  useArrowKeySelection(move, Boolean(openId || pendingDelete));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

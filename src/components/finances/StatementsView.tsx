@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { GridRow } from "@/lib/tree/slice";
 import { formatUsd } from "@/lib/finances/money";
 import type { CoverageHole } from "@/lib/finances/reconcile";
@@ -10,6 +10,7 @@ import {
 } from "@/lib/finances/statementGrouping";
 import type { StatementViewRow } from "@/lib/finances/types";
 import { DateText } from "@/components/date/DateText";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { FileImportHost } from "@/components/import/FileImportHost";
 import { FinanceImportPanel } from "./FinanceImportPanel";
@@ -19,7 +20,6 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { isTypingTarget } from "@/lib/keyboard";
 import { statementColumns, type StatementColumnCtx } from "./statementColumns";
 import { useStatementPeriod } from "./useStatementPeriod";
 
@@ -74,22 +74,7 @@ export function StatementsView({
   const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } =
     useMultiSelect(order, null);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [move]);
+  useArrowKeySelection(move);
 
   const selected = rows.find((row) => row.id === selectedId) ?? null;
   const period = useStatementPeriod(selected);

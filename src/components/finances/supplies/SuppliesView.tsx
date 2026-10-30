@@ -1,7 +1,7 @@
 "use client";
 
 import { useToast } from "@/components/shell/ToastProvider";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import {
   createSupplyItemAction,
   createSupplyOptionAction,
@@ -14,6 +14,7 @@ import {
   updateSupplyOptionAction,
 } from "@/app/(shell)/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar } from "@/components/grid/GridToolbar";
@@ -26,7 +27,6 @@ import { useIsCompact } from "@/components/shell/useIsCompact";
 import { INSERT_AFTER } from "@/lib/commands/chords";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
-import { isTypingTarget } from "@/lib/keyboard";
 import { formatUsd } from "@/lib/finances/money";
 import type { BudgetEnvelopeCatalog } from "@/lib/finances/budget/queries";
 import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
@@ -463,22 +463,7 @@ export function SuppliesView({
 
   const pendingDeleteCopy = deleting ? deleteCopy(deleting, items) : null;
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (deleting !== null || isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [deleting, move]);
+  useArrowKeySelection(move, deleting !== null);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

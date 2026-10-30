@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import type { HouseListRow } from "@/lib/houses/types";
 import type { GridRow } from "@/lib/tree/slice";
 import {
@@ -10,6 +10,7 @@ import {
   refreshHouseRouteAction,
 } from "@/app/(shell)/library/houses/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
@@ -20,7 +21,6 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { HouseDrawer } from "./HouseDrawer";
 import {
@@ -191,23 +191,7 @@ export function HousesView({ initialHouses }: { initialHouses: HouseListRow[] })
     [capabilitiesFor],
   );
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (openId || pendingDelete || isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-        return;
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, pendingDelete, move]);
+  useArrowKeySelection(move, Boolean(openId || pendingDelete));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

@@ -16,6 +16,7 @@ import {
   listMetricsAction,
 } from "@/app/(shell)/metrics/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
@@ -32,7 +33,6 @@ import { useSetting, type SettingCodec } from "@/components/settings/SettingsPro
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { ToolbarButton, ToolbarToggle } from "@/components/tabs/tabChrome";
-import { isTypingTarget } from "@/lib/keyboard";
 import type { GridRow } from "@/lib/tree/slice";
 import {
   clampPerformanceHeight,
@@ -401,21 +401,7 @@ export function MetricsView({
   );
 
   // Arrow keys walk the grid's own order. Same document-level handler as the Wish List.
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (openId || drawerPending || pendingDelete) return;
-      if (isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, drawerPending, pendingDelete, move]);
+  useArrowKeySelection(move, Boolean(openId || drawerPending || pendingDelete));
 
   const chartSource =
     chartDetail && selected && chartDetail.id === selected.id ? chartDetail : null;

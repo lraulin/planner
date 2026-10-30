@@ -12,6 +12,7 @@ import {
   updateLifeEventAction,
 } from "@/app/(shell)/library/timeline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
@@ -31,7 +32,6 @@ import {
 } from "@/components/tabs/tabChrome";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { isTypingTarget } from "@/lib/keyboard";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { TIMELINE_SCOPE } from "@/lib/settings/scopes";
 import {
@@ -373,23 +373,7 @@ export function TimelineView({
     [capabilitiesFor],
   );
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (presentation !== "grid") return;
-      if (pendingDelete || isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [presentation, pendingDelete, move]);
+  useArrowKeySelection(move, Boolean(presentation !== "grid" || pendingDelete));
 
   /**
    * `?detail=` is a grid landing. Honour it on the first paint so Find does not flash the

@@ -18,6 +18,7 @@ import {
 } from "@/app/(shell)/library/contacts/actions";
 import { syncGoogleContactsAction } from "@/app/settings/actions";
 import type { GoogleContactSyncStatus } from "@/lib/google/contacts/sync";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
@@ -33,7 +34,6 @@ import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
-import { isTypingTarget } from "@/lib/keyboard";
 import { ContactDrawer } from "./ContactDrawer";
 import {
   contactsColumns,
@@ -282,29 +282,7 @@ export function ContactsView({
     [capabilitiesFor],
   );
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (openId || pendingDelete.length > 0) return;
-      if (isTypingTarget(event.target)) return;
-
-      // Arrows before the has-a-selection guard: `moveSelection` reads a null focus as
-      // "start from the end you are heading towards", so ArrowDown is how you pick the
-      // first row without reaching for the mouse.
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-        return;
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, pendingDelete, move]);
+  useArrowKeySelection(move, Boolean(openId || pendingDelete.length > 0));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

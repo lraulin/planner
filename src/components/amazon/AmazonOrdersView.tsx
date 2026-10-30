@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -17,6 +16,7 @@ import {
   parseAmazonOrdersQuery,
   type AmazonOrdersPrepared,
 } from "@/lib/amazon/ordersQuery";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { FileImportHost } from "@/components/import/FileImportHost";
@@ -29,7 +29,6 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useToday } from "@/components/grid/useToday";
-import { isTypingTarget } from "@/lib/keyboard";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import {
   addSupplyFromAmazonItemAction,
@@ -184,22 +183,7 @@ export function AmazonOrdersView({
   const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } =
     useMultiSelect(order, null);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [move]);
+  useArrowKeySelection(move);
 
   const displayError = error ?? sourceError;
 

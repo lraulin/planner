@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { NodeState, PriorityLetter } from "@/db/schema";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { RowSwipe } from "@/components/grid/CompactRow";
 import type { MenuItem } from "@/components/grid/ContextMenu";
@@ -22,7 +23,6 @@ import { INSERT_AFTER, OPEN_RECORD } from "@/lib/commands/chords";
 import type { DailyItemView } from "@/lib/day/types";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
-import { isTypingTarget } from "@/lib/keyboard";
 import { CommandBar } from "@/components/grid/CommandBar";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import {
@@ -432,22 +432,7 @@ export function DailyItemsGrid({
   );
 
   // Arrows only. ⌘C and Enter are `bindings` on the commands now — see `CommandKeys`.
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return;
-      if (!selectedId) return;
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [selectedId, move]);
+  useArrowKeySelection(move, !selectedId);
 
   /**
    * The two things done to a day item most often, and both reversible — swipe right ticks it

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { GridRow } from "@/lib/tree/slice";
 import type { TimeChartListRow } from "@/lib/schedule/queries";
@@ -9,6 +9,7 @@ import {
   deleteTimeChartAction,
   updateTimeChartAction,
 } from "@/app/(shell)/schedule/actions";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
@@ -20,7 +21,6 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
-import { isTypingTarget } from "@/lib/keyboard";
 import {
   timeChartsColumns,
   TIME_CHARTS_COLUMN_IDS,
@@ -207,31 +207,8 @@ export function TimeChartsView({
     [capabilitiesFor],
   );
 
-  /*
-   * Selection navigation only — the create, open and delete chords are `bindings` on the commands.
-   *
-   * Arrows come before any "needs a selection" guard on purpose: `moveSelection` treats a null focus
-   * as "start at the end you are heading towards", so ArrowDown is how you pick the first row.
-   * Guarding it first leaves the keyboard with no way in — every visible cell here is an inline input
-   * that stops propagation, so clicking a row does not select it either.
-   */
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (pendingDelete) return;
-      if (isTypingTarget(event.target)) return;
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [pendingDelete, move]);
+  // The create, open and delete chords are `bindings` on the commands; only the arrows are here.
+  useArrowKeySelection(move, Boolean(pendingDelete));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

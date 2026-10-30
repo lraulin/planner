@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
   deleteNodeAction,
@@ -12,6 +12,7 @@ import {
   setStateAction,
   setCollapsedAction,
 } from "@/app/(shell)/plan/outline/actions";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useOutline } from "@/components/grid/useOutline";
 import type { OutlineWire } from "@/lib/tree/wire";
@@ -23,7 +24,6 @@ import { useSuspendCommandKeys } from "@/components/shell/CommandProvider";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { shouldDiscardVirginInsert } from "@/lib/grid/virginInsert";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
-import { isTypingTarget } from "@/lib/keyboard";
 
 /**
  * Shared selection, drawer, rename, and optimistic cell-write handlers for the node-based
@@ -239,23 +239,7 @@ export function useGridTab(wire: OutlineWire) {
    */
   useSuspendCommandKeys(editingId !== null);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (detailId || editingId) return;
-      if (isTypingTarget(event.target)) return;
-      if (!selectedId) return;
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [detailId, editingId, selectedId, move]);
+  useArrowKeySelection(move, Boolean(detailId || editingId || !selectedId));
 
   return {
     nodes,

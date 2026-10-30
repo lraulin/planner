@@ -1,7 +1,7 @@
 "use client";
 
 import { useToast } from "@/components/shell/ToastProvider";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import type { GridRow } from "@/lib/tree/slice";
 import type { BudgetEnvelopeCatalog } from "@/lib/finances/budget/queries";
 import type { PayeeRow } from "@/lib/finances/payees/queries";
@@ -12,6 +12,7 @@ import {
   updatePayeeDetailsAction,
 } from "@/app/(shell)/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
@@ -22,7 +23,6 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { PayeeDrawer } from "./PayeeDrawer";
@@ -274,29 +274,10 @@ export function PayeesView({
     [capabilitiesFor],
   );
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (
-        openId ||
-        pendingDelete ||
-        pendingMerge ||
-        choosingMerge ||
-        isTypingTarget(event.target)
-      )
-        return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, pendingDelete, pendingMerge, choosingMerge, move]);
+  useArrowKeySelection(
+    move,
+    Boolean(openId || pendingDelete || pendingMerge || choosingMerge),
+  );
 
   const openPayee = openId ? (rows.find((row) => row.id === openId) ?? null) : null;
 

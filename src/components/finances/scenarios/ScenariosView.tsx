@@ -23,6 +23,7 @@ import {
   updateScenarioLineAction,
 } from "@/app/(shell)/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import { GridToolbar } from "@/components/grid/GridToolbar";
@@ -36,7 +37,6 @@ import { INSERT_AFTER, INSERT_CHILD } from "@/lib/commands/chords";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { selectionMoveRoots } from "@/lib/grid/selection";
-import { isTypingTarget } from "@/lib/keyboard";
 import { budgetEnvelopeLabel } from "@/lib/finances/budget/hierarchy";
 import type { BudgetEnvelopeCatalog } from "@/lib/finances/budget/queries";
 import { formatUsd } from "@/lib/finances/money";
@@ -598,20 +598,7 @@ export function ScenariosView({
     };
   }, [lineIndex, lineOfRow, gridState, commit, selectOne]);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (dialog !== null || isTypingTarget(event.target)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        move(1, event.shiftKey);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        move(-1, event.shiftKey);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [dialog, move]);
+  useArrowKeySelection(move, dialog !== null);
 
   const deleteCopy = useMemo(() => {
     if (dialog?.type !== "deleteLines") return null;
