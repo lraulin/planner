@@ -27,6 +27,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Memoizes components and hooks at build time, so new code adds no useMemo/useCallback for
+  // performance (development/typescript-react.md). The react-hooks/* compiler lint rules are
+  // errors, which is what keeps every component compilable. The stable Babel path, not the
+  // experimental Rust port.
+  reactCompiler: true,
   // Import routes accept up to 25 MB (Achieve Full XML, a folder of 360 statements).
   // Two Next.js caps sit in front of those guards and must be at least as large, or
   // the request never reaches our JSON error:
