@@ -40,6 +40,13 @@ const eslintConfig = defineConfig([
       // Code shape — development/typescript-react.md has the why for each.
       // One spelling for object types, so declaration merging never surprises anyone.
       "@typescript-eslint/consistent-type-definitions": ["error", "type"],
+      // A switch with no `default` must name every member, so a new variant breaks the
+      // build where it needs a decision. A `default` counts: "everything else alike" is a
+      // real answer, but list the cases where a new variant could need different handling.
+      "@typescript-eslint/switch-exhaustiveness-check": [
+        "error",
+        { considerDefaultExhaustiveForUnions: true },
+      ],
 
       // Deliberately NOT enabled: @typescript-eslint/no-unnecessary-condition.
       // `noUncheckedIndexedAccess` is off, so TS types `const [row] = await ...` as

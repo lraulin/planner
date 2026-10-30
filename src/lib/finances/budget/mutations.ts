@@ -491,7 +491,12 @@ function touchedRefs(operation: BudgetOperation): EnvelopeRef[] {
       return [operation.to];
     case "unassign":
       return [operation.from];
-    default:
+    // Month-wide operations name no envelope. Listed rather than defaulted: a new operation
+    // that does name one must decide here, or its envelope skips the ownership check.
+    case "release-hold":
+    case "copy-previous":
+    case "average":
+    case "zero":
       return [];
   }
 }
