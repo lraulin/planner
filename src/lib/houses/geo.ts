@@ -12,15 +12,15 @@ import { parseNominatim, parseOsrm } from "./route";
 const FETCH_TIMEOUT_MS = 4_000;
 const USER_AGENT = "planner/1.0 (personal use; leeraulin@gmail.com)";
 
-export interface LatLon {
+export type LatLon = {
   lat: number;
   lon: number;
-}
+};
 
-export interface DriveRoute {
+export type DriveRoute = {
   meters: number;
   seconds: number;
-}
+};
 
 /**
  * Geocode a free-typed address via Nominatim. Nominatim's usage policy requires a real

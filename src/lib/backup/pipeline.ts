@@ -7,23 +7,23 @@ import { redactSecrets } from "./redaction";
 const execFileAsync = promisify(execFile);
 const MAX_ERROR_BYTES = 64 * 1_024;
 
-export interface BackupTools {
+export type BackupTools = {
   pgDump: string;
   pgRestore: string;
   psql: string;
   gpg: string;
   docker: string;
-}
+};
 
-export interface BackupSecrets {
+export type BackupSecrets = {
   databaseUrl: string;
   passphrase: string;
-}
+};
 
-interface ProcessResult {
+type ProcessResult = {
   code: number;
   stderr: string;
-}
+};
 
 export async function dumpEncryptedArchive(input: {
   destinationPath: string;

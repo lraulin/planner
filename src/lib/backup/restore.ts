@@ -7,7 +7,7 @@ import { decryptToCommand, verifyEncryptedArchive, type BackupTools } from "./pi
 
 const execFileAsync = promisify(execFile);
 
-export interface RestoreCounts {
+export type RestoreCounts = {
   migrations: number;
   users: number;
   sessions: number;
@@ -17,13 +17,13 @@ export interface RestoreCounts {
   notes: number;
   userSettings: number;
   financeTransactions: number;
-}
+};
 
-export interface RestoreTestResult {
+export type RestoreTestResult = {
   serverVersion: string;
   counts: RestoreCounts;
   durationMs: number;
-}
+};
 
 const RESTORE_COUNTS_SQL = `
 SELECT json_build_object(

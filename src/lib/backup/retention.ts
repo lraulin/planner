@@ -2,10 +2,10 @@ import type { BackupGeneration } from "./generations";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
-export interface RetentionPlan {
+export type RetentionPlan = {
   keep: BackupGeneration[];
   prune: BackupGeneration[];
-}
+};
 
 /**
  * Keep the newest generation in every eligible bucket. The tiers overlap deliberately:

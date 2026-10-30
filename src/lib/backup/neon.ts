@@ -3,17 +3,17 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
 const HISTORY_SECONDS = 7 * 24 * 60 * 60;
 const SNAPSHOT_RETENTION_DAYS = 90;
 
-export interface NeonRecoveryConfig {
+export type NeonRecoveryConfig = {
   apiKey: string;
   projectId: string;
   branchId: string;
-}
+};
 
-export interface NeonRecoveryStatus {
+export type NeonRecoveryStatus = {
   historyRetentionSeconds: number;
   weeklySnapshots: number;
   newestWeeklySnapshotAt: string | null;
-}
+};
 
 export async function configureNeonRecovery(
   apiKey: string,
@@ -140,12 +140,12 @@ export const AGENT_BRANCH_PREFIX = "agent-dry-run-";
 const AGENT_BRANCH_MAX_AGE_MS = 60 * 60 * 1_000;
 const OPERATION_TIMEOUT_MS = 180_000;
 
-export interface AgentBranch {
+export type AgentBranch = {
   branchId: string;
   name: string;
   /** Connects as the database owner with a password reset on this branch alone. */
   databaseUrl: string;
-}
+};
 
 /** Where to connect on a fresh branch: its read-write host, its one database, that database's owner. */
 export function branchConnectionTarget(response: Record<string, unknown>): {

@@ -4,12 +4,12 @@
  * the network.
  */
 
-interface HouseAddress {
+type HouseAddress = {
   streetAddress: string;
   city: string;
   state: string;
   postalCode: string;
-}
+};
 
 function normalizePart(value: string): string {
   return value.trim().replace(/\s+/g, " ");

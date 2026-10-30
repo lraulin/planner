@@ -29,18 +29,18 @@ import {
 } from "./pipeline";
 import { planRetention } from "./retention";
 
-export interface BackupLogger {
+export type BackupLogger = {
   info(message: string): void;
   warn(message: string): void;
-}
+};
 
-export interface RunBackupResult {
+export type RunBackupResult = {
   kind: "created" | "skipped";
   fileName?: string;
   encryptedBytes?: number;
   durationMs?: number;
   pruned: string[];
-}
+};
 
 export async function runBackup(input: {
   destination: string;

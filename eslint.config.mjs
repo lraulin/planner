@@ -37,6 +37,10 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/require-await": "error",
       "@typescript-eslint/no-unnecessary-type-assertion": "error",
 
+      // Code shape — development/typescript-react.md has the why for each.
+      // One spelling for object types, so declaration merging never surprises anyone.
+      "@typescript-eslint/consistent-type-definitions": ["error", "type"],
+
       // Deliberately NOT enabled: @typescript-eslint/no-unnecessary-condition.
       // `noUncheckedIndexedAccess` is off, so TS types `const [row] = await ...` as
       // always-defined and the rule flags correct runtime guards as dead code. Acting

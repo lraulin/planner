@@ -38,13 +38,13 @@ export const DEFAULT_BACKUP_DESTINATION =
   "/Users/leeraulin/Library/CloudStorage/Dropbox/Planner Backups";
 export const LAUNCH_AGENT_LABEL = "com.lraulin.planner-backup";
 
-export interface MacBackupPaths {
+export type MacBackupPaths = {
   destination: string;
   launchAgent: string;
   logDirectory: string;
   standardLog: string;
   errorLog: string;
-}
+};
 
 export function macBackupPaths(): MacBackupPaths {
   const home = os.homedir();

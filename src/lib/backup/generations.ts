@@ -7,7 +7,7 @@ const BACKUP_NAME =
   /^planner-production_(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})Z\.dump\.gpg$/;
 const SHA256 = /^[a-f0-9]{64}$/;
 
-export interface BackupGeneration {
+export type BackupGeneration = {
   createdAt: Date;
   fileName: string;
   filePath: string;
@@ -15,9 +15,9 @@ export interface BackupGeneration {
   checksumPath: string;
   encryptedBytes: number;
   sha256: string;
-}
+};
 
-export interface BackupManifest {
+export type BackupManifest = {
   version: 1;
   fileName: string;
   createdAt: string;
@@ -30,7 +30,7 @@ export interface BackupManifest {
     pgRestore: string;
     gpg: string;
   };
-}
+};
 
 export function backupFileName(createdAt: Date): string {
   const timestamp = createdAt
