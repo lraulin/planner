@@ -460,14 +460,12 @@ export function InsightsView({
             ariaLabel={balances ? "Envelope balances" : "Spending by envelope"}
             rowLabel={(row) => row.node.name}
             enableSort
-            sorts={grid.sorts.filter((sort) =>
-              columns.some((column) => column.id === sort.columnId),
-            )}
-            onSortChange={grid.toggleSort}
-            onSetSort={grid.setSort}
-            collapsedGroups={grid.collapsedGroups}
-            onToggleGroup={grid.toggleGroup}
-            density={grid.density}
+            grid={{
+              ...grid,
+              sorts: grid.sorts.filter((sort) =>
+                columns.some((column) => column.id === sort.columnId),
+              ),
+            }}
             autoHeight
             groupTotals={(members) =>
               Object.fromEntries(

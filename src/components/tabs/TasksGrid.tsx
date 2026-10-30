@@ -475,23 +475,10 @@ export function TasksGrid({
         rowDrag={rowDrag}
         enableFilters
         enableSort
-        sorts={gridState.sorts}
-        onSortChange={gridState.toggleSort}
-        onSetSort={gridState.setSort}
-        filters={gridState.filters}
-        onFilterChange={gridState.setFilter}
-        advancedFilter={gridState.advancedFilter}
-        search={gridState.search}
+        grid={gridState}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
-        widths={gridState.widths}
-        onResizeColumn={gridState.setWidth}
-        onResetColumnWidth={gridState.clearWidth}
-        columnControls={gridState.columnControls}
-        collapsedGroups={gridState.collapsedGroups}
-        onToggleGroup={gridState.toggleGroup}
         onGroupIdsChange={setGroupIds}
-        density={gridState.density}
         empty={
           <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
             No tasks match this view.

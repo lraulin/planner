@@ -355,23 +355,10 @@ export function BillsView({
         rowMenu={rowMenu}
         enableFilters
         enableSort
-        sorts={grid.sorts}
-        onSortChange={grid.toggleSort}
-        onSetSort={grid.setSort}
-        filters={grid.filters}
-        onFilterChange={grid.setFilter}
-        advancedFilter={grid.advancedFilter}
-        search={grid.search}
+        grid={grid}
         distinctValues={distinct}
         onCountsChange={setCounts}
         onNavigableIdsChange={nav.onIdsChange}
-        widths={grid.widths}
-        onResizeColumn={grid.setWidth}
-        onResetColumnWidth={grid.clearWidth}
-        columnControls={grid.columnControls}
-        collapsedGroups={grid.collapsedGroups}
-        onToggleGroup={grid.toggleGroup}
-        density={grid.density}
         empty="No bills match this view."
       />
       <div className="max-h-[35dvh] shrink-0 space-y-2 overflow-auto p-3">

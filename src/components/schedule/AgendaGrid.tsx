@@ -132,20 +132,9 @@ export function AgendaGrid({
         rowLabel={(row) => row.node.subject || "(no subject)"}
         enableFilters
         enableSort
-        sorts={grid.sorts}
-        onSortChange={grid.toggleSort}
-        onSetSort={grid.setSort}
-        filters={grid.filters}
-        onFilterChange={grid.setFilter}
-        advancedFilter={grid.advancedFilter}
-        search={grid.search}
+        grid={grid}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
-        widths={grid.widths}
-        onResizeColumn={grid.setWidth}
-        onResetColumnWidth={grid.clearWidth}
-        columnControls={grid.columnControls}
-        density={grid.density}
         empty={
           <p className="p-6 text-[0.8125rem] text-ink-muted">
             Nothing scheduled in these days.

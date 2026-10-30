@@ -215,23 +215,10 @@ export function ResourcesView({
         rowLabel={(row) => row.node.shortName || "Untitled resource"}
         enableFilters
         enableSort
-        sorts={gridState.sorts}
-        onSortChange={gridState.toggleSort}
-        onSetSort={gridState.setSort}
-        filters={gridState.filters}
-        onFilterChange={gridState.setFilter}
-        advancedFilter={gridState.advancedFilter}
-        search={gridState.search}
+        grid={gridState}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
         onNavigableIdsChange={onIdsChange}
-        widths={gridState.widths}
-        onResizeColumn={gridState.setWidth}
-        onResetColumnWidth={gridState.clearWidth}
-        columnControls={gridState.columnControls}
-        collapsedGroups={gridState.collapsedGroups}
-        onToggleGroup={gridState.toggleGroup}
-        density={gridState.density}
         empty={
           <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-[0.9375rem] text-ink-muted">
             <p>No resources yet.</p>

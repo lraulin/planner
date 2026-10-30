@@ -198,21 +198,10 @@ export function ActivityView({
         rowLabel={(row) => row.node.summary}
         enableFilters
         enableSort
-        sorts={grid.sorts}
-        onSortChange={grid.toggleSort}
-        onSetSort={grid.setSort}
-        filters={grid.filters}
-        onFilterChange={grid.setFilter}
-        advancedFilter={grid.advancedFilter}
-        search={grid.search}
+        grid={grid}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
         onNavigableIdsChange={onIdsChange}
-        widths={grid.widths}
-        onResizeColumn={grid.setWidth}
-        onResetColumnWidth={grid.clearWidth}
-        columnControls={grid.columnControls}
-        density={grid.density}
         empty={
           <p className="mx-auto max-w-lg p-6 text-center text-[0.9375rem] text-ink-muted">
             Finance Activity begins with the first audited change after this deployment.

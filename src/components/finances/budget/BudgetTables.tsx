@@ -175,16 +175,13 @@ export function BudgetTables({
             rowMenu={rowMenu}
             ariaLabel={`Envelopes for ${monthLabel(monthKey)}`}
             empty="No envelopes yet."
-            widths={envelopes.grid.widths}
-            onResizeColumn={envelopes.grid.setWidth}
-            onResetColumnWidth={envelopes.grid.clearWidth}
-            columnControls={envelopes.grid.columnControls}
-            collapsedGroups={revealBudgetGroups(
-              envelopes.grid.collapsedGroups,
-              revealAncestors,
-            )}
-            onToggleGroup={envelopes.grid.toggleGroup}
-            density={envelopes.grid.density}
+            grid={{
+              ...envelopes.grid,
+              collapsedGroups: revealBudgetGroups(
+                envelopes.grid.collapsedGroups,
+                revealAncestors,
+              ),
+            }}
             autoHeight
             rowLabel={(row) => `Envelope: ${row.node.name}`}
             groupTotals={(_nodes, header) => groupTotals(sections.envelopes, header.id)}
@@ -229,16 +226,13 @@ export function BudgetTables({
             rowMenu={rowMenu}
             ariaLabel={`Bills for ${monthLabel(monthKey)}`}
             empty="No bills yet — open Bills to add or discover recurring charges."
-            widths={bills.grid.widths}
-            onResizeColumn={bills.grid.setWidth}
-            onResetColumnWidth={bills.grid.clearWidth}
-            columnControls={bills.grid.columnControls}
-            collapsedGroups={revealBudgetGroups(
-              bills.grid.collapsedGroups,
-              revealAncestors,
-            )}
-            onToggleGroup={bills.grid.toggleGroup}
-            density={bills.grid.density}
+            grid={{
+              ...bills.grid,
+              collapsedGroups: revealBudgetGroups(
+                bills.grid.collapsedGroups,
+                revealAncestors,
+              ),
+            }}
             autoHeight
             rowLabel={(row) => `Bill: ${row.node.name}`}
             groupTotals={(_nodes, header) => groupTotals(sections.bills, header.id)}
@@ -287,16 +281,13 @@ export function BudgetTables({
           rowMenu={rowMenu}
           ariaLabel={`Savings for ${monthLabel(monthKey)}`}
           empty="No savings envelopes yet — add one with + Envelope above."
-          widths={savings.grid.widths}
-          onResizeColumn={savings.grid.setWidth}
-          onResetColumnWidth={savings.grid.clearWidth}
-          columnControls={savings.grid.columnControls}
-          collapsedGroups={revealBudgetGroups(
-            savings.grid.collapsedGroups,
-            revealAncestors,
-          )}
-          onToggleGroup={savings.grid.toggleGroup}
-          density={savings.grid.density}
+          grid={{
+            ...savings.grid,
+            collapsedGroups: revealBudgetGroups(
+              savings.grid.collapsedGroups,
+              revealAncestors,
+            ),
+          }}
           autoHeight
           rowLabel={(row) => `Savings: ${row.node.name}`}
           groupTotals={(_nodes, header) => groupTotals(sections.savings, header.id)}

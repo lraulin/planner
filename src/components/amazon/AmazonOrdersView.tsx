@@ -336,13 +336,7 @@ export function AmazonOrdersView({
         rowLabel={(row) => row.node.productName || "Amazon item"}
         enableFilters
         enableSort
-        sorts={gridState.sorts}
-        onSortChange={gridState.toggleSort}
-        onSetSort={gridState.setSort}
-        filters={gridState.filters}
-        onFilterChange={gridState.setFilter}
-        advancedFilter={gridState.advancedFilter}
-        search={gridState.search}
+        grid={gridState}
         distinctValues={distinctValues}
         preparedCounts={counts}
         preparedDisplay
@@ -351,13 +345,6 @@ export function AmazonOrdersView({
         onVisibleRange={onVisibleRange}
         loadExportRows={loadExportRows}
         onNavigableIdsChange={onIdsChange}
-        widths={gridState.widths}
-        onResizeColumn={gridState.setWidth}
-        onResetColumnWidth={gridState.clearWidth}
-        columnControls={gridState.columnControls}
-        collapsedGroups={gridState.collapsedGroups}
-        onToggleGroup={gridState.toggleGroup}
-        density={gridState.density}
         empty={
           !isClient ? (
             <div className="min-h-0 flex-1" />

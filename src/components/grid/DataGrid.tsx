@@ -15,12 +15,10 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
-import type { GridDensity } from "@/lib/settings/grid";
 import type { DropZone } from "@/lib/tree/dnd";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import {
   alignClass,
-  type ColumnControls,
   type ColumnDef,
   type ColumnMeta,
   type NodeGridRow,
@@ -28,12 +26,8 @@ import {
 import { ColumnHeaderRow } from "./ColumnHeader";
 import { useGridChips } from "./useGridChips";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
-import { filterActive, rowPassesFilters, type ColumnFilter } from "@/lib/grid/filters";
-import {
-  crossFilterActive,
-  rowPassesCrossFilter,
-  type CrossColumnFilter,
-} from "@/lib/grid/crossFilter";
+import { filterActive, rowPassesFilters } from "@/lib/grid/filters";
+import { crossFilterActive, rowPassesCrossFilter } from "@/lib/grid/crossFilter";
 import { withAncestors } from "@/lib/grid/ancestors";
 import { buildGridTemplate, nameColumnOffset } from "@/lib/grid/template";
 import { collectColumnValues, distinctValuesOf } from "@/lib/grid/distinct";
@@ -65,6 +59,7 @@ import { RowDragHandleContext, type RowDragHandleApi } from "./rowDragContext";
 import { RowSelectedContext } from "./rowSelectedContext";
 import { SelectionCheckbox } from "./SelectionCheckbox";
 import { downloadTextFile } from "./downloadCsv";
+import type { GridState } from "./useGridState";
 
 export type GridSortKey = { columnId: string; direction: "asc" | "desc" };
 
@@ -76,6 +71,27 @@ export type GridSortKey = { columnId: string; direction: "asc" | "desc" };
  * key can only approximate it.
  */
 export type SortState = GridSortKey[];
+
+const NO_SORTS: SortState = [];
+
+/** The slice of `useGridState` this grid renders and writes back to. */
+type GridView = Pick<
+  GridState,
+  | "sorts"
+  | "toggleSort"
+  | "setSort"
+  | "filters"
+  | "setFilter"
+  | "advancedFilter"
+  | "search"
+  | "widths"
+  | "setWidth"
+  | "clearWidth"
+  | "columnControls"
+  | "collapsedGroups"
+  | "toggleGroup"
+  | "density"
+>;
 
 /** Click / keyboard modifiers the host turns into multi-select. */
 export type GridSelectMods = SelectMods;
@@ -208,29 +224,16 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   empty,
   enableFilters = false,
   enableSort = false,
-  sorts: controlledSorts,
-  onSortChange,
-  onSetSort,
-  filters: controlledFilters,
-  onFilterChange,
-  advancedFilter = null,
-  search = "",
+  grid,
   distinctValues: providedDistinctValues,
   onDistinctValuesNeeded,
   onCountsChange,
-  widths,
-  onResizeColumn,
-  onResetColumnWidth,
-  columnControls,
-  collapsedGroups,
-  onToggleGroup,
   onGroupIdsChange,
   groupTotals,
   groupNote,
   groupChrome,
   footerTotals,
   onNavigableIdsChange,
-  density = "comfortable",
   autoHeight = false,
   rowDrag,
   rowMenu,
@@ -321,29 +324,17 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   /** Display-index range currently on screen, for prefetching prepared blocks. */
   onVisibleRange?: (start: number, end: number) => void;
   /**
-   * Sort and filters are controlled when a host passes them, which is what lets a tab
-   * persist them. Omitting both keeps the grid's own state, so a tab can adopt one at a
-   * time — and so a grid with nothing to remember does not need a store.
+   * The tab's remembered view — sort, filters, advanced filter, search, column widths and
+   * layout controls, collapsed groups, density. Pass `useGridState()`'s result whole.
+   *
+   * One prop rather than fourteen because the fourteen drifted: hosts threaded them by hand,
+   * Notes forgot `density`, and its toolbar's density toggle then saved a setting the grid
+   * never read. A host that must adjust one piece spreads it: `{ ...grid, collapsedGroups }`.
+   *
+   * The sort applies only with `enableSort`, since a grid with no sortable headers would
+   * otherwise rearrange itself with no indicator saying so.
    */
-  sorts?: SortState;
-  /** `additive` is a Shift-click: refine the existing sort rather than replacing it. */
-  onSortChange?: (columnId: string, additive: boolean) => void;
-  /**
-   * Set one column's sort key outright, or drop it with `null`. The header's cycle cannot
-   * express "make this descending" in one step, and a menu item that has to be clicked twice
-   * to reach the direction it names is not a menu item.
-   */
-  onSetSort?: (columnId: string, direction: GridSortKey["direction"] | null) => void;
-  filters?: Record<string, ColumnFilter>;
-  onFilterChange?: (columnId: string, filter: ColumnFilter) => void;
-  /**
-   * Cross-column And/Or expression from the advanced filter builder, ANDed with the
-   * per-column filters. Always controlled — there is no host-less version, because the
-   * builder that writes it lives in the toolbar.
-   */
-  advancedFilter?: CrossColumnFilter | null;
-  /** Quick-search text, matched across every filterable column. */
-  search?: string;
+  grid: GridView;
   /**
    * Distinct values per column id. Pass the same object given to `GridToolbar` so the
    * header funnels and the advanced builder offer identical choices; omit it and the grid
@@ -361,20 +352,6 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * counted — they are chrome, not results.
    */
   onCountsChange?: (counts: { shown: number; total: number }) => void;
-  /** Column id to pixel width, overriding each column's declared track. */
-  widths?: Record<string, number>;
-  /** Omit to leave columns unresizable, as a grid with nowhere to store widths should. */
-  onResizeColumn?: (columnId: string, width: number) => void;
-  onResetColumnWidth?: (columnId: string) => void;
-  /**
-   * Show / hide / move / reset for the column set — what the header menu's layout items and
-   * header drag-to-reorder act through. `useGridState` returns this ready-made as
-   * `columnControls`. Omit it and those items are visibly unavailable rather than missing.
-   */
-  columnControls?: ColumnControls;
-  /** Group ids the user has collapsed. Omitted means every group is open. */
-  collapsedGroups?: Set<string>;
-  onToggleGroup?: (groupId: string) => void;
   /**
    * Every group id currently in the row set, so the toolbar can offer Expand all / Collapse
    * all without re-deriving the grouping it does not own. Reported before collapse is
@@ -440,12 +417,6 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    */
   onNavigableIdsChange?: (ids: string[]) => void;
   /**
-   * Row height. Overrides `--row-height` on the grid's own subtree rather than setting a
-   * height per row: the header, the data rows and the group headers all already read that
-   * one variable, so density stays a single change instead of three that can drift.
-   */
-  density?: GridDensity;
-  /**
    * Size to the rows instead of filling the parent, for a grid that shares a scrolling page
    * with another one. The default fills its container and scrolls internally, which is right
    * for a tab that *is* the page and collapses to a single row when two are stacked.
@@ -471,10 +442,8 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
 } & RowMeta<TRow>) {
   type Row = NodeGridRow<TRow>;
 
-  const [ownSorts, setOwnSorts] = useState<SortState>([]);
-  const [ownFilters, setOwnFilters] = useState<Record<string, ColumnFilter>>({});
-  const sorts = controlledSorts ?? ownSorts;
-  const filters = controlledFilters ?? ownFilters;
+  const { filters, advancedFilter, search, widths, collapsedGroups, density } = grid;
+  const sorts = enableSort ? grid.sorts : NO_SORTS;
 
   const [dragIds, setDragIds] = useState<readonly string[] | null>(null);
   /**
@@ -687,7 +656,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     if (preparedDisplay) return filteredRows;
     let next = filteredRows;
 
-    if (collapsedGroups && collapsedGroups.size > 0) {
+    if (collapsedGroups.size > 0) {
       next = applyGroupCollapse(next, collapsedGroups);
     }
 
@@ -906,73 +875,6 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     return [...downloads, ...copies];
   }, []);
   useRegisterCommands(registerExportCommands ? exportCommands : EMPTY_EXPORT_COMMANDS);
-
-  /**
-   * Achieve's header cycle: unsorted → ascending → descending → unsorted.
-   *
-   * A plain click replaces the whole sort; `additive` (Shift-click) cycles this one column's
-   * key and leaves the others alone. Mirrors `useGridState.toggleSort`, which is the
-   * controlled version — the two must agree or a tab would behave differently depending on
-   * whether it persists its sort.
-   */
-  const handleSort = useCallback(
-    (columnId: string, additive: boolean) => {
-      if (onSortChange) {
-        onSortChange(columnId, additive);
-        return;
-      }
-      setOwnSorts((current) => {
-        const existing = current.find((entry) => entry.columnId === columnId);
-
-        if (!additive) {
-          const isSoleKey = current.length === 1 && existing !== undefined;
-          if (!isSoleKey) return [{ columnId, direction: "asc" }];
-          return existing.direction === "asc" ? [{ columnId, direction: "desc" }] : [];
-        }
-
-        if (!existing) return [...current, { columnId, direction: "asc" }];
-        return existing.direction === "asc"
-          ? current.map((entry) =>
-              entry.columnId === columnId
-                ? { columnId, direction: "desc" as const }
-                : entry,
-            )
-          : current.filter((entry) => entry.columnId !== columnId);
-      });
-    },
-    [onSortChange],
-  );
-
-  /**
-   * The column menu's Sort ascending / descending / Clear sort. Replaces the whole sort with
-   * this one key, matching a plain header click — accumulating keys stays Shift-click's job,
-   * so a menu pick can never quietly leave a stale secondary sort behind.
-   */
-  const handleSetSort = useCallback(
-    (columnId: string, direction: GridSortKey["direction"] | null) => {
-      if (onSetSort) {
-        onSetSort(columnId, direction);
-        return;
-      }
-      setOwnSorts((current) =>
-        direction === null
-          ? current.filter((entry) => entry.columnId !== columnId)
-          : [{ columnId, direction }],
-      );
-    },
-    [onSetSort],
-  );
-
-  const handleFilterChange = useCallback(
-    (columnId: string, filter: ColumnFilter) => {
-      if (onFilterChange) {
-        onFilterChange(columnId, filter);
-        return;
-      }
-      setOwnFilters((current) => ({ ...current, [columnId]: filter }));
-    },
-    [onFilterChange],
-  );
 
   /**
    * Row event handlers must be identity-stable across renders. DataRow's memo compares
@@ -1271,18 +1173,18 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                 columns={columns}
                 allColumns={filterColumns}
                 gridTemplate={gridTemplate}
-                sorts={enableSort ? sorts : []}
-                onSort={enableSort ? handleSort : undefined}
-                onSetSort={enableSort ? handleSetSort : undefined}
+                sorts={sorts}
+                onSort={enableSort ? grid.toggleSort : undefined}
+                onSetSort={enableSort ? grid.setSort : undefined}
                 filters={filters}
-                onFilterChange={handleFilterChange}
+                onFilterChange={grid.setFilter}
                 distinctValues={distinctValues}
                 onDistinctValuesNeeded={onDistinctValuesNeeded}
                 columnValues={columnValues}
-                onResize={onResizeColumn}
-                onResetWidth={onResetColumnWidth}
+                onResize={grid.setWidth}
+                onResetWidth={grid.clearWidth}
                 widths={widths}
-                controls={columnControls}
+                controls={grid.columnControls}
                 enableFilters={enableFilters}
                 leadingGutter={
                   gutter === "checkbox" ? (
@@ -1328,13 +1230,13 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                       <GroupHeader
                         row={row}
                         gridTemplate={gridTemplate}
-                        collapsed={collapsedGroups?.has(row.id) ?? false}
-                        onToggle={() => onToggleGroup?.(row.id)}
+                        collapsed={collapsedGroups.has(row.id)}
+                        onToggle={() => grid.toggleGroup(row.id)}
                         drag={dragBindingFor(
                           row.id,
                           displayNodeIds,
-                          collapsedGroups?.has(row.id)
-                            ? () => onToggleGroup?.(row.id)
+                          collapsedGroups.has(row.id)
+                            ? () => grid.toggleGroup(row.id)
                             : undefined,
                         )}
                         compact={compact}

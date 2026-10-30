@@ -530,17 +530,7 @@ export function DailyItemsGrid({
           }}
           rowLabel={(row) => row.node.title}
           enableSort
-          sorts={gridState.sorts}
-          onSortChange={gridState.toggleSort}
-          onSetSort={gridState.setSort}
-          filters={gridState.filters}
-          onFilterChange={gridState.setFilter}
-          widths={gridState.widths}
-          onResizeColumn={gridState.setWidth}
-          onResetColumnWidth={gridState.clearWidth}
-          columnControls={gridState.columnControls}
-          collapsedGroups={gridState.collapsedGroups}
-          onToggleGroup={gridState.toggleGroup}
+          grid={gridState}
           onNavigableIdsChange={onIdsChange}
           empty={<p className="p-4 text-[0.8125rem] text-ink-faint">{emptyHint}</p>}
         />

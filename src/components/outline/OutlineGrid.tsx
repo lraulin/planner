@@ -1063,23 +1063,10 @@ export function OutlineGrid({ wire }: { wire: OutlineWire }) {
         rowSwipe={rowSwipe}
         enableFilters
         enableSort
-        sorts={gridState.sorts}
-        onSortChange={gridState.toggleSort}
-        onSetSort={gridState.setSort}
-        filters={gridState.filters}
-        onFilterChange={gridState.setFilter}
-        advancedFilter={gridState.advancedFilter}
-        search={gridState.search}
+        grid={gridState}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
-        widths={gridState.widths}
-        onResizeColumn={gridState.setWidth}
-        onResetColumnWidth={gridState.clearWidth}
-        columnControls={gridState.columnControls}
-        collapsedGroups={gridState.collapsedGroups}
-        onToggleGroup={gridState.toggleGroup}
         onGroupIdsChange={setGroupIds}
-        density={gridState.density}
         empty={
           <EmptyState
             filtered={nodes.length > 0}

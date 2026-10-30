@@ -474,22 +474,10 @@ export function AccountsView({
         rowLabel={(row) => row.node.name || "Account"}
         enableFilters
         enableSort
-        sorts={gridState.sorts}
-        onSortChange={gridState.toggleSort}
-        onSetSort={gridState.setSort}
-        filters={gridState.filters}
-        onFilterChange={gridState.setFilter}
-        advancedFilter={gridState.advancedFilter}
-        search={gridState.search}
+        grid={gridState}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
         onNavigableIdsChange={onIdsChange}
-        widths={gridState.widths}
-        onResizeColumn={gridState.setWidth}
-        onResetColumnWidth={gridState.clearWidth}
-        columnControls={gridState.columnControls}
-        collapsedGroups={gridState.collapsedGroups}
-        onToggleGroup={gridState.toggleGroup}
         onGroupIdsChange={setGroupIds}
         // Accounts holds every row, so a group's money is a real sum of it, and the
         // question a grouped account list is read to answer is "how much is in the
@@ -502,7 +490,6 @@ export function AccountsView({
             pending: formatUsd(totals.pendingCents),
           };
         }}
-        density={gridState.density}
         empty={
           <div className="mx-auto w-full max-w-2xl p-6">
             <p className="mb-4 text-center text-[0.9375rem] text-ink-muted">

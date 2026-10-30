@@ -801,13 +801,7 @@ export function FinancesView({
         rowLabel={transactionRowLabel}
         enableFilters
         enableSort
-        sorts={gridState.sorts}
-        onSortChange={gridState.toggleSort}
-        onSetSort={gridState.setSort}
-        filters={gridState.filters}
-        onFilterChange={gridState.setFilter}
-        advancedFilter={gridState.advancedFilter}
-        search={gridState.search}
+        grid={gridState}
         distinctValues={distinctValues}
         onDistinctValuesNeeded={ensureFacets}
         preparedCounts={counts}
@@ -817,13 +811,6 @@ export function FinancesView({
         onVisibleRange={onVisibleRange}
         loadExportRows={loadExportRows}
         onNavigableIdsChange={onIdsChange}
-        widths={gridState.widths}
-        onResizeColumn={gridState.setWidth}
-        onResetColumnWidth={gridState.clearWidth}
-        columnControls={gridState.columnControls}
-        collapsedGroups={gridState.collapsedGroups}
-        onToggleGroup={gridState.toggleGroup}
-        density={gridState.density}
         empty={
           !isClient ? (
             <div className="min-h-0 flex-1" />
