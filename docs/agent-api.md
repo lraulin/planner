@@ -875,6 +875,141 @@ Read one scenario: live bills and income as it counts them, its own lines, and t
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
 
+### `get_budget_month`
+
+Read one budget month: each envelope's assigned, activity and available, plus income and Ready to Assign.
+
+- Use when: Use before any budget edit to get envelope and group ids and the month's numbers, or to answer what is left in an envelope.
+- Avoid when: Use get_finance_overview for balances and the envelope list without money, and get_spending_breakdown for spending history across months.
+- Returns: summary (income, from last month, last month overspent, assigned, activity, available, held, assigned in future months, uncategorized activity, readyToAssignCents), uncategorized {count, cents}, groups, income envelopes with receivedCents, a page of expense envelopes in Budget page order { id, name, kind, groupId, assignedCents, activityCents, availableCents, goalCents? }, hiddenEnvelopeCount and pageInfo. Hidden envelopes still count in summary.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ month?, includeHidden=false, offset?, limit? }`
+- Output: `{ month*, firstMonth*, lastMonth*, summary*, uncategorized*, groups*, income*, envelopes*, hiddenEnvelopeCount*, pageInfo* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `create_budget_group`
+
+Create a budget group inside one section (spending, bill, savings or income).
+
+- Use when: Use when the user wants envelopes gathered under a new heading.
+- Avoid when: Do not create a group just to hold one envelope unless asked; an envelope can sit at the section root.
+- Returns: created: true and the group { id, name, kind, parentGroupId, hidden }.
+- Effects: write; destructive=false; retry=unsafe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ name*, kind*, parentGroupId? }`
+- Output: `{ created*, group* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `update_budget_group`
+
+Rename a budget group.
+
+- Use when: Use when the user renames a group on the Budget page's terms.
+- Avoid when: Do not use to move envelopes; use update_budget_envelope with groupId.
+- Returns: The group { id, name, kind, parentGroupId, hidden } after the rename.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ id*, name* }`
+- Output: `{ group* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `create_budget_envelope`
+
+Create an envelope (category), optionally inside a group: spending, savings, bill or income.
+
+- Use when: Use when the user wants a new envelope, e.g. a Vet / Pet Medical fund before moving money into it.
+- Avoid when: Do not create one that get_budget_month already lists under the same name; refused as a conflict. A new envelope starts at $0; fund it with move_budget_money or set_budget_assignment.
+- Returns: created: true and the envelope { id, name, kind, groupId, groupName, hidden, notes }.
+- Effects: write; destructive=false; retry=unsafe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ name*, kind="spending", groupId?, notes? }`
+- Output: `{ created*, envelope* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `update_budget_envelope`
+
+Rename, move, change the section of, hide (archive) or unhide an envelope.
+
+- Use when: Use to rename an envelope, move it to another group, or archive one the user no longer uses (hidden: true keeps its history and balance).
+- Avoid when: Do not hide an envelope that still holds money without saying so; its available balance stays counted. There is no delete tool.
+- Returns: The envelope { id, name, kind, groupId, groupName, hidden, notes } after the edit.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ id*, name?, groupId?, kind?, hidden?, notes? }`
+- Output: `{ envelope* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `set_budget_assignment`
+
+Set or adjust how much is assigned to one envelope in one month.
+
+- Use when: Use to fund an envelope from Ready to Assign (amountCents sets it, adjustCents adds or removes).
+- Avoid when: Use move_budget_money to take money from another envelope. Assigning more than Ready to Assign holds is allowed, as on the Budget page, and comes back as a warning.
+- Returns: applied, the envelope's assigned and available after, previousAssignedCents, readyToAssignCents after, and warnings (e.g. Ready to Assign went negative).
+- Effects: write; destructive=false; retry=unsafe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ month*, envelopeId*, amountCents?, adjustCents? }`
+- Output: `{ applied*, month*, envelope*, previousAssignedCents*, readyToAssignCents*, warnings* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `move_budget_money`
+
+Move money between two envelopes in one month, atomically.
+
+- Use when: Use when the user moves money from one envelope to another, e.g. $623.65 from House to Vet / Pet Medical.
+- Avoid when: Do not use to fund from Ready to Assign; use set_budget_assignment. A move larger than the source's available balance is refused with nothing changed, never clamped.
+- Returns: moved, amountCents, both envelopes' assigned and available after the move, and readyToAssignCents (unchanged).
+- Effects: write; destructive=false; retry=unsafe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ month*, fromEnvelopeId*, toEnvelopeId*, amountCents* }`
+- Output: `{ moved*, month*, amountCents*, from*, to*, readyToAssignCents* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `set_transaction_category`
+
+File transactions to an envelope, or make them uncategorized.
+
+- Use when: Use to recategorize rows found with search_transactions. Filing also teaches the payee that envelope, as filing on the register does.
+- Avoid when: Do not use on a split row; use split_transaction. Off-budget rows and transfers between budget accounts are skipped.
+- Returns: The envelope, the ids updated, and the ids skipped with a reason.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ ids*, envelopeId* }`
+- Output: `{ envelope*, updated*, skipped* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `split_transaction`
+
+Split one transaction across envelopes, replace its split, or unsplit it.
+
+- Use when: Use when one charge covers several envelopes, e.g. a Target run that was groceries and gifts.
+- Avoid when: Lines must sum exactly to the row's amount, with the same sign. Transfers and split lines cannot be split.
+- Returns: The row's id, amountCents, split, and its lines { id, amountCents, envelopeId, envelopeName, notes }.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ id*, splits* }`
+- Output: `{ id*, split*, amountCents*, lines* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
 ## History
 
 ### `list_jobs`

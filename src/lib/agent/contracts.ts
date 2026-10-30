@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { budgetInputSchemas, budgetOutputSchemas } from "./budgetContracts";
+import { pageInfoSchema } from "./pageInfoSchema";
 import {
   financeAccountKindEnum,
   financeFlowKindEnum,
@@ -191,14 +193,7 @@ const commitmentSummarySchema = z.strictObject({
   active: z.boolean(),
 });
 
-export const pageInfoSchema = z.strictObject({
-  offset: z.number().int().min(0),
-  limit: z.number().int().min(1),
-  returned: z.number().int().min(0),
-  total: z.number().int().min(0),
-  hasMore: z.boolean(),
-  nextOffset: z.number().int().min(0).nullable(),
-});
+export { pageInfoSchema };
 
 export const nodeSummarySchema = z.strictObject({
   id,
@@ -1184,6 +1179,7 @@ export const inputSchemas = {
   get_scenario: z.strictObject({
     id: id.describe("Scenario id from list_scenarios."),
   }),
+  ...budgetInputSchemas,
   list_jobs: z.strictObject({
     currentOnly: z.boolean().default(false),
     ...historyListInputFields,
@@ -1910,6 +1906,7 @@ export const outputSchemas = {
     pageInfo: pageInfoSchema,
   }),
   get_scenario: scenarioDetailSchema,
+  ...budgetOutputSchemas,
   list_jobs: z.strictObject({
     jobs: z.array(jobSummarySchema),
     pageInfo: pageInfoSchema,

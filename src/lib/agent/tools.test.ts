@@ -167,6 +167,15 @@ describe("agent tool registry", () => {
       "set_commitment_payees",
       "list_scenarios",
       "get_scenario",
+      "get_budget_month",
+      "create_budget_group",
+      "update_budget_group",
+      "create_budget_envelope",
+      "update_budget_envelope",
+      "set_budget_assignment",
+      "move_budget_money",
+      "set_transaction_category",
+      "split_transaction",
     ]);
     expect(finances.tools.every((tool) => tool.domain === "finances")).toBe(true);
 
