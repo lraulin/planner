@@ -81,6 +81,20 @@ const eslintConfig = defineConfig([
     },
   },
 
+  // Flat control flow (development/typescript-react.md). The codebase already has no else
+  // after a return and nothing nested past four blocks; these keep it that way. max-depth 3
+  // was measured: its 33 hits were guards inside two nested loops and char-loop parsers,
+  // where flattening further buys nothing. `src/` only: one-off scripts under scripts/ are
+  // run once against a database and are not where the next agent copies a pattern from.
+  {
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    rules: {
+      "no-else-return": ["error", { allowElseIf: false }],
+      "no-lonely-if": "error",
+      "max-depth": ["error", 4],
+    },
+  },
+
   // A `!` tells the compiler a value exists without checking it, so the crash lands far from
   // the cause. Application code handles the missing case or throws naming the invariant
   // (development/typescript-react.md). Tests keep `!`: a wrong guess there fails the test.
