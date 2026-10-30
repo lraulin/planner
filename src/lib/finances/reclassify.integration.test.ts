@@ -92,7 +92,12 @@ async function classifiedRows(userId: string) {
       payeeId: financeTransactions.payeeId,
     })
     .from(financeTransactions)
-    .where(eq(financeTransactions.userId, userId));
+    .where(eq(financeTransactions.userId, userId))
+    // SQL promises no order without ORDER BY, and this table has eight indexes leading with
+    // user_id, each returning rows in its own key order. Other files insert into and delete
+    // from it during the parallel run; when autovacuum re-analyzes it between two reads, the
+    // planner can switch index and the same unchanged rows fail a positional toEqual.
+    .orderBy(financeTransactions.id);
   return rows;
 }
 
