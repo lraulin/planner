@@ -361,7 +361,12 @@ describeDb("budget agent tools", () => {
     );
     expect(split.split).toBe(true);
     expect(split.amountCents).toBe(-12_000);
-    expect(split.lines.map((line) => [line.amountCents, line.envelopeName])).toEqual([
+    // Lines written in one transaction share created_at, so their order is not fixed.
+    expect(
+      split.lines
+        .map((line) => [line.amountCents, line.envelopeName])
+        .sort(([a], [b]) => Number(a) - Number(b)),
+    ).toEqual([
       [-10_000, "Vet"],
       [-2_000, "House"],
     ]);
