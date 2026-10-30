@@ -123,6 +123,7 @@ function guardWhileCheckedOut(client: pg.PoolClient): pg.PoolClient {
  * promise, which Drizzle already wraps as a query error; wrapping that path as well would
  * bury the driver's own `code` under a second layer.
  */
+// eslint-disable-next-line no-restricted-syntax -- overriding pg.Pool's connect() needs a subclass; Drizzle takes the pool object itself.
 class AppPool extends pg.Pool {
   override connect(): Promise<pg.PoolClient>;
   override connect(callback: NonNullable<ConnectCallback>): void;
