@@ -183,7 +183,7 @@ Work in **cycles**. One cycle = one coherent change.
 4. **Gate** it (above).
 5. **Commit** — small, single-purpose, imperative subject in the voice of the existing log
    (`git log --oneline -20` — this repo writes commit subjects as sentences about intent,
-   not as changelog entries). No mention of Claude or Anthropic, no `Co-Authored-By`.
+   not as changelog entries).
 6. **Push** to `origin/master`. Committing and pushing is pre-authorized here.
 7. **Log** the outcome, then immediately start the next cycle.
 

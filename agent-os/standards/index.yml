@@ -32,7 +32,7 @@ development:
   clean-code:
     description: How code should read here — the app→components→lib→db dependency direction (lib never imports app, components never touch the db, actions.ts stays thin, every mutation takes userId), naming for the concept, small single-purpose lib modules, one shared implementation per concern (DataGrid, ModalShell, Drawer, run()), explicit over clever, no speculative generality, DRY only for business rules, when the model is wrong change the model (two workarounds for one missing concept is the signal, not "would touch a lot of files"), and reviewing agent-written diffs
   commits:
-    description: How to record and retrieve a change for the agent that reads it in six months — specs for governing intent, targeted history for implementation rationale, one logical change per commit, effect-naming subject, useful body, canonical Spec trailer, no AI attribution, and the three immutable-message checks
+    description: How to record and retrieve a change for the agent that reads it in six months — specs for governing intent, targeted history for implementation rationale, one logical change per commit, effect-naming subject, useful body, canonical Spec trailer, and the three immutable-message checks
   dates:
     description: Calendar day vs instant — UTC noon encoding (fromDateKey/toDateKey/asCalendarDay), localDateKey for wall-clock today, never startOfDay on calendar fields (Aug 1→Jul 31 regression), and why the test suite pins TZ
   security:

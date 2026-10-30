@@ -114,13 +114,6 @@ not its whole predecessor chain; the delta owns those relationships. Repeat `Spe
 when one logical change is genuinely governed by more than one spec. Unshaped maintenance
 does not need a trailer. This is the link from a blamed line back to intent.
 
-**No AI attribution.** No `Co-Authored-By`, no "Generated with", no tool names — this is
-already a hard rule in `CLAUDE.md`, and the reason it makes sense here rather than being
-mere preference is that almost every commit in this repo is agent-written. A marker present
-on everything distinguishes nothing; it would only add four lines of noise to 305 commits
-and counting. The transparency argument for attribution assumes a reader deciding which
-changes to scrutinise harder. Here, the answer is all of them.
-
 ## The one part of this that is enforced
 
 `.husky/commit-msg` rejects three things because they cannot be repaired after push:
