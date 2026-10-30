@@ -6,10 +6,9 @@ import { saveNodeDetail } from "@/lib/detail/mutations";
 import { isSettled } from "@/lib/tree/completionCascade";
 import {
   applyStateTransition,
-  createNode,
-  createNodeOnce,
   reopenSettledAncestors,
-} from "@/lib/tree/mutations";
+} from "@/lib/tree/stateTransitions";
+import { createNode, createNodeOnce } from "@/lib/tree/mutations";
 import type { CapturedItem } from "./parse";
 
 /**

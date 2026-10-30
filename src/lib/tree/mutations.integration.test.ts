@@ -13,21 +13,17 @@ import {
   createNodeOnce,
   deleteNode,
   expandThroughDepth,
-  indentNode,
-  moveNode,
-  moveNodeVertically,
-  outdentNode,
   renameNode,
   setDeadline,
   setAllCollapsed,
   setCollapsed,
   setEffort,
   setFocus,
-  setPriority,
-  setState,
-  setTcPriorities,
-  skipRecurrence,
 } from "./mutations";
+import { indentNode, moveNode, moveNodeVertically, outdentNode } from "./nodeMoves";
+import { setPriority, setTcPriorities } from "./priorityWrites";
+import { setState } from "./stateTransitions";
+import { skipRecurrence } from "./recurrenceCycle";
 import { loadOutline } from "./queries";
 import { effectiveState } from "./shelving";
 

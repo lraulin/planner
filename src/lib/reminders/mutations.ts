@@ -8,7 +8,10 @@ import {
 } from "@/db/schema";
 import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
 import { setAppointmentCheckState } from "@/lib/schedule/mutations";
-import { applyStateTransition, reopenSettledAncestors } from "@/lib/tree/mutations";
+import {
+  applyStateTransition,
+  reopenSettledAncestors,
+} from "@/lib/tree/stateTransitions";
 import {
   publishAll,
   rearmReminders,

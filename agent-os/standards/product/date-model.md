@@ -169,12 +169,12 @@ An effort-based scheduler (dormant) writes its own `scheduled_start` / `schedule
 
 ## Where this is enforced
 
-| Concern                       | Location                                           |
-| ----------------------------- | -------------------------------------------------- |
-| CHECK constraint              | `nodes` table / migration `0019`                   |
-| Effective shelf / state       | `src/lib/tree/shelving.ts`, `derive.ts`            |
-| Chooser / grid hide           | `slice.ts`, `chooser/views.ts` (effective state)   |
-| Day line sync                 | `src/lib/day/sync.ts`                              |
-| Forward skip                  | `src/lib/day/mutations.ts` `forwardOpenItems`      |
-| Detail save coupling          | `src/lib/detail/mutations.ts`, `stateFromDates.ts` |
-| State transition + recurrence | `src/lib/tree/mutations.ts` `applyStateTransition` |
+| Concern                       | Location                                                  |
+| ----------------------------- | --------------------------------------------------------- |
+| CHECK constraint              | `nodes` table / migration `0019`                          |
+| Effective shelf / state       | `src/lib/tree/shelving.ts`, `derive.ts`                   |
+| Chooser / grid hide           | `slice.ts`, `chooser/views.ts` (effective state)          |
+| Day line sync                 | `src/lib/day/sync.ts`                                     |
+| Forward skip                  | `src/lib/day/mutations.ts` `forwardOpenItems`             |
+| Detail save coupling          | `src/lib/detail/mutations.ts`, `stateFromDates.ts`        |
+| State transition + recurrence | `src/lib/tree/stateTransitions.ts` `applyStateTransition` |

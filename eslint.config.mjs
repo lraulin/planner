@@ -50,7 +50,6 @@ const OVERSIZE_FILES = [
   "src/lib/finances/supplies/mutations.ts",
   "src/lib/find/queries.ts",
   "src/lib/grid/commandDeck.ts",
-  "src/lib/tree/mutations.ts",
 ];
 
 const eslintConfig = defineConfig([

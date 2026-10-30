@@ -4,7 +4,9 @@ import { db } from "@/db";
 import { dailyItems, nodes, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
-import { createNode, moveNode, setState } from "@/lib/tree/mutations";
+import { createNode } from "@/lib/tree/mutations";
+import { moveNode } from "@/lib/tree/nodeMoves";
+import { setState } from "@/lib/tree/stateTransitions";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
   createDailyItem,

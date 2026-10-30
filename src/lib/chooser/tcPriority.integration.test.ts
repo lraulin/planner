@@ -3,7 +3,8 @@ import { db } from "@/db";
 import { nodes, users } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { createNode, setTcPriorities } from "@/lib/tree/mutations";
+import { createNode } from "@/lib/tree/mutations";
+import { setTcPriorities } from "@/lib/tree/priorityWrites";
 import { loadOutline } from "@/lib/tree/queries";
 import { planTcDrop } from "./tcPriority";
 

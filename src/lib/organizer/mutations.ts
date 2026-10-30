@@ -18,10 +18,8 @@ import { createAppointment } from "@/lib/schedule/mutations";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { assertCanNest } from "@/lib/tree/hierarchy";
-import {
-  applyStateTransition,
-  assignPriorityAmongSiblings,
-} from "@/lib/tree/mutations";
+import { applyStateTransition } from "@/lib/tree/stateTransitions";
+import { assignPriorityAmongSiblings } from "@/lib/tree/priorityWrites";
 import { between } from "@/lib/tree/sortKey";
 import type { NodeType } from "@/db/schema";
 import { organizerOutcomeError, type OrganizerOutcome } from "./types";

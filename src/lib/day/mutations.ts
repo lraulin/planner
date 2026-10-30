@@ -13,9 +13,9 @@ import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { isSettled } from "@/lib/tree/completionCascade";
 import {
   applyStateTransition,
-  createNode,
   reopenSettledAncestors,
-} from "@/lib/tree/mutations";
+} from "@/lib/tree/stateTransitions";
+import { createNode } from "@/lib/tree/mutations";
 import { rearmReminders } from "@/lib/reminders/arm";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";

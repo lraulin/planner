@@ -141,13 +141,13 @@ Must keep green:
 
 ## Where things live
 
-| Concern                       | Location                                            |
-| ----------------------------- | --------------------------------------------------- |
-| Day keys, calendar encoding   | `src/lib/schedule/geometry.ts`                      |
-| Local wall-clock arithmetic   | `src/lib/dateMath.ts`                               |
-| DateField                     | `src/components/detail/fields.tsx`                  |
-| Today hook                    | `src/components/grid/useToday.ts`                   |
-| Standalone display formats    | `src/lib/dateFormat.ts`, `SettingsProvider.tsx`     |
-| Detail save / record dates    | `src/lib/detail/mutations.ts`                       |
-| Completion + recurrence moves | `src/lib/tree/mutations.ts`, `src/lib/recurrence/*` |
-| Domain meanings               | `agent-os/standards/product/date-model.md`          |
+| Concern                       | Location                                                                                      |
+| ----------------------------- | --------------------------------------------------------------------------------------------- |
+| Day keys, calendar encoding   | `src/lib/schedule/geometry.ts`                                                                |
+| Local wall-clock arithmetic   | `src/lib/dateMath.ts`                                                                         |
+| DateField                     | `src/components/detail/fields.tsx`                                                            |
+| Today hook                    | `src/components/grid/useToday.ts`                                                             |
+| Standalone display formats    | `src/lib/dateFormat.ts`, `SettingsProvider.tsx`                                               |
+| Detail save / record dates    | `src/lib/detail/mutations.ts`                                                                 |
+| Completion + recurrence moves | `src/lib/tree/stateTransitions.ts`, `src/lib/tree/recurrenceCycle.ts`, `src/lib/recurrence/*` |
+| Domain meanings               | `agent-os/standards/product/date-model.md`                                                    |

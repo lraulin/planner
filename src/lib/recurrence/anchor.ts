@@ -2,7 +2,7 @@
  * The date a repeating task's pattern is *about*.
  *
  * One copy, because two callers must agree on it: completing or skipping the task
- * (`applyStateTransition` / `skipRecurrence` in `src/lib/tree/mutations.ts`) steps the dates
+ * (`applyStateTransition` / `skipRecurrence` in `src/lib/tree/`) steps the dates
  * on from here, and the drawer's "Next" preview (`RecurrenceFields`) promises to show what
  * that step will produce. When the preview kept its own precedence it read an expired
  * deferred date that completing ignores, so it could name a date years from the real one.

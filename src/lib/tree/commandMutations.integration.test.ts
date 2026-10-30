@@ -6,14 +6,9 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import { loadOutline } from "./queries";
-import {
-  convertNode,
-  createNode,
-  deleteNode,
-  setPriority,
-  setPriorityForNodes,
-  setState,
-} from "./mutations";
+import { convertNode, createNode, deleteNode } from "./mutations";
+import { setPriority, setPriorityForNodes } from "./priorityWrites";
+import { setState } from "./stateTransitions";
 
 const reachable = await databaseReachable();
 const describeDb = reachable ? describe : describe.skip;

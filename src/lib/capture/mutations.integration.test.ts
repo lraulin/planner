@@ -5,13 +5,9 @@ import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { loadNodeDetail } from "@/lib/detail/queries";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
-import {
-  createNode,
-  deleteNode,
-  moveNode,
-  renameNode,
-  setState,
-} from "@/lib/tree/mutations";
+import { createNode, deleteNode, renameNode } from "@/lib/tree/mutations";
+import { moveNode } from "@/lib/tree/nodeMoves";
+import { setState } from "@/lib/tree/stateTransitions";
 import { loadOutline } from "@/lib/tree/queries";
 import { captureItems, ensureInbox, INBOX_NAME } from "./mutations";
 import { parseCapture, type CapturedItem } from "./parse";

@@ -16,10 +16,10 @@ import {
 } from "@/lib/day/sync";
 import {
   applyStateTransition,
-  assignPriorityAmongSiblings,
-  moveNode,
   reopenSettledAncestors,
-} from "@/lib/tree/mutations";
+} from "@/lib/tree/stateTransitions";
+import { assignPriorityAmongSiblings } from "@/lib/tree/priorityWrites";
+import { moveNode } from "@/lib/tree/nodeMoves";
 import { subtreeIdsVia } from "@/lib/tree/ancestry";
 import { owningResultAreaIdFromChain } from "@/lib/tree/owningResultArea";
 import { loadNodeChain } from "@/lib/tree/path";

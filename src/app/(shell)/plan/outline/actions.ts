@@ -3,7 +3,31 @@
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import type { Position } from "@/lib/tree/types";
 import { nodeFromKind, type NodeKind } from "@/lib/tree/hierarchy";
-import * as tree from "@/lib/tree/mutations";
+import {
+  convertNode,
+  createNode,
+  deleteNode,
+  expandThroughDepth,
+  renameNode,
+  setAllCollapsed,
+  setCollapsed,
+  setDeadline,
+  setEffort,
+  setFocus,
+} from "@/lib/tree/mutations";
+import {
+  indentNode,
+  moveNode,
+  moveNodeVertically,
+  outdentNode,
+} from "@/lib/tree/nodeMoves";
+import {
+  setPriority,
+  setPriorityForNodes,
+  setTcPriorities,
+} from "@/lib/tree/priorityWrites";
+import { skipRecurrence } from "@/lib/tree/recurrenceCycle";
+import { setState } from "@/lib/tree/stateTransitions";
 import { run, type ActionResult } from "@/app/actionResult";
 
 /**
@@ -25,18 +49,18 @@ export async function createNodeAction(params: {
 }): Promise<ActionResult> {
   const { kind, ...rest } = params;
   const { type, isDream } = nodeFromKind(kind);
-  return run((userId) => tree.createNode({ userId, type, isDream, ...rest }));
+  return run((userId) => createNode({ userId, type, isDream, ...rest }));
 }
 
 export async function renameNodeAction(
   nodeId: string,
   name: string,
 ): Promise<ActionResult> {
-  return run((userId) => tree.renameNode(userId, nodeId, name));
+  return run((userId) => renameNode(userId, nodeId, name));
 }
 
 export async function deleteNodeAction(nodeId: string): Promise<ActionResult> {
-  return run((userId) => tree.deleteNode(userId, nodeId));
+  return run((userId) => deleteNode(userId, nodeId));
 }
 
 export async function setPriorityAction(
@@ -44,7 +68,7 @@ export async function setPriorityAction(
   letter: PriorityLetter | null,
   rank: number | null,
 ): Promise<ActionResult> {
-  return run((userId) => tree.setPriority(userId, nodeId, letter, rank));
+  return run((userId) => setPriority(userId, nodeId, letter, rank));
 }
 
 /**
@@ -56,21 +80,21 @@ export async function setPriorityForNodesAction(
   letter: PriorityLetter | null,
   rank: number | null,
 ): Promise<ActionResult> {
-  return run((userId) => tree.setPriorityForNodes(userId, nodeIds, letter, rank));
+  return run((userId) => setPriorityForNodes(userId, nodeIds, letter, rank));
 }
 
 export async function convertNodeAction(
   nodeId: string,
   targetKind: NodeKind,
 ): Promise<ActionResult> {
-  return run((userId) => tree.convertNode(userId, nodeId, targetKind));
+  return run((userId) => convertNode(userId, nodeId, targetKind));
 }
 
 export async function setStateAction(
   nodeId: string,
   state: NodeState,
 ): Promise<ActionResult> {
-  return run((userId) => tree.setState(userId, nodeId, state));
+  return run((userId) => setState(userId, nodeId, state));
 }
 
 /**
@@ -78,38 +102,38 @@ export async function setStateAction(
  * completing this one. Nothing is logged and nothing is reset — see `skipRecurrence`.
  */
 export async function skipRecurrenceAction(nodeId: string): Promise<ActionResult> {
-  return run((userId) => tree.skipRecurrence(userId, nodeId));
+  return run((userId) => skipRecurrence(userId, nodeId));
 }
 
 export async function setFocusAction(
   nodeId: string,
   focus: boolean,
 ): Promise<ActionResult> {
-  return run((userId) => tree.setFocus(userId, nodeId, focus));
+  return run((userId) => setFocus(userId, nodeId, focus));
 }
 
 export async function setCollapsedAction(
   nodeId: string,
   collapsed: boolean,
 ): Promise<ActionResult> {
-  return run((userId) => tree.setCollapsed(userId, nodeId, collapsed));
+  return run((userId) => setCollapsed(userId, nodeId, collapsed));
 }
 
 export async function setAllCollapsedAction(collapsed: boolean): Promise<ActionResult> {
-  return run((userId) => tree.setAllCollapsed(userId, collapsed));
+  return run((userId) => setAllCollapsed(userId, collapsed));
 }
 
 export async function expandThroughDepthAction(
   maxDepth: number,
 ): Promise<ActionResult> {
-  return run((userId) => tree.expandThroughDepth(userId, maxDepth));
+  return run((userId) => expandThroughDepth(userId, maxDepth));
 }
 
 export async function setEffortAction(
   nodeId: string,
   minutes: number | null,
 ): Promise<ActionResult> {
-  return run((userId) => tree.setEffort(userId, nodeId, minutes));
+  return run((userId) => setEffort(userId, nodeId, minutes));
 }
 
 export async function setDeadlineAction(
@@ -117,16 +141,16 @@ export async function setDeadlineAction(
   deadline: string | null,
 ): Promise<ActionResult> {
   return run((userId) =>
-    tree.setDeadline(userId, nodeId, deadline ? new Date(deadline) : null),
+    setDeadline(userId, nodeId, deadline ? new Date(deadline) : null),
   );
 }
 
 export async function indentNodeAction(nodeId: string): Promise<ActionResult> {
-  return run((userId) => tree.indentNode(userId, nodeId));
+  return run((userId) => indentNode(userId, nodeId));
 }
 
 export async function outdentNodeAction(nodeId: string): Promise<ActionResult> {
-  return run((userId) => tree.outdentNode(userId, nodeId));
+  return run((userId) => outdentNode(userId, nodeId));
 }
 
 /**
@@ -147,14 +171,14 @@ export async function moveNodeAction(params: {
    */
   priorityPlacement?: { targetId: string; zone: "before" | "after" };
 }): Promise<ActionResult> {
-  return run((userId) => tree.moveNode({ userId, ...params }));
+  return run((userId) => moveNode({ userId, ...params }));
 }
 
 export async function moveNodeVerticallyAction(
   nodeId: string,
   direction: "up" | "down",
 ): Promise<ActionResult> {
-  return run((userId) => tree.moveNodeVertically(userId, nodeId, direction));
+  return run((userId) => moveNodeVertically(userId, nodeId, direction));
 }
 
 /**
@@ -172,5 +196,5 @@ export async function setTcPrioritiesAction(
     rank: number | null;
   }[],
 ): Promise<ActionResult> {
-  return run((userId) => tree.setTcPriorities(userId, assignments));
+  return run((userId) => setTcPriorities(userId, assignments));
 }

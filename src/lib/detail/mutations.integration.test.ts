@@ -11,7 +11,8 @@ import {
   toDateKey,
 } from "@/lib/schedule/geometry";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { createNode, setState } from "@/lib/tree/mutations";
+import { createNode } from "@/lib/tree/mutations";
+import { setState } from "@/lib/tree/stateTransitions";
 import {
   TASK_KEYS,
   autofillAttachmentTitleFromUrl,

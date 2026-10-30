@@ -1715,7 +1715,7 @@ export const dailyItems = pgTable(
      * When this line was checked off. **This — not `nodes.state` — decides whether the
      * item was done on this day.** It cannot be derived, because completing a recurring
      * task resets its node to `not_started` (see `applyStateTransition` in
-     * `src/lib/tree/mutations.ts`); the day's record has to survive that reset.
+     * `src/lib/tree/stateTransitions.ts`); the day's record has to survive that reset.
      */
     completedAt: timestamp("completed_at", { withTimezone: true }),
     /**
