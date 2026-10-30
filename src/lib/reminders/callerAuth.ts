@@ -1,5 +1,5 @@
 import { Receiver } from "@upstash/qstash";
-import { secretsMatch } from "@/lib/agent/auth";
+import { secretsMatch } from "@/lib/security/secretsMatch";
 import { AgentError } from "@/lib/agent/errors";
 import { fireCallbackUrl } from "./publish";
 
