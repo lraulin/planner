@@ -428,6 +428,7 @@ describeDb("retireCoveredScrapeRows", () => {
       sourceCategory: "",
       budgetCategoryId: envelopeId,
       parentId,
+      splitPosition: 0,
       externalSource: "scrape:chase",
     });
     await db.insert(financeTransactions).values({
@@ -440,6 +441,7 @@ describeDb("retireCoveredScrapeRows", () => {
       sourceCategory: "",
       budgetCategoryId: envelopeId,
       parentId,
+      splitPosition: 1,
       externalSource: "scrape:chase",
     });
     const feedId = await insertRow(

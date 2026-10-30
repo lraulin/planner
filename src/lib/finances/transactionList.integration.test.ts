@@ -152,6 +152,7 @@ describeDb("the register row reads", () => {
       description: "NOT A CHILD OF YOURS",
       amount: "-500.00",
       parentId,
+      splitPosition: 0,
     });
     const owner = await getTransaction(ownerId, parentId);
     expect(owner).toMatchObject({ splitChildCount: 2, splitImbalanceCents: 0 });

@@ -1516,11 +1516,13 @@ async function writeSplitChildren(
         );
     }
 
-    for (const child of children) {
+    for (const [position, child] of children.entries()) {
+      // Every child is renumbered, kept ones included: the caller's list is the order.
       const values = {
         amount: centsToNumericString(child.amountCents),
         budgetCategoryId: child.budgetCategoryId,
         notes: child.notes?.trim() ?? "",
+        splitPosition: position,
         updatedAt: now,
       };
       if (child.id !== undefined && kept.has(child.id)) {

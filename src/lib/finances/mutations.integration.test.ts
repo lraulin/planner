@@ -37,7 +37,12 @@ import {
 } from "./mutations";
 import { numericStringToCents } from "./money";
 import { toDateKey } from "@/lib/schedule/geometry";
-import { getTransaction, listAccounts, listTransactions } from "./queries";
+import {
+  getTransaction,
+  listAccounts,
+  listSplitChildren,
+  listTransactions,
+} from "./queries";
 import { createPayee } from "./payees/mutations";
 import { getPayee, listAliasRows, payeesForCommitment } from "./payees/queries";
 import { payeeForDescription, payeeIndex } from "./payees/resolve";
@@ -1545,6 +1550,42 @@ describeDb("split transactions", () => {
     expect(
       after.some((row) => row.id === before.find((r) => r.id !== keep.id)!.id),
     ).toBe(false);
+  });
+
+  it("lists children in the order the caller gave them, across edits", async () => {
+    // Children written by one split share `createdAt`, so creation time cannot be what
+    // orders them; and an edit's new line is newer than its kept ones, so neither can it.
+    await splitTransaction(userId, appleId, [
+      { amountCents: -1000, budgetCategoryId: software, notes: "first" },
+      { amountCents: -1500, budgetCategoryId: fitness, notes: "second" },
+      { amountCents: -997, budgetCategoryId: software, notes: "third" },
+    ]);
+    const written = await listSplitChildren(userId, appleId);
+    expect(written.map((row) => row.notes)).toEqual(["first", "second", "third"]);
+
+    await updateSplitChildren(userId, appleId, [
+      { amountCents: -500, budgetCategoryId: fitness, notes: "new" },
+      {
+        id: written[2].id,
+        amountCents: -497,
+        budgetCategoryId: software,
+        notes: "third",
+      },
+      {
+        id: written[0].id,
+        amountCents: -1000,
+        budgetCategoryId: software,
+        notes: "first",
+      },
+      {
+        id: written[1].id,
+        amountCents: -1500,
+        budgetCategoryId: fitness,
+        notes: "second",
+      },
+    ]);
+    const edited = await listSplitChildren(userId, appleId);
+    expect(edited.map((row) => row.notes)).toEqual(["new", "third", "first", "second"]);
   });
 
   it("unsplits when the last child is removed, and directly", async () => {

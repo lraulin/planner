@@ -72,6 +72,7 @@ type RowInput = {
   budgetCategoryId?: string | null;
   isParent?: boolean;
   parentId?: string | null;
+  splitPosition?: number;
   pending?: boolean;
 };
 
@@ -93,6 +94,7 @@ async function insertRow(userId: string, input: RowInput): Promise<string> {
       budgetCategoryId: input.budgetCategoryId ?? null,
       isParent: input.isParent ?? false,
       parentId: input.parentId ?? null,
+      splitPosition: input.splitPosition ?? null,
     })
     .returning({ id: financeTransactions.id });
   return row.id;
@@ -151,6 +153,7 @@ describeDb("delete_transaction", () => {
       description: "TARGET 00012345",
       amount: "-60.00",
       parentId: parent,
+      splitPosition: 0,
       budgetCategoryId: pets,
     });
     const childB = await insertRow(userId, {
@@ -158,6 +161,7 @@ describeDb("delete_transaction", () => {
       description: "TARGET 00012345",
       amount: "-40.00",
       parentId: parent,
+      splitPosition: 1,
     });
     const keep = await insertRow(userId, {
       accountId,
@@ -247,6 +251,7 @@ describeDb("delete_transaction", () => {
       description: "TARGET",
       amount: "-10.00",
       parentId: parent,
+      splitPosition: 0,
     });
     await expect(
       dispatchAgentTool("delete_transaction", { ids: [child] }, userId),

@@ -2484,6 +2484,16 @@ export const financeTransactions = pgTable(
     parentId: uuid("parent_id").references((): AnyPgColumn => financeTransactions.id, {
       onDelete: "cascade",
     }),
+    /**
+     * A split child's place among its siblings: 0, 1, 2… in the order the caller listed them.
+     * Null exactly when `parentId` is.
+     *
+     * Stored because nothing else orders the lines. Every split write inserts its children in
+     * one transaction, so `createdAt` (`now()`, the transaction's start) ties across all of
+     * them, and an edit that keeps one line and adds another would sort by write time rather
+     * than by where the caller put it.
+     */
+    splitPosition: integer("split_position"),
     externalSource: text("external_source"),
     externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2524,6 +2534,10 @@ export const financeTransactions = pgTable(
     check(
       "finance_transactions_no_nested_splits",
       sql`not (${table.isParent} and ${table.parentId} is not null)`,
+    ),
+    check(
+      "finance_transactions_split_position_on_children",
+      sql`(${table.parentId} is null) = (${table.splitPosition} is null)`,
     ),
   ],
 );

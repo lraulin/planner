@@ -702,7 +702,8 @@ export async function getTransaction(
 }
 
 /**
- * One split parent's children, in the order they were written.
+ * One split parent's children, in the order the last split write listed them
+ * (`splitPosition`).
  *
  * The only way a child is ever read (D8). They are deliberately outside the register's
  * index — no sort, no filter, no search — so this is a direct fetch by parent, and the
@@ -719,7 +720,7 @@ export async function listSplitChildren(
         eq(financeTransactions.parentId, parentId),
       ),
     )
-    .orderBy(asc(financeTransactions.createdAt), asc(financeTransactions.id));
+    .orderBy(asc(financeTransactions.splitPosition));
 
   return rows.map(toTransactionListRow);
 }

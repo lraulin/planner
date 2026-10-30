@@ -501,6 +501,7 @@ describeDb("the reads the retired dashboard was composed from", () => {
       amount: "-50.00",
       derivedFlow: "spend",
       parentId,
+      splitPosition: 0,
       budgetCategoryId: internetId,
     });
     await insert({
@@ -508,6 +509,7 @@ describeDb("the reads the retired dashboard was composed from", () => {
       amount: "-40.00",
       derivedFlow: "spend",
       parentId,
+      splitPosition: 1,
       budgetCategoryId: groceriesId,
     });
     // A pending hold from the other source, which the working-balance rule supersedes.
