@@ -418,3 +418,57 @@ export function moveDestinations(
       entry.kind === movingKind && !excluded.has(entry.id) && entry.id !== parentId,
   );
 }
+
+/** The group an item sits in, or `null` at its section's root (or when it is unknown). */
+export function structureParentId(
+  groups: readonly Pick<BudgetGroupRow, "id" | "parentGroupId">[],
+  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId">[],
+  item: BudgetStructureRef,
+): string | null {
+  return item.kind === "group"
+    ? (groups.find((entry) => entry.id === item.id)?.parentGroupId ?? null)
+    : (categories.find((entry) => entry.id === item.id)?.groupId ?? null);
+}
+
+/**
+ * The ordered run an item sits in (`budgetSiblings`) and its place in it — what Move up /
+ * Move down step through. An item that is not in the structure has no run and index `-1`.
+ */
+export function structurePosition(
+  groups: readonly BudgetGroupRow[],
+  categories: readonly Pick<
+    BudgetCategoryRow,
+    "id" | "groupId" | "name" | "sortKey" | "kind"
+  >[],
+  item: BudgetStructureRef,
+): { siblings: StructureItem[]; index: number } {
+  const kind =
+    item.kind === "group"
+      ? groups.find((entry) => entry.id === item.id)?.kind
+      : categories.find((entry) => entry.id === item.id)?.kind;
+  if (!kind) return { siblings: [], index: -1 };
+  const siblings = budgetSiblings(
+    groups,
+    categories,
+    structureParentId(groups, categories, item),
+    kind,
+  );
+  const index = siblings.findIndex(
+    (entry) => entry.kind === item.kind && entry.id === item.id,
+  );
+  return { siblings, index };
+}
+
+/** Empty-only delete, and the reason when it is not. Groups hold no money; rows do. */
+export function groupDeleteBlockedReason(
+  groups: readonly Pick<BudgetGroupRow, "parentGroupId">[],
+  categories: readonly Pick<BudgetCategoryRow, "groupId">[],
+  groupId: string,
+): string | undefined {
+  const hasChildren =
+    groups.some((entry) => entry.parentGroupId === groupId) ||
+    categories.some((entry) => entry.groupId === groupId);
+  return hasChildren
+    ? "Move every subgroup and envelope out before deleting"
+    : undefined;
+}

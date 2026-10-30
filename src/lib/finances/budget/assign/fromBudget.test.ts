@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assignHistoryWithLookback,
+  assignScopeFromSelection,
   isFutureBudgetMonth,
   preStartAssignHistory,
 } from "./fromBudget";
@@ -67,5 +68,44 @@ describe("assignHistoryWithLookback", () => {
       assigned: { food: 0 },
       activity: { food: -4_200 },
     });
+  });
+});
+
+describe("assignScopeFromSelection", () => {
+  const groups = [
+    { id: "food", parentGroupId: null },
+    { id: "eating-out", parentGroupId: "food" },
+  ];
+  const categories = [
+    { id: "groceries", groupId: "food" },
+    { id: "dining", groupId: "eating-out" },
+    { id: "rent", groupId: null },
+    // Same group, other table: a bill selected through its group is not this section's.
+    { id: "meal-kit", groupId: "food" },
+  ];
+  const section = [{ id: "groceries" }, { id: "dining" }, { id: "rent" }];
+
+  it("is the whole month when nothing is selected", () => {
+    expect(assignScopeFromSelection(new Set(), section, groups, categories)).toBe(
+      undefined,
+    );
+  });
+
+  it("keeps a selected envelope of the section", () => {
+    expect(
+      assignScopeFromSelection(new Set(["rent"]), section, groups, categories),
+    ).toEqual(["rent"]);
+  });
+
+  it("expands a selected group to its envelopes in this section at any depth", () => {
+    expect(
+      assignScopeFromSelection(new Set(["food"]), section, groups, categories),
+    ).toEqual(["groceries", "dining"]);
+  });
+
+  it("falls back to the whole month when the selection names nothing in the section", () => {
+    expect(
+      assignScopeFromSelection(new Set(["meal-kit"]), section, groups, categories),
+    ).toBe(undefined);
   });
 });

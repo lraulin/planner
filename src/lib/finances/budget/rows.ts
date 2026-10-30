@@ -11,7 +11,11 @@ import type { GridRow } from "@/lib/tree/slice";
 
 import { categoryMonth, type BudgetMonth } from "./envelope";
 import type { BillFacet, BudgetCategoryRow, BudgetGroupRow } from "./queries";
-import { compareBudgetNames, nestedBudgetGridRows } from "./hierarchy";
+import {
+  compareBudgetNames,
+  descendantEnvelopeIds,
+  nestedBudgetGridRows,
+} from "./hierarchy";
 import type { EnvelopeKind } from "@/db/schema";
 import type { BillAnchor } from "../commitments";
 
@@ -77,6 +81,30 @@ export function budgetTotals(rows: readonly BudgetRow[]): BudgetTotals {
     }),
     { assignedCents: 0, activityCents: 0, balanceCents: 0 },
   );
+}
+
+/** What came in this month: the activity on every income row. */
+export function receivedIncomeCents(rows: readonly BudgetRow[]): number {
+  return rows
+    .filter((row) => row.isIncome)
+    .reduce((total, row) => total + row.activityCents, 0);
+}
+
+/**
+ * A group header's own subtotal, over the rows that group contributes to one section — a
+ * group's descendants at any depth. `null` when it contributes none, so an empty header
+ * shows no figures rather than three zeros.
+ */
+export function groupSectionTotals(
+  groups: readonly Pick<BudgetGroupRow, "id" | "parentGroupId">[],
+  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId">[],
+  sectionRows: readonly BudgetRow[],
+  groupId: string,
+): BudgetTotals | null {
+  const ids = descendantEnvelopeIds(groups, categories, groupId);
+  const mine = sectionRows.filter((row) => ids.has(row.id));
+  if (mine.length === 0) return null;
+  return budgetTotals(mine);
 }
 
 /**

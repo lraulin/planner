@@ -14,6 +14,8 @@ import {
   type BudgetMonth,
   type MonthKey,
 } from "../envelope";
+import { descendantEnvelopeIds } from "../hierarchy";
+import type { BudgetCategoryRow, BudgetGroupRow } from "../queries";
 import { budgetRows, type BudgetRow } from "../rows";
 import { underfundedGapCents } from "./plan";
 import type { BillSnapshot } from "../targets/derive";
@@ -193,4 +195,31 @@ export function assignBillsFromRows(
     if (snapshot) bills.set(row.id, snapshot);
   }
   return bills;
+}
+
+/**
+ * The envelopes the page's Assign acts on: the selected rows of one section, a selected
+ * group standing for every envelope beneath it in that section. `undefined` — the whole
+ * month — when nothing is selected or the selection holds no envelope of this section.
+ */
+export function assignScopeFromSelection(
+  selectedIds: ReadonlySet<string>,
+  sectionRows: readonly Pick<BudgetRow, "id">[],
+  groups: readonly Pick<BudgetGroupRow, "id" | "parentGroupId">[],
+  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId">[],
+): string[] | undefined {
+  if (selectedIds.size === 0) return undefined;
+  const envelopeIds = new Set(sectionRows.map((row) => row.id));
+  const scoped: string[] = [];
+  for (const id of selectedIds) {
+    if (envelopeIds.has(id)) {
+      scoped.push(id);
+      continue;
+    }
+    const descendants = descendantEnvelopeIds(groups, categories, id);
+    for (const row of sectionRows) {
+      if (descendants.has(row.id)) scoped.push(row.id);
+    }
+  }
+  return scoped.length > 0 ? scoped : undefined;
 }

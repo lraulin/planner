@@ -7,8 +7,10 @@ import {
   budgetSections,
   budgetTotals,
   coverSources,
+  groupSectionTotals,
   moveTargets,
   overspentRows,
+  receivedIncomeCents,
   sectionGridRows,
 } from "./rows";
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
@@ -414,5 +416,64 @@ describe("sectionGridRows", () => {
     expect(sectionGridRows(groups, "bill", rows).map((row) => row.id)).toContain(
       "netflix",
     );
+  });
+});
+
+describe("receivedIncomeCents", () => {
+  it("sums income activity and ignores what was spent", () => {
+    const rows = budgetRows(GROUPS, CATEGORIES, august());
+    // Pay brought in 2,000; food and fun spent 400 between them, which is not income.
+    expect(receivedIncomeCents(rows)).toBe(200_000);
+    expect(receivedIncomeCents(rows.filter((row) => !row.isIncome))).toBe(0);
+  });
+});
+
+describe("groupSectionTotals", () => {
+  const groups: BudgetGroupRow[] = [
+    ...GROUPS,
+    {
+      id: "fun-stuff",
+      parentGroupId: "spending",
+      name: "Fun stuff",
+      kind: "spending",
+      sortKey: "c",
+      hidden: false,
+    },
+  ];
+  const categories = CATEGORIES.map((row) =>
+    row.id === "fun" ? { ...row, groupId: "fun-stuff" } : row,
+  );
+
+  it("totals a group's descendants at any depth, hidden ones included", () => {
+    const rows = budgetRows(groups, categories, august());
+    const spending = rows.filter((row) => !row.isIncome);
+    // `fun` now sits one level down; the outer group still owns it.
+    expect(groupSectionTotals(groups, categories, spending, "spending")).toEqual(
+      budgetTotals(spending),
+    );
+    expect(groupSectionTotals(groups, categories, spending, "fun-stuff")).toEqual(
+      budgetTotals(spending.filter((row) => row.id === "fun")),
+    );
+  });
+
+  it("counts only the section's rows, so another table's envelope cannot leak in", () => {
+    const rows = budgetRows(groups, categories, august());
+    const onlyFood = rows.filter((row) => row.id === "food");
+    expect(groupSectionTotals(groups, categories, onlyFood, "spending")).toEqual(
+      budgetTotals(onlyFood),
+    );
+  });
+
+  it("is null for a group that contributes nothing to the section", () => {
+    const rows = budgetRows(groups, categories, august());
+    expect(groupSectionTotals(groups, categories, rows, "income")).not.toBeNull();
+    expect(
+      groupSectionTotals(
+        groups,
+        categories,
+        rows.filter((row) => !row.isIncome),
+        "income",
+      ),
+    ).toBeNull();
   });
 });

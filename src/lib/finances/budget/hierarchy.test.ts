@@ -12,10 +12,13 @@ import {
   budgetSiblings,
   budgetGroupDepths,
   descendantEnvelopeIds,
+  groupDeleteBlockedReason,
   isQuietCancelledBill,
   moveDestinations,
   nestedBudgetGridRows,
   resolveBudgetDrop,
+  structureParentId,
+  structurePosition,
 } from "./hierarchy";
 
 function group(
@@ -538,5 +541,99 @@ describe("budgetSiblings", () => {
     expect(
       budgetSiblings(groups, categories, "bills", "bill").map((item) => item.id),
     ).toEqual(["electric"]);
+  });
+});
+
+describe("structurePosition", () => {
+  const groups = [
+    group("bills", null, "B", "bill"),
+    group("utilities", "bills", "C", "bill"),
+  ];
+  const categories = [
+    category("rent", null, "A", "bill"),
+    category("groceries", null, "C"),
+    category("electric", "utilities", "A", "bill"),
+    category("water", "utilities", "B", "bill"),
+  ];
+
+  it("places a root envelope among its own section's root items only", () => {
+    const { siblings, index } = structurePosition(groups, categories, {
+      kind: "category",
+      id: "rent",
+    });
+    expect(siblings.map((item) => item.id)).toEqual(["rent", "bills"]);
+    expect(index).toBe(0);
+  });
+
+  it("places a group inside its parent, matching on kind as well as id", () => {
+    // A group and an envelope may not share an id in practice, but the index must not
+    // depend on that: it is what Move up/down step from.
+    const { siblings, index } = structurePosition(groups, categories, {
+      kind: "group",
+      id: "utilities",
+    });
+    expect(siblings.map((item) => item.id)).toEqual(["utilities"]);
+    expect(index).toBe(0);
+  });
+
+  it("walks the run inside a nested group", () => {
+    const { siblings, index } = structurePosition(groups, categories, {
+      kind: "category",
+      id: "water",
+    });
+    expect(siblings.map((item) => item.id)).toEqual(["electric", "water"]);
+    expect(index).toBe(1);
+  });
+
+  it("has no run for an item that is not in the structure", () => {
+    expect(
+      structurePosition(groups, categories, { kind: "category", id: "gone" }),
+    ).toEqual({ siblings: [], index: -1 });
+  });
+});
+
+describe("structureParentId", () => {
+  const groups = [
+    group("bills", null, "B", "bill"),
+    group("utilities", "bills", "C", "bill"),
+  ];
+  const categories = [category("electric", "utilities", "A", "bill")];
+
+  it("reads a group's parent group and an envelope's group", () => {
+    expect(
+      structureParentId(groups, categories, { kind: "group", id: "utilities" }),
+    ).toBe("bills");
+    expect(
+      structureParentId(groups, categories, { kind: "group", id: "bills" }),
+    ).toBeNull();
+    expect(
+      structureParentId(groups, categories, { kind: "category", id: "electric" }),
+    ).toBe("utilities");
+  });
+
+  it("does not confuse a group id with an envelope id", () => {
+    expect(
+      structureParentId(groups, categories, { kind: "category", id: "utilities" }),
+    ).toBeNull();
+  });
+});
+
+describe("groupDeleteBlockedReason", () => {
+  const groups = [
+    group("bills", null, "B", "bill"),
+    group("utilities", "bills", "C", "bill"),
+  ];
+
+  it("blocks a group that still holds a subgroup", () => {
+    expect(groupDeleteBlockedReason(groups, [], "bills")).toBeDefined();
+  });
+
+  it("blocks a group that still holds an envelope, hidden ones included", () => {
+    const hidden = { ...category("electric", "utilities", "A", "bill"), hidden: true };
+    expect(groupDeleteBlockedReason(groups, [hidden], "utilities")).toBeDefined();
+  });
+
+  it("allows an empty group", () => {
+    expect(groupDeleteBlockedReason(groups, [], "utilities")).toBeUndefined();
   });
 });
