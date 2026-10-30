@@ -74,6 +74,10 @@ or a render.
 - Split by _reason to change_, not by size. `queries.ts` and `mutations.ts` stay separate
   even when both are long, because they change for different reasons.
 
+What a function, a type, and a component look like inside those units — guard clauses, no
+`!`, exhaustive switches, the file-size ratchet, the React Compiler — is
+`development/typescript-react.md`.
+
 ## Consistency over cleverness
 
 There is one of each thing here. Use it; do not build a second one.
@@ -161,6 +165,9 @@ why — so the next reader sees a decision, not churn. Large is fine; unexplaine
   a 40-file change gets skimmed and merged on faith.
 - **Review agent output like a junior's:** run `npm test`, `npm run lint`, and the
   typecheck, and read the diff. Confident, plausible, and wrong is the failure mode.
+- **Do not refactor for readability on taste.** Agent refactors motivated by readability
+  alone are where structure most often gets worse. Refactor where a lint rule, a ratchet
+  entry, or the change at hand points, and keep behaviour identical.
 - **New abstractions, new dependencies, and new shared components need a reason stated in
   the PR or the spec.** Deleting a guard, a check, or a test to make something pass needs a
   louder one.

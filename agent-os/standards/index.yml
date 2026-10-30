@@ -39,6 +39,8 @@ development:
     description: Why every mutation takes userId and proves ownership before writing, why the proxy is not the auth gate, why session/dev/agent identities stay separate, what an error is allowed to say, the CSP nonce rules (no nonce in style-src, unsafe-eval only in dev), why HSTS is not ours to set, and when in-memory rate limiting stops being enough
   testing:
     description: What to test and what not to — pure logic and DB mutations yes (always with a cross-user case), React components no; tests as a tripwire against silent breakage rather than a coverage target
+  typescript-react:
+    description: Function, type, and component shape — guard clauses and max-depth 3, function declarations, type not interface, classes only for Errors, no `!`/`as` to silence the compiler (throw naming the invariant), exhaustive switches, React Compiler so no new manual memo, and the 600-line file cap as a may-only-shrink ratchet
 
 product:
   date-model:

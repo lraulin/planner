@@ -44,6 +44,15 @@ easy to get subtly wrong, so before changing any budget number:
 Clone the reference beside this repo (`git clone https://github.com/actualbudget/actual ../actual`);
 it is not vendored.
 
+### Code shape
+
+Full rules: `agent-os/standards/development/typescript-react.md`. ESLint enforces most of it
+(flat control flow, no `!` in app code, exhaustive switches, `type` not `interface`, no
+classes but `Error`s, a 600-line file cap). The part lint cannot see: **never satisfy those
+rules with a `?? fallback` or an `as` cast** — handle the missing case or throw naming the
+invariant. The over-cap files listed in `eslint.config.mjs` may only shrink. The React
+Compiler is on, so new code adds no `useMemo`/`useCallback` for performance.
+
 ### Tests
 
 Full rules: `agent-os/standards/development/testing.md`. The short version, because tests
