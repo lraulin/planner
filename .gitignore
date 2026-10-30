@@ -14,6 +14,9 @@
 # Screenshots and scratch output from the run-planner driver.
 /.artifacts
 
+# Cache the Deslop Live editor extension writes into the workspace.
+/.deslop
+
 # Achieve Planner reference captures. Kept on disk as the source material for the
 # reimplementation, but out of git — they are large, numerous, and never built against.
 /screenshots
