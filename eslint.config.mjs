@@ -20,7 +20,6 @@ const OVERSIZE_FILES = [
   "src/components/detail/ItemList.tsx",
   "src/components/detail/fields.tsx",
   "src/components/finances/FinancesView.tsx",
-  "src/components/finances/budget/BudgetView.tsx",
   "src/components/finances/insights/InsightsView.tsx",
   "src/components/finances/scenarios/ScenariosView.tsx",
   "src/components/fitness/SessionEditor.tsx",
