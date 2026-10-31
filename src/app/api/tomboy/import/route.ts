@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { findCurrentAccount } from "@/lib/auth";
 import { importTomboyFiles } from "@/lib/tomboy/import";
+import { capWarnings } from "@/lib/http/capWarnings";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
@@ -63,15 +64,10 @@ export async function POST(request: Request) {
     const result = await importTomboyFiles({ userId, files });
     revalidatePath("/", "layout");
 
-    const warnings =
-      result.warnings.length > 50
-        ? [
-            ...result.warnings.slice(0, 50),
-            `…and ${result.warnings.length - 50} more warnings`,
-          ]
-        : result.warnings;
-
-    return NextResponse.json({ ok: true, data: { ...result, warnings } });
+    return NextResponse.json({
+      ok: true,
+      data: { ...result, warnings: capWarnings(result.warnings) },
+    });
   } catch (error) {
     return NextResponse.json(
       {

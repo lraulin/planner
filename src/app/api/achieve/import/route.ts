@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { findCurrentAccount } from "@/lib/auth";
 import { importAchieveXml } from "@/lib/achieve/import";
 import { parseImportMode } from "@/lib/achieve/importMode";
+import { capWarnings } from "@/lib/http/capWarnings";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -65,21 +66,12 @@ export async function POST(request: Request) {
     const result = await importAchieveXml({ userId, xml, mode });
     revalidatePath("/", "layout");
 
-    // Cap warnings in the response so a chatty import does not balloon the JSON.
-    const warnings =
-      result.warnings.length > 50
-        ? [
-            ...result.warnings.slice(0, 50),
-            `…and ${result.warnings.length - 50} more warnings`,
-          ]
-        : result.warnings;
-
     return NextResponse.json({
       ok: true,
       created: result.created,
       counts: result.counts,
       extras: result.extras,
-      warnings,
+      warnings: capWarnings(result.warnings),
       skippedTables: result.skippedTables,
     });
   } catch (error) {

@@ -4,6 +4,7 @@ import { findCurrentAccount } from "@/lib/auth";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
 import { isPdfBytes } from "@/lib/finances/pdf";
 import { checkReadyToAssignQuietly } from "@/lib/reminders/arm";
+import { capWarnings } from "@/lib/http/capWarnings";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -111,14 +112,6 @@ export async function POST(request: Request) {
     await checkReadyToAssignQuietly(userId);
     revalidatePath("/", "layout");
 
-    const warnings =
-      result.warnings.length > 50
-        ? [
-            ...result.warnings.slice(0, 50),
-            `…and ${result.warnings.length - 50} more warnings`,
-          ]
-        : result.warnings;
-
     return NextResponse.json({
       ok: true,
       created: result.created,
@@ -129,7 +122,7 @@ export async function POST(request: Request) {
       resolutionsCreated: result.resolutionsCreated,
       resolutionsSkipped: result.resolutionsSkipped,
       auditBatchId: result.auditBatchId,
-      warnings,
+      warnings: capWarnings(result.warnings),
     });
   } catch (error) {
     return NextResponse.json(
