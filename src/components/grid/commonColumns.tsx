@@ -651,48 +651,48 @@ function kindRank(node: { type: NodeType; isDream?: boolean }): number {
   return NODE_KINDS.indexOf(kindOfNode(node));
 }
 
-export function projectPriorityColumn(): ColumnDef<OutlineColumnCtx> {
+/** A priority this row shows but does not own — its project's, its L.A.P. — read-only. */
+function derivedPriorityColumn(
+  id: string,
+  label: string,
+  width: string,
+  priority: (node: OutlineNode) => {
+    letter: PriorityLetter | null;
+    rank: number | null;
+  },
+): ColumnDef<OutlineColumnCtx> {
+  const text = (node: OutlineNode) => {
+    const { letter, rank } = priority(node);
+    return formatPriority(letter, rank);
+  };
   return {
-    id: "projectPriority",
-    label: "Project Pri",
-    width: "5.5rem",
+    id,
+    label,
+    width,
     align: "center",
     filterKind: "priority",
-    filterValue: (row) =>
-      formatPriority(row.node.projectPriorityLetter, row.node.projectPriorityRank) ||
-      null,
-    sortValue: (row) =>
-      priorityOrderValue(row.node.projectPriorityLetter, row.node.projectPriorityRank),
+    filterValue: (row) => text(row.node) || null,
+    sortValue: (row) => {
+      const { letter, rank } = priority(row.node);
+      return priorityOrderValue(letter, rank);
+    },
     compact: "hidden",
-    render: (row) => (
-      <ReadOnlyCell
-        value={formatPriority(
-          row.node.projectPriorityLetter,
-          row.node.projectPriorityRank,
-        )}
-        align="center"
-      />
-    ),
+    render: (row) => <ReadOnlyCell value={text(row.node)} align="center" />,
   };
 }
 
+export function projectPriorityColumn(): ColumnDef<OutlineColumnCtx> {
+  return derivedPriorityColumn("projectPriority", "Project Pri", "5.5rem", (node) => ({
+    letter: node.projectPriorityLetter,
+    rank: node.projectPriorityRank,
+  }));
+}
+
 export function lapColumn(): ColumnDef<OutlineColumnCtx> {
-  return {
-    id: "lap",
-    label: "L.A.P.",
-    width: "3.5rem",
-    align: "center",
-    filterKind: "priority",
-    filterValue: (row) => formatPriority(row.node.lapLetter, row.node.lapRank) || null,
-    sortValue: (row) => priorityOrderValue(row.node.lapLetter, row.node.lapRank),
-    compact: "hidden",
-    render: (row) => (
-      <ReadOnlyCell
-        value={formatPriority(row.node.lapLetter, row.node.lapRank)}
-        align="center"
-      />
-    ),
-  };
+  return derivedPriorityColumn("lap", "L.A.P.", "3.5rem", (node) => ({
+    letter: node.lapLetter,
+    rank: node.lapRank,
+  }));
 }
 
 export function scheduleStatusColumn(
