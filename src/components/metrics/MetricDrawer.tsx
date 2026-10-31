@@ -963,6 +963,20 @@ function MetricForm({
   );
 }
 
+/** An entry cell's keys: Enter commits by leaving the field, Escape drops the draft first. */
+function cellKeys(dropDraft: () => void) {
+  return (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+    if (e.key === "Escape") {
+      dropDraft();
+      e.currentTarget.blur();
+    }
+  };
+}
+
 /**
  * Date cell: local draft while the native picker is open; commit on blur/Enter.
  * Month/year navigation must not write the server or re-sort the grid.
@@ -993,16 +1007,7 @@ function MetricDateCell({
       onChange={(e) => setDraft(e.target.value)}
       onBlur={finish}
       onFocus={onFocus}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          (e.target as HTMLInputElement).blur();
-        }
-        if (e.key === "Escape") {
-          setDraft(null);
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
+      onKeyDown={cellKeys(() => setDraft(null))}
       className="min-h-tap w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge md:min-h-0"
     />
   );
@@ -1045,16 +1050,7 @@ function MetricDecimalCell({
       onChange={(e) => setDraft(e.target.value)}
       onBlur={finish}
       onFocus={onFocus}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          (e.target as HTMLInputElement).blur();
-        }
-        if (e.key === "Escape") {
-          setDraft(null);
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
+      onKeyDown={cellKeys(() => setDraft(null))}
       placeholder={placeholder}
       className="min-h-tap w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge md:min-h-0"
       inputMode="decimal"
