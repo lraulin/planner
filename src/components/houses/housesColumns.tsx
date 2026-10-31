@@ -97,6 +97,26 @@ function quantityField(
   };
 }
 
+/**
+ * A decimal stored as text — baths, lot acres. Filtered on the stored text, so saved
+ * filters keep matching; sorted as a number.
+ */
+function decimalField(value: (house: HouseListRow) => string | null): HouseField {
+  return {
+    filterKind: "number",
+    filterValue: (row) => value(row.node),
+    sortValue: (row) => {
+      const v = value(row.node);
+      return v === null ? null : Number(v);
+    },
+    render: (row) => (
+      <span className="tabular text-[0.8125rem] text-ink-muted">
+        {value(row.node) ?? ""}
+      </span>
+    ),
+  };
+}
+
 /** A running cost: filtered on its dollar text, sorted by cents. */
 function moneyField(cents: (house: HouseListRow) => number | null): HouseField {
   return {
@@ -200,14 +220,7 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     label: "Baths",
     width: "4.5rem",
     align: "right",
-    filterKind: "number",
-    filterValue: (row) => row.node.baths,
-    sortValue: (row) => (row.node.baths === null ? null : Number(row.node.baths)),
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {row.node.baths ?? ""}
-      </span>
-    ),
+    ...decimalField((house) => house.baths),
   },
   {
     id: "pricePerSqft",
@@ -310,14 +323,7 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     width: "6rem",
     align: "right",
     compact: "hidden",
-    filterKind: "number",
-    filterValue: (row) => row.node.lotAcres,
-    sortValue: (row) => (row.node.lotAcres === null ? null : Number(row.node.lotAcres)),
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {row.node.lotAcres ?? ""}
-      </span>
-    ),
+    ...decimalField((house) => house.lotAcres),
   },
   {
     id: "hoa",
