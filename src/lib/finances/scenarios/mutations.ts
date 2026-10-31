@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import {
   financeBudgetCategories,
   financeCategoryGroups,
@@ -11,7 +12,7 @@ import {
   SCENARIO_LINE_KINDS,
   type ScenarioLineKind,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { between, after, compare, first } from "@/lib/tree/sortKey";
 import {
@@ -37,8 +38,6 @@ import { splitLine } from "./split";
  * Nothing here touches the budget or Supplies.
  */
 
-type Executor = Pick<typeof db, "select" | "insert" | "update" | "delete">;
-
 export type LineLink = { envelopeId: string } | { budgetGroupId: string } | null;
 
 const NOT_YOURS = {
@@ -59,14 +58,15 @@ function requireName(name: string, what: string): string {
 async function requireScenario(
   userId: string,
   scenarioId: string,
-  executor: Executor = db,
+  executor: DbExecutor = db,
 ): Promise<void> {
-  const [row] = await executor
-    .select({ id: financeScenarios.id })
-    .from(financeScenarios)
-    .where(ownedRow(financeScenarios, scenarioId, userId))
-    .limit(1);
-  if (!row) throw new Error(NOT_YOURS.scenario);
+  await requireOwnedRow(
+    executor,
+    financeScenarios,
+    scenarioId,
+    userId,
+    NOT_YOURS.scenario,
+  );
 }
 
 type LineRow = typeof financeScenarioLines.$inferSelect;
@@ -74,15 +74,15 @@ type LineRow = typeof financeScenarioLines.$inferSelect;
 async function requireLine(
   userId: string,
   lineId: string,
-  executor: Executor = db,
+  executor: DbExecutor = db,
 ): Promise<LineRow> {
-  const [row] = await executor
-    .select()
-    .from(financeScenarioLines)
-    .where(ownedRow(financeScenarioLines, lineId, userId))
-    .limit(1);
-  if (!row) throw new Error(NOT_YOURS.line);
-  return row;
+  return requireOwnedRow(
+    executor,
+    financeScenarioLines,
+    lineId,
+    userId,
+    NOT_YOURS.line,
+  );
 }
 
 async function requireEnvelope(
@@ -90,42 +90,40 @@ async function requireEnvelope(
   envelopeId: string,
   kinds?: readonly string[],
 ): Promise<void> {
-  const [row] = await db
-    .select({ kind: financeBudgetCategories.kind })
-    .from(financeBudgetCategories)
-    .where(ownedRow(financeBudgetCategories, envelopeId, userId))
-    .limit(1);
-  if (!row) throw new Error(NOT_YOURS.envelope);
+  const row = await requireOwnedRow(
+    db,
+    financeBudgetCategories,
+    envelopeId,
+    userId,
+    NOT_YOURS.envelope,
+  );
   if (kinds && !kinds.includes(row.kind)) {
     throw new Error("Only a bill or a Regular income envelope can be overridden.");
   }
 }
 
 async function requireBudgetGroup(userId: string, groupId: string): Promise<void> {
-  const [row] = await db
-    .select({ id: financeCategoryGroups.id })
-    .from(financeCategoryGroups)
-    .where(ownedRow(financeCategoryGroups, groupId, userId))
-    .limit(1);
-  if (!row) throw new Error(NOT_YOURS.budgetGroup);
+  await requireOwnedRow(
+    db,
+    financeCategoryGroups,
+    groupId,
+    userId,
+    NOT_YOURS.budgetGroup,
+  );
 }
 
 async function requireSupplyItem(userId: string, itemId: string): Promise<void> {
-  const [row] = await db
-    .select({ id: financeSupplyItems.id })
-    .from(financeSupplyItems)
-    .where(ownedRow(financeSupplyItems, itemId, userId))
-    .limit(1);
-  if (!row) throw new Error(NOT_YOURS.supplyItem);
+  await requireOwnedRow(db, financeSupplyItems, itemId, userId, NOT_YOURS.supplyItem);
 }
 
 async function requireSupplyGroup(userId: string, groupId: string): Promise<void> {
-  const [row] = await db
-    .select({ id: financeSupplyGroups.id })
-    .from(financeSupplyGroups)
-    .where(ownedRow(financeSupplyGroups, groupId, userId))
-    .limit(1);
-  if (!row) throw new Error(NOT_YOURS.supplyGroup);
+  await requireOwnedRow(
+    db,
+    financeSupplyGroups,
+    groupId,
+    userId,
+    NOT_YOURS.supplyGroup,
+  );
 }
 
 /** Prove the caller owns what a source refers to, and that a manual one is well-formed. */
@@ -186,7 +184,7 @@ const BLANK_LINE_SOURCE: LineAmountSource = {
 
 async function nextScenarioSortKey(
   userId: string,
-  executor: Executor,
+  executor: DbExecutor,
 ): Promise<string> {
   const [last] = await executor
     .select({ sortKey: financeScenarios.sortKey })
@@ -245,12 +243,13 @@ export async function duplicateScenario(
   name?: string,
 ): Promise<string> {
   return db.transaction(async (tx) => {
-    const [source] = await tx
-      .select()
-      .from(financeScenarios)
-      .where(ownedRow(financeScenarios, scenarioId, userId))
-      .limit(1);
-    if (!source) throw new Error(NOT_YOURS.scenario);
+    const source = await requireOwnedRow(
+      tx,
+      financeScenarios,
+      scenarioId,
+      userId,
+      NOT_YOURS.scenario,
+    );
 
     const [copy] = await tx
       .insert(financeScenarios)
@@ -336,7 +335,7 @@ async function siblings(
   userId: string,
   scenarioId: string,
   parentId: string | null,
-  executor: Executor,
+  executor: DbExecutor,
 ): Promise<{ id: string; sortKey: string }[]> {
   const rows = await executor
     .select({ id: financeScenarioLines.id, sortKey: financeScenarioLines.sortKey })
@@ -359,7 +358,7 @@ async function sortKeyAfter(
   scenarioId: string,
   parentId: string | null,
   afterId: string | null,
-  executor: Executor,
+  executor: DbExecutor,
   excluding?: string,
 ): Promise<string> {
   const rows = (await siblings(userId, scenarioId, parentId, executor)).filter(
@@ -380,7 +379,7 @@ async function sortKeyBefore(
   scenarioId: string,
   parentId: string | null,
   beforeId: string,
-  executor: Executor,
+  executor: DbExecutor,
   excluding?: string,
 ): Promise<string> {
   const rows = (await siblings(userId, scenarioId, parentId, executor)).filter(
@@ -394,7 +393,7 @@ async function sortKeyBefore(
 async function hasChildren(
   userId: string,
   lineId: string,
-  executor: Executor,
+  executor: DbExecutor,
 ): Promise<boolean> {
   const [row] = await executor
     .select({ id: financeScenarioLines.id })
@@ -417,7 +416,7 @@ async function hasChildren(
 async function openRollup(
   userId: string,
   parent: LineRow,
-  executor: Executor,
+  executor: DbExecutor,
 ): Promise<LineSourceColumns | null> {
   if (await hasChildren(userId, parent.id, executor)) return null;
   const plan = splitLine(lineSourceOf(parent));
@@ -547,7 +546,7 @@ async function isSelfOrDescendant(
   userId: string,
   lineId: string,
   candidateId: string,
-  executor: Executor,
+  executor: DbExecutor,
 ): Promise<boolean> {
   return isSelfOrDescendantVia(lineId, candidateId, async (id) => {
     const [row] = await executor

@@ -2,7 +2,7 @@ import { and, asc, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { contactItems, contacts } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import type { ContactItemKind, PriorityLetter } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
 import { ensureInbox } from "@/lib/capture/mutations";
@@ -18,23 +18,11 @@ import type { ContactInput, ContactItemInput } from "./types";
  */
 
 async function requireContact(tx: DbExecutor, userId: string, contactId: string) {
-  const [row] = await tx
-    .select()
-    .from(contacts)
-    .where(ownedRow(contacts, contactId, userId))
-    .limit(1);
-  if (!row) throw new Error("Contact not found.");
-  return row;
+  return requireOwnedRow(tx, contacts, contactId, userId, "Contact not found.");
 }
 
 async function requireItem(tx: DbExecutor, userId: string, itemId: string) {
-  const [row] = await tx
-    .select()
-    .from(contactItems)
-    .where(ownedRow(contactItems, itemId, userId))
-    .limit(1);
-  if (!row) throw new Error("Contact detail not found.");
-  return row;
+  return requireOwnedRow(tx, contactItems, itemId, userId, "Contact detail not found.");
 }
 
 async function nextSortKey(

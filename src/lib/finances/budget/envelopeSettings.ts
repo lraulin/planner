@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { financeBudgetAllocations, financeBudgetCategories } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { snoozeUnavailableReason } from "./snooze";
 import { monthKeyOf, type MonthKey } from "./envelope";
@@ -123,15 +123,13 @@ export async function setTargetSnooze(
 ): Promise<void> {
   await requireCategory(userId, params.categoryId);
 
-  const [category] = await db
-    .select({
-      kind: financeBudgetCategories.kind,
-      target: financeBudgetCategories.target,
-    })
-    .from(financeBudgetCategories)
-    .where(ownedRow(financeBudgetCategories, params.categoryId, userId))
-    .limit(1);
-  if (!category) throw new Error("That envelope does not exist.");
+  const category = await requireOwnedRow(
+    db,
+    financeBudgetCategories,
+    params.categoryId,
+    userId,
+    "That envelope does not exist.",
+  );
 
   const reason = snoozeUnavailableReason(
     { kind: category.kind, target: parseTarget(category.target) },
@@ -163,16 +161,13 @@ async function requireTargetableCategory(
   userId: string,
   categoryId: string,
 ): Promise<{ id: string; target: unknown }> {
-  const [row] = await db
-    .select({
-      id: financeBudgetCategories.id,
-      target: financeBudgetCategories.target,
-      kind: financeBudgetCategories.kind,
-    })
-    .from(financeBudgetCategories)
-    .where(ownedRow(financeBudgetCategories, categoryId, userId))
-    .limit(1);
-  if (!row) throw new Error("That envelope does not exist.");
+  const row = await requireOwnedRow(
+    db,
+    financeBudgetCategories,
+    categoryId,
+    userId,
+    "That envelope does not exist.",
+  );
   if (row.kind === "income") {
     throw new Error("Income envelopes cannot hold a target.");
   }

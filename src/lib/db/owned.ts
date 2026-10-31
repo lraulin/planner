@@ -1,5 +1,8 @@
 import { eq, sql, type SQL } from "drizzle-orm";
-import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
+import type { DbExecutor } from "@/db/executor";
+
+type OwnedTable = PgTable & { id: AnyPgColumn; userId: AnyPgColumn };
 
 /**
  * `id = ? AND user_id = ?` — the row with this id, and only if `userId` owns it.
@@ -18,4 +21,46 @@ export function ownedRow(
   userId: string,
 ): SQL {
   return sql`(${eq(table.id, id)} and ${eq(table.userId, userId)})`;
+}
+
+/**
+ * The caller's row with this id, or `null` when there is none — including when the id is
+ * real but belongs to another user, which must read exactly like a missing row.
+ */
+export async function findOwnedRow<T extends OwnedTable>(
+  executor: DbExecutor,
+  table: T,
+  id: string,
+  userId: string,
+): Promise<T["$inferSelect"] | null> {
+  // Drizzle cannot resolve `.from()` over a generic table (its selection type is a
+  // conditional on `T` that TypeScript leaves unevaluated), so the query reads the table as
+  // a plain `PgTable`, whose columns are loosely typed, and the declared return type gives
+  // the row back its table's shape. That is the one unchecked step here, and it holds
+  // because `select()` with no fields returns the full row of the table it reads — exactly
+  // what `$inferSelect` describes.
+  const source: PgTable = table;
+  const [row] = await executor
+    .select()
+    .from(source)
+    .where(ownedRow(table, id, userId))
+    .limit(1);
+  if (!row) return null;
+  return row;
+}
+
+/**
+ * The caller's row with this id, or throw `notFound`. The guard every mutation runs before
+ * acting on an id that came from a request: an id is a claim, and this checks it.
+ */
+export async function requireOwnedRow<T extends OwnedTable>(
+  executor: DbExecutor,
+  table: T,
+  id: string,
+  userId: string,
+  notFound: string,
+): Promise<T["$inferSelect"]> {
+  const row = await findOwnedRow(executor, table, id, userId);
+  if (!row) throw new Error(notFound);
+  return row;
 }

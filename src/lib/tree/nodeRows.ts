@@ -1,6 +1,6 @@
 import type { DbExecutor } from "@/db/executor";
 import { nodes, resultAreaDetails } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { between } from "./sortKey";
 import type { Position } from "./types";
@@ -17,14 +17,7 @@ export function parentMatches(parentId: string | null) {
 }
 
 export async function requireNode(tx: DbExecutor, userId: string, nodeId: string) {
-  const [node] = await tx
-    .select()
-    .from(nodes)
-    .where(ownedRow(nodes, nodeId, userId))
-    .limit(1);
-
-  if (!node) throw new Error(`Node not found: ${nodeId}`);
-  return node;
+  return requireOwnedRow(tx, nodes, nodeId, userId, `Node not found: ${nodeId}`);
 }
 
 /**

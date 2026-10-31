@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { lifeEvents } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { findOwnedRow } from "@/lib/db/owned";
 import type { LifeEventDetail } from "./types";
 
 function toDetail(row: typeof lifeEvents.$inferSelect): LifeEventDetail {
@@ -31,10 +31,6 @@ export async function getLifeEvent(
   userId: string,
   eventId: string,
 ): Promise<LifeEventDetail | null> {
-  const [row] = await db
-    .select()
-    .from(lifeEvents)
-    .where(ownedRow(lifeEvents, eventId, userId))
-    .limit(1);
+  const row = await findOwnedRow(db, lifeEvents, eventId, userId);
   return row ? toDetail(row) : null;
 }

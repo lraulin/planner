@@ -1,6 +1,6 @@
 import type { DbExecutor } from "@/db/executor";
 import { nodes } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { requireOwnedRow } from "@/lib/db/owned";
 
 /**
  * Refuse a link to an outline node that is missing or belongs to someone else.
@@ -18,10 +18,5 @@ export async function assertNodeOwned(
   what = "Record",
 ): Promise<void> {
   if (nodeId === undefined || nodeId === null) return;
-  const [node] = await tx
-    .select({ id: nodes.id })
-    .from(nodes)
-    .where(ownedRow(nodes, nodeId, userId))
-    .limit(1);
-  if (!node) throw new Error(`${what} not found.`);
+  await requireOwnedRow(tx, nodes, nodeId, userId, `${what} not found.`);
 }

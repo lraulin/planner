@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { jobs } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { findOwnedRow } from "@/lib/db/owned";
 import { formatPostalAddress } from "@/lib/address";
 import type { JobDetail, JobListRow } from "./types";
 
@@ -71,11 +71,7 @@ export async function getJobDetail(
   userId: string,
   jobId: string,
 ): Promise<JobDetail | null> {
-  const [row] = await db
-    .select()
-    .from(jobs)
-    .where(ownedRow(jobs, jobId, userId))
-    .limit(1);
+  const row = await findOwnedRow(db, jobs, jobId, userId);
   return row ? toDetail(row) : null;
 }
 

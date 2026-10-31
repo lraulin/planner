@@ -7,7 +7,7 @@ import {
   type HouseStatus,
   type PriorityLetter,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { letterRankEngine } from "@/lib/priority/letterRank";
 import { between } from "@/lib/tree/sortKey";
 import { DRIVE_DESTINATION } from "./destination";
@@ -18,13 +18,7 @@ import type { HouseInput } from "./types";
 /** Houses are standalone records. Every write scopes by `userId`. */
 
 async function requireHouse(tx: DbExecutor, userId: string, houseId: string) {
-  const [row] = await tx
-    .select()
-    .from(houses)
-    .where(ownedRow(houses, houseId, userId))
-    .limit(1);
-  if (!row) throw new Error("House not found.");
-  return row;
+  return requireOwnedRow(tx, houses, houseId, userId, "House not found.");
 }
 
 async function nextSortKey(tx: DbExecutor, userId: string): Promise<string> {

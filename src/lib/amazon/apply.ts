@@ -21,7 +21,7 @@ import {
   financeSupplyOptions,
   financeTransactions,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { createCategoryGroup } from "@/lib/finances/budget/mutations";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { splitTransaction, upsertBillEnvelope } from "@/lib/finances/mutations";
@@ -392,17 +392,13 @@ async function applyMatch(
     .limit(1);
   if (existing[0]?.splitProtected) return;
 
-  const [transaction] = await db
-    .select({
-      id: financeTransactions.id,
-      isParent: financeTransactions.isParent,
-      budgetCategoryId: financeTransactions.budgetCategoryId,
-      amount: financeTransactions.amount,
-    })
-    .from(financeTransactions)
-    .where(ownedRow(financeTransactions, input.transactionId, userId))
-    .limit(1);
-  if (!transaction) throw new Error("Transaction not found.");
+  const transaction = await requireOwnedRow(
+    db,
+    financeTransactions,
+    input.transactionId,
+    userId,
+    "Transaction not found.",
+  );
   if (transaction.isParent && !existing[0]) {
     throw new Error("An existing split is not rewritten automatically.");
   }
@@ -677,23 +673,23 @@ async function loadMatches(
 }
 
 async function requireOwnedCharge(userId: string, chargeId: string) {
-  const [row] = await db
-    .select()
-    .from(amazonCharges)
-    .where(ownedRow(amazonCharges, chargeId, userId))
-    .limit(1);
-  if (!row) throw new Error("Amazon charge not found.");
-  return row;
+  return requireOwnedRow(
+    db,
+    amazonCharges,
+    chargeId,
+    userId,
+    "Amazon charge not found.",
+  );
 }
 
 async function requireOwnedTransaction(userId: string, transactionId: string) {
-  const [row] = await db
-    .select()
-    .from(financeTransactions)
-    .where(ownedRow(financeTransactions, transactionId, userId))
-    .limit(1);
-  if (!row) throw new Error("Transaction not found.");
-  return row;
+  return requireOwnedRow(
+    db,
+    financeTransactions,
+    transactionId,
+    userId,
+    "Transaction not found.",
+  );
 }
 
 export { markAmazonMatchSplitProtected } from "./matchProtect";

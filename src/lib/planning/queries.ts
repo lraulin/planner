@@ -9,7 +9,7 @@ import {
   type WeeklyPlan,
   type WeeklyPlanEntry,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { findOwnedRow } from "@/lib/db/owned";
 import { localDateKey, startOfWeek } from "@/lib/schedule/geometry";
 import { loadSchedule, type SchedulePayload } from "@/lib/schedule/queries";
 import { weekRange } from "@/lib/schedule/range";
@@ -36,12 +36,7 @@ export async function getWeeklyPlanById(
   userId: string,
   id: string,
 ): Promise<WeeklyPlan | null> {
-  const [row] = await db
-    .select()
-    .from(weeklyPlans)
-    .where(ownedRow(weeklyPlans, id, userId))
-    .limit(1);
-  return row ?? null;
+  return findOwnedRow(db, weeklyPlans, id, userId);
 }
 
 /** Most recent plans first — the wizard's "resume where you left off" list. */

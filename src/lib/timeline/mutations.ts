@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { lifeEvents, type ExternalRef } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { patchText, requireDateKey } from "@/lib/history/fields";
 import type { LifeEventInput } from "./types";
 
@@ -83,12 +83,7 @@ export async function updateLifeEvent(
   input: LifeEventInput,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({ id: lifeEvents.id })
-      .from(lifeEvents)
-      .where(ownedRow(lifeEvents, eventId, userId))
-      .limit(1);
-    if (!existing) throw new Error("Event not found.");
+    await requireOwnedRow(tx, lifeEvents, eventId, userId, "Event not found.");
 
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     patchText(patch, input, TEXT_FIELDS);

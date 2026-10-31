@@ -8,7 +8,7 @@ import {
   brainThoughtTypes,
   brainThoughts,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { canonicalLink, planLink, type LinkRelation } from "./links";
 
 /** Brain is standalone per-user data. Every write scopes by `userId`. */
@@ -25,21 +25,17 @@ function cleanName(raw: string, what: string): string {
 }
 
 async function requireThought(tx: DbExecutor, userId: string, thoughtId: string) {
-  const [row] = await tx
-    .select({ id: brainThoughts.id })
-    .from(brainThoughts)
-    .where(ownedRow(brainThoughts, thoughtId, userId))
-    .limit(1);
-  if (!row) throw new Error("Thought not found.");
+  await requireOwnedRow(tx, brainThoughts, thoughtId, userId, "Thought not found.");
 }
 
 async function requireType(tx: DbExecutor, userId: string, typeId: string) {
-  const [row] = await tx
-    .select({ id: brainThoughtTypes.id })
-    .from(brainThoughtTypes)
-    .where(ownedRow(brainThoughtTypes, typeId, userId))
-    .limit(1);
-  if (!row) throw new Error("Thought type not found.");
+  await requireOwnedRow(
+    tx,
+    brainThoughtTypes,
+    typeId,
+    userId,
+    "Thought type not found.",
+  );
 }
 
 function pairWhere(userId: string, a: string, b: string) {

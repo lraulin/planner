@@ -8,7 +8,7 @@ import {
   financePayees,
   financeTransactions,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import { writeFinanceAuditEvent } from "./audit/writes";
 import { restorableHold } from "./auditRestore";
@@ -81,12 +81,13 @@ export async function restoreDeletedHold(
     if (!verdict.ok) throw new Error(verdict.reason);
     const { hold } = verdict;
 
-    const [account] = await tx
-      .select({ id: financeAccounts.id })
-      .from(financeAccounts)
-      .where(ownedRow(financeAccounts, hold.accountId, userId))
-      .limit(1);
-    if (!account) throw new Error("The account that held it no longer exists.");
+    await requireOwnedRow(
+      tx,
+      financeAccounts,
+      hold.accountId,
+      userId,
+      "The account that held it no longer exists.",
+    );
 
     const [present] = await tx
       .select({ id: financeTransactions.id })

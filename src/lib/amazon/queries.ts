@@ -12,7 +12,7 @@ import {
   financeBudgetCategories,
   financeTransactions,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { findOwnedRow } from "@/lib/db/owned";
 import { numericStringToCents } from "@/lib/finances/money";
 import { amazonReviewChargeTitle } from "./grouping";
 import {
@@ -572,12 +572,7 @@ export async function listAmazonSubscriptions(userId: string) {
 }
 
 export async function getAmazonSubscription(userId: string, id: string) {
-  const [row] = await db
-    .select()
-    .from(amazonSubscriptions)
-    .where(ownedRow(amazonSubscriptions, id, userId))
-    .limit(1);
-  return row ?? null;
+  return findOwnedRow(db, amazonSubscriptions, id, userId);
 }
 
 export async function listAmazonCharges(userId: string) {
@@ -589,12 +584,7 @@ export async function listAmazonCharges(userId: string) {
 }
 
 export async function getAmazonCharge(userId: string, id: string) {
-  const [row] = await db
-    .select()
-    .from(amazonCharges)
-    .where(ownedRow(amazonCharges, id, userId))
-    .limit(1);
-  return row ?? null;
+  return findOwnedRow(db, amazonCharges, id, userId);
 }
 
 export async function listAmazonChargeOrders(userId: string, chargeId: string) {

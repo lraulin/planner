@@ -12,7 +12,7 @@ import {
   type RecurrenceFrequency,
   type ShowAs,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { syncWindow } from "@/lib/google/sync";
 import {
   pushCreate,
@@ -126,12 +126,7 @@ export async function createTimeChartArea(
   timeChartId: string,
   input: TimeChartAreaInput,
 ) {
-  const [chart] = await db
-    .select({ id: timeCharts.id })
-    .from(timeCharts)
-    .where(ownedRow(timeCharts, timeChartId, userId))
-    .limit(1);
-  if (!chart) throw new Error("Time Chart not found.");
+  await requireOwnedRow(db, timeCharts, timeChartId, userId, "Time Chart not found.");
   await assertNodeOwned(db, userId, input.resultAreaId, "Result Area");
 
   const [row] = await db
@@ -425,12 +420,13 @@ export async function updateAppointment(
   id: string,
   input: Partial<AppointmentInput>,
 ) {
-  const [existing] = await db
-    .select()
-    .from(appointments)
-    .where(ownedRow(appointments, id, userId))
-    .limit(1);
-  if (!existing) throw new Error("Appointment not found.");
+  const existing = await requireOwnedRow(
+    db,
+    appointments,
+    id,
+    userId,
+    "Appointment not found.",
+  );
   await assertNodeOwned(db, userId, input.projectId, "Project");
 
   const allDay = input.allDay ?? existing.allDay;
@@ -494,12 +490,13 @@ export async function updateAppointment(
 }
 
 export async function deleteAppointment(userId: string, id: string) {
-  const [existing] = await db
-    .select()
-    .from(appointments)
-    .where(ownedRow(appointments, id, userId))
-    .limit(1);
-  if (!existing) throw new Error("Appointment not found.");
+  const existing = await requireOwnedRow(
+    db,
+    appointments,
+    id,
+    userId,
+    "Appointment not found.",
+  );
 
   // Google first. A failure here leaves the row in place, which is recoverable; deleting
   // locally first would strand an event in Google with nothing left here naming it.
@@ -554,12 +551,13 @@ export async function rescheduleAppointment(
     patch.recurrenceByWeekday = null;
   }
 
-  const [existing] = await db
-    .select()
-    .from(appointments)
-    .where(ownedRow(appointments, id, userId))
-    .limit(1);
-  if (!existing) throw new Error("Appointment not found.");
+  const existing = await requireOwnedRow(
+    db,
+    appointments,
+    id,
+    userId,
+    "Appointment not found.",
+  );
 
   // Dragging a Google event in the week grid moves it in Google. For an instance of a
   // series this moves that occurrence only, which is what Google's own UI does too.

@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { resources } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { assertContactOwned } from "@/lib/contacts/ownership";
 import { RESOURCE_MINUTE_FIELDS, type ResourceMinuteField } from "./capacity";
 import type { ResourceInput } from "./types";
@@ -9,13 +9,7 @@ import type { ResourceInput } from "./types";
 /** Resources are standalone records. Every write scopes by `userId`. */
 
 async function requireResource(tx: DbExecutor, userId: string, resourceId: string) {
-  const [row] = await tx
-    .select()
-    .from(resources)
-    .where(ownedRow(resources, resourceId, userId))
-    .limit(1);
-  if (!row) throw new Error("Resource not found.");
-  return row;
+  return requireOwnedRow(tx, resources, resourceId, userId, "Resource not found.");
 }
 
 function percentage(value: number, label: string, max: number): number {

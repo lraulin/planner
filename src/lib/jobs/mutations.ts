@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { jobs, type ExternalRef } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import {
   dateKeyOrNull,
   moneyOrNull,
@@ -38,13 +38,7 @@ const TEXT_FIELDS = [
 const DATE_LABELS = { start: "Start date", end: "End date" };
 
 async function requireJob(tx: DbExecutor, userId: string, jobId: string) {
-  const [row] = await tx
-    .select()
-    .from(jobs)
-    .where(ownedRow(jobs, jobId, userId))
-    .limit(1);
-  if (!row) throw new Error("Job not found.");
-  return row;
+  return requireOwnedRow(tx, jobs, jobId, userId, "Job not found.");
 }
 
 export async function createJob(userId: string, input: JobInput = {}): Promise<string> {

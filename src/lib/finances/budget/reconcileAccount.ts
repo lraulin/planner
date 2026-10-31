@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { financeAccounts, financeTransactions } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { requireOwnedRow } from "@/lib/db/owned";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { parseBudget } from "@/lib/settings/finances";
 import { readSetting } from "@/lib/settings/queries";
@@ -35,12 +35,13 @@ export async function reconcileAccount(
   accountId: string,
 ): Promise<ReconcileReceipt> {
   return await db.transaction(async (tx) => {
-    const [account] = await tx
-      .select({ id: financeAccounts.id, name: financeAccounts.name })
-      .from(financeAccounts)
-      .where(ownedRow(financeAccounts, accountId, userId))
-      .limit(1);
-    if (!account) throw new Error("Account not found.");
+    const account = await requireOwnedRow(
+      tx,
+      financeAccounts,
+      accountId,
+      userId,
+      "Account not found.",
+    );
 
     const settings = parseBudget(await readSetting(userId, BUDGET_SCOPE, tx));
     const startMonth = settings.startMonth;

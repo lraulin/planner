@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { houses, type HouseStatus } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { findOwnedRow } from "@/lib/db/owned";
 import type { HouseDetail, HouseListRow } from "./types";
 
 function toDetail(row: typeof houses.$inferSelect): HouseDetail {
@@ -73,10 +73,6 @@ export async function getHouseDetail(
   userId: string,
   houseId: string,
 ): Promise<HouseDetail | null> {
-  const [row] = await db
-    .select()
-    .from(houses)
-    .where(ownedRow(houses, houseId, userId))
-    .limit(1);
+  const row = await findOwnedRow(db, houses, houseId, userId);
   return row ? toDetail(row) : null;
 }

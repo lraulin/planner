@@ -8,7 +8,7 @@ import {
   workoutSessions,
   workoutSets,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { between } from "@/lib/tree/sortKey";
 import { DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
 import { parseDurationSeconds } from "./duration";
@@ -29,23 +29,11 @@ import type {
  */
 
 async function requireExercise(tx: DbExecutor, userId: string, exerciseId: string) {
-  const [row] = await tx
-    .select()
-    .from(exercises)
-    .where(ownedRow(exercises, exerciseId, userId))
-    .limit(1);
-  if (!row) throw new Error("Exercise not found.");
-  return row;
+  return requireOwnedRow(tx, exercises, exerciseId, userId, "Exercise not found.");
 }
 
 async function requireSession(tx: DbExecutor, userId: string, sessionId: string) {
-  const [row] = await tx
-    .select()
-    .from(workoutSessions)
-    .where(ownedRow(workoutSessions, sessionId, userId))
-    .limit(1);
-  if (!row) throw new Error("Session not found.");
-  return row;
+  return requireOwnedRow(tx, workoutSessions, sessionId, userId, "Session not found.");
 }
 
 function prefsToColumns(prefs?: ExercisePrefs) {

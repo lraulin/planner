@@ -19,7 +19,7 @@ import {
   financeAccounts,
   financeTransactions,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { captureFinanceMoneyCheckpoint } from "@/lib/finances/audit/checkpoints";
 import type { FinanceAuditChange } from "@/lib/finances/audit/types";
@@ -32,21 +32,17 @@ import { retireCoveredScrapeRowsForAccounts } from "@/lib/finances/feedHandoverW
 import type { BankInsert, BankUpdate, SyncCarry } from "./syncPlan";
 
 async function requireConnection(userId: string, connectionId: string): Promise<void> {
-  const [row] = await db
-    .select({ id: bankConnections.id })
-    .from(bankConnections)
-    .where(ownedRow(bankConnections, connectionId, userId))
-    .limit(1);
-  if (!row) throw new Error("Bank connection not found.");
+  await requireOwnedRow(
+    db,
+    bankConnections,
+    connectionId,
+    userId,
+    "Bank connection not found.",
+  );
 }
 
 async function requireAccount(userId: string, accountId: string): Promise<void> {
-  const [row] = await db
-    .select({ id: financeAccounts.id })
-    .from(financeAccounts)
-    .where(ownedRow(financeAccounts, accountId, userId))
-    .limit(1);
-  if (!row) throw new Error("Account not found.");
+  await requireOwnedRow(db, financeAccounts, accountId, userId, "Account not found.");
 }
 
 /**
@@ -316,12 +312,13 @@ export async function applySync(
   },
 ): Promise<ApplySyncResult> {
   return db.transaction(async (tx) => {
-    const [connection] = await tx
-      .select({ id: bankConnections.id })
-      .from(bankConnections)
-      .where(ownedRow(bankConnections, input.connectionId, userId))
-      .limit(1);
-    if (!connection) throw new Error("Bank connection not found.");
+    await requireOwnedRow(
+      tx,
+      bankConnections,
+      input.connectionId,
+      userId,
+      "Bank connection not found.",
+    );
     const externalIds = [
       ...new Set([...input.deletes, ...input.updates.map((row) => row.externalId)]),
     ];

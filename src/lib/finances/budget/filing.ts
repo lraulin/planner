@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financePayees, financeTransactions } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { requireOwnedRow } from "@/lib/db/owned";
 import { effectiveFlow } from "../analytics";
 import {
   categoryAssignableIds,
@@ -212,12 +212,13 @@ export async function fileWaitingChargesForPayee(
   categoryId: string,
 ): Promise<{ filed: number }> {
   await requireCategory(userId, categoryId);
-  const [payee] = await db
-    .select({ id: financePayees.id })
-    .from(financePayees)
-    .where(ownedRow(financePayees, payeeId, userId))
-    .limit(1);
-  if (!payee) throw new Error("That payee does not exist.");
+  await requireOwnedRow(
+    db,
+    financePayees,
+    payeeId,
+    userId,
+    "That payee does not exist.",
+  );
 
   const waiting = await db
     .select({ id: financeTransactions.id })

@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { nodes, timeCharts, weeklyPlanEntries, weeklyPlans } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { startOfWeek } from "@/lib/schedule/geometry";
 
 /**
@@ -95,12 +95,13 @@ export async function updateWeeklyPlan(
   if (patch.timeChartId !== undefined) {
     // Prove the chart is this user's before pointing the plan at it (`security.md`).
     if (patch.timeChartId !== null) {
-      const [chart] = await db
-        .select({ id: timeCharts.id })
-        .from(timeCharts)
-        .where(ownedRow(timeCharts, patch.timeChartId, userId))
-        .limit(1);
-      if (!chart) throw new Error("Time Chart not found.");
+      await requireOwnedRow(
+        db,
+        timeCharts,
+        patch.timeChartId,
+        userId,
+        "Time Chart not found.",
+      );
     }
     values.timeChartId = patch.timeChartId;
   }
@@ -164,19 +165,9 @@ export async function upsertPlanEntry(
   nodeId: string,
   patch: PlanEntryPatch,
 ) {
-  const [plan] = await db
-    .select({ id: weeklyPlans.id })
-    .from(weeklyPlans)
-    .where(ownedRow(weeklyPlans, planId, userId))
-    .limit(1);
-  if (!plan) throw new Error("Weekly plan not found.");
+  await requireOwnedRow(db, weeklyPlans, planId, userId, "Weekly plan not found.");
 
-  const [node] = await db
-    .select({ id: nodes.id })
-    .from(nodes)
-    .where(ownedRow(nodes, nodeId, userId))
-    .limit(1);
-  if (!node) throw new Error("Item not found.");
+  await requireOwnedRow(db, nodes, nodeId, userId, "Item not found.");
 
   return db.transaction((tx) =>
     upsertPlanEntryInTransaction(tx, userId, planId, nodeId, patch),
@@ -249,12 +240,7 @@ export async function updateWeeklyPlanEntries(
   entries: readonly PlanEntryBatchItem[],
 ) {
   return db.transaction(async (tx) => {
-    const [plan] = await tx
-      .select({ id: weeklyPlans.id })
-      .from(weeklyPlans)
-      .where(ownedRow(weeklyPlans, planId, userId))
-      .limit(1);
-    if (!plan) throw new Error("Weekly plan not found.");
+    await requireOwnedRow(tx, weeklyPlans, planId, userId, "Weekly plan not found.");
 
     const nodeIds = [...new Set(entries.map((entry) => entry.nodeId))];
     const owned = await tx

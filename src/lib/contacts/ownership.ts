@@ -1,6 +1,6 @@
 import type { DbExecutor } from "@/db/executor";
 import { contacts } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { requireOwnedRow } from "@/lib/db/owned";
 
 /**
  * Refuse a contact id that is missing or belongs to someone else.
@@ -14,10 +14,5 @@ export async function assertContactOwned(
   contactId: string | null | undefined,
 ): Promise<void> {
   if (contactId === undefined || contactId === null) return;
-  const [contact] = await tx
-    .select({ id: contacts.id })
-    .from(contacts)
-    .where(ownedRow(contacts, contactId, userId))
-    .limit(1);
-  if (!contact) throw new Error("Contact not found.");
+  await requireOwnedRow(tx, contacts, contactId, userId, "Contact not found.");
 }

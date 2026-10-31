@@ -6,7 +6,7 @@ import {
   reminderOccurrences,
   type ReminderOccurrence,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
 import { setAppointmentCheckState } from "@/lib/schedule/mutations";
 import {
@@ -34,13 +34,7 @@ import { loadAppointmentReminderSources, loadNotificationPrefs } from "./queries
 // Acting on a reminder
 
 async function requireOccurrence(userId: string, id: string) {
-  const [row] = await db
-    .select()
-    .from(reminderOccurrences)
-    .where(ownedRow(reminderOccurrences, id, userId))
-    .limit(1);
-  if (!row) throw new Error("Reminder not found.");
-  return row;
+  return requireOwnedRow(db, reminderOccurrences, id, userId, "Reminder not found.");
 }
 
 function assertActive(row: ReminderOccurrence): void {

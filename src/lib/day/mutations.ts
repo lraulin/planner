@@ -8,7 +8,7 @@ import {
   type NodeState,
   type PriorityLetter,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { ensureInbox } from "@/lib/capture/mutations";
 import { assertRankedLetterPriorities } from "@/lib/priority/letterRank";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
@@ -35,14 +35,7 @@ import type { DayAssignment } from "./priority";
  */
 
 async function requireItem(tx: DbExecutor, userId: string, itemId: string) {
-  const [item] = await tx
-    .select()
-    .from(dailyItems)
-    .where(ownedRow(dailyItems, itemId, userId))
-    .limit(1);
-
-  if (!item) throw new Error("Daily item not found.");
-  return item;
+  return requireOwnedRow(tx, dailyItems, itemId, userId, "Daily item not found.");
 }
 
 /** A sort key placing a new row at the end of `day`. */
@@ -318,13 +311,7 @@ export async function planNodeForDay(
   day: string | null,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const [node] = await tx
-      .select({ type: nodes.type })
-      .from(nodes)
-      .where(ownedRow(nodes, nodeId, userId))
-      .limit(1);
-
-    if (!node) throw new Error("Task not found.");
+    const node = await requireOwnedRow(tx, nodes, nodeId, userId, "Task not found.");
     if (node.type !== "task") {
       throw new Error("Only tasks go on a day list. Add a task under it instead.");
     }

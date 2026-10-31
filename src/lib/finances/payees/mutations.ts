@@ -22,7 +22,7 @@ import {
   financePayees,
   financeTransactions,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import { amountMatches } from "../amountMatch";
 import { normalizeMerchant } from "../classify/merchant";
@@ -118,16 +118,13 @@ export async function ensurePayeeForTransaction(
   userId: string,
   transactionId: string,
 ): Promise<string> {
-  const [row] = await db
-    .select({
-      id: financeTransactions.id,
-      description: financeTransactions.description,
-      payeeId: financeTransactions.payeeId,
-    })
-    .from(financeTransactions)
-    .where(ownedRow(financeTransactions, transactionId, userId))
-    .limit(1);
-  if (!row) throw new Error("That transaction does not exist.");
+  const row = await requireOwnedRow(
+    db,
+    financeTransactions,
+    transactionId,
+    userId,
+    "That transaction does not exist.",
+  );
   if (row.payeeId) return row.payeeId;
 
   const alias = aliasFor(row.description);
@@ -186,12 +183,13 @@ export async function isolatePayeeForBill(
   transactionId: string,
 ): Promise<string> {
   const payeeId = await ensurePayeeForTransaction(userId, transactionId);
-  const [row] = await db
-    .select({ description: financeTransactions.description })
-    .from(financeTransactions)
-    .where(ownedRow(financeTransactions, transactionId, userId))
-    .limit(1);
-  if (!row) throw new Error("That transaction does not exist.");
+  const row = await requireOwnedRow(
+    db,
+    financeTransactions,
+    transactionId,
+    userId,
+    "That transaction does not exist.",
+  );
   const alias = aliasFor(row.description);
   if (alias === "") return payeeId;
 
@@ -309,16 +307,13 @@ export async function isolateSimilarAmountForBill(
   payeeId: string,
   billName: string,
 ): Promise<string> {
-  const [selected] = await db
-    .select({
-      id: financeTransactions.id,
-      amount: financeTransactions.amount,
-      description: financeTransactions.description,
-    })
-    .from(financeTransactions)
-    .where(ownedRow(financeTransactions, transactionId, userId))
-    .limit(1);
-  if (!selected) throw new Error("That transaction does not exist.");
+  const selected = await requireOwnedRow(
+    db,
+    financeTransactions,
+    transactionId,
+    userId,
+    "That transaction does not exist.",
+  );
   const targetCents = absCents(selected.amount);
   const alias = aliasFor(selected.description);
 
@@ -456,12 +451,13 @@ export async function setPayeeAutoCategory(
     throw new Error("A fixed default needs a Category.");
   }
   if (input.defaultBudgetCategoryId !== null) {
-    const [category] = await db
-      .select({ id: financeBudgetCategories.id })
-      .from(financeBudgetCategories)
-      .where(ownedRow(financeBudgetCategories, input.defaultBudgetCategoryId, userId))
-      .limit(1);
-    if (!category) throw new Error("That Category does not exist.");
+    await requireOwnedRow(
+      db,
+      financeBudgetCategories,
+      input.defaultBudgetCategoryId,
+      userId,
+      "That Category does not exist.",
+    );
   }
   const [owned] = await db
     .update(financePayees)

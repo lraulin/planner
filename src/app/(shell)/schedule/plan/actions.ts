@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { nodes, resultAreaDetails } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import * as planning from "@/lib/planning/mutations";
 import type { PlanEntryPatch, WeeklyPlanPatch } from "@/lib/planning/mutations";
@@ -61,12 +61,7 @@ export async function saveMissionAction(
   mission: string,
 ): Promise<ActionResult> {
   return run(async (userId) => {
-    const [node] = await db
-      .select({ id: nodes.id, type: nodes.type })
-      .from(nodes)
-      .where(ownedRow(nodes, nodeId, userId))
-      .limit(1);
-    if (!node) throw new Error("Item not found.");
+    const node = await requireOwnedRow(db, nodes, nodeId, userId, "Item not found.");
     if (node.type !== "result_area") {
       throw new Error("Mission is only available on Result Areas.");
     }

@@ -2,7 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { metricEntries, metrics, nodes } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import type { PriorityLetter } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
 import { isMetricType } from "./derive";
@@ -23,23 +23,11 @@ function requireMetricType(raw: string | undefined, fallback: MetricType): Metri
  */
 
 async function requireMetric(tx: DbExecutor, userId: string, metricId: string) {
-  const [row] = await tx
-    .select()
-    .from(metrics)
-    .where(ownedRow(metrics, metricId, userId))
-    .limit(1);
-  if (!row) throw new Error("Metric not found.");
-  return row;
+  return requireOwnedRow(tx, metrics, metricId, userId, "Metric not found.");
 }
 
 async function requireEntry(tx: DbExecutor, userId: string, entryId: string) {
-  const [row] = await tx
-    .select()
-    .from(metricEntries)
-    .where(ownedRow(metricEntries, entryId, userId))
-    .limit(1);
-  if (!row) throw new Error("Metric entry not found.");
-  return row;
+  return requireOwnedRow(tx, metricEntries, entryId, userId, "Metric entry not found.");
 }
 
 /** Owner must be this user's goal (or dream-as-goal). Null owner is fine. */
@@ -49,12 +37,13 @@ async function assertOwnerOk(
   ownerNodeId: string | null | undefined,
 ): Promise<void> {
   if (ownerNodeId === undefined || ownerNodeId === null) return;
-  const [node] = await tx
-    .select({ id: nodes.id, type: nodes.type })
-    .from(nodes)
-    .where(ownedRow(nodes, ownerNodeId, userId))
-    .limit(1);
-  if (!node) throw new Error("Owner not found.");
+  const node = await requireOwnedRow(
+    tx,
+    nodes,
+    ownerNodeId,
+    userId,
+    "Owner not found.",
+  );
   if (node.type !== "goal") throw new Error("Metric owner must be a goal.");
 }
 

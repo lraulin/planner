@@ -3,7 +3,7 @@ import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { notes, type NewNote, type NoteFlag } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { assertContactOwned } from "@/lib/contacts/ownership";
 import { assertNodeOwned } from "@/lib/tree/ownership";
 import type { ExternalRef } from "@/db/schema";
@@ -21,14 +21,7 @@ function parentMatches(parentId: string | null) {
 }
 
 async function requireNote(tx: DbExecutor, userId: string, noteId: string) {
-  const [note] = await tx
-    .select()
-    .from(notes)
-    .where(ownedRow(notes, noteId, userId))
-    .limit(1);
-
-  if (!note) throw new Error("Note not found.");
-  return note;
+  return requireOwnedRow(tx, notes, noteId, userId, "Note not found.");
 }
 
 /**

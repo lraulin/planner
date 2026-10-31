@@ -8,7 +8,7 @@ import {
   resultAreaDetails,
   taskDetails,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import type { NodeItemKind } from "@/db/schema";
 import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { assertContactOwned } from "@/lib/contacts/ownership";
@@ -817,12 +817,7 @@ async function applyResultAreaId(
 }
 
 async function requireResultArea(userId: string, id: string): Promise<void> {
-  const [row] = await db
-    .select({ type: nodes.type })
-    .from(nodes)
-    .where(ownedRow(nodes, id, userId))
-    .limit(1);
-  if (!row) throw new Error(`Node not found: ${id}`);
+  const row = await requireOwnedRow(db, nodes, id, userId, `Node not found: ${id}`);
   if (row.type !== "result_area") {
     throw new Error("The Result Area field only accepts a Result Area.");
   }

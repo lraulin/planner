@@ -7,7 +7,7 @@ import {
   financeSupplyOptions,
   type SupplyRateBasis,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { after, first } from "@/lib/tree/sortKey";
 import { parsePackCount } from "./packSize";
 import { listAmazonRepeatPurchases, listSupplyItems } from "./queries";
@@ -77,12 +77,13 @@ export type SupplyOptionEdit = {
 };
 
 async function requireSupplyItem(userId: string, itemId: string): Promise<void> {
-  const [row] = await db
-    .select({ id: financeSupplyItems.id })
-    .from(financeSupplyItems)
-    .where(ownedRow(financeSupplyItems, itemId, userId))
-    .limit(1);
-  if (!row) throw new Error("That supply item does not exist.");
+  await requireOwnedRow(
+    db,
+    financeSupplyItems,
+    itemId,
+    userId,
+    "That supply item does not exist.",
+  );
 }
 
 async function requireSupplyOption(
@@ -104,22 +105,24 @@ async function requireSupplyOption(
  * its name and assigned amount back off the worksheet.
  */
 async function requireEnvelope(userId: string, envelopeId: string): Promise<void> {
-  const [row] = await db
-    .select({ id: financeBudgetCategories.id })
-    .from(financeBudgetCategories)
-    .where(ownedRow(financeBudgetCategories, envelopeId, userId))
-    .limit(1);
-  if (!row) throw new Error("That envelope does not exist.");
+  await requireOwnedRow(
+    db,
+    financeBudgetCategories,
+    envelopeId,
+    userId,
+    "That envelope does not exist.",
+  );
 }
 
 /** Same reasoning as `requireEnvelope`: a group id is a claim about the caller's own rows. */
 async function requireGroup(userId: string, groupId: string): Promise<void> {
-  const [row] = await db
-    .select({ id: financeSupplyGroups.id })
-    .from(financeSupplyGroups)
-    .where(ownedRow(financeSupplyGroups, groupId, userId))
-    .limit(1);
-  if (!row) throw new Error("That supply group does not exist.");
+  await requireOwnedRow(
+    db,
+    financeSupplyGroups,
+    groupId,
+    userId,
+    "That supply group does not exist.",
+  );
 }
 
 function requireName(name: string): string {

@@ -12,7 +12,7 @@ import {
   type FinanceAccountKind,
   type FinanceFlowKind,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import * as sortKey from "@/lib/tree/sortKey";
 import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
@@ -73,12 +73,13 @@ async function requireTransaction(
   userId: string,
   transactionId: string,
 ): Promise<void> {
-  const [row] = await db
-    .select({ id: financeTransactions.id })
-    .from(financeTransactions)
-    .where(ownedRow(financeTransactions, transactionId, userId))
-    .limit(1);
-  if (!row) throw new Error("Transaction not found.");
+  await requireOwnedRow(
+    db,
+    financeTransactions,
+    transactionId,
+    userId,
+    "Transaction not found.",
+  );
 }
 
 export type TransactionEdit = {
@@ -398,12 +399,13 @@ async function requirePaymentResolution(
   userId: string,
   resolutionId: string,
 ): Promise<void> {
-  const [row] = await db
-    .select({ id: financePaymentResolutions.id })
-    .from(financePaymentResolutions)
-    .where(ownedRow(financePaymentResolutions, resolutionId, userId))
-    .limit(1);
-  if (!row) throw new Error("Payment resolution not found.");
+  await requireOwnedRow(
+    db,
+    financePaymentResolutions,
+    resolutionId,
+    userId,
+    "Payment resolution not found.",
+  );
 }
 
 /**
@@ -461,16 +463,13 @@ export async function updateAccount(
   accountId: string,
   edit: AccountEdit,
 ): Promise<void> {
-  const [current] = await db
-    .select({
-      id: financeAccounts.id,
-      kind: financeAccounts.kind,
-      offBudget: financeAccounts.offBudget,
-    })
-    .from(financeAccounts)
-    .where(ownedRow(financeAccounts, accountId, userId))
-    .limit(1);
-  if (!current) throw new Error("Account not found.");
+  const current = await requireOwnedRow(
+    db,
+    financeAccounts,
+    accountId,
+    userId,
+    "Account not found.",
+  );
 
   const nextKind = edit.kind ?? current.kind;
   if (isCoreBudgetKind(nextKind) && edit.offBudget === true) {
@@ -795,19 +794,13 @@ export async function reclassifyTransactions(
 /** Delete an account and, by cascade, every transaction on it. */
 export async function deleteAccount(userId: string, accountId: string): Promise<void> {
   await db.transaction(async (tx) => {
-    const [account] = await tx
-      .select({
-        id: financeAccounts.id,
-        name: financeAccounts.name,
-        kind: financeAccounts.kind,
-        offBudget: financeAccounts.offBudget,
-        externalSource: financeAccounts.externalSource,
-        externalKey: financeAccounts.externalKey,
-      })
-      .from(financeAccounts)
-      .where(ownedRow(financeAccounts, accountId, userId))
-      .limit(1);
-    if (!account) throw new Error("Account not found.");
+    const account = await requireOwnedRow(
+      tx,
+      financeAccounts,
+      accountId,
+      userId,
+      "Account not found.",
+    );
     const transactions = await tx
       .select(TRANSACTION_AUDIT_COLUMNS)
       .from(financeTransactions)

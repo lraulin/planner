@@ -9,7 +9,7 @@ import {
   financeTransactions,
   type EnvelopeKind,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { rearmReminders, supersedeOrphanedReminders } from "@/lib/reminders/arm";
 import { serializeBudget } from "@/lib/settings/finances";
 import { writeUserSetting } from "@/lib/settings/mutations";
@@ -398,17 +398,13 @@ export async function deleteBudgetCategory(
   categoryId: string,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const [category] = await tx
-      .select({
-        id: financeBudgetCategories.id,
-        name: financeBudgetCategories.name,
-        kind: financeBudgetCategories.kind,
-        groupId: financeBudgetCategories.groupId,
-      })
-      .from(financeBudgetCategories)
-      .where(ownedRow(financeBudgetCategories, categoryId, userId))
-      .limit(1);
-    if (!category) throw new Error("That envelope does not exist.");
+    const category = await requireOwnedRow(
+      tx,
+      financeBudgetCategories,
+      categoryId,
+      userId,
+      "That envelope does not exist.",
+    );
     const [allocations, filedTransactions] = await Promise.all([
       tx
         .select({

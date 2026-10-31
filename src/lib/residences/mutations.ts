@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { residences, type ExternalRef } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import {
   dateKeyOrNull,
   moneyOrNull,
@@ -33,13 +33,7 @@ const TEXT_FIELDS = [
 const DATE_LABELS = { start: "Moved in", end: "Moved out" };
 
 async function requireResidence(tx: DbExecutor, userId: string, residenceId: string) {
-  const [row] = await tx
-    .select()
-    .from(residences)
-    .where(ownedRow(residences, residenceId, userId))
-    .limit(1);
-  if (!row) throw new Error("Residence not found.");
-  return row;
+  return requireOwnedRow(tx, residences, residenceId, userId, "Residence not found.");
 }
 
 export async function createResidence(

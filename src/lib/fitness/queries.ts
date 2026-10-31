@@ -7,7 +7,7 @@ import {
   workoutSessions,
   workoutSets,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { findOwnedRow } from "@/lib/db/owned";
 import { DEFAULT_BAR_WEIGHT_LB } from "./bars";
 import { normaliseEquipment } from "./equipment";
 import { normaliseMeasure } from "./measure";
@@ -90,11 +90,7 @@ export async function getExercise(
   userId: string,
   exerciseId: string,
 ): Promise<ExerciseSummary | null> {
-  const [row] = await db
-    .select()
-    .from(exercises)
-    .where(ownedRow(exercises, exerciseId, userId))
-    .limit(1);
+  const row = await findOwnedRow(db, exercises, exerciseId, userId);
   if (!row) return null;
   return mapExercise(row);
 }
@@ -164,11 +160,7 @@ export async function getSessionDetail(
   userId: string,
   sessionId: string,
 ): Promise<SessionDetail | null> {
-  const [session] = await db
-    .select()
-    .from(workoutSessions)
-    .where(ownedRow(workoutSessions, sessionId, userId))
-    .limit(1);
+  const session = await findOwnedRow(db, workoutSessions, sessionId, userId);
   if (!session) return null;
 
   const seRows = await db
