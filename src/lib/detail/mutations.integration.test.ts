@@ -12,6 +12,7 @@ import {
 } from "@/lib/schedule/geometry";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
+import { mockTitleFetch } from "@/lib/testing/titleFetch";
 import { createNode } from "@/lib/tree/mutations";
 import { setState } from "@/lib/tree/stateTransitions";
 import {
@@ -1390,25 +1391,6 @@ describeDb("detail mutations", () => {
     });
 
     describe("force title fetch", () => {
-      function mockTitleFetch(titleByUrl: Record<string, string | null>) {
-        vi.stubGlobal(
-          "fetch",
-          vi.fn((input: RequestInfo | URL) => {
-            const href = typeof input === "string" ? input : input.toString();
-            const title = titleByUrl[href];
-            if (title === null || title === undefined) {
-              return Promise.resolve(new Response("nope", { status: 500 }));
-            }
-            return Promise.resolve(
-              new Response(`<html><head><title>${title}</title></head></html>`, {
-                status: 200,
-                headers: { "content-type": "text/html" },
-              }),
-            );
-          }),
-        );
-      }
-
       afterEach(() => {
         vi.unstubAllGlobals();
         vi.restoreAllMocks();
