@@ -3,7 +3,7 @@ import { listJobDates } from "@/lib/jobs/queries";
 import { listResidenceDates } from "@/lib/residences/queries";
 import { employerName, residenceName } from "./naming";
 import { listLifeEvents } from "./queries";
-import type { ChronologyRow, LifeEventDetail } from "./types";
+import type { ChronologyRow, LifeEventDetail, JobDates, ResidenceDates } from "./types";
 
 /**
  * The Timeline grid's rows: everything that happened, in order.
@@ -22,27 +22,6 @@ import type { ChronologyRow, LifeEventDetail } from "./types";
 /** The two categories derived rows carry. Fixed, so the set filter can offer them as values. */
 export const WORK_CATEGORY = "Work";
 export const HOME_CATEGORY = "Home";
-
-type JobDates = {
-  id: string;
-  employer: string;
-  jobTitle: string;
-  startDate: string | null;
-  endDate: string | null;
-};
-
-type ResidenceDates = {
-  id: string;
-  label: string;
-  streetAddress: string;
-  extendedAddress: string;
-  city: string;
-  region: string;
-  postalCode: string;
-  country: string;
-  movedIn: string | null;
-  movedOut: string | null;
-};
 
 /**
  * Pure so it can be tested without a database — the branching here (null dates, unnamed

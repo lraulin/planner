@@ -43,3 +43,26 @@ export type ChronologyRow = {
   /** The job or residence this was derived from; null on a life event. */
   sourceId: string | null;
 };
+
+/** A job as the Timeline reads it: who, and the span it covers. */
+export type JobDates = {
+  id: string;
+  employer: string;
+  jobTitle: string;
+  startDate: string | null;
+  endDate: string | null;
+};
+
+/** A residence as the Timeline reads it: the address it is named by, and the span. */
+export type ResidenceDates = {
+  id: string;
+  label: string;
+  streetAddress: string;
+  extendedAddress: string;
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+  movedIn: string | null;
+  movedOut: string | null;
+};

@@ -1,7 +1,7 @@
 import { formatPostalAddress } from "@/lib/address";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { employerName, residenceName } from "./naming";
-import type { LifeEventDetail } from "./types";
+import type { LifeEventDetail, JobDates, ResidenceDates } from "./types";
 
 /**
  * The Timeline ribbon: the same records the chronology draws as a list, drawn as spans.
@@ -86,27 +86,6 @@ const FOLD_LABEL = "Other";
 
 /** Lane order: where you lived above where you worked, because a move usually explains a job. */
 const LANE_LABELS: Record<RibbonLaneId, string> = { home: "Home", work: "Work" };
-
-type JobDates = {
-  id: string;
-  employer: string;
-  jobTitle: string;
-  startDate: string | null;
-  endDate: string | null;
-};
-
-type ResidenceDates = {
-  id: string;
-  label: string;
-  streetAddress: string;
-  extendedAddress: string;
-  city: string;
-  region: string;
-  postalCode: string;
-  country: string;
-  movedIn: string | null;
-  movedOut: string | null;
-};
 
 export function deriveRibbon(
   events: readonly LifeEventDetail[],

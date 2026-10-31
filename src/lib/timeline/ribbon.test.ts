@@ -14,51 +14,7 @@ import {
   type RibbonBar,
 } from "./ribbon";
 import { daysBetweenKeys as daysBetween } from "@/lib/schedule/geometry";
-import type { LifeEventDetail } from "./types";
-
-const NOW = new Date("2026-08-14T12:00:00Z");
-
-function event(overrides: Partial<LifeEventDetail> = {}): LifeEventDetail {
-  return {
-    id: "e1",
-    eventDate: "2010-05-04",
-    title: "Adopted Biscuit",
-    category: "Pets",
-    notes: "",
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  };
-}
-
-function job(overrides: Partial<Parameters<typeof deriveRibbon>[1][number]> = {}) {
-  return {
-    id: "j1",
-    employer: "Acme Corp",
-    jobTitle: "Software Engineer",
-    startDate: "2019-03-01" as string | null,
-    endDate: "2022-06-30" as string | null,
-    ...overrides,
-  };
-}
-
-function residence(
-  overrides: Partial<Parameters<typeof deriveRibbon>[2][number]> = {},
-) {
-  return {
-    id: "r1",
-    label: "",
-    streetAddress: "12 Sejong-daero",
-    extendedAddress: "",
-    city: "Seoul",
-    region: "",
-    postalCode: "04524",
-    country: "South Korea",
-    movedIn: "2014-08-01" as string | null,
-    movedOut: "2017-02-15" as string | null,
-    ...overrides,
-  };
-}
+import { jobDates, lifeEvent, residenceDates } from "@/lib/testing/lifeHistory";
 
 /** The bars the ribbon puts in one lane, packed the way the component packs them. */
 function laneRows(ribbon: ReturnType<typeof deriveRibbon>, id: "home" | "work") {
@@ -84,7 +40,7 @@ function windowRange(startKey: string, endKey: string) {
 describe("deriveRibbon", () => {
   it("draws a job as one bar, where the chronology draws two rows", () => {
     // The whole reason this projection exists: duration, not a pair of points.
-    const ribbon = deriveRibbon([], [job()], []);
+    const ribbon = deriveRibbon([], [jobDates()], []);
     expect(laneRows(ribbon, "work")).toEqual([
       [
         {
@@ -102,7 +58,10 @@ describe("deriveRibbon", () => {
 
   it("keeps an ongoing job's missing end null rather than filling in today", () => {
     // Today belongs to the reader's clock. Anything here that guessed it would be the server's.
-    const [[bar]] = laneRows(deriveRibbon([], [job({ endDate: null })], []), "work");
+    const [[bar]] = laneRows(
+      deriveRibbon([], [jobDates({ endDate: null })], []),
+      "work",
+    );
     expect(bar.endKey).toBeNull();
     expect(bar.startKey).toBe("2019-03-01");
   });
@@ -110,7 +69,7 @@ describe("deriveRibbon", () => {
   it("keeps a residence you only remember leaving", () => {
     // A real shape: the move out is on a lease, the move in was a decade of ago.
     const [[bar]] = laneRows(
-      deriveRibbon([], [], [residence({ movedIn: null })]),
+      deriveRibbon([], [], [residenceDates({ movedIn: null })]),
       "home",
     );
     expect(bar.startKey).toBeNull();
@@ -120,8 +79,8 @@ describe("deriveRibbon", () => {
   it("drops a record with no dates at all instead of drawing a dateless bar", () => {
     const ribbon = deriveRibbon(
       [],
-      [job({ startDate: null, endDate: null })],
-      [residence({ movedIn: null, movedOut: null })],
+      [jobDates({ startDate: null, endDate: null })],
+      [residenceDates({ movedIn: null, movedOut: null })],
     );
     expect(laneRows(ribbon, "work")).toEqual([]);
     expect(laneRows(ribbon, "home")).toEqual([]);
@@ -131,15 +90,15 @@ describe("deriveRibbon", () => {
   it("names a record whose naming field is blank the way the chronology does", () => {
     const ribbon = deriveRibbon(
       [],
-      [job({ employer: "  " })],
-      [residence({ city: "", label: "The cabin" })],
+      [jobDates({ employer: "  " })],
+      [residenceDates({ city: "", label: "The cabin" })],
     );
     expect(laneRows(ribbon, "work")[0][0].label).toBe("an unnamed employer");
     expect(laneRows(ribbon, "home")[0][0].label).toBe("The cabin");
   });
 
   it("carries the full address as a residence bar's detail line", () => {
-    const [[bar]] = laneRows(deriveRibbon([], [], [residence()]), "home");
+    const [[bar]] = laneRows(deriveRibbon([], [], [residenceDates()]), "home");
     expect(bar.detail).toBe("12 Sejong-daero, Seoul, 04524, South Korea");
   });
 });
@@ -151,13 +110,13 @@ describe("packing overlapping bars", () => {
         [],
         [],
         [
-          residence({
+          residenceDates({
             id: "r1",
             city: "Seoul",
             movedIn: "2014-01-01",
             movedOut: "2017-06-30",
           }),
-          residence({
+          residenceDates({
             id: "r2",
             city: "Austin",
             movedIn: "2017-01-01",
@@ -176,13 +135,13 @@ describe("packing overlapping bars", () => {
         [],
         [],
         [
-          residence({
+          residenceDates({
             id: "r1",
             city: "Seoul",
             movedIn: "2014-01-01",
             movedOut: "2017-06-30",
           }),
-          residence({
+          residenceDates({
             id: "r2",
             city: "Austin",
             movedIn: "2017-06-30",
@@ -202,8 +161,13 @@ describe("packing overlapping bars", () => {
       deriveRibbon(
         [],
         [
-          job({ id: "j1", employer: "Globex", startDate: "2010-01-01", endDate: null }),
-          job({
+          jobDates({
+            id: "j1",
+            employer: "Globex",
+            startDate: "2010-01-01",
+            endDate: null,
+          }),
+          jobDates({
             id: "j2",
             employer: "Initech",
             startDate: "2015-01-01",
@@ -223,8 +187,13 @@ describe("packing overlapping bars", () => {
         [],
         [],
         [
-          residence({ id: "r1", city: "Seoul", movedIn: null, movedOut: "2017-06-30" }),
-          residence({
+          residenceDates({
+            id: "r1",
+            city: "Seoul",
+            movedIn: null,
+            movedOut: "2017-06-30",
+          }),
+          residenceDates({
             id: "r2",
             city: "Austin",
             movedIn: "2010-01-01",
@@ -243,26 +212,26 @@ describe("packing overlapping bars", () => {
       deriveRibbon(
         [],
         [
-          job({
+          jobDates({
             id: "j1",
             employer: "A",
             startDate: "2000-01-01",
             endDate: "2006-01-01",
           }),
-          job({
+          jobDates({
             id: "j2",
             employer: "B",
             startDate: "2001-01-01",
             endDate: "2007-01-01",
           }),
-          job({
+          jobDates({
             id: "j3",
             employer: "C",
             startDate: "2002-01-01",
             endDate: "2008-01-01",
           }),
           // Starts after A ends, so it fills A's row rather than opening a fourth.
-          job({
+          jobDates({
             id: "j4",
             employer: "D",
             startDate: "2006-06-01",
@@ -281,9 +250,9 @@ describe("pins and their colours", () => {
   it("orders pins oldest first with a stable same-day tiebreak", () => {
     const { pins } = deriveRibbon(
       [
-        event({ id: "e2", eventDate: "2010-05-04" }),
-        event({ id: "e1", eventDate: "2010-05-04" }),
-        event({ id: "e3", eventDate: "2001-01-01" }),
+        lifeEvent({ id: "e2", eventDate: "2010-05-04" }),
+        lifeEvent({ id: "e1", eventDate: "2010-05-04" }),
+        lifeEvent({ id: "e3", eventDate: "2001-01-01" }),
       ],
       [],
       [],
@@ -294,9 +263,9 @@ describe("pins and their colours", () => {
   it("assigns colours by sorted category, so the legend does not shuffle", () => {
     const { pins, categories } = deriveRibbon(
       [
-        event({ id: "e1", category: "Pets" }),
-        event({ id: "e2", category: "Family" }),
-        event({ id: "e3", category: "Pets" }),
+        lifeEvent({ id: "e1", category: "Pets" }),
+        lifeEvent({ id: "e2", category: "Family" }),
+        lifeEvent({ id: "e3", category: "Pets" }),
       ],
       [],
       [],
@@ -314,9 +283,9 @@ describe("pins and their colours", () => {
   it("folds an uncategorised event into the catch-all colour and says so once", () => {
     const { pins, categories } = deriveRibbon(
       [
-        event({ id: "e1", category: "  " }),
-        event({ id: "e2", category: "" }),
-        event({ id: "e3", category: "Pets" }),
+        lifeEvent({ id: "e1", category: "  " }),
+        lifeEvent({ id: "e2", category: "" }),
+        lifeEvent({ id: "e3", category: "Pets" }),
       ],
       [],
       [],
@@ -333,7 +302,7 @@ describe("pins and their colours", () => {
     const categoriesInUse = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
     const { pins, categories } = deriveRibbon(
       categoriesInUse.map((category, index) =>
-        event({ id: `e${index}`, category, eventDate: `20${10 + index}-01-01` }),
+        lifeEvent({ id: `e${index}`, category, eventDate: `20${10 + index}-01-01` }),
       ),
       [],
       [],
@@ -352,22 +321,22 @@ describe("pins and their colours", () => {
   });
 
   it("omits the catch-all from the legend when nothing landed in it", () => {
-    const { categories } = deriveRibbon([event({ category: "Pets" })], [], []);
+    const { categories } = deriveRibbon([lifeEvent({ category: "Pets" })], [], []);
     expect(categories).toEqual([{ label: "Pets", colorIndex: 0 }]);
   });
 });
 describe("bounds", () => {
   it("spans every dated thing on the page, from all three sources", () => {
     const ribbon = deriveRibbon(
-      [event({ eventDate: "2010-05-04" })],
-      [job()],
-      [residence()],
+      [lifeEvent({ eventDate: "2010-05-04" })],
+      [jobDates()],
+      [residenceDates()],
     );
     expect(ribbon.bounds).toEqual({ minKey: "2010-05-04", maxKey: "2022-06-30" });
   });
 
   it("ignores the missing half of a half-open span", () => {
-    const ribbon = deriveRibbon([], [job({ startDate: null })], []);
+    const ribbon = deriveRibbon([], [jobDates({ startDate: null })], []);
     expect(ribbon.bounds).toEqual({ minKey: "2022-06-30", maxKey: "2022-06-30" });
   });
 });
