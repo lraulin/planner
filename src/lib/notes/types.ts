@@ -1,4 +1,5 @@
 import type { NodeType, NoteFlag } from "@/db/schema";
+import type { Position } from "@/lib/tree/types";
 
 /** One note as loaded from the database, before derived values are computed. */
 export type NoteRow = {
@@ -45,9 +46,5 @@ export type NoteSummary = Omit<NoteNode, "body"> & {
   snippet: string;
 };
 
-/** Where a note goes among its new siblings. Mirrors `src/lib/tree/types.ts`. */
-export type NotePosition =
-  | { at: "first" }
-  | { at: "last" }
-  | { at: "before"; siblingId: string }
-  | { at: "after"; siblingId: string };
+/** Where a note goes among its new siblings — the same positions as an outline node. */
+export type NotePosition = Position;

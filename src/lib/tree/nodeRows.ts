@@ -2,7 +2,7 @@ import type { DbExecutor } from "@/db/executor";
 import { nodes, resultAreaDetails } from "@/db/schema";
 import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import { between } from "./sortKey";
+import { keyAtPosition } from "./siblingOrder";
 import type { Position } from "./types";
 import { isSelfOrDescendantVia, subtreeIdsVia } from "./ancestry";
 
@@ -66,26 +66,7 @@ export async function sortKeyFor(
   position: Position,
   excludeId?: string,
 ): Promise<string> {
-  const siblings = (await siblingKeys(tx, userId, parentId)).filter(
-    (s) => s.id !== excludeId,
-  );
-
-  switch (position.at) {
-    case "first":
-      return between(null, siblings[0]?.sortKey ?? null);
-    case "last":
-      return between(siblings[siblings.length - 1]?.sortKey ?? null, null);
-    case "before": {
-      const index = siblings.findIndex((s) => s.id === position.siblingId);
-      if (index === -1) throw new Error(`Sibling not found: ${position.siblingId}`);
-      return between(siblings[index - 1]?.sortKey ?? null, siblings[index].sortKey);
-    }
-    case "after": {
-      const index = siblings.findIndex((s) => s.id === position.siblingId);
-      if (index === -1) throw new Error(`Sibling not found: ${position.siblingId}`);
-      return between(siblings[index].sortKey, siblings[index + 1]?.sortKey ?? null);
-    }
-  }
+  return keyAtPosition(await siblingKeys(tx, userId, parentId), position, excludeId);
 }
 
 /** True when `candidateId` is `nodeId` itself or sits somewhere beneath it. */

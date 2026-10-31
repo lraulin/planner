@@ -17,6 +17,7 @@ import {
   sortKeyFor,
   subtreeIds,
 } from "./nodeRows";
+import { indentParentId, verticalPosition } from "./siblingOrder";
 import { applyPriorityAssignments, siblingPriorityPool } from "./priorityWrites";
 
 /**
@@ -154,16 +155,11 @@ async function applyCategoryToResultAreaSubtree(
 export async function indentNode(userId: string, nodeId: string): Promise<void> {
   const node = await requireNode(db, userId, nodeId);
   const siblings = await siblingKeys(db, userId, node.parentId);
-  const index = siblings.findIndex((s) => s.id === nodeId);
-
-  if (index <= 0) {
-    throw new Error("Nothing to indent under — this is the first item at its level.");
-  }
 
   await moveNode({
     userId,
     nodeId,
-    parentId: siblings[index - 1].id,
+    parentId: indentParentId(siblings, nodeId, "item"),
     position: { at: "last" },
   });
 }
@@ -194,20 +190,9 @@ export async function moveNodeVertically(
 ): Promise<void> {
   const node = await requireNode(db, userId, nodeId);
   const siblings = await siblingKeys(db, userId, node.parentId);
-  const index = siblings.findIndex((s) => s.id === nodeId);
+  const position = verticalPosition(siblings, nodeId, direction);
+  // Already at the end of its level — a no-op rather than an error.
+  if (!position) return;
 
-  const target = direction === "up" ? index - 1 : index + 1;
-  if (target < 0 || target >= siblings.length) {
-    return; // Already at the end of its level — a no-op rather than an error.
-  }
-
-  await moveNode({
-    userId,
-    nodeId,
-    parentId: node.parentId,
-    position: {
-      at: direction === "up" ? "before" : "after",
-      siblingId: siblings[target].id,
-    },
-  });
+  await moveNode({ userId, nodeId, parentId: node.parentId, position });
 }

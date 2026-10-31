@@ -4,11 +4,15 @@ import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { notes, type NewNote, type NoteFlag } from "@/db/schema";
 import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import {
+  indentParentId,
+  keyAtPosition,
+  verticalPosition,
+} from "@/lib/tree/siblingOrder";
 import { assertContactOwned } from "@/lib/contacts/ownership";
 import { assertNodeOwned } from "@/lib/tree/ownership";
 import type { ExternalRef } from "@/db/schema";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
-import { between } from "@/lib/tree/sortKey";
 import type { NotePosition } from "./types";
 
 /**
@@ -84,26 +88,7 @@ async function sortKeyFor(
   position: NotePosition,
   excludeId?: string,
 ): Promise<string> {
-  const siblings = (await siblingKeys(tx, userId, parentId)).filter(
-    (s) => s.id !== excludeId,
-  );
-
-  switch (position.at) {
-    case "first":
-      return between(null, siblings[0]?.sortKey ?? null);
-    case "last":
-      return between(siblings[siblings.length - 1]?.sortKey ?? null, null);
-    case "before": {
-      const index = siblings.findIndex((s) => s.id === position.siblingId);
-      if (index === -1) throw new Error("Sibling note not found.");
-      return between(siblings[index - 1]?.sortKey ?? null, siblings[index].sortKey);
-    }
-    case "after": {
-      const index = siblings.findIndex((s) => s.id === position.siblingId);
-      if (index === -1) throw new Error("Sibling note not found.");
-      return between(siblings[index].sortKey, siblings[index + 1]?.sortKey ?? null);
-    }
-  }
+  return keyAtPosition(await siblingKeys(tx, userId, parentId), position, excludeId);
 }
 
 /** True when `candidateId` is `noteId` itself or sits somewhere beneath it. */
@@ -331,16 +316,11 @@ export async function moveNote(params: {
 export async function indentNote(userId: string, noteId: string): Promise<void> {
   const note = await requireNote(db, userId, noteId);
   const siblings = await siblingKeys(db, userId, note.parentId);
-  const index = siblings.findIndex((s) => s.id === noteId);
-
-  if (index <= 0) {
-    throw new Error("Nothing to indent under — this is the first note at its level.");
-  }
 
   await moveNote({
     userId,
     noteId,
-    parentId: siblings[index - 1].id,
+    parentId: indentParentId(siblings, noteId, "note"),
     position: { at: "last" },
   });
 }
@@ -369,19 +349,9 @@ export async function moveNoteVertically(
 ): Promise<void> {
   const note = await requireNote(db, userId, noteId);
   const siblings = await siblingKeys(db, userId, note.parentId);
-  const index = siblings.findIndex((s) => s.id === noteId);
-
-  const target = direction === "up" ? index - 1 : index + 1;
+  const position = verticalPosition(siblings, noteId, direction);
   // Already at the end of its level — a no-op rather than an error.
-  if (target < 0 || target >= siblings.length) return;
+  if (!position) return;
 
-  await moveNote({
-    userId,
-    noteId,
-    parentId: note.parentId,
-    position: {
-      at: direction === "up" ? "before" : "after",
-      siblingId: siblings[target].id,
-    },
-  });
+  await moveNote({ userId, noteId, parentId: note.parentId, position });
 }
