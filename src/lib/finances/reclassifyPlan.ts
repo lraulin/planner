@@ -1,16 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import {
-  financeAccounts,
-  financePayeeAliases,
-  financePaymentResolutions,
-  financeTransactions,
-} from "@/db/schema";
+import { financeAccounts, financePayeeAliases, financeTransactions } from "@/db/schema";
 import { changedRows, planReclassify, type RowPlan } from "./classify/reclassify";
 import type { FinanceExecutor } from "./dbExecutor";
 import { numericStringToCents } from "./money";
-import type { PaypalResolution } from "./paypalMatch";
 import { payeeIndex } from "./payees/resolve";
+import { loadPaypalResolutions } from "./paypalResolutions";
 
 /**
  * Load everything one user's classification depends on, and plan it. **Writes nothing.**
@@ -26,7 +21,7 @@ import { payeeIndex } from "./payees/resolve";
  * never seen before is still unclaimed and reports it that way.
  */
 export async function loadAndPlanReclassify(executor: FinanceExecutor, userId: string) {
-  const [rows, accounts, storedResolutions, aliases] = await Promise.all([
+  const [rows, accounts, resolutions, aliases] = await Promise.all([
     executor
       .select({
         id: financeTransactions.id,
@@ -48,16 +43,7 @@ export async function loadAndPlanReclassify(executor: FinanceExecutor, userId: s
       })
       .from(financeAccounts)
       .where(eq(financeAccounts.userId, userId)),
-    executor
-      .select({
-        externalId: financePaymentResolutions.externalId,
-        transactionDate: financePaymentResolutions.transactionDate,
-        amount: financePaymentResolutions.amount,
-        counterparty: financePaymentResolutions.counterparty,
-        direction: financePaymentResolutions.direction,
-      })
-      .from(financePaymentResolutions)
-      .where(eq(financePaymentResolutions.userId, userId)),
+    loadPaypalResolutions(userId, executor),
     executor
       .select({
         alias: financePayeeAliases.alias,
@@ -78,21 +64,6 @@ export async function loadAndPlanReclassify(executor: FinanceExecutor, userId: s
     payeeId: row.payeeId,
     derivedFlow: row.derivedFlow,
   }));
-
-  const resolutions: PaypalResolution[] = storedResolutions.flatMap((row) => {
-    const amountCents = numericStringToCents(row.amount);
-    if (amountCents === null) return [];
-    if (row.direction !== "in" && row.direction !== "out") return [];
-    return [
-      {
-        externalId: row.externalId,
-        date: row.transactionDate,
-        amountCents,
-        counterparty: row.counterparty,
-        direction: row.direction,
-      },
-    ];
-  });
 
   const plan = planReclassify(
     parsed,

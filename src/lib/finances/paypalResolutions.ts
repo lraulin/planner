@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financePaymentResolutions } from "@/db/schema";
-import { centsToNumericString } from "./money";
+import { centsToNumericString, numericStringToCents } from "./money";
+import type { PaypalResolution } from "./paypalMatch";
 import type { PaypalEntry } from "./paypalStatement";
 import type { FinanceExecutor } from "./dbExecutor";
 import type { FinanceAuditChange } from "./audit/types";
@@ -95,4 +96,38 @@ export async function persistPaypalResolutions(
   }
 
   return { created, skipped: incoming.length - created, changes };
+}
+
+/**
+ * The user's stored PayPal resolutions, for pairing with register rows. A row whose amount
+ * or direction does not parse is skipped rather than guessed at.
+ */
+export async function loadPaypalResolutions(
+  userId: string,
+  executor: FinanceExecutor = db,
+): Promise<PaypalResolution[]> {
+  const rows = await executor
+    .select({
+      externalId: financePaymentResolutions.externalId,
+      transactionDate: financePaymentResolutions.transactionDate,
+      amount: financePaymentResolutions.amount,
+      counterparty: financePaymentResolutions.counterparty,
+      direction: financePaymentResolutions.direction,
+    })
+    .from(financePaymentResolutions)
+    .where(eq(financePaymentResolutions.userId, userId));
+  return rows.flatMap((row) => {
+    const amountCents = numericStringToCents(row.amount);
+    if (amountCents === null) return [];
+    if (row.direction !== "in" && row.direction !== "out") return [];
+    return [
+      {
+        externalId: row.externalId,
+        date: row.transactionDate,
+        amountCents,
+        counterparty: row.counterparty,
+        direction: row.direction,
+      },
+    ];
+  });
 }

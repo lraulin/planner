@@ -11,18 +11,14 @@
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  financePayeeAliases,
-  financePayees,
-  financePaymentResolutions,
-  financeTransactions,
-} from "@/db/schema";
+import { financePayeeAliases, financePayees, financeTransactions } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import { numericStringToCents } from "../money";
-import { matchPaypalResolutions, type PaypalResolution } from "../paypalMatch";
+import { matchPaypalResolutions } from "../paypalMatch";
 import { aliasFor, payeeIndex } from "./resolve";
 import { planSeed, type ExistingPayee, type SeedSource } from "./seed";
 import { canonicalPayeeName } from "./canonicalNames";
+import { loadPaypalResolutions } from "../paypalResolutions";
 
 export type SeedPayeesSummary = {
   createdPayees: number;
@@ -55,7 +51,7 @@ async function loadSources(userId: string): Promise<{
   sources: SeedSource[];
   byRowId: Map<string, { description: string; counterparty: string | null }>;
 }> {
-  const [rows, storedResolutions] = await Promise.all([
+  const [rows, resolutions] = await Promise.all([
     db
       .select({
         id: financeTransactions.id,
@@ -65,32 +61,8 @@ async function loadSources(userId: string): Promise<{
       })
       .from(financeTransactions)
       .where(eq(financeTransactions.userId, userId)),
-    db
-      .select({
-        externalId: financePaymentResolutions.externalId,
-        transactionDate: financePaymentResolutions.transactionDate,
-        amount: financePaymentResolutions.amount,
-        counterparty: financePaymentResolutions.counterparty,
-        direction: financePaymentResolutions.direction,
-      })
-      .from(financePaymentResolutions)
-      .where(eq(financePaymentResolutions.userId, userId)),
+    loadPaypalResolutions(userId),
   ]);
-
-  const resolutions: PaypalResolution[] = storedResolutions.flatMap((row) => {
-    const amountCents = numericStringToCents(row.amount);
-    if (amountCents === null) return [];
-    if (row.direction !== "in" && row.direction !== "out") return [];
-    return [
-      {
-        externalId: row.externalId,
-        date: row.transactionDate,
-        amountCents,
-        counterparty: row.counterparty,
-        direction: row.direction,
-      },
-    ];
-  });
 
   // The same pairing `classify/reclassify.ts` uses, so the payee a row gets and the category
   // it gets are decided from one story about who was paid.
