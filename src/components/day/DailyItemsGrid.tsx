@@ -22,7 +22,7 @@ import {
 import { INSERT_AFTER, OPEN_RECORD } from "@/lib/commands/chords";
 import type { DailyItemView } from "@/lib/day/types";
 import { shiftDateKey } from "@/lib/schedule/geometry";
-import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
+import { flatSelectionText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { CommandBar } from "@/components/grid/CommandBar";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import {
@@ -192,13 +192,7 @@ export function DailyItemsGrid({
   }, [gridState.sort, planFor, onApplyPriorities, selectOne]);
 
   const copySelectionAsText = useCallback(() => {
-    const text = copyAsText(
-      order
-        .map((id) => items.find((item) => item.id === id))
-        .filter((item): item is DailyItemView => item != null)
-        .map((item) => ({ id: item.id, name: item.title, depth: 0 })),
-      selectedIds,
-    );
+    const text = flatSelectionText(order, items, selectedIds, (row) => row.title);
     void writeClipboardText(text);
   }, [order, items, selectedIds]);
 

@@ -30,6 +30,21 @@ export function copyAsText(
     .join("\n");
 }
 
+/** A flat list's selection as text, one line per selected item in display `order`. */
+export function flatSelectionText<T extends { id: string }>(
+  order: readonly string[],
+  items: readonly T[],
+  selectedIds: ReadonlySet<string>,
+  nameOf: (item: T) => string,
+): string {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const rows = order.flatMap((id) => {
+    const item = byId.get(id);
+    return item ? [{ id, name: nameOf(item), depth: 0 }] : [];
+  });
+  return copyAsText(rows, selectedIds);
+}
+
 /** Write plain text to the clipboard; returns whether the write was attempted. */
 export async function writeClipboardText(text: string): Promise<boolean> {
   if (!text) return false;

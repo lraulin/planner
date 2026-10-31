@@ -22,7 +22,7 @@ import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
-import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
+import { flatSelectionText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { outlineSelectPath } from "@/lib/url/viewState";
 import { ToolbarSelect } from "./tabChrome";
 import {
@@ -242,13 +242,7 @@ export function WishesGrid({
   );
 
   const copySelectionAsText = useCallback(() => {
-    const text = copyAsText(
-      order
-        .map((id) => rows.find((row) => row.id === id))
-        .filter((row): row is WishListRow => row != null)
-        .map((row) => ({ id: row.id, name: row.title, depth: 0 })),
-      selectedIds,
-    );
+    const text = flatSelectionText(order, rows, selectedIds, (row) => row.title);
     void writeClipboardText(text);
   }, [order, rows, selectedIds]);
 
