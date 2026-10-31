@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { beforeEach, expect, it } from "vitest";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
   InvalidSettingError,
@@ -21,9 +21,7 @@ import { chooserScope, gridScope } from "./scopes";
  * completely invisible when you only ever test with one user.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("settings mutations");
+const describeDb = await describeWithDatabase("settings mutations");
 
 const makeUser = testUsers("test");
 

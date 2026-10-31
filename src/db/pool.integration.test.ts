@@ -8,7 +8,7 @@ import {
   safeErrorMessage,
   GENERIC_ERROR_MESSAGE,
 } from "@/lib/security/safeError";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { createPool, DatabaseConnectionError } from "./pool";
 
 /**
@@ -17,9 +17,7 @@ import { createPool, DatabaseConnectionError } from "./pool";
  * is recognisable as the database's rather than a sentence someone wrote.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("connection pool");
+const describeDb = await describeWithDatabase("connection pool");
 
 const pools: pg.Pool[] = [];
 const servers: net.Server[] = [];

@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { db } from "@/db";
 import { financeStatements } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles } from "./import";
 import { splitTransaction } from "./mutations";
@@ -12,9 +12,7 @@ import {
   loadStatementsView,
 } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("statements view");
+const describeDb = await describeWithDatabase("statements view");
 
 const makeUser = testUsers("statements-view");
 

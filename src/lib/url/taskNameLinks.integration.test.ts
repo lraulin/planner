@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { db } from "@/db";
 import { nodeItems, nodes } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { captureItems } from "@/lib/capture/mutations";
 import { parseCapture } from "@/lib/capture/parse";
@@ -14,9 +14,7 @@ import { promoteUrlsFromTaskName } from "./taskNameLinks";
  * Mocks `fetch` so title resolution is deterministic and offline-safe.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("task name URL links");
+const describeDb = await describeWithDatabase("task name URL links");
 
 const makeUser = testUsers("url-task");
 

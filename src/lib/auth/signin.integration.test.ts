@@ -1,10 +1,10 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, users } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import { auth } from "@/lib/auth/server";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { CREDENTIAL_ISSUER, credentialAccountFor } from "./accountKey";
 import { changePassword } from "./password";
 import { createCredentialUser, upsertUser } from "./provision";
@@ -24,9 +24,7 @@ import { createCredentialUser, upsertUser } from "./provision";
  * schema stops being one it will run against, whichever side moved.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("credential sign-in");
+const describeDb = await describeWithDatabase("credential sign-in");
 
 const createdUserIds: string[] = [];
 const PASSWORD = "password12345678";

@@ -1,16 +1,14 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, expect, it } from "vitest";
 import { createContact } from "@/lib/contacts/mutations";
 import { createNodeItem, saveNodeDetail } from "@/lib/detail/mutations";
 import { createNote } from "@/lib/notes/mutations";
 import { createNode } from "@/lib/tree/mutations";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { loadFindCorpus } from "./queries";
 import { FIND_FIELD_CLASSES, FIND_SOURCE_IDS } from "./types";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("find corpus");
+const describeDb = await describeWithDatabase("find corpus");
 
 const makeUser = testUsers("find");
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -6,7 +6,7 @@ import {
   financeBudgetCategories,
   financeTransactions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { monthKeyOf, shiftMonthKey } from "@/lib/finances/budget/envelope";
 import {
@@ -30,9 +30,7 @@ import {
   seedScenarioFromSpending,
 } from "./workspace";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("scenario workspace");
+const describeDb = await describeWithDatabase("scenario workspace");
 
 const makeUser = testUsers("scenario-ws");
 

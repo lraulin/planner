@@ -12,7 +12,7 @@ import {
   financeTransactions,
 } from "@/db/schema";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { loadFinanceAuditEvent, listFinanceAuditEvents } from "./audit/queries";
 import { seedBudget } from "./budget/mutations";
@@ -25,9 +25,7 @@ import {
 import { applyBankBrowserSnapshot } from "./bankSnapshotApply";
 import { listAccounts, listTransactions } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("bank snapshot apply");
+const describeDb = await describeWithDatabase("bank snapshot apply");
 
 const MONTH = "2026-08-01";
 /**

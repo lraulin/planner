@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 
 /**
  * `getGoogleAccessToken` is called from inside Bearer-authenticated requests — the MCP
@@ -23,14 +23,13 @@ vi.mock("next/headers", () => ({
 
 const { db } = await import("@/db");
 const { accounts } = await import("@/db/schema");
-const { databaseReachable, warnDatabaseSkipped } =
-  await import("@/lib/testing/database");
+const { describeWithDatabase } = await import("@/lib/testing/database");
 const { testUsers } = await import("@/lib/testing/users");
 const { getGoogleAccessToken } = await import("./client");
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("google access token in a bearer request");
+const describeDb = await describeWithDatabase(
+  "google access token in a bearer request",
+);
 
 const makeUser = testUsers("test");
 

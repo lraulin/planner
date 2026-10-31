@@ -1,15 +1,13 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 import { verifyPassword } from "better-auth/crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, users } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { changePassword } from "./password";
 import { upsertUser } from "./provision";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("change password");
+const describeDb = await describeWithDatabase("change password");
 
 const createdUserIds: string[] = [];
 const PASSWORD = "password12345678";

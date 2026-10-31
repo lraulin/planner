@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -8,15 +8,13 @@ import {
   financeTransactions,
 } from "@/db/schema";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { findMonth } from "./envelope";
 import { seedBudget } from "./mutations";
 import { loadBudget, loadBudgetMismatch } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("budget queries — mismatch");
+const describeDb = await describeWithDatabase("budget queries — mismatch");
 
 const makeUser = testUsers("mismatch");
 

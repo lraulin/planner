@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { db } from "@/db";
 import { bankConnections, googleCalendarLinks } from "@/db/schema";
 import type { SyncResult } from "@/lib/banksync/sync";
 import type { MirrorWindow } from "@/lib/google/mirror";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
   bankSyncUserIds,
@@ -12,9 +12,7 @@ import {
   runCalendarSyncJob,
 } from "./jobs";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("cron jobs");
+const describeDb = await describeWithDatabase("cron jobs");
 
 const makeUser = testUsers("cron-test");
 

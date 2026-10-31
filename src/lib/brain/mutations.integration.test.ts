@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { brainLinks, brainThoughts } from "@/db/schema";
 import { isCheckViolation, isUniqueViolation } from "@/lib/db/constraints";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { neighbourhood } from "./neighbourhood";
 import {
@@ -30,9 +30,7 @@ import {
   startThoughtId,
 } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("brain mutations");
+const describeDb = await describeWithDatabase("brain mutations");
 
 const makeUser = testUsers("brain-test");
 

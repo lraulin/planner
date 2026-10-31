@@ -1,13 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { db } from "@/db";
 import { amazonOrderItems, amazonOrders } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { listAmazonRepeatPurchases } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("supply suggestion queries");
+const describeDb = await describeWithDatabase("supply suggestion queries");
 
 const makeUser = testUsers("supply-q");
 

@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { beforeEach, expect, it, vi } from "vitest";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import * as geo from "./geo";
 import {
@@ -13,9 +13,7 @@ import { getHouseDetail, listHouses } from "./queries";
 
 vi.mock("./geo");
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("houses mutations");
+const describeDb = await describeWithDatabase("houses mutations");
 
 const makeUser = testUsers("houses-test");
 

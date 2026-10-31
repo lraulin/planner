@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -12,15 +12,13 @@ import { readSetting } from "@/lib/settings/queries";
 import { parseBudget, serializeBudget } from "@/lib/settings/finances";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { userSettings } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { seedBudget } from "./mutations";
 import { loadBudget } from "./queries";
 import { applyLedgerOpeningCutover } from "./openingCutover";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("ledger opening cutover");
+const describeDb = await describeWithDatabase("ledger opening cutover");
 
 const makeUser = testUsers("opening-cutover");
 

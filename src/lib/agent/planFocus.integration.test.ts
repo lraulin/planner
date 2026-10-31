@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes } from "@/db/schema";
 import { ensureWeeklyPlan } from "@/lib/planning/mutations";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { dispatchAgentTool } from "./tools";
@@ -16,9 +16,7 @@ import { dispatchAgentTool } from "./tools";
  * tool synced none.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("plan-entry focus agent tools");
+const describeDb = await describeWithDatabase("plan-entry focus agent tools");
 
 const makeUser = testUsers("plan-focus");
 

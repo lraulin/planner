@@ -1,12 +1,10 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { beforeEach, expect, it } from "vitest";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { addMasterContext, deleteMasterContext } from "./mutations";
 import { listMasterContexts } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("master context mutations");
+const describeDb = await describeWithDatabase("master context mutations");
 
 const makeUser = testUsers("context");
 

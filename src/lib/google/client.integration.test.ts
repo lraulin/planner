@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { db } from "@/db";
 import { accounts } from "@/db/schema";
 import { CREDENTIAL_ISSUER } from "@/lib/auth/accountKey";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { getGoogleAccessToken, googleAccountId, GoogleNotLinkedError } from "./client";
 
@@ -16,9 +16,7 @@ import { getGoogleAccessToken, googleAccountId, GoogleNotLinkedError } from "./c
  * find.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("google access token");
+const describeDb = await describeWithDatabase("google access token");
 
 const makeUser = testUsers("test");
 

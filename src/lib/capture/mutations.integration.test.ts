@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { db } from "@/db";
 import { nodes } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { loadNodeDetail } from "@/lib/detail/queries";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
@@ -18,9 +18,7 @@ import { parseCapture, type CapturedItem } from "./parse";
  * own user, so these never touch seeded development data.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("capture mutations");
+const describeDb = await describeWithDatabase("capture mutations");
 
 const makeUser = testUsers("test");
 

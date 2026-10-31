@@ -1,16 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { seedSampleData } from "./sample-data";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("sample data");
+const describeDb = await describeWithDatabase("sample data");
 
 const makeUser = testUsers("sample-test");
 

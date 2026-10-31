@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { db } from "@/db";
 import {
   amazonCharges,
@@ -8,7 +8,7 @@ import {
 } from "@/db/schema";
 import { createBudgetCategory } from "./budget/mutations";
 import { lastChargeByEnvelope, lastChargeOnBill } from "./billLastCharge";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 
 /**
@@ -19,9 +19,7 @@ import { testUsers } from "@/lib/testing/users";
  * transaction — and its own second-user isolation.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("bill last charge from Amazon receipts");
+const describeDb = await describeWithDatabase("bill last charge from Amazon receipts");
 
 const makeUser = testUsers("bill-last-charge");
 

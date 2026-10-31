@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { beforeEach, expect, it } from "vitest";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createExercise, createSession, replaceSession } from "./mutations";
 import { planDraftFromDetail } from "./sessionDraft";
@@ -11,9 +11,7 @@ import {
   loadLatestForExercise,
 } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("fitness queries");
+const describeDb = await describeWithDatabase("fitness queries");
 
 const makeUser = testUsers("test");
 

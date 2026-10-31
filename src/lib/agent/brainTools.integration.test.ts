@@ -1,12 +1,10 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { createThoughtType } from "@/lib/brain/mutations";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { dispatchAgentTool } from "./tools";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("brain agent tools");
+const describeDb = await describeWithDatabase("brain agent tools");
 
 const makeUser = testUsers("brain-agent");
 

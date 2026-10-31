@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -6,7 +6,7 @@ import {
   financeBudgetCategories,
   financeTransactions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { listAccounts } from "@/lib/finances/queries";
 import { recordSourceState } from "@/lib/finances/sourceStateWrite";
@@ -41,9 +41,7 @@ import { nextSyncedThrough } from "./crossSource";
  * invisible when only one user ever exists.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("bank sync");
+const describeDb = await describeWithDatabase("bank sync");
 
 const makeUser = testUsers("test");
 

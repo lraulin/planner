@@ -10,7 +10,7 @@ import {
   financeSupplyItems,
   financeSupplyOptions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { monthKeyOf } from "@/lib/finances/budget/envelope";
 import { localDateKey } from "@/lib/schedule/geometry";
@@ -34,9 +34,7 @@ import {
 } from "./mutations";
 import { listSupplyItems } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("supply mutations");
+const describeDb = await describeWithDatabase("supply mutations");
 
 const makeUser = testUsers("supplies");
 

@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { db } from "@/db";
 import { nodeItems } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { ATTACH_KIND_REFUSAL, ATTACH_NO_LINK, attachUrlsToNode } from "./attachUrls";
@@ -12,9 +12,7 @@ import { ATTACH_KIND_REFUSAL, ATTACH_NO_LINK, attachUrlsToNode } from "./attachU
  * Mocks `fetch` so title resolution is deterministic and offline-safe.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("attach URLs from clipboard");
+const describeDb = await describeWithDatabase("attach URLs from clipboard");
 
 const makeUser = testUsers("attach-url");
 

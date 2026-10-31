@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financeAuditEvents, financeTransactions } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { monthKeyOf } from "@/lib/finances/budget/envelope";
@@ -11,9 +11,7 @@ import type { z } from "zod";
 import type { outputSchemas } from "./contracts";
 import { dispatchAgentTool } from "./tools";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("budget agent tools");
+const describeDb = await describeWithDatabase("budget agent tools");
 
 // The tools read the server's today, so the fixture budget starts in the current month.
 const TODAY = localDateKey(new Date());

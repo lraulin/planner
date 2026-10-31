@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, goalDetails, nodes, taskDetails } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { saveNodeDetail } from "@/lib/detail/mutations";
@@ -11,9 +11,7 @@ import { convertNode, createNode, deleteNode } from "./mutations";
 import { setPriority, setPriorityForNodes } from "./priorityWrites";
 import { setState } from "./stateTransitions";
 
-const reachable = await databaseReachable();
-const describeDb = reachable ? describe : describe.skip;
-if (!reachable) warnDatabaseSkipped("command deck tree mutations");
+const describeDb = await describeWithDatabase("command deck tree mutations");
 
 const makeUser = testUsers("command");
 

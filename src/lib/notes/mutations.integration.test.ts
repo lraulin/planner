@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createNode, deleteNode } from "@/lib/tree/mutations";
 import {
@@ -30,9 +30,7 @@ import { toDateKey } from "@/lib/schedule/geometry";
  * clause is both easy to write and invisible in single-user testing.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("notes mutations");
+const describeDb = await describeWithDatabase("notes mutations");
 
 const makeUser = testUsers("test");
 

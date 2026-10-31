@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { beforeEach, expect, it } from "vitest";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createJob } from "@/lib/jobs/mutations";
 import { createResidence } from "@/lib/residences/mutations";
@@ -12,9 +12,7 @@ import {
 } from "./mutations";
 import { getLifeEvent, listLifeEvents } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("timeline mutations");
+const describeDb = await describeWithDatabase("timeline mutations");
 
 const makeUser = testUsers("timeline-test");
 

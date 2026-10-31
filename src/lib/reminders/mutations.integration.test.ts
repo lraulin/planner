@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { appointments, nodes, reminderOccurrences, taskDetails } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
@@ -29,9 +29,7 @@ import { listFiredReminders, listPushDevices } from "./queries";
  * is the row state each step leaves, which is what the firing route and the panel read.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("reminders");
+const describeDb = await describeWithDatabase("reminders");
 
 const makeUser = testUsers("test");
 

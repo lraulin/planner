@@ -1,14 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { beforeEach, expect, it, vi } from "vitest";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import * as geo from "@/lib/houses/geo";
 import { dispatchAgentTool } from "./tools";
 
 vi.mock("@/lib/houses/geo");
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("houses agent tools");
+const describeDb = await describeWithDatabase("houses agent tools");
 
 const makeUser = testUsers("houses-agent");
 

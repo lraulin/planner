@@ -1,14 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { beforeEach, expect, it } from "vitest";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { AgentError } from "./errors";
 import { dispatchAgentTool } from "./tools";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("agent tools");
+const describeDb = await describeWithDatabase("agent tools");
 
 const makeUser = testUsers("agent-test");
 

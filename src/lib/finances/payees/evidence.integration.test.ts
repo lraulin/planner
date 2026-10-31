@@ -8,7 +8,7 @@ import {
   financePayees,
   financeTransactions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
   claimPayeeForCommitment,
@@ -19,9 +19,7 @@ import {
 import { payeeEvidenceForCategory } from "./queries";
 import { fileWaitingChargesForPayee } from "../budget/filing";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("payee evidence");
+const describeDb = await describeWithDatabase("payee evidence");
 
 const makeUser = testUsers("evidence");
 

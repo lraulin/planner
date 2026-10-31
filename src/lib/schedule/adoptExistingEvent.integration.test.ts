@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { appointments, type NewAppointment } from "@/db/schema";
 import type { GoogleOwnedFields } from "@/lib/google/mapping";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { adoptExistingEvent } from "./mutations";
 
@@ -14,9 +14,7 @@ import { adoptExistingEvent } from "./mutations";
  * `mutations.integration.test.ts`; each test works under its own user.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("adopt existing Google event");
+const describeDb = await describeWithDatabase("adopt existing Google event");
 
 const makeUser = testUsers("test");
 

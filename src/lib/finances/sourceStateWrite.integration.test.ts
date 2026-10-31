@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -8,7 +8,7 @@ import {
   financeAccounts,
   financeTransactions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { linkAccount } from "@/lib/banksync/mutations";
@@ -26,9 +26,7 @@ import {
  * three reports produces a different headline, and that the headline never goes backwards.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("source state");
+const describeDb = await describeWithDatabase("source state");
 
 const makeUser = testUsers("test");
 

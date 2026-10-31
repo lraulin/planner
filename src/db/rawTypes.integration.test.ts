@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { transactionIngestionWatermark } from "@/lib/finances/ingestion";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 
 /**
  * The JavaScript type each kind of raw selection arrives as, through the app's own `db`.
@@ -17,9 +17,7 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
  * No user-owned rows: every value is a literal, so there is nothing for a second user to try.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("raw selection types");
+const describeDb = await describeWithDatabase("raw selection types");
 
 describeDb("raw selection types through db.execute", () => {
   it("pins each kind the raw readers rely on", async () => {

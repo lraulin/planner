@@ -1,12 +1,10 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { beforeEach, expect, it } from "vitest";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createNode } from "./mutations";
 import { formatNodePath, loadNodeChain } from "./path";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("tree path");
+const describeDb = await describeWithDatabase("tree path");
 
 const makeUser = testUsers("test");
 

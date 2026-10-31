@@ -1,16 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import { listTransactions } from "@/lib/finances/queries";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { importAmazonSlim } from "./import";
 import { deleteAmazonItem } from "./mutations";
 import { getAmazonItem, listAmazonItems, listAmazonItemsByIds } from "./queries";
 import { SLIM_SOURCE, SLIM_VERSION, type SlimAmazonOrders } from "./types";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("amazon import");
+const describeDb = await describeWithDatabase("amazon import");
 
 const makeUser = testUsers("amazon-import");
 

@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contactItems, contacts, nodes, notes, taskDetails } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createNote } from "@/lib/notes/mutations";
 import {
@@ -23,9 +23,7 @@ import {
   loadDiscussionItems,
 } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("contacts mutations");
+const describeDb = await describeWithDatabase("contacts mutations");
 
 const makeUser = testUsers("contacts-test");
 

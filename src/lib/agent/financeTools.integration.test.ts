@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financeTransactions } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
 import {
@@ -20,9 +20,7 @@ import { listTransactions, loadStatementsView } from "@/lib/finances/queries";
 import { createPayee } from "@/lib/finances/payees/mutations";
 import { dispatchAgentTool } from "./tools";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("finance agent tools");
+const describeDb = await describeWithDatabase("finance agent tools");
 
 const makeUser = testUsers("finance-agent");
 

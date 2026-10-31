@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { beforeEach, expect, it } from "vitest";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
@@ -11,9 +11,7 @@ import { dispatchAgentTool } from "./tools";
  * priorities rather than writing one column.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("move_node agent tool");
+const describeDb = await describeWithDatabase("move_node agent tool");
 
 const makeUser = testUsers("move-node");
 

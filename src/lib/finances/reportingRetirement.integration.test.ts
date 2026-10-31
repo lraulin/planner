@@ -1,16 +1,15 @@
 import { readFile } from "node:fs/promises";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-const reachable = await databaseReachable();
-if (!reachable) warnDatabaseSkipped("reporting retirement migration");
+import { describeWithDatabase } from "@/lib/testing/database";
+const describeDb = await describeWithDatabase("reporting retirement migration");
 const created: string[] = [];
 afterAll(async () => {
   for (const id of created) await db.delete(users).where(eq(users.id, id));
 });
-(reachable ? describe : describe.skip)("reporting metadata retirement", () => {
+describeDb("reporting metadata retirement", () => {
   it("runs the generated retirement against legacy rows, preserving labels, flags and original notes", async () => {
     const [owner, other] = await db
       .insert(users)

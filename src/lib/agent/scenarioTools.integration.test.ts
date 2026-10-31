@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeBudgetCategories } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
   createBudgetCategory,
@@ -20,9 +20,7 @@ import {
 import { outputSchemas } from "./contracts";
 import { dispatchAgentTool } from "./tools";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("scenario agent tools");
+const describeDb = await describeWithDatabase("scenario agent tools");
 
 const makeUser = testUsers("scenarios-agent");
 

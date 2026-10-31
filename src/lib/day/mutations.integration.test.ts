@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { createNode } from "@/lib/tree/mutations";
@@ -32,9 +32,7 @@ import { loadDay, loadWeek, plannedDayForNode, plannedNodeIds } from "./queries"
  * `userId` in a `where` clause is both easy to write and invisible in single-user testing.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("day mutations");
+const describeDb = await describeWithDatabase("day mutations");
 
 const makeUser = testUsers("test");
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -6,7 +6,7 @@ import {
   financeBudgetCategories,
   financeTransactions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { retireCoveredScrapeRows } from "./feedHandoverWrite";
 import { seedBudget } from "./budget/mutations";
@@ -14,9 +14,7 @@ import { categoryMonth, findMonth } from "./budget/envelope";
 import { loadBudget } from "./budget/queries";
 import { listAccounts } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("feed handover");
+const describeDb = await describeWithDatabase("feed handover");
 
 const makeUser = testUsers("feed-handover");
 

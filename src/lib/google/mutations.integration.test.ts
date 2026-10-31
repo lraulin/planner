@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, appointments, contacts } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import type { GoogleCalendarListEntry } from "./client";
 import {
@@ -29,9 +29,7 @@ import {
  * clause is invisible when only one user ever exists.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("google calendar links");
+const describeDb = await describeWithDatabase("google calendar links");
 
 const makeUser = testUsers("test");
 

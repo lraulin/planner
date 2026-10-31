@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -13,7 +13,7 @@ import { upsertBillEnvelope } from "@/lib/finances/mutations";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { READER_TIME_ZONE, readerTodayKey } from "@/lib/schedule/readerZone";
 import { zonedWallTime } from "@/lib/schedule/zonedTime";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { checkReadyToAssign, fireOccurrence } from "./arm";
 import { listFiredReminders } from "./queries";
@@ -24,9 +24,7 @@ import { listFiredReminders } from "./queries";
  * itself on recovery.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("finance reminders");
+const describeDb = await describeWithDatabase("finance reminders");
 
 const makeUser = testUsers("test");
 

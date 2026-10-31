@@ -1,13 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { beforeEach, expect, it } from "vitest";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createContact } from "@/lib/contacts/mutations";
 import { createResource, deleteResource, updateResource } from "./mutations";
 import { getResourceDetail, listResources } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("resources mutations");
+const describeDb = await describeWithDatabase("resources mutations");
 
 const makeUser = testUsers("resources-test");
 

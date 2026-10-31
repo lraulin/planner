@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { amazonOrderItems, financeAccounts, financeTransactions } from "@/db/schema";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { approveAmazonChargeMatch } from "./apply";
 import { importAmazonSlim } from "./import";
@@ -29,9 +29,7 @@ import { parseAmazonOrderSummary } from "./orderSummary";
 import { SNAPSHOT_SOURCE, SNAPSHOT_VERSION, type AmazonSnapshot } from "./snapshot";
 import { AMAZON_FEEDS, SLIM_SOURCE, SLIM_VERSION } from "./types";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("amazon snapshot evidence");
+const describeDb = await describeWithDatabase("amazon snapshot evidence");
 
 const makeUser = testUsers("amazon-sns");
 

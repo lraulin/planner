@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, appointments } from "@/db/schema";
 import { updateAppointmentTool } from "@/lib/agent/scheduleTools";
 import { rescheduleAppointment, updateAppointment } from "@/lib/schedule/mutations";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 
 /**
@@ -33,9 +33,7 @@ vi.hoisted(() => {
   process.env.GOOGLE_CLIENT_SECRET ||= "test-client-secret";
 });
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("google series edits");
+const describeDb = await describeWithDatabase("google series edits");
 
 const ZONE = "America/New_York";
 const SERIES_ID = "evt1";

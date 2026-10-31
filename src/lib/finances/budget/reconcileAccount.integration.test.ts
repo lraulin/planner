@@ -1,19 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financeTransactions } from "@/db/schema";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
 import { localDateKey } from "@/lib/schedule/geometry";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { seedBudget } from "./mutations";
 import { reconcileAccount } from "./reconcileAccount";
 import { loadBudget, loadBudgetMismatch } from "./queries";
 import { loadFinanceAuditEvent, listFinanceAuditEvents } from "../audit/queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("reconcile account");
+const describeDb = await describeWithDatabase("reconcile account");
 
 const makeUser = testUsers("reconcile");
 

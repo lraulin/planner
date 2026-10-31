@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeBudgetCategories } from "@/db/schema";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import { listSplitChildren, listTransactions } from "@/lib/finances/queries";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { applyAmazonSnapshotText } from "./apply";
 import { listAmazonItems, listAmazonSubscriptions } from "./queries";
@@ -12,9 +12,7 @@ import { parseAmazonOrderSummary } from "./orderSummary";
 import { serializeAmazonSnapshot, SNAPSHOT_SOURCE, SNAPSHOT_VERSION } from "./snapshot";
 import { AMAZON_SNS_GROUP } from "./preview";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("amazon snapshot apply");
+const describeDb = await describeWithDatabase("amazon snapshot apply");
 
 const makeUser = testUsers("amazon-apply");
 

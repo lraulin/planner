@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { fromDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
 import { zonedWallTime } from "@/lib/schedule/zonedTime";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
@@ -33,9 +33,7 @@ import { effectiveState } from "./shelving";
  * own user, so these never touch seeded development data.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("tree mutations");
+const describeDb = await describeWithDatabase("tree mutations");
 
 const makeUser = testUsers("test");
 

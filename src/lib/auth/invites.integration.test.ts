@@ -1,8 +1,8 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes, users } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { loadOutline } from "@/lib/tree/queries";
 import {
   createInvite,
@@ -13,9 +13,7 @@ import {
 } from "./invites";
 import { createCredentialUser, upsertUser } from "./provision";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("invites");
+const describeDb = await describeWithDatabase("invites");
 
 const createdUserIds: string[] = [];
 const PASSWORD = "password12345678";

@@ -1,16 +1,14 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { notes } from "@/db/schema";
 import { deleteNote, updateNote } from "@/lib/notes/mutations";
 import { toDateKey } from "@/lib/schedule/geometry";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { importTomboyFiles, TOMBOY_SOURCE, TOMBOY_SUBJECT } from "./import";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("Tomboy import");
+const describeDb = await describeWithDatabase("Tomboy import");
 
 const NOTE_ID = "651b3053-e904-4ab8-b18e-19267b053caf";
 

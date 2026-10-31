@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,7 +14,7 @@ import {
   timeChartAreas,
   timeCharts,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { loadOutline } from "@/lib/tree/queries";
 import { importAchieveXml, writeMappedOutline } from "./import";
@@ -22,9 +22,7 @@ import { mapOutline } from "./mapOutline";
 import { parseAchXml } from "./parseXml";
 import { buildAchieveXml, type ExportOutlineRow } from "./exportXml";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("achieve import");
+const describeDb = await describeWithDatabase("achieve import");
 
 const fixture = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "fixtures/minimal.achxml"),

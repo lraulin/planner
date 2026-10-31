@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -8,7 +8,7 @@ import {
   financePayees,
   financeTransactions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
   addAlias,
@@ -34,9 +34,7 @@ import { getPayee, listAliasRows, listPayees, previewPayeeMerge } from "./querie
 import { payeeForDescription, payeeIndex } from "./resolve";
 import { lastChargeOnBill } from "../billLastCharge";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("payee mutations");
+const describeDb = await describeWithDatabase("payee mutations");
 
 const makeUser = testUsers("payees");
 

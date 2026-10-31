@@ -1,15 +1,13 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { notes } from "@/db/schema";
 import { loadDay } from "@/lib/day/queries";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { importRedNotebookFiles, REDNOTEBOOK_SUBJECT } from "./import";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("rednotebook import");
+const describeDb = await describeWithDatabase("rednotebook import");
 
 const makeUser = testUsers("test");
 

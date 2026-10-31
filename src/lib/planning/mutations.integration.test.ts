@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createTimeChart } from "@/lib/schedule/mutations";
 import { initialStateForType } from "@/lib/tree/lifecycle";
@@ -32,9 +32,7 @@ import {
  * forgets `userId` would let one account read and rewrite another's week.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("weekly planning mutations");
+const describeDb = await describeWithDatabase("weekly planning mutations");
 
 const makeUser = testUsers("test");
 

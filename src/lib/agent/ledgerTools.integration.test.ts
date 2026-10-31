@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -9,7 +9,7 @@ import {
   financePayees,
   financeTransactions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { normalizeMerchant } from "@/lib/finances/classify/merchant";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
@@ -18,9 +18,7 @@ import { removePayeeAlias } from "@/lib/finances/payees/aliases";
 import { createPayee } from "@/lib/finances/payees/mutations";
 import { dispatchAgentTool } from "./tools";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("ledger agent tools");
+const describeDb = await describeWithDatabase("ledger agent tools");
 
 const makeUser = testUsers("ledger-agent");
 

@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financeTransactions } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createBudgetCategory, seedBudget } from "./budget/mutations";
 import { loadBudget } from "./budget/queries";
@@ -10,9 +10,7 @@ import { listAccounts, listTransactions, transactionTotalCents } from "./queries
 import { splitTransaction, unsplitTransaction } from "./mutations";
 import { reconcileAccounts } from "./reconcile";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("split reader audit");
+const describeDb = await describeWithDatabase("split reader audit");
 
 const makeUser = testUsers("split-audit");
 

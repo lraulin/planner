@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -8,7 +8,7 @@ import {
   financeCaptureCoverage,
   financeTransactions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
@@ -18,9 +18,7 @@ import { seedBudget } from "./budget/mutations";
 import { createPayee, setPayeeAutoCategory } from "./payees/mutations";
 import { loadFinanceAuditEvent } from "./audit/queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("finance import");
+const describeDb = await describeWithDatabase("finance import");
 
 const makeUser = testUsers("finance-test");
 

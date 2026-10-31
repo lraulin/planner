@@ -1,9 +1,9 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 import { verifyPassword } from "better-auth/crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, nodes, users } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { createCredentialUser, upsertUser } from "./provision";
 
 /**
@@ -16,9 +16,7 @@ import { createCredentialUser, upsertUser } from "./provision";
  * name, password, credential row, data — exactly as it was.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("account provisioning");
+const describeDb = await describeWithDatabase("account provisioning");
 
 const createdUserIds: string[] = [];
 

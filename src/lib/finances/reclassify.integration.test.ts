@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeTransactions } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import {
@@ -14,9 +14,7 @@ import { addAlias, removeAlias } from "./payees/mutations";
 import { listPayees } from "./payees/queries";
 import { listAccounts, listTransactions } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("finance reclassify");
+const describeDb = await describeWithDatabase("finance reclassify");
 
 const makeUser = testUsers("finance-reclassify");
 

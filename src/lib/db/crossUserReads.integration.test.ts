@@ -1,9 +1,9 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { createInvite, listInvites } from "@/lib/auth/invites";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 
 import { createNode } from "@/lib/tree/mutations";
@@ -248,9 +248,7 @@ import {
  * the database keeps passing.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("cross-user reads");
+const describeDb = await describeWithDatabase("cross-user reads");
 
 const makeUser = testUsers("test");
 

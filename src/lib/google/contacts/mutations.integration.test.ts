@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contactItems, contacts } from "@/db/schema";
@@ -8,15 +8,13 @@ import {
   updateContact,
 } from "@/lib/contacts/mutations";
 import { loadContacts } from "@/lib/contacts/queries";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import type { RemoteContactItem, RemoteGoogleContact } from "./mapping";
 import { applyGoogleContactSync, clearGoogleContactMirror } from "./mutations";
 import { getGoogleContactSync } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("google contacts sync");
+const describeDb = await describeWithDatabase("google contacts sync");
 
 const makeUser = testUsers("google-contacts");
 

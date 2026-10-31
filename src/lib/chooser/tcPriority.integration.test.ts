@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { db } from "@/db";
 import { nodes } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { setTcPriorities } from "@/lib/tree/priorityWrites";
@@ -15,9 +15,7 @@ import { planTcDrop } from "./tcPriority";
  * development data.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("tc priority");
+const describeDb = await describeWithDatabase("tc priority");
 
 const makeUser = testUsers("tc");
 

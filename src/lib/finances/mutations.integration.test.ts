@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -17,7 +17,7 @@ import {
   loadNextDueKeys,
   type BudgetCategoryRow,
 } from "./budget/queries";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { lastChargeByEnvelope, lastChargeOnBill } from "./billLastCharge";
@@ -47,9 +47,7 @@ import { createPayee } from "./payees/mutations";
 import { getPayee, listAliasRows, payeesForCommitment } from "./payees/queries";
 import { payeeForDescription, payeeIndex } from "./payees/resolve";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("finance mutations");
+const describeDb = await describeWithDatabase("finance mutations");
 
 const makeUser = testUsers("finance-mutations");
 

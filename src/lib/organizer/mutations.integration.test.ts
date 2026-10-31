@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { db } from "@/db";
 import { appointments, nodes, notes, projectDetails, taskDetails } from "@/db/schema";
 import { and, count, eq } from "drizzle-orm";
 import { captureItems } from "@/lib/capture/mutations";
 import { parseCapture } from "@/lib/capture/parse";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { assignPriorityAmongSiblings } from "@/lib/tree/priorityWrites";
 import { createNode } from "@/lib/tree/mutations";
@@ -14,9 +14,7 @@ import { organizerQueue } from "./queue";
 import { organizeInboxItem } from "./mutations";
 import type { OrganizerOutcome } from "./types";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("organizer mutations");
+const describeDb = await describeWithDatabase("organizer mutations");
 
 const makeUser = testUsers("organizer");
 

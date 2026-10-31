@@ -7,7 +7,7 @@ import {
   financeScenarioOverrides,
   financeScenarios,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
   createBudgetCategory,
@@ -36,9 +36,7 @@ import {
 import { listScenarios, loadAllScenarios, loadScenario } from "./queries";
 import type { LineAmountSource } from "./amount";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("scenario mutations");
+const describeDb = await describeWithDatabase("scenario mutations");
 
 const makeUser = testUsers("scenarios");
 

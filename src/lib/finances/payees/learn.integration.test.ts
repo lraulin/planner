@@ -10,7 +10,7 @@
  * three.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -20,13 +20,11 @@ import {
   financePayees,
   financeTransactions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { learnFromCategoryEdit, relearnPayeeDefault } from "./learn";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("payee category learning");
+const describeDb = await describeWithDatabase("payee category learning");
 
 const makeUser = testUsers("learn");
 

@@ -1,4 +1,22 @@
 import pg from "pg";
+import { describe } from "vitest";
+
+/**
+ * The `describe` an integration test file runs its suites under: `describe` when Postgres is
+ * up, `describe.skip` — announced by `warnDatabaseSkipped` — when it is not. Every
+ * integration test file opens with
+ *
+ *   const describeDb = await describeWithDatabase("budget mutations");
+ *
+ * and, when it needs users, `testUsers` from `./users`.
+ */
+export async function describeWithDatabase(
+  suite: string,
+): Promise<typeof describe | typeof describe.skip> {
+  const reachable = await databaseReachable();
+  if (!reachable) warnDatabaseSkipped(suite);
+  return reachable ? describe : describe.skip;
+}
 
 /**
  * Whether the local Postgres from `npm run db:up` is actually reachable.

@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeBudgetCategories } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import { createBudgetCategory } from "@/lib/finances/budget/mutations";
@@ -16,9 +16,7 @@ import { dispatchAgentTool } from "./tools";
  * result was then found again by name, which a rename or a duplicate name defeats.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("bill agent tools");
+const describeDb = await describeWithDatabase("bill agent tools");
 
 const makeUser = testUsers("bill-agent");
 

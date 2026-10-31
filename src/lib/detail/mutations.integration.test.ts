@@ -10,7 +10,7 @@ import {
   shiftDateKey,
   toDateKey,
 } from "@/lib/schedule/geometry";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { createNode } from "@/lib/tree/mutations";
 import { setState } from "@/lib/tree/stateTransitions";
@@ -34,9 +34,7 @@ import { loadNodeDetail } from "./queries";
  * seeded development data.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("detail mutations");
+const describeDb = await describeWithDatabase("detail mutations");
 
 const makeUser = testUsers("detail-test");
 

@@ -10,7 +10,7 @@ import {
 } from "@/db/schema";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { linkAccount, saveConnection } from "@/lib/banksync/mutations";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
   applyBudgetTemplates,
@@ -44,9 +44,7 @@ import { loadBudget } from "./queries";
 import { categoryMonth, findMonth, monthKeyOf, nextMonthKey } from "./envelope";
 import * as sortKey from "@/lib/tree/sortKey";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("budget mutations");
+const describeDb = await describeWithDatabase("budget mutations");
 
 const makeUser = testUsers("budget");
 

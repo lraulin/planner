@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { isCheckViolation, isUniqueViolation } from "./constraints";
 import { GENERIC_ERROR_MESSAGE, safeErrorMessage } from "@/lib/security/safeError";
@@ -16,9 +16,7 @@ import { GENERIC_ERROR_MESSAGE, safeErrorMessage } from "@/lib/security/safeErro
  * No user-owned rows are read here, only refused writes, so there is no second user.
  */
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("driver error shapes");
+const describeDb = await describeWithDatabase("driver error shapes");
 
 const makeUser = testUsers("test");
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -6,15 +6,13 @@ import {
   financePaymentResolutions,
   financeTransactions,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { seedPayees, unresolvedPayeeCount } from "./backfill";
 import { createPayee, renamePayee } from "./mutations";
 import { getPayee, listPayees } from "./queries";
 
-const dbReachable = await databaseReachable();
-const describeDb = dbReachable ? describe : describe.skip;
-if (!dbReachable) warnDatabaseSkipped("payee backfill");
+const describeDb = await describeWithDatabase("payee backfill");
 
 const makeUser = testUsers("payee-seed");
 

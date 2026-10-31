@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -7,7 +7,7 @@ import {
   financeTransactions,
   financeBudgetAllocations,
 } from "@/db/schema";
-import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { describeWithDatabase } from "@/lib/testing/database";
 import {
   createBudgetCategory,
   createCategoryGroup,
@@ -31,9 +31,7 @@ import {
   sumReportActivity,
 } from "./reports";
 import { createPayee, replaceCommitmentPayees } from "./payees/mutations";
-const reachable = await databaseReachable();
-if (!reachable) warnDatabaseSkipped("envelope workflow");
-const describeDb = reachable ? describe : describe.skip;
+const describeDb = await describeWithDatabase("envelope workflow");
 const created: string[] = [];
 async function user() {
   const [row] = await db
