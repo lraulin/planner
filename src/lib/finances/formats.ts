@@ -156,6 +156,20 @@ function maskedName(prefix: string, key: string): string {
   return `${prefix} •••${key}`;
 }
 
+/** A required cell, parsed — or the row's failure, quoting what could not be read. */
+function requiredCell<T>(
+  cells: readonly string[],
+  index: Map<string, number>,
+  header: string,
+  what: string,
+  parse: (raw: string) => T | null,
+): { ok: true; value: T } | { ok: false; message: string } {
+  const raw = csvCell(cells, index.get(header));
+  const value = parse(raw);
+  if (value === null) return { ok: false, message: `Unreadable ${what} "${raw}".` };
+  return { ok: true, value };
+}
+
 type RowParser = (
   cells: readonly string[],
   index: Map<string, number>,
@@ -164,20 +178,18 @@ type RowParser = (
   | { ok: false; message: string };
 
 const parseChaseRow: RowParser = (cells, index) => {
-  const transactionDate = parseCsvDate(csvCell(cells, index.get("transactiondate")));
-  if (!transactionDate) {
-    return {
-      ok: false,
-      message: `Unreadable transaction date "${csvCell(cells, index.get("transactiondate"))}".`,
-    };
-  }
-  const amountCents = parseAmountCents(csvCell(cells, index.get("amount")));
-  if (amountCents === null) {
-    return {
-      ok: false,
-      message: `Unreadable amount "${csvCell(cells, index.get("amount"))}".`,
-    };
-  }
+  const date = requiredCell(
+    cells,
+    index,
+    "transactiondate",
+    "transaction date",
+    parseCsvDate,
+  );
+  if (!date.ok) return date;
+  const transactionDate = date.value;
+  const amount = requiredCell(cells, index, "amount", "amount", parseAmountCents);
+  if (!amount.ok) return amount;
+  const amountCents = amount.value;
 
   return {
     ok: true,
@@ -197,25 +209,26 @@ const parseChaseRow: RowParser = (cells, index) => {
 };
 
 const parseCapitalOneCardRow: RowParser = (cells, index) => {
-  const transactionDate = parseCsvDate(csvCell(cells, index.get("transactiondate")));
-  if (!transactionDate) {
-    return {
-      ok: false,
-      message: `Unreadable transaction date "${csvCell(cells, index.get("transactiondate"))}".`,
-    };
-  }
+  const date = requiredCell(
+    cells,
+    index,
+    "transactiondate",
+    "transaction date",
+    parseCsvDate,
+  );
+  if (!date.ok) return date;
+  const transactionDate = date.value;
 
   const debit = parseAmountCents(csvCell(cells, index.get("debit")));
   const credit = parseAmountCents(csvCell(cells, index.get("credit")));
-  if (debit === null && credit === null) {
-    return { ok: false, message: "Row has neither a Debit nor a Credit amount." };
-  }
   if (debit !== null && credit !== null) {
     return { ok: false, message: "Row has both a Debit and a Credit amount." };
   }
-
   // Debit is a purchase (money out of the card account), Credit a payment or refund.
-  const amountCents = debit !== null ? -debit : (credit as number);
+  const amountCents = debit !== null ? -debit : credit;
+  if (amountCents === null) {
+    return { ok: false, message: "Row has neither a Debit nor a Credit amount." };
+  }
 
   return {
     ok: true,
@@ -233,21 +246,25 @@ const parseCapitalOneCardRow: RowParser = (cells, index) => {
 };
 
 const parseCapitalOneBankRow: RowParser = (cells, index) => {
-  const transactionDate = parseCsvDate(csvCell(cells, index.get("transactiondate")));
-  if (!transactionDate) {
-    return {
-      ok: false,
-      message: `Unreadable transaction date "${csvCell(cells, index.get("transactiondate"))}".`,
-    };
-  }
+  const date = requiredCell(
+    cells,
+    index,
+    "transactiondate",
+    "transaction date",
+    parseCsvDate,
+  );
+  if (!date.ok) return date;
+  const transactionDate = date.value;
 
-  const magnitude = parseAmountCents(csvCell(cells, index.get("transactionamount")));
-  if (magnitude === null) {
-    return {
-      ok: false,
-      message: `Unreadable amount "${csvCell(cells, index.get("transactionamount"))}".`,
-    };
-  }
+  const amount = requiredCell(
+    cells,
+    index,
+    "transactionamount",
+    "amount",
+    parseAmountCents,
+  );
+  if (!amount.ok) return amount;
+  const magnitude = amount.value;
 
   const type = csvCell(cells, index.get("transactiontype")).toLowerCase();
   if (type !== "debit" && type !== "credit") {
