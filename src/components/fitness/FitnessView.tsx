@@ -57,23 +57,23 @@ export function FitnessView({
   mode,
   initialSessions,
   initialExercises,
-  openLog,
-  seedExerciseId,
-  initialSessionDetail,
+  openLog = false,
+  seedExerciseId = null,
+  initialSessionDetail = null,
   copyFrom,
   repeatableTitles,
-  openExerciseId,
+  openExerciseId = null,
 }: {
   mode: Mode;
   initialSessions: SessionSummary[];
   initialExercises: ExerciseSummary[];
-  openLog: boolean;
-  seedExerciseId: string | null;
-  initialSessionDetail: SessionDetail | null;
+  openLog?: boolean;
+  seedExerciseId?: string | null;
+  initialSessionDetail?: SessionDetail | null;
   copyFrom?: SessionDetail | null;
   repeatableTitles: RepeatableTitle[];
   /** null = closed; `"new"` or exercise id = open catalog editor */
-  openExerciseId: string | null;
+  openExerciseId?: string | null;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);

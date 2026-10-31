@@ -1,10 +1,5 @@
 import { getCurrentUserId } from "@/lib/auth";
-import {
-  getSessionDetail,
-  listExercises,
-  listRepeatableTitles,
-  listSessions,
-} from "@/lib/fitness/queries";
+import { getSessionDetail, loadFitnessLists } from "@/lib/fitness/queries";
 import { FitnessView } from "@/components/fitness/FitnessView";
 
 export const dynamic = "force-dynamic";
@@ -19,24 +14,18 @@ export default async function FitnessLogPage({
   const params = await searchParams;
   const userId = await getCurrentUserId();
   const fromId = params.from?.trim() || null;
-  const [sessions, exercises, titles, copyFrom] = await Promise.all([
-    listSessions(userId),
-    listExercises(userId),
-    listRepeatableTitles(userId),
+  const [lists, copyFrom] = await Promise.all([
+    loadFitnessLists(userId),
     fromId ? getSessionDetail(userId, fromId) : Promise.resolve(null),
   ]);
 
   return (
     <FitnessView
       mode="sessions"
-      initialSessions={sessions}
-      initialExercises={exercises}
+      {...lists}
       openLog
       seedExerciseId={fromId ? null : (params.exercise ?? null)}
-      initialSessionDetail={null}
       copyFrom={copyFrom}
-      repeatableTitles={titles}
-      openExerciseId={null}
     />
   );
 }

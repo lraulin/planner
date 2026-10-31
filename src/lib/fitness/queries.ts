@@ -403,3 +403,17 @@ export async function listRepeatableTitles(userId: string): Promise<RepeatableTi
     isIncomplete: incomplete.has(session.id),
   }));
 }
+
+/**
+ * What every Fitness page renders around its own content: the session history, the exercise
+ * catalog, and the titles a new session can repeat. Named as `FitnessView`'s props, so a
+ * page spreads them.
+ */
+export async function loadFitnessLists(userId: string) {
+  const [initialSessions, initialExercises, repeatableTitles] = await Promise.all([
+    listSessions(userId),
+    listExercises(userId),
+    listRepeatableTitles(userId),
+  ]);
+  return { initialSessions, initialExercises, repeatableTitles };
+}
