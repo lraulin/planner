@@ -1,10 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { matchBindings } from "@/lib/commands/bindings";
+import { useGlobalOpener } from "@/components/shell/useGlobalOpener";
 import { QUICK_CAPTURE } from "@/lib/commands/chords";
-import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
 import { CAPTURE_EVENT } from "./event";
 
 const QuickCaptureDialog = dynamic(
@@ -31,29 +29,7 @@ const QuickCaptureDialog = dynamic(
  * open starts clean.
  */
 export function QuickCapture() {
-  const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (!matchBindings(event, QUICK_CAPTURE)) return;
-      if (isTypingTarget(event.target) || isModalOpen()) return;
-
-      event.preventDefault();
-      setOpen(true);
-    }
-
-    function onRequest() {
-      setOpen(true);
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    window.addEventListener(CAPTURE_EVENT, onRequest);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener(CAPTURE_EVENT, onRequest);
-    };
-  }, []);
+  const { open, close } = useGlobalOpener(QUICK_CAPTURE, CAPTURE_EVENT);
 
   // Closing is the success signal, as everywhere else in the app: a failed capture keeps
   // the box open with the error, so the box going away means it worked. No toast — this

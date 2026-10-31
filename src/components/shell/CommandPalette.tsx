@@ -1,9 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
-import { matchBindings } from "@/lib/commands/bindings";
+import { useGlobalOpener } from "@/components/shell/useGlobalOpener";
 import { OPEN_PALETTE } from "@/lib/commands/chords";
 import { COMMAND_PALETTE_EVENT } from "./commandEvent";
 
@@ -32,31 +30,7 @@ const CommandPaletteDialog = dynamic(
  * The dialog itself is a separate chunk so every signed-in page does not parse it on load.
  */
 export function CommandPalette() {
-  const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (!matchBindings(event, OPEN_PALETTE)) return;
-      // The same two guards `QuickCapture` uses: never steal a keystroke from something the
-      // user is typing into, and never open on top of a drawer or a confirmation.
-      if (isTypingTarget(event.target) || isModalOpen()) return;
-
-      event.preventDefault();
-      setOpen(true);
-    }
-
-    function onRequest() {
-      setOpen(true);
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    window.addEventListener(COMMAND_PALETTE_EVENT, onRequest);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener(COMMAND_PALETTE_EVENT, onRequest);
-    };
-  }, []);
+  const { open, close } = useGlobalOpener(OPEN_PALETTE, COMMAND_PALETTE_EVENT);
 
   return open ? <CommandPaletteDialog onClose={close} /> : null;
 }
