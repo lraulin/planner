@@ -1,4 +1,5 @@
 import type { GridRow } from "@/lib/tree/slice";
+import { compareGroupText } from "./grouping";
 
 /**
  * One row's bucket on one dimension.
@@ -113,4 +114,21 @@ export function buildGroupRows<TRow, TNode, TDimension extends string>(
 
   closeTo(0);
   return out;
+}
+
+/**
+ * Order two group headers: numbers numerically, text as `compareGroupText` does. A
+ * calendar dimension passes `newestFirst`, so the latest year or month heads the list and a
+ * missing month shows as a gap rather than sinking to the bottom.
+ */
+export function compareGroupParts(
+  left: GroupPart,
+  right: GroupPart,
+  newestFirst: boolean,
+): number {
+  const compared =
+    typeof left.sort === "number" && typeof right.sort === "number"
+      ? left.sort - right.sort
+      : compareGroupText(String(left.sort), String(right.sort));
+  return newestFirst ? -compared : compared;
 }

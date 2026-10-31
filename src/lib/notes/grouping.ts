@@ -5,7 +5,11 @@ import {
   type CalendarNoteGroupBy,
   type NoteGroupBy,
 } from "@/lib/grid/grouping";
-import { buildGroupRows, type GroupPart } from "@/lib/grid/groupRows";
+import {
+  buildGroupRows,
+  compareGroupParts,
+  type GroupPart,
+} from "@/lib/grid/groupRows";
 import {
   DEFAULT_DATE_FORMAT,
   formatDateKey,
@@ -164,21 +168,6 @@ function isCalendarDimension(dimension: NoteGroupBy): boolean {
   );
 }
 
-function compareParts(
-  left: GroupPart,
-  right: GroupPart,
-  dimension: NoteGroupBy,
-): number {
-  if (typeof left.sort === "number" && typeof right.sort === "number") {
-    return isCalendarDimension(dimension)
-      ? right.sort - left.sort
-      : left.sort - right.sort;
-  }
-
-  const compared = compareGroupText(String(left.sort), String(right.sort));
-  return isCalendarDimension(dimension) ? -compared : compared;
-}
-
 /**
  * Put flat note rows under nested column-value headers.
  *
@@ -195,7 +184,8 @@ export function groupNotes<T extends GroupableNote>(
     dimensions: asNoteGroupBy(dimensions),
     partOf: (row, dimension) => noteGroupPart(row.note, dimension, dateFormat),
     emptyLabel: (dimension) => EMPTY_LABELS[dimension],
-    comparePart: compareParts,
+    comparePart: (left, right, dimension) =>
+      compareGroupParts(left, right, isCalendarDimension(dimension)),
     toGridRow,
   });
 }

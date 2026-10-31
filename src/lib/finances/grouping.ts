@@ -1,10 +1,13 @@
 import {
-  compareGroupText,
   knownGroupBy,
   type CalendarNoteGroupBy,
   type GridGroupBy,
 } from "@/lib/grid/grouping";
-import { buildGroupRows, type GroupPart } from "@/lib/grid/groupRows";
+import {
+  buildGroupRows,
+  compareGroupParts,
+  type GroupPart,
+} from "@/lib/grid/groupRows";
 import type { GridRow } from "@/lib/tree/slice";
 import { effectiveCategory, effectiveFlow } from "./analytics";
 import { flowLabel } from "./flowLabels";
@@ -100,20 +103,6 @@ function partOf(row: TransactionListRow, dimension: FinanceGroupBy): GroupPart |
   return { key: name, label: name, sort: name };
 }
 
-function compareParts(
-  left: GroupPart,
-  right: GroupPart,
-  dimension: FinanceGroupBy,
-): number {
-  if (typeof left.sort === "number" && typeof right.sort === "number") {
-    // Newest year / month first, so a missing December sits as a gap between January
-    // and November rather than buried at the bottom of a flat date sort.
-    return isCalendar(dimension) ? right.sort - left.sort : left.sort - right.sort;
-  }
-  const compared = compareGroupText(String(left.sort), String(right.sort));
-  return isCalendar(dimension) ? -compared : compared;
-}
-
 function toGridRow(row: TransactionListRow): GridRow<TransactionListRow> {
   return { kind: "node", id: row.id, node: row, depth: 0 };
 }
@@ -153,7 +142,8 @@ export function groupTransactions(
     dimensions: asFinanceGroupBy(dimensions),
     partOf,
     emptyLabel: (dimension) => EMPTY_LABELS[dimension],
-    comparePart: compareParts,
+    comparePart: (left, right, dimension) =>
+      compareGroupParts(left, right, isCalendar(dimension)),
     toGridRow,
   });
 }
