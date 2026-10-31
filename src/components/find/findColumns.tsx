@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from "@/components/grid/columns";
 import type { FindResult } from "@/lib/find/types";
-import { PlainTextCell } from "@/components/grid/PlainTextCell";
+import { PlainTextCell, plainTextField } from "@/components/grid/PlainTextCell";
 
 export type FindColumnCtx = Record<string, never>;
 
@@ -56,11 +56,8 @@ export const findColumns: FindColumn[] = [
     id: "where",
     label: "Where",
     width: "17rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.where || null,
-    sortValue: (row) => row.node.where.toLowerCase(),
     compact: "meta",
-    render: (row) => <PlainTextCell value={row.node.where} />,
+    ...plainTextField((node) => node.where),
   },
   {
     id: "field",

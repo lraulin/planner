@@ -1,3 +1,5 @@
+import type { ColumnDef } from "./columns";
+
 /**
  * A record catalog's read-only text cell: one line, truncated, with the full value on hover.
  * Muted by default, because most catalog columns sit beside the row's name and read as
@@ -18,4 +20,23 @@ export function PlainTextCell({
       {value}
     </span>
   );
+}
+
+/**
+ * The filter, sort and cell of a plain text column: filtered as text, sorted
+ * case-insensitively, drawn as a muted `PlainTextCell`. Spread into a column next to its
+ * id, label and width.
+ */
+export function plainTextField<TNode>(
+  value: (node: TNode) => string,
+): Pick<
+  ColumnDef<unknown, TNode>,
+  "filterKind" | "filterValue" | "sortValue" | "render"
+> {
+  return {
+    filterKind: "text",
+    filterValue: (row) => value(row.node) || null,
+    sortValue: (row) => value(row.node).toLowerCase(),
+    render: (row) => <PlainTextCell value={value(row.node)} />,
+  };
 }

@@ -10,7 +10,7 @@ import { priorityOrderValue } from "@/lib/priority/order";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { formatPriority } from "@/lib/tree/format";
 import { formatPostalAddress } from "@/lib/address";
-import { PlainTextCell } from "@/components/grid/PlainTextCell";
+import { PlainTextCell, plainTextField } from "@/components/grid/PlainTextCell";
 
 export type HousesColumnCtx = Record<string, never>;
 
@@ -331,20 +331,14 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     label: "City",
     width: "10rem",
     compact: "hidden",
-    filterKind: "text",
-    filterValue: (row) => row.node.city || null,
-    sortValue: (row) => row.node.city.toLowerCase(),
-    render: (row) => <PlainTextCell value={row.node.city} />,
+    ...plainTextField((node) => node.city),
   },
   {
     id: "notes",
     label: "Notes",
     width: "18rem",
     compact: "hidden",
-    filterKind: "text",
-    filterValue: (row) => row.node.notes || null,
-    sortValue: (row) => row.node.notes.toLowerCase(),
-    render: (row) => <PlainTextCell value={row.node.notes} />,
+    ...plainTextField((node) => node.notes),
   },
   {
     id: "updated",

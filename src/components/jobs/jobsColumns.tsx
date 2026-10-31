@@ -3,7 +3,7 @@
 import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
 import type { JobGridRow } from "@/lib/jobs/types";
-import { PlainTextCell } from "@/components/grid/PlainTextCell";
+import { PlainTextCell, plainTextField } from "@/components/grid/PlainTextCell";
 
 export type JobsColumnCtx = Record<string, never>;
 
@@ -40,11 +40,8 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
     id: "title",
     label: "Title",
     width: "15rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.jobTitle || null,
-    sortValue: (row) => row.node.jobTitle.toLowerCase(),
     compact: "meta",
-    render: (row) => <PlainTextCell value={row.node.jobTitle} />,
+    ...plainTextField((node) => node.jobTitle),
   },
   {
     id: "start",
@@ -111,30 +108,21 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
     id: "location",
     label: "Location",
     width: "14rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.location || null,
-    sortValue: (row) => row.node.location.toLowerCase(),
     compact: "hidden",
-    render: (row) => <PlainTextCell value={row.node.location} />,
+    ...plainTextField((node) => node.location),
   },
   {
     id: "supervisor",
     label: "Supervisor",
     width: "14rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.supervisorName || null,
-    sortValue: (row) => row.node.supervisorName.toLowerCase(),
     compact: "hidden",
-    render: (row) => <PlainTextCell value={row.node.supervisorName} />,
+    ...plainTextField((node) => node.supervisorName),
   },
   {
     id: "reason",
     label: "Reason for leaving",
     width: "16rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.reasonForLeaving || null,
-    sortValue: (row) => row.node.reasonForLeaving.toLowerCase(),
     compact: "hidden",
-    render: (row) => <PlainTextCell value={row.node.reasonForLeaving} />,
+    ...plainTextField((node) => node.reasonForLeaving),
   },
 ];

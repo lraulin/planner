@@ -5,7 +5,7 @@ import { DateText } from "@/components/date/DateText";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { formatEffort } from "@/lib/tree/format";
 import type { ResourceListRow } from "@/lib/resources/types";
-import { PlainTextCell } from "@/components/grid/PlainTextCell";
+import { PlainTextCell, plainTextField } from "@/components/grid/PlainTextCell";
 
 export type ResourcesColumnCtx = Record<string, never>;
 
@@ -115,11 +115,8 @@ export const resourcesColumns: ColumnDef<ResourcesColumnCtx, ResourceListRow>[] 
     id: "description",
     label: "Description",
     width: "19rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.description || null,
-    sortValue: (row) => row.node.description.toLowerCase(),
     compact: "hidden",
-    render: (row) => <PlainTextCell value={row.node.description} />,
+    ...plainTextField((node) => node.description),
   },
   {
     id: "updated",

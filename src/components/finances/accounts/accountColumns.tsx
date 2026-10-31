@@ -10,7 +10,7 @@ import { UrlLink } from "@/components/url/UrlLink";
 import { toDateKey } from "@/lib/schedule/geometry";
 
 import { type PendingRow } from "@/lib/finances/workingBalance";
-import { PlainTextCell } from "@/components/grid/PlainTextCell";
+import { PlainTextCell, plainTextField } from "@/components/grid/PlainTextCell";
 export type AccountColumnCtx = {
   pending: readonly PendingRow[];
 };
@@ -69,11 +69,8 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     id: "institution",
     label: "Institution",
     width: "13rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.institution || null,
-    sortValue: (row) => row.node.institution.toLowerCase(),
     compact: "meta",
-    render: (row) => <PlainTextCell value={row.node.institution} />,
+    ...plainTextField((node) => node.institution),
   },
   {
     id: "lastFour",

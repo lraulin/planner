@@ -3,7 +3,7 @@
 import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
 import type { ResidenceGridRow } from "@/lib/residences/types";
-import { PlainTextCell } from "@/components/grid/PlainTextCell";
+import { PlainTextCell, plainTextField } from "@/components/grid/PlainTextCell";
 
 export type ResidencesColumnCtx = Record<string, never>;
 
@@ -109,20 +109,14 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
     id: "address",
     label: "Address",
     width: "20rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.address || null,
-    sortValue: (row) => row.node.address.toLowerCase(),
     compact: "hidden",
-    render: (row) => <PlainTextCell value={row.node.address} />,
+    ...plainTextField((node) => node.address),
   },
   {
     id: "landlord",
     label: "Landlord",
     width: "14rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.landlordName || null,
-    sortValue: (row) => row.node.landlordName.toLowerCase(),
     compact: "hidden",
-    render: (row) => <PlainTextCell value={row.node.landlordName} />,
+    ...plainTextField((node) => node.landlordName),
   },
 ];

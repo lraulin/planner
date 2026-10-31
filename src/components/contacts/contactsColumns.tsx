@@ -4,7 +4,7 @@ import type { ColumnDef } from "@/components/grid/columns";
 import type { ContactListRow } from "@/lib/contacts/types";
 import { DateText } from "@/components/date/DateText";
 import { localDateKey } from "@/lib/schedule/geometry";
-import { PlainTextCell } from "@/components/grid/PlainTextCell";
+import { PlainTextCell, plainTextField } from "@/components/grid/PlainTextCell";
 
 /**
  * The Contacts grid's columns. Read-only, unlike the other list grids: a contact's fields
@@ -48,19 +48,13 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
     id: "company",
     label: "Company",
     width: "13rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.company || null,
-    sortValue: (row) => row.node.company.toLowerCase(),
-    render: (row) => <PlainTextCell value={row.node.company} />,
+    ...plainTextField((node) => node.company),
   },
   {
     id: "jobTitle",
     label: "Job Title",
     width: "13rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.jobTitle || null,
-    sortValue: (row) => row.node.jobTitle.toLowerCase(),
-    render: (row) => <PlainTextCell value={row.node.jobTitle} />,
+    ...plainTextField((node) => node.jobTitle),
   },
   {
     id: "phone",
@@ -106,10 +100,7 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
     id: "city",
     label: "City",
     width: "8rem",
-    filterKind: "text",
-    filterValue: (row) => row.node.primaryCity || null,
-    sortValue: (row) => row.node.primaryCity.toLowerCase(),
-    render: (row) => <PlainTextCell value={row.node.primaryCity} />,
+    ...plainTextField((node) => node.primaryCity),
   },
   {
     id: "group",
