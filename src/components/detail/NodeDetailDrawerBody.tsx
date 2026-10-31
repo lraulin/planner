@@ -276,16 +276,25 @@ function DetailForm({
     }
   }, [detail.id, onReload, today]);
 
-  const runItemAction = useCallback(
-    (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
+  /** Run a write, report its error, and on success re-read what it changed with `after`. */
+  const runThen = useCallback(
+    (
+      action: () => Promise<{ ok: true } | { ok: false; error: string }>,
+      after: () => Promise<void>,
+    ) => {
       setError(null);
       startTransition(async () => {
         const result = await action();
         if (!result.ok) setError(result.error);
-        else await refreshItems();
+        else await after();
       });
     },
-    [refreshItems],
+    [],
+  );
+  const runItemAction = useCallback(
+    (action: () => Promise<{ ok: true } | { ok: false; error: string }>) =>
+      runThen(action, refreshItems),
+    [runThen, refreshItems],
   );
 
   /**
@@ -294,15 +303,9 @@ function DetailForm({
    * the user is looking at — Skip Recurrence moves every date on the General tab.
    */
   const runAction = useCallback(
-    (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
-      setError(null);
-      startTransition(async () => {
-        const result = await action();
-        if (!result.ok) setError(result.error);
-        else await reseed();
-      });
-    },
-    [reseed],
+    (action: () => Promise<{ ok: true } | { ok: false; error: string }>) =>
+      runThen(action, reseed),
+    [runThen, reseed],
   );
 
   const list = useCallback(
