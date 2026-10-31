@@ -117,6 +117,19 @@ function decimalField(value: (house: HouseListRow) => string | null): HouseField
   };
 }
 
+/** A yes / no / not-known feature: filtered and sorted on its three states. */
+function triStateField(value: (house: HouseListRow) => boolean | null): HouseField & {
+  filterLabel: (value: string) => string;
+} {
+  return {
+    filterKind: "enum",
+    filterValue: (row) => triStateValue(value(row.node)),
+    filterLabel: (label) => TRI_STATE_LABELS[label] ?? label,
+    sortValue: (row) => triStateValue(value(row.node)),
+    render: (row) => <TriStateCell value={value(row.node)} />,
+  };
+}
+
 /** A running cost: filtered on its dollar text, sorted by cents. */
 function moneyField(cents: (house: HouseListRow) => number | null): HouseField {
   return {
@@ -281,33 +294,21 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     label: "Fence",
     width: "5rem",
     align: "center",
-    filterKind: "enum",
-    filterValue: (row) => triStateValue(row.node.hasFence),
-    filterLabel: (value) => TRI_STATE_LABELS[value] ?? value,
-    sortValue: (row) => triStateValue(row.node.hasFence),
-    render: (row) => <TriStateCell value={row.node.hasFence} />,
+    ...triStateField((house) => house.hasFence),
   },
   {
     id: "basement",
     label: "Basement",
     width: "6rem",
     align: "center",
-    filterKind: "enum",
-    filterValue: (row) => triStateValue(row.node.hasBasement),
-    filterLabel: (value) => TRI_STATE_LABELS[value] ?? value,
-    sortValue: (row) => triStateValue(row.node.hasBasement),
-    render: (row) => <TriStateCell value={row.node.hasBasement} />,
+    ...triStateField((house) => house.hasBasement),
   },
   {
     id: "garage",
     label: "Garage",
     width: "5.5rem",
     align: "center",
-    filterKind: "enum",
-    filterValue: (row) => triStateValue(row.node.hasGarage),
-    filterLabel: (value) => TRI_STATE_LABELS[value] ?? value,
-    sortValue: (row) => triStateValue(row.node.hasGarage),
-    render: (row) => <TriStateCell value={row.node.hasGarage} />,
+    ...triStateField((house) => house.hasGarage),
   },
   {
     id: "yearBuilt",
