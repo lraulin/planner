@@ -1,4 +1,4 @@
-import type { NodeType, ProgressReview } from "@/db/schema";
+import type { NodeType } from "@/db/schema";
 import {
   boolField,
   decodeCalendarDay,
@@ -449,53 +449,66 @@ function emptyToNull(value: string | undefined): string | null {
   return value;
 }
 
-function baseNode(args: {
-  achId: string;
-  type: NodeType;
-  parentAchId: string | null;
-  name: string;
-  ordinal: number;
-  row: AchRow;
-  categoryName: string | null;
-  importance: number | null;
-  effortMinutes: number | null;
-  effortLeftMinutes: number | null;
-  actualEffortMinutes: number | null;
-  percentComplete: number | null;
-  description: string;
-  purpose: string;
-  place: string;
-  mission?: string;
-  importanceReason?: string;
-  idealOuterVision?: string;
-  idealInnerVision?: string;
-  strengths?: string;
-  weaknesses?: string;
-  opportunities?: string;
-  threats?: string;
-  strategy?: string;
-  blockSizeMinutes?: number | null;
-  timePerWeekMinutes?: number | null;
-  onlyShowNextTask?: boolean;
-  isDream?: boolean;
-  definition?: string;
-  vision?: string;
-  kindOfPerson?: string;
-  personalChanges?: string;
-  baseline?: string;
-  limitingFactor?: string;
-  values?: string;
-  question?: string;
-  affirmation?: string;
-  range?: string;
-  progressReview?: ProgressReview;
-  scorecard?: boolean;
-  linkedProjectAchId?: string | null;
-  deadlineField?: string;
-  targetStartField?: string;
-  targetEndField?: string;
-  deferredField?: string;
-}): AchMappedNode {
+/**
+ * What a table's mapper hands `baseNode`: the fields every node has, the type-specific
+ * prose it read (absent ones default to empty), and where in the row its dates live.
+ */
+type BaseNodeArgs = Pick<
+  AchMappedNode,
+  | "achId"
+  | "type"
+  | "parentAchId"
+  | "name"
+  | "ordinal"
+  | "categoryName"
+  | "importance"
+  | "effortMinutes"
+  | "effortLeftMinutes"
+  | "actualEffortMinutes"
+  | "percentComplete"
+  | "description"
+  | "purpose"
+  | "place"
+> &
+  Partial<
+    Pick<
+      AchMappedNode,
+      | "mission"
+      | "importanceReason"
+      | "idealOuterVision"
+      | "idealInnerVision"
+      | "strengths"
+      | "weaknesses"
+      | "opportunities"
+      | "threats"
+      | "strategy"
+      | "blockSizeMinutes"
+      | "timePerWeekMinutes"
+      | "onlyShowNextTask"
+      | "isDream"
+      | "definition"
+      | "vision"
+      | "kindOfPerson"
+      | "personalChanges"
+      | "baseline"
+      | "limitingFactor"
+      | "values"
+      | "question"
+      | "affirmation"
+      | "range"
+      | "progressReview"
+      | "scorecard"
+      | "linkedProjectAchId"
+    >
+  > & {
+    row: AchRow;
+    deadlineField?: string;
+    targetStartField?: string;
+    targetEndField?: string;
+    deferredField?: string;
+  };
+
+function baseNode(args: BaseNodeArgs): AchMappedNode {
   const { row } = args;
   const isCompleted = boolField(row, "IsCompleted", false);
   let state =
