@@ -24,11 +24,8 @@ import { catalogCapabilities } from "@/components/grid/catalogCommands";
 import { formatBindings } from "@/lib/commands/bindings";
 import { INSERT_AFTER } from "@/lib/commands/chords";
 import { GridToolbar } from "@/components/grid/GridToolbar";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
@@ -53,6 +50,7 @@ import {
   METRICS_COLUMN_IDS,
   type MetricsColumnCtx,
 } from "./metricsColumns";
+import { useGridSelection } from "@/components/grid/useFlatGrid";
 
 const LAYOUT_CODEC: SettingCodec<MetricsLayoutSettings> = {
   parse: parseMetricsLayout,
@@ -281,21 +279,11 @@ export function MetricsView({
     ]);
   }, [visible, groupByOwner]);
 
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        metricsColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
+  const { distinctValues, onIdsChange, multi } = useGridSelection(
+    gridRows,
+    metricsColumns,
+    openId ?? initialMetrics[0]?.id ?? null,
   );
-
-  const rowIds = useMemo(
-    () => gridRows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
-    [gridRows],
-  );
-  const { order, onIdsChange } = useNavigableIds(rowIds);
-  const multi = useMultiSelect(order, openId ?? initialMetrics[0]?.id ?? null);
   const {
     selectedId,
     selectedIds,

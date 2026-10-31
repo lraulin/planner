@@ -16,11 +16,8 @@ import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { GridToolbar } from "@/components/grid/GridToolbar";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { flatSelectionText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { outlineSelectPath } from "@/lib/url/viewState";
@@ -30,6 +27,7 @@ import {
   WISHES_COLUMN_IDS,
   type WishesColumnCtx,
 } from "./wishesColumns";
+import { useGridSelection } from "@/components/grid/useFlatGrid";
 
 /**
  * One built-in view. The Wish List is a single list by nature; what it gains from views is
@@ -169,21 +167,10 @@ export function WishesGrid({
     });
   }, [rows, scopeId]);
 
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        wishesColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
+  const { distinctValues, order, onIdsChange, multi } = useGridSelection(
+    gridRows,
+    wishesColumns,
   );
-
-  const rowIds = useMemo(
-    () => gridRows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
-    [gridRows],
-  );
-  const { order, onIdsChange } = useNavigableIds(rowIds);
-  const multi = useMultiSelect(order, null);
   const {
     selectedId,
     selectedIds,

@@ -47,10 +47,7 @@ import {
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { GridToolbar } from "@/components/grid/GridToolbar";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import { asNoteGroupBy, groupNotes, NOTE_GROUP_BY_VALUES } from "@/lib/notes/grouping";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import type { MenuItem } from "@/components/grid/ContextMenu";
@@ -79,6 +76,7 @@ import { TomboyImportPanel } from "@/components/settings/TomboyImportPanel";
 import { NoteFilterDialog } from "./NoteFilterDialog";
 import { NoteDrawer } from "./NoteDrawer";
 import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
+import { useGridSelection } from "@/components/grid/useFlatGrid";
 
 const NOTES_VIEW_CODEC: SettingCodec<NotesViewSettings> = {
   parse: parseNotesView,
@@ -365,21 +363,11 @@ export function NotesGrid({
     bodyMatchPending,
   ]);
 
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        notesColumns,
-        rows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [rows],
+  const { distinctValues, order, onIdsChange, multi } = useGridSelection(
+    rows,
+    notesColumns,
+    urlNoteId,
   );
-
-  const rowIds = useMemo(
-    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
-    [rows],
-  );
-  const { order, onIdsChange } = useNavigableIds(rowIds);
-  const multi = useMultiSelect(order, urlNoteId);
   const {
     selectedId,
     selectedIds,
