@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import type { DbExecutor, DbTransaction } from "@/db/executor";
 import {
   appointments,
   nodeItems,
@@ -25,9 +26,6 @@ import { between } from "@/lib/tree/sortKey";
 import type { NodeType } from "@/db/schema";
 import { organizerOutcomeError, type OrganizerOutcome } from "./types";
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-
 type InboxItem = {
   id: string;
   parentId: string | null;
@@ -38,7 +36,7 @@ type InboxItem = {
 };
 
 async function requireInboxItem(
-  tx: Db | Tx,
+  tx: DbExecutor,
   userId: string,
   itemId: string,
 ): Promise<InboxItem> {
@@ -78,7 +76,7 @@ async function requireInboxItem(
 }
 
 async function isSelfOrDescendant(
-  tx: Db | Tx,
+  tx: DbExecutor,
   userId: string,
   itemId: string,
   candidateId: string,
@@ -98,7 +96,7 @@ async function isSelfOrDescendant(
  * or project (Achieve's hierarchy, and ours) — not only under projects.
  */
 async function requireDestinationParent(
-  tx: Db | Tx,
+  tx: DbExecutor,
   userId: string,
   parentId: string | null,
   sourceId: string,
@@ -118,7 +116,7 @@ async function requireDestinationParent(
 }
 
 async function endNodeSortKey(
-  tx: Tx,
+  tx: DbTransaction,
   userId: string,
   parentId: string | null,
 ): Promise<string> {
@@ -133,7 +131,7 @@ async function endNodeSortKey(
   return between(last?.sortKey ?? null, null);
 }
 
-async function endNoteSortKey(tx: Tx, userId: string): Promise<string> {
+async function endNoteSortKey(tx: DbTransaction, userId: string): Promise<string> {
   const [last] = await tx
     .select({ sortKey: noteRows.sortKey })
     .from(noteRows)
@@ -148,7 +146,7 @@ function calendarDay(value: string | null): Date | null {
 }
 
 async function organizeAsTask(
-  tx: Tx,
+  tx: DbTransaction,
   userId: string,
   item: InboxItem,
   outcome: Extract<OrganizerOutcome, { kind: "task" }>,
@@ -228,7 +226,7 @@ async function organizeAsTask(
 }
 
 async function organizeAsProject(
-  tx: Tx,
+  tx: DbTransaction,
   userId: string,
   item: InboxItem,
   outcome: Extract<OrganizerOutcome, { kind: "project" }>,
@@ -283,7 +281,7 @@ async function organizeAsProject(
 }
 
 async function organizeAsDeferred(
-  tx: Tx,
+  tx: DbTransaction,
   userId: string,
   item: InboxItem,
   outcome: Extract<OrganizerOutcome, { kind: "defer" }>,
@@ -322,7 +320,7 @@ async function organizeAsDeferred(
 }
 
 async function organizeAsReferenceNote(
-  tx: Tx,
+  tx: DbTransaction,
   userId: string,
   item: InboxItem,
   outcome: Extract<OrganizerOutcome, { kind: "reference_note" }>,

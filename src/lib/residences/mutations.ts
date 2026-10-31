@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { residences, type ExternalRef } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import {
@@ -31,11 +32,7 @@ const TEXT_FIELDS = [
 
 const DATE_LABELS = { start: "Moved in", end: "Moved out" };
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
-async function requireResidence(tx: Executor, userId: string, residenceId: string) {
+async function requireResidence(tx: DbExecutor, userId: string, residenceId: string) {
   const [row] = await tx
     .select()
     .from(residences)

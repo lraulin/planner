@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { nodes, resultAreaDetails } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -12,15 +12,11 @@ import { isSelfOrDescendantVia, subtreeIdsVia } from "./ancestry";
  * scopes on `userId`, so a guessed id from another user's outline is simply not found.
  */
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-export type Executor = Db | Tx;
-
 export function parentMatches(parentId: string | null) {
   return parentId === null ? isNull(nodes.parentId) : eq(nodes.parentId, parentId);
 }
 
-export async function requireNode(tx: Executor, userId: string, nodeId: string) {
+export async function requireNode(tx: DbExecutor, userId: string, nodeId: string) {
   const [node] = await tx
     .select()
     .from(nodes)
@@ -40,7 +36,7 @@ export async function requireNode(tx: Executor, userId: string, nodeId: string) 
  * predicate keeps `updatedAt` still when there is nothing to change.
  */
 export async function expandParent(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   parentId: string | null,
 ): Promise<void> {
@@ -55,7 +51,7 @@ export async function expandParent(
 
 /** Sibling sort keys under `parentId`, in order. */
 export async function siblingKeys(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   parentId: string | null,
 ): Promise<{ id: string; sortKey: string }[]> {
@@ -71,7 +67,7 @@ export async function siblingKeys(
  * within its current parent does not treat itself as a neighbour.
  */
 export async function sortKeyFor(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   parentId: string | null,
   position: Position,
@@ -101,7 +97,7 @@ export async function sortKeyFor(
 
 /** True when `candidateId` is `nodeId` itself or sits somewhere beneath it. */
 export async function isSelfOrDescendant(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   candidateId: string | null,
@@ -123,7 +119,7 @@ export async function isSelfOrDescendant(
  * which is the shape this is walked in.
  */
 export async function subtreeIds(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   rootId: string,
 ): Promise<string[]> {
@@ -137,7 +133,7 @@ export async function subtreeIds(
 
 /** Stored category on a result area, or null when missing / blank is not applied. */
 export async function resultAreaCategory(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
 ): Promise<string | null> {

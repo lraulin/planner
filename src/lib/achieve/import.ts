@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import type { DbTransaction } from "@/db/executor";
 import {
   appointments,
   goalDetails,
@@ -340,11 +341,9 @@ export async function writeMappedImport(params: {
  */
 const BARE_LETTER_PROVISIONAL_RANK = 2500;
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 /** Max existing sort key per parent so merge continues after current siblings. */
 async function maxSortKeyByParent(
-  tx: Tx,
+  tx: DbTransaction,
   table: typeof nodes | typeof notes,
   userId: string,
 ): Promise<Map<string | null, string | null>> {
@@ -365,7 +364,7 @@ async function maxSortKeyByParent(
 }
 
 async function writeExtras(
-  tx: Tx,
+  tx: DbTransaction,
   userId: string,
   idByAch: Map<string, string>,
   extras: AchExtrasMap,

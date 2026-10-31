@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { resources } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import { assertContactOwned } from "@/lib/contacts/ownership";
@@ -7,11 +8,7 @@ import type { ResourceInput } from "./types";
 
 /** Resources are standalone records. Every write scopes by `userId`. */
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
-async function requireResource(tx: Executor, userId: string, resourceId: string) {
+async function requireResource(tx: DbExecutor, userId: string, resourceId: string) {
   const [row] = await tx
     .select()
     .from(resources)

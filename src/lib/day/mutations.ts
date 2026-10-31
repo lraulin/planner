@@ -1,5 +1,6 @@
 import { and, asc, eq, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import {
   dailyItems,
   nodes,
@@ -33,11 +34,7 @@ import type { DayAssignment } from "./priority";
  * rows even by guessing an id. Same contract as `src/lib/tree/mutations.ts`.
  */
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
-async function requireItem(tx: Executor, userId: string, itemId: string) {
+async function requireItem(tx: DbExecutor, userId: string, itemId: string) {
   const [item] = await tx
     .select()
     .from(dailyItems)
@@ -49,7 +46,7 @@ async function requireItem(tx: Executor, userId: string, itemId: string) {
 }
 
 /** A sort key placing a new row at the end of `day`. */
-async function endOfDay(tx: Executor, userId: string, day: string): Promise<string> {
+async function endOfDay(tx: DbExecutor, userId: string, day: string): Promise<string> {
   const [last] = await tx
     .select({ sortKey: dailyItems.sortKey })
     .from(dailyItems)
@@ -61,7 +58,7 @@ async function endOfDay(tx: Executor, userId: string, day: string): Promise<stri
 }
 
 /** The open row for a task, if it is currently planned for some day. */
-async function openRowForNode(tx: Executor, userId: string, nodeId: string) {
+async function openRowForNode(tx: DbExecutor, userId: string, nodeId: string) {
   const [row] = await tx
     .select()
     .from(dailyItems)
@@ -249,7 +246,7 @@ export async function setDailyPriorities(
  * when you get there.
  */
 async function moveItemToDay(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   itemId: string,
   day: string,

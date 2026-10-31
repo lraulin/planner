@@ -1,5 +1,6 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbTransaction } from "@/db/executor";
 import { notes } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import { between } from "@/lib/tree/sortKey";
@@ -19,9 +20,6 @@ export type TomboyImportResult = {
   warnings: string[];
 };
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-
 type ImportedRow = {
   id: string;
   title: string;
@@ -33,7 +31,7 @@ type ImportedRow = {
 };
 
 async function findImportedNote(
-  tx: Tx,
+  tx: DbTransaction,
   userId: string,
   sourceId: string,
 ): Promise<ImportedRow | null> {

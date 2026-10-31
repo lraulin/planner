@@ -11,7 +11,8 @@ import {
   planOutlinePriorityClear,
   type PriorityNode,
 } from "./outlinePriority";
-import { parentMatches, requireNode, type Executor } from "./nodeRows";
+import type { DbExecutor } from "@/db/executor";
+import { parentMatches, requireNode } from "./nodeRows";
 
 /**
  * Writes for outline and Task Chooser priorities. The ranking rules live in the pure
@@ -27,7 +28,7 @@ import { parentMatches, requireNode, type Executor } from "./nodeRows";
  * everything a filter had hidden.
  */
 export async function siblingPriorityPool(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   parentId: string | null,
 ): Promise<PriorityNode[]> {
@@ -124,7 +125,7 @@ export async function setPriorityForNodes(
  * `A1` means would break the invariant from whichever side nobody was testing.
  */
 export async function assignPriorityAmongSiblings(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   parentId: string | null,
@@ -140,7 +141,7 @@ export async function assignPriorityAmongSiblings(
 }
 
 export async function applyPriorityAssignments(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   assignments: { id: string; letter: PriorityLetter | null; rank: number | null }[],
 ): Promise<void> {
@@ -164,7 +165,7 @@ export async function applyPriorityAssignments(
  * pools and persists `planClear`.
  */
 export async function applySettlePriorityClear(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   requested: NodeState,
@@ -234,7 +235,7 @@ export async function setTcPriorities(
 
 /** Persist TC assignments inside a transaction the caller already owns. */
 async function applyTcAssignments(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   assignments: {
     nodeId: string;

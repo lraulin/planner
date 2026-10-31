@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import {
   exercises,
   workoutSessionExercises,
@@ -27,11 +28,7 @@ import type {
  * outline — only an explicit session delete removes sets.
  */
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
-async function requireExercise(tx: Executor, userId: string, exerciseId: string) {
+async function requireExercise(tx: DbExecutor, userId: string, exerciseId: string) {
   const [row] = await tx
     .select()
     .from(exercises)
@@ -41,7 +38,7 @@ async function requireExercise(tx: Executor, userId: string, exerciseId: string)
   return row;
 }
 
-async function requireSession(tx: Executor, userId: string, sessionId: string) {
+async function requireSession(tx: DbExecutor, userId: string, sessionId: string) {
   const [row] = await tx
     .select()
     .from(workoutSessions)
@@ -152,7 +149,7 @@ export async function updateExercise(
 }
 
 async function resolveExerciseId(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   block: SessionExerciseInput,
 ): Promise<string> {
@@ -236,7 +233,7 @@ export async function deleteExercise(
 }
 
 async function insertSets(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   sessionExerciseId: string,
   rawSets: SessionExerciseInput["sets"],
@@ -271,7 +268,7 @@ async function insertSets(
  * the property the read side relies on to fold them back into a group.
  */
 async function insertGroupsAndExercises(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   sessionId: string,
   input: SessionInput,

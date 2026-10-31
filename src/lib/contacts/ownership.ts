@@ -1,8 +1,6 @@
-import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { contacts } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
-
-type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * Refuse a contact id that is missing or belongs to someone else.
@@ -11,7 +9,7 @@ type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
  * pass. A guessed id must not attach another user's person to this user's row.
  */
 export async function assertContactOwned(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   contactId: string | null | undefined,
 ): Promise<void> {

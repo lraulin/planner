@@ -1,5 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import {
   HOUSE_STATUSES,
   houses,
@@ -16,11 +17,7 @@ import type { HouseInput } from "./types";
 
 /** Houses are standalone records. Every write scopes by `userId`. */
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
-async function requireHouse(tx: Executor, userId: string, houseId: string) {
+async function requireHouse(tx: DbExecutor, userId: string, houseId: string) {
   const [row] = await tx
     .select()
     .from(houses)
@@ -30,7 +27,7 @@ async function requireHouse(tx: Executor, userId: string, houseId: string) {
   return row;
 }
 
-async function nextSortKey(tx: Executor, userId: string): Promise<string> {
+async function nextSortKey(tx: DbExecutor, userId: string): Promise<string> {
   const siblings = await tx
     .select({ sortKey: houses.sortKey })
     .from(houses)
@@ -105,7 +102,7 @@ const priorityEngine = letterRankEngine<{
  * Must run after `houseId` already exists as a row, and inside the caller's transaction.
  */
 async function assignHousePriority(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   houseId: string,
   letter: PriorityLetter | null,

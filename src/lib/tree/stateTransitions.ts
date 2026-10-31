@@ -15,7 +15,8 @@ import { cascadeStateChange, type CascadeNode } from "./completionCascade";
 import { rearmReminders } from "@/lib/reminders/arm";
 import { between } from "./sortKey";
 import { assertSupportsLifecycleState } from "./lifecycle";
-import { subtreeIds, type Executor } from "./nodeRows";
+import type { DbExecutor } from "@/db/executor";
+import { subtreeIds } from "./nodeRows";
 import { moveDates, nextAnchor, recurrenceOf, seriesEnds } from "./recurrenceCycle";
 import { applySettlePriorityClear } from "./priorityWrites";
 
@@ -64,7 +65,7 @@ import { applySettlePriorityClear } from "./priorityWrites";
  * Typing the real date into Date completed is how you say so — see `stateFromDates`.
  */
 export async function applyStateTransition(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   state: NodeState,
@@ -252,7 +253,7 @@ export async function applyStateTransition(
  * aiming at the same square.
  */
 async function syncDayLineOnCompletion(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   completedAt: Date,
@@ -266,7 +267,7 @@ async function syncDayLineOnCompletion(
  * `cancelled` so the check box can show an X rather than a tick.
  */
 async function syncDayLineOnCancel(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   at: Date,
@@ -276,7 +277,7 @@ async function syncDayLineOnCancel(
 
 /** Cross off the open day line (or write one for today) as completed or cancelled. */
 async function settleDayLine(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   at: Date,
@@ -317,7 +318,7 @@ async function settleDayLine(
 
 /** Append a line for a task to the end of a day. Silent if one is already there. */
 async function addDayLine(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   day: string,
@@ -360,7 +361,7 @@ async function addDayLine(
  * its completed one alone, which is right: that occurrence really was done.
  */
 async function reopenDayLine(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   now: Date,
@@ -479,7 +480,7 @@ export async function setState(
  * half-changed by a failure between two statements.
  */
 export async function reopenSettledAncestors(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   requested?: NodeState,
@@ -506,7 +507,7 @@ const CASCADE_SELECT = { id: nodes.id, parentId: nodes.parentId, state: nodes.st
  * rows to settle one task.
  */
 async function branchStates(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
 ): Promise<CascadeNode[]> {
@@ -537,7 +538,7 @@ async function branchStates(
  * recursive CTE: outlines are shallow, and this reads the same way the pure cascade does.
  */
 async function selfAndAncestors(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
 ): Promise<CascadeNode[]> {

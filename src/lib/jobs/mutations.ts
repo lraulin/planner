@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { jobs, type ExternalRef } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import {
@@ -36,11 +37,7 @@ const TEXT_FIELDS = [
 
 const DATE_LABELS = { start: "Start date", end: "End date" };
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
-async function requireJob(tx: Executor, userId: string, jobId: string) {
+async function requireJob(tx: DbExecutor, userId: string, jobId: string) {
   const [row] = await tx
     .select()
     .from(jobs)

@@ -14,7 +14,7 @@ import {
 import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
 import { shiftZonedDays } from "@/lib/schedule/zonedTime";
 import { rearmReminders } from "@/lib/reminders/arm";
-import type { Executor } from "./nodeRows";
+import type { DbExecutor } from "@/db/executor";
 
 /**
  * How a repeating task steps to its next occurrence: the rule, the dates it moves, and when
@@ -29,7 +29,7 @@ import type { Executor } from "./nodeRows";
  * Returns null for everything else — a project, a goal, a task with recurrence off — which
  * is the overwhelmingly common case and the one that must stay on the plain path.
  */
-export async function recurrenceOf(tx: Executor, userId: string, nodeId: string) {
+export async function recurrenceOf(tx: DbExecutor, userId: string, nodeId: string) {
   const [row] = await tx
     .select({
       frequency: taskDetails.recurrenceFrequency,

@@ -37,7 +37,7 @@
  */
 
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { dailyItems, nodes } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import { localDateKey, fromDateKey, toDateKey } from "@/lib/schedule/geometry";
@@ -46,16 +46,12 @@ import { laterShelf, ownShelf, shelfHolds, type Shelf } from "@/lib/tree/shelvin
 import { subtreeIdsVia } from "@/lib/tree/ancestry";
 import { between } from "@/lib/tree/sortKey";
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
 /**
  * The effective shelf on a node: its own, combined with every ancestor's, latest wins.
  * Mirror of the memoized walk in `derive.ts`, for the single-node path mutations take.
  */
 export async function effectiveShelfOf(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
 ): Promise<Shelf | null> {
@@ -87,7 +83,7 @@ export async function effectiveShelfOf(
 }
 
 /** A sort key placing a new row at the end of `day`. */
-async function endOfDay(tx: Executor, userId: string, day: string): Promise<string> {
+async function endOfDay(tx: DbExecutor, userId: string, day: string): Promise<string> {
   const [last] = await tx
     .select({ sortKey: dailyItems.sortKey })
     .from(dailyItems)
@@ -106,7 +102,7 @@ async function endOfDay(tx: Executor, userId: string, day: string): Promise<stri
  * It is idempotent, so calling it when nothing changed costs one query and does nothing.
  */
 export async function syncDayLineToTargetStart(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   /**
@@ -211,7 +207,7 @@ export async function syncDayLineToTargetStart(
  * on one row, and the CHECK already permits it.
  */
 export async function clearConflictingDescendantPlans(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
 ): Promise<void> {
@@ -276,7 +272,7 @@ export async function clearConflictingDescendantPlans(
  * through `applyStateTransition`; this is only for "this is no longer day work at all".
  */
 export async function clearOpenDayLinesForNode(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
 ): Promise<void> {
@@ -294,7 +290,7 @@ export async function clearOpenDayLinesForNode(
 
 /** Re-sync every task under (and including) `rootId` — used after re-parenting into a shelf. */
 export async function syncDayLinesInSubtree(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   rootId: string,
 ): Promise<void> {
@@ -334,7 +330,7 @@ export async function syncDayLinesInSubtree(
  * dragging its line to another one (`moveDailyItemToDay`) — so both refuse the same way.
  */
 export async function assertPlannableOn(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   day: string,
@@ -353,7 +349,7 @@ export async function assertPlannableOn(
 }
 
 export async function setDayPlan(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   day: string | null,

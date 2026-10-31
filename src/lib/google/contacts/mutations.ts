@@ -1,13 +1,11 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbTransaction } from "@/db/executor";
 import { contactItems, contacts, googleContactSyncs } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import { between } from "@/lib/tree/sortKey";
 import type { RemoteContactItem, RemoteGoogleContact } from "./mapping";
 import { planContactItems, planContactMirror } from "./mirror";
-
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export type AppliedContactSync = {
   inserted: number;
@@ -16,7 +14,7 @@ export type AppliedContactSync = {
 };
 
 async function nextItemSortKey(
-  tx: Tx,
+  tx: DbTransaction,
   userId: string,
   contactId: string,
   kind: RemoteContactItem["kind"],
@@ -36,7 +34,7 @@ async function nextItemSortKey(
 }
 
 async function syncContactItems(
-  tx: Tx,
+  tx: DbTransaction,
   userId: string,
   contactId: string,
   remote: RemoteContactItem[],

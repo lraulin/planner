@@ -9,6 +9,7 @@
 
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbTransaction } from "@/db/executor";
 import {
   amazonChargeMatches,
   amazonChargeOrders,
@@ -80,7 +81,7 @@ export async function persistAmazonSnapshot(
  * inventing a $0.00 charge for it would be inventing a payment.
  */
 async function ensureOrderTotalCharges(
-  tx: Executor,
+  tx: DbTransaction,
   userId: string,
   snapshot: AmazonSnapshot,
 ): Promise<number> {
@@ -258,11 +259,10 @@ function slimFromSnapshot(snapshot: AmazonSnapshot): SlimAmazonOrders {
   };
 }
 
-type Executor = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Counts = { created: number; updated: number; unchanged: number };
 
 async function upsertSubscriptions(
-  tx: Executor,
+  tx: DbTransaction,
   userId: string,
   snapshot: AmazonSnapshot,
 ): Promise<Counts> {
@@ -336,7 +336,7 @@ async function upsertSubscriptions(
 }
 
 async function upsertCharges(
-  tx: Executor,
+  tx: DbTransaction,
   userId: string,
   snapshot: AmazonSnapshot,
 ): Promise<Counts & { linksCreated: number }> {
@@ -428,7 +428,7 @@ async function upsertCharges(
 }
 
 async function addChargeOrders(
-  tx: Executor,
+  tx: DbTransaction,
   userId: string,
   chargeId: string,
   amazonOrderIds: readonly string[],

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import {
   financeAccounts,
   financeCaptureCoverage,
@@ -91,10 +92,6 @@ import {
  *    rows even if application-side bookkeeping is wrong.
  */
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
 /** Postgres caps a statement's bind parameters; these rows have 13 columns each. */
 const INSERT_CHUNK_ROWS = 500;
 
@@ -107,7 +104,7 @@ const INSERT_CHUNK_ROWS = 500;
  * creation.
  */
 async function resolveAccount(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   externalSource: string,
   account: ParsedAccount,
@@ -171,7 +168,7 @@ async function resolveAccount(
  * Import still never un-closes, and it never touches name / kind / institution.
  */
 async function markClosedIfNeeded(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   accountId: string,
   closedOn: string | null | undefined,
@@ -197,7 +194,7 @@ async function markClosedIfNeeded(
  * watermark already decides ownership — and simply does not move the headline (D4).
  */
 async function recordImportedPostedHeadline(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   accountId: string,
   fileRows: readonly ParsedTransaction[],
@@ -252,7 +249,7 @@ function optionalCents(cents: number | null | undefined): string | null {
 }
 
 async function persistStatements(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   accountId: string,
   feed: string,
@@ -362,7 +359,7 @@ function importMonths(
  */
 /** A `YYYY-MM-DD` day shifted by whole days. Noon UTC so no timezone can move the date. */
 async function existingOnAccount(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   accountId: string,
   incoming: readonly { transactionDate: string }[],
@@ -434,7 +431,7 @@ async function existingOnAccount(
 async function authorableFileRows<
   T extends { postedDate: string | null; transactionDate: string },
 >(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   accountId: string,
   rows: readonly T[],

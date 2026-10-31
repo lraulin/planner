@@ -1,5 +1,6 @@
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import {
   brainLinks,
   brainTags,
@@ -12,10 +13,6 @@ import { canonicalLink, planLink, type LinkRelation } from "./links";
 
 /** Brain is standalone per-user data. Every write scopes by `userId`. */
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
 const NAME_MAX = 200;
 const LABEL_MAX = 100;
 const PALETTE_SIZE = 8;
@@ -27,7 +24,7 @@ function cleanName(raw: string, what: string): string {
   return name;
 }
 
-async function requireThought(tx: Executor, userId: string, thoughtId: string) {
+async function requireThought(tx: DbExecutor, userId: string, thoughtId: string) {
   const [row] = await tx
     .select({ id: brainThoughts.id })
     .from(brainThoughts)
@@ -36,7 +33,7 @@ async function requireThought(tx: Executor, userId: string, thoughtId: string) {
   if (!row) throw new Error("Thought not found.");
 }
 
-async function requireType(tx: Executor, userId: string, typeId: string) {
+async function requireType(tx: DbExecutor, userId: string, typeId: string) {
   const [row] = await tx
     .select({ id: brainThoughtTypes.id })
     .from(brainThoughtTypes)
@@ -57,7 +54,7 @@ function pairWhere(userId: string, a: string, b: string) {
 
 /** Link two thoughts, or change how they are already linked — one row per pair. */
 async function linkIn(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   thoughtId: string,
   relation: LinkRelation,
@@ -171,7 +168,7 @@ export async function createThought(
   });
 }
 
-async function touch(tx: Executor, userId: string, thoughtId: string, set: object) {
+async function touch(tx: DbExecutor, userId: string, thoughtId: string, set: object) {
   const rows = await tx
     .update(brainThoughts)
     .set({ ...set, updatedAt: sql`now()` })
@@ -232,7 +229,7 @@ export async function deleteThought(userId: string, thoughtId: string) {
 }
 
 async function tagsIn(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   thoughtId: string,
   names: string[],

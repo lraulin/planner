@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { nodes, resultAreaDetails } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import { and, eq, inArray } from "drizzle-orm";
@@ -15,7 +16,6 @@ import {
   siblingKeys,
   sortKeyFor,
   subtreeIds,
-  type Executor,
 } from "./nodeRows";
 import { applyPriorityAssignments, siblingPriorityPool } from "./priorityWrites";
 
@@ -114,7 +114,7 @@ export async function moveNode(params: {
  * Other node types do not carry a category column.
  */
 async function applyCategoryToResultAreaSubtree(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   rootId: string,
   category: string | null,

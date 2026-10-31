@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import {
   goalDetails,
   nodeItems,
@@ -50,10 +51,6 @@ import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
  * nothing stops a hand-rolled request from including `nodeId` or `userId`, and spreading it
  * into `.set()` would honour them.
  */
-
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
 
 /**
  * Coerce a value that may have crossed the server-action boundary into a real `Date`.
@@ -328,7 +325,7 @@ const ITEM_KEYS = [
   "comments",
 ] as const;
 
-async function requireNode(tx: Executor, userId: string, nodeId: string) {
+async function requireNode(tx: DbExecutor, userId: string, nodeId: string) {
   const [node] = await tx
     .select({
       id: nodes.id,
@@ -352,7 +349,7 @@ async function requireNode(tx: Executor, userId: string, nodeId: string) {
   return node;
 }
 
-async function requireItem(tx: Executor, userId: string, itemId: string) {
+async function requireItem(tx: DbExecutor, userId: string, itemId: string) {
   const [item] = await tx
     .select({ id: nodeItems.id, nodeId: nodeItems.nodeId, kind: nodeItems.kind })
     .from(nodeItems)
@@ -368,7 +365,7 @@ async function requireItem(tx: Executor, userId: string, itemId: string) {
  * edited, so changing its association without changing the person does not trip the check.
  */
 async function assertContactUnusedOnNode(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   contactId: string | null | undefined,
@@ -392,7 +389,7 @@ async function assertContactUnusedOnNode(
 }
 
 async function assertItemContact(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   values: NodeItemValues | undefined,
@@ -908,7 +905,7 @@ function hasValues(set: object): boolean {
  * promotes it to the root; the subtree comes with it and inherits the new category.
  */
 async function applyResultAreaCategory(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   parentId: string | null,
@@ -964,7 +961,7 @@ async function applyResultAreaCategory(
 
 /** Sort keys already in one list, in order. */
 async function listKeys(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   kind: NodeItemKind,
@@ -983,7 +980,7 @@ async function listKeys(
 }
 
 async function sortKeyFor(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   kind: NodeItemKind,

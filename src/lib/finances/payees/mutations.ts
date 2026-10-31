@@ -15,6 +15,7 @@
 
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbTransaction } from "@/db/executor";
 import {
   financeBudgetCategories,
   financePayeeAliases,
@@ -697,11 +698,9 @@ export async function replaceCommitmentPayees(
   await applyClaimedPayees(userId, claim.id, ids);
 }
 
-type PayeeTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 /** Shared transaction body for envelope upserts and standalone picker edits. */
 export async function replaceCommitmentPayeesInTransaction(
-  tx: PayeeTransaction,
+  tx: DbTransaction,
   userId: string,
   claim: { id: string },
   payeeIds: readonly string[],

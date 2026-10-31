@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { nodes, timeCharts, weeklyPlanEntries, weeklyPlans } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import { startOfWeek } from "@/lib/schedule/geometry";
@@ -150,9 +151,6 @@ export type PlanEntryPatch = {
 
 export type PlanEntryBatchItem = PlanEntryPatch & { nodeId: string };
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-
 /**
  * Record what this plan decided about one node, creating the row on first write.
  *
@@ -186,7 +184,7 @@ export async function upsertPlanEntry(
 }
 
 async function upsertPlanEntryInTransaction(
-  tx: Db | Tx,
+  tx: DbExecutor,
   userId: string,
   planId: string,
   nodeId: string,
@@ -231,7 +229,7 @@ async function upsertPlanEntryInTransaction(
  * `setFocusArea`'s explicit step 1 decision, and goals and tasks have no MVP role.
  */
 async function syncProjectFocus(
-  tx: Db | Tx,
+  tx: DbExecutor,
   userId: string,
   nodeId: string,
   focus: boolean,

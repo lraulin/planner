@@ -1,5 +1,6 @@
 import { and, asc, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { contactItems, contacts } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import type { ContactItemKind, PriorityLetter } from "@/db/schema";
@@ -16,11 +17,7 @@ import type { ContactInput, ContactItemInput } from "./types";
  * work or the record of it.
  */
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
-async function requireContact(tx: Executor, userId: string, contactId: string) {
+async function requireContact(tx: DbExecutor, userId: string, contactId: string) {
   const [row] = await tx
     .select()
     .from(contacts)
@@ -30,7 +27,7 @@ async function requireContact(tx: Executor, userId: string, contactId: string) {
   return row;
 }
 
-async function requireItem(tx: Executor, userId: string, itemId: string) {
+async function requireItem(tx: DbExecutor, userId: string, itemId: string) {
   const [row] = await tx
     .select()
     .from(contactItems)
@@ -41,7 +38,7 @@ async function requireItem(tx: Executor, userId: string, itemId: string) {
 }
 
 async function nextSortKey(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   contactId: string,
   kind: ContactItemKind,
@@ -179,7 +176,7 @@ function itemPatch(input: ContactItemInput): Record<string, unknown> {
  * Postgres constraint violation in the user's face.
  */
 async function clearPrimary(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   contactId: string,
   kind: ContactItemKind,

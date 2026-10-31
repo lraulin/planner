@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { notes, type NewNote, type NoteFlag } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import { assertContactOwned } from "@/lib/contacts/ownership";
@@ -15,15 +16,11 @@ import type { NotePosition } from "./types";
  * notes even by guessing an id. Same contract as `src/lib/tree/mutations.ts`.
  */
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
 function parentMatches(parentId: string | null) {
   return parentId === null ? isNull(notes.parentId) : eq(notes.parentId, parentId);
 }
 
-async function requireNote(tx: Executor, userId: string, noteId: string) {
+async function requireNote(tx: DbExecutor, userId: string, noteId: string) {
   const [note] = await tx
     .select()
     .from(notes)
@@ -43,7 +40,7 @@ async function requireNote(tx: Executor, userId: string, noteId: string) {
  * that record would `set null` on this user's note.
  */
 async function assertLinksOwned(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   links: { nodeId?: string | null; contactId?: string | null },
 ): Promise<void> {
@@ -57,7 +54,7 @@ async function assertLinksOwned(
  * otherwise hide under a parent that had no expander when it was collapsed.
  */
 async function expandParent(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   parentId: string | null,
 ): Promise<void> {
@@ -72,7 +69,7 @@ async function expandParent(
 
 /** Sibling sort keys under `parentId`, in order. */
 async function siblingKeys(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   parentId: string | null,
 ): Promise<{ id: string; sortKey: string }[]> {
@@ -88,7 +85,7 @@ async function siblingKeys(
  * within its current parent does not treat itself as a neighbour.
  */
 async function sortKeyFor(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   parentId: string | null,
   position: NotePosition,
@@ -118,7 +115,7 @@ async function sortKeyFor(
 
 /** True when `candidateId` is `noteId` itself or sits somewhere beneath it. */
 async function isSelfOrDescendant(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   noteId: string,
   candidateId: string | null,

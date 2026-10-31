@@ -1,5 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { metricEntries, metrics, nodes } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import type { PriorityLetter } from "@/db/schema";
@@ -21,11 +22,7 @@ function requireMetricType(raw: string | undefined, fallback: MetricType): Metri
  * Entries cascade with the metric; metrics never cascade with outline nodes.
  */
 
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
-
-async function requireMetric(tx: Executor, userId: string, metricId: string) {
+async function requireMetric(tx: DbExecutor, userId: string, metricId: string) {
   const [row] = await tx
     .select()
     .from(metrics)
@@ -35,7 +32,7 @@ async function requireMetric(tx: Executor, userId: string, metricId: string) {
   return row;
 }
 
-async function requireEntry(tx: Executor, userId: string, entryId: string) {
+async function requireEntry(tx: DbExecutor, userId: string, entryId: string) {
   const [row] = await tx
     .select()
     .from(metricEntries)
@@ -47,7 +44,7 @@ async function requireEntry(tx: Executor, userId: string, entryId: string) {
 
 /** Owner must be this user's goal (or dream-as-goal). Null owner is fine. */
 async function assertOwnerOk(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   ownerNodeId: string | null | undefined,
 ): Promise<void> {
@@ -61,7 +58,7 @@ async function assertOwnerOk(
   if (node.type !== "goal") throw new Error("Metric owner must be a goal.");
 }
 
-async function nextSortKey(tx: Executor, userId: string): Promise<string> {
+async function nextSortKey(tx: DbExecutor, userId: string): Promise<string> {
   const siblings = await tx
     .select({ sortKey: metrics.sortKey })
     .from(metrics)

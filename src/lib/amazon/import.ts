@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import {
   amazonOrderItems,
   amazonOrders,
@@ -17,10 +18,6 @@ import {
   type SlimAmazonOrders,
   type SlimItem,
 } from "./types";
-
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
 
 const INSERT_CHUNK = 400;
 
@@ -206,7 +203,7 @@ function storedSummaryColumns(found: SummaryColumns): SummaryColumns {
 }
 
 async function upsertOrders(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   document: SlimAmazonOrders,
   enrich = false,
@@ -306,7 +303,7 @@ async function upsertOrders(
 }
 
 async function upsertItems(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   document: SlimAmazonOrders,
   enrich = false,
@@ -425,7 +422,7 @@ async function upsertItems(
 }
 
 async function upsertRefunds(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   document: SlimAmazonOrders,
 ): Promise<Counts> {
@@ -493,7 +490,7 @@ async function upsertRefunds(
 }
 
 async function upsertReturns(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   document: SlimAmazonOrders,
 ): Promise<Counts> {
@@ -558,7 +555,7 @@ async function upsertReturns(
 }
 
 async function upsertReplacements(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   document: SlimAmazonOrders,
 ): Promise<Counts> {
@@ -603,8 +600,8 @@ async function upsertReplacements(
 }
 
 async function insertChunks<T extends { externalId?: string }>(
-  tx: Executor,
-  table: Parameters<Executor["insert"]>[0],
+  tx: DbExecutor,
+  table: Parameters<DbExecutor["insert"]>[0],
   rows: T[],
 ): Promise<void> {
   const unique: T[] = [];

@@ -1,8 +1,6 @@
-import { db } from "@/db";
+import type { DbExecutor } from "@/db/executor";
 import { nodes } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
-
-type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * Refuse a link to an outline node that is missing or belongs to someone else.
@@ -14,7 +12,7 @@ type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
  * `set null` on this user's row. `undefined` (leave it) and `null` (clear it) pass.
  */
 export async function assertNodeOwned(
-  tx: Executor,
+  tx: DbExecutor,
   userId: string,
   nodeId: string | null | undefined,
   what = "Record",
