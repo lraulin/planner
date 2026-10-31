@@ -21,11 +21,8 @@ import { GridToolbar } from "@/components/grid/GridToolbar";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { INSERT_AFTER } from "@/lib/commands/chords";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { formatUsd } from "@/lib/finances/money";
 import type { BudgetEnvelopeCatalog } from "@/lib/finances/budget/queries";
@@ -50,6 +47,7 @@ import {
   suppliesColumns,
   type SuppliesColumnCtx,
 } from "./suppliesColumns";
+import { useGridSelection } from "@/components/grid/useFlatGrid";
 
 const SUPPLY_VIEWS = [{ id: "all", label: "All Supplies" }] as const;
 
@@ -238,20 +236,10 @@ export function SuppliesView({
     withAlternatives.every((id) => collapsedItemIds.has(id));
 
   const columns = useMemo(() => suppliesColumns(), []);
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        columns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [columns, gridRows],
+  const { distinctValues, order, onIdsChange, multi } = useGridSelection(
+    gridRows,
+    columns,
   );
-
-  const rowIds = useMemo(
-    () => gridRows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
-    [gridRows],
-  );
-  const { order, onIdsChange } = useNavigableIds(rowIds);
   const {
     selectedId,
     selectedIds,
@@ -261,7 +249,7 @@ export function SuppliesView({
     selectOne,
     selectAll,
     move,
-  } = useMultiSelect(order, null);
+  } = multi;
   const compact = useIsCompact();
   const selectedItemIds = useMemo(
     () => itemIdsOfSelection(selectedIds, items),

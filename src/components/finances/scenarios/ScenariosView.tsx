@@ -30,12 +30,9 @@ import { GridToolbar } from "@/components/grid/GridToolbar";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useToast } from "@/components/shell/ToastProvider";
 import { INSERT_AFTER, INSERT_CHILD } from "@/lib/commands/chords";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import { selectionMoveRoots } from "@/lib/grid/selection";
 import { budgetEnvelopeLabel } from "@/lib/finances/budget/hierarchy";
 import type { BudgetEnvelopeCatalog } from "@/lib/finances/budget/queries";
@@ -59,6 +56,7 @@ import {
   scenarioColumns,
   type ScenariosColumnCtx,
 } from "./scenarioColumns";
+import { useGridSelection } from "@/components/grid/useFlatGrid";
 
 const SCENARIO_VIEWS = [{ id: "all", label: "All rows" }] as const;
 
@@ -143,19 +141,10 @@ export function ScenariosView({
       ),
     [composition],
   );
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        columns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [columns, gridRows],
+  const { distinctValues, order, onIdsChange, multi } = useGridSelection(
+    gridRows,
+    columns,
   );
-  const rowIds = useMemo(
-    () => gridRows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
-    [gridRows],
-  );
-  const { order, onIdsChange } = useNavigableIds(rowIds);
   const {
     selectedId,
     selectedIds,
@@ -165,7 +154,7 @@ export function ScenariosView({
     selectOne,
     selectAll,
     move,
-  } = useMultiSelect(order, null);
+  } = multi;
 
   /** Re-read the whole workspace, optionally switching scenario. Reports errors inline. */
   const reload = useCallback(async (next?: string | null) => {
