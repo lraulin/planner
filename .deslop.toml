@@ -1,0 +1,23 @@
+# Deslop duplicate-code analysis — https://deslop.live/docs/configuration/
+#
+# Deslop (0.38) cannot accept a single finding: suppression is by file or by kind only. So
+# only files whose every repetition is deliberate belong here, each with the reason. A
+# reviewed-but-kept duplicate inside ordinary code stays visible.
+#
+# Keys Deslop does not recognise are ignored without a warning. After editing, re-run
+# `deslop . --notext --nohtml` and check that `clusters_hidden` moved.
+
+[defaults]
+report_hide = [
+  # Drizzle column declarations. Every table spells out its own columns and timestamps;
+  # the repetition is the schema's shape, not logic to share.
+  "src/db/schema.ts",
+  # Userscripts install into the browser one file at a time and cannot import a shared
+  # helper, so each carries its own clipboard write, search check and snapshot envelope.
+  "scripts/*.user.js",
+]
+
+[visibility]
+# Shape-only matches share structure but no tokens, and Deslop does not count them as
+# duplication. This hides them from the editor panel too.
+structural_only = "ignore"

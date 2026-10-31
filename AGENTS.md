@@ -90,6 +90,10 @@ it); Copilot gets it from the extension. Agent reference: <https://deslop.live/d
   `duplicates` again afterwards to confirm the cluster is gone.
 - **Never silence a finding** by widening thresholds, hiding a cluster, or reshaping code
   into a trivially different form. "This looks new" is the intuition the tool overrules.
+  The one sanctioned suppression is a `report_hide` entry in `.deslop.toml`, with its reason,
+  for a file whose _every_ repetition is deliberate — Deslop cannot accept a single finding,
+  so a reviewed-but-kept duplicate in ordinary code stays visible. Add one only with Lee's
+  agreement, and re-scan to check it took: Deslop ignores keys it does not know.
 - **If the server is unavailable**, read `.deslop/cache/live-report.json` (it may lag recent
   edits), or run the extension's bundled CLI from the repo root —
   `~/.vscode/extensions/nimblesite.deslop-live-*/bin/*/deslop . --notext --nohtml --no-color`
