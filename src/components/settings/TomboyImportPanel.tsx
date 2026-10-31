@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, useTransition } from "react";
 import { readJsonResponse } from "@/lib/http/readJson";
+import { ImportWarnings } from "@/components/settings/ImportWarnings";
 
 type ImportData = {
   created: number;
@@ -163,22 +164,7 @@ export function TomboyImportPanel({ embedded = false }: { embedded?: boolean } =
                 : ""}
               .
             </p>
-            {result.warnings.length > 0 ? (
-              <details className="mt-2">
-                <summary className="cursor-pointer text-ink-muted">
-                  {result.warnings.length} warning
-                  {result.warnings.length === 1 ? "" : "s"}
-                </summary>
-                <ul className="mt-1 list-inside list-disc text-ink-faint">
-                  {result.warnings.slice(0, 20).map((warning, index) => (
-                    <li key={`${index}-${warning.slice(0, 48)}`}>{warning}</li>
-                  ))}
-                  {result.warnings.length > 20 ? (
-                    <li>…and {result.warnings.length - 20} more</li>
-                  ) : null}
-                </ul>
-              </details>
-            ) : null}
+            <ImportWarnings warnings={result.warnings} />
           </div>
         ) : null}
       </div>

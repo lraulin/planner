@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { downloadTextFile } from "@/components/grid/downloadCsv";
 import { exportFilename } from "@/lib/grid/exportCsv";
 import { readJsonResponse } from "@/lib/http/readJson";
+import { ImportWarnings } from "@/components/settings/ImportWarnings";
 
 type ImportOk = {
   ok: true;
@@ -249,23 +250,7 @@ export function AchieveTransferPanel({
                   ".",
                 ].join("")}
             </p>
-            {result.warnings.length > 0 && (
-              <details className="mt-2">
-                <summary className="cursor-pointer text-ink-muted">
-                  {result.warnings.length} warning
-                  {result.warnings.length === 1 ? "" : "s"}
-                </summary>
-                <ul className="mt-1 list-inside list-disc text-ink-faint">
-                  {result.warnings.slice(0, 20).map((w, i) => (
-                    // Warnings often repeat the same text (same rule on many rows).
-                    <li key={`${i}-${w.slice(0, 48)}`}>{w}</li>
-                  ))}
-                  {result.warnings.length > 20 && (
-                    <li key="more">…and {result.warnings.length - 20} more</li>
-                  )}
-                </ul>
-              </details>
-            )}
+            <ImportWarnings warnings={result.warnings} />
             {result.skippedTables.length > 0 && result.created > 0 && (
               <p className="mt-1 text-ink-faint">
                 Skipped tables in file: {result.skippedTables.slice(0, 8).join(", ")}
