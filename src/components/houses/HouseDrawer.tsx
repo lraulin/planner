@@ -10,6 +10,7 @@ import { DrawerFooter, DrawerLeaveGuard } from "@/components/detail/Drawer";
 import { RecordDrawer } from "@/components/detail/RecordDrawer";
 import { useDrawerForm } from "@/components/detail/useDrawerForm";
 import { FormTabs } from "@/components/detail/FormTabs";
+import { catalogNotesTab } from "@/components/detail/catalogNotesTab";
 import {
   DecimalField,
   FieldGrid,
@@ -18,7 +19,6 @@ import {
   PriorityField,
   SelectField,
   Section,
-  TextArea,
   TextField,
 } from "@/components/detail/fields";
 import {
@@ -303,20 +303,7 @@ function HouseForm({
         </>
       ),
     },
-    {
-      id: "notes" as const,
-      label: "Notes",
-      render: () => (
-        <Section title="Notes">
-          <TextArea
-            label="Anything else worth keeping"
-            rows={12}
-            value={draft.notes}
-            onChange={(value) => patch("notes", value)}
-          />
-        </Section>
-      ),
-    },
+    catalogNotesTab(draft.notes, (value) => patch("notes", value)),
   ];
 
   return (

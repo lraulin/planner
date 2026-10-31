@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { EnvelopeIndicator } from "@/lib/finances/budget/indicator";
 import { formatUsd } from "@/lib/finances/money";
 
@@ -17,17 +18,31 @@ const FILL: Record<EnvelopeIndicator["pill"], string> = {
   gray: "bg-ink-faint/50",
 };
 
-function ClockIcon() {
+function IconFrame({ children }: { children: ReactNode }) {
   return (
     <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
-      <circle
-        cx="6"
-        cy="6"
-        r="4.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.25"
-      />
+      {children}
+    </svg>
+  );
+}
+
+function Ring() {
+  return (
+    <circle
+      cx="6"
+      cy="6"
+      r="4.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.25"
+    />
+  );
+}
+
+function ClockIcon() {
+  return (
+    <IconFrame>
+      <Ring />
       <path
         d="M6 3.5V6l2 1.25"
         fill="none"
@@ -35,13 +50,13 @@ function ClockIcon() {
         strokeWidth="1.25"
         strokeLinecap="round"
       />
-    </svg>
+    </IconFrame>
   );
 }
 
 function CheckIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
+    <IconFrame>
       <circle cx="6" cy="6" r="4.5" fill="currentColor" opacity="0.2" />
       <path
         d="M3.75 6.2 5.3 7.8 8.4 4.4"
@@ -51,30 +66,23 @@ function CheckIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-    </svg>
+    </IconFrame>
   );
 }
 
 function PieIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
-      <circle
-        cx="6"
-        cy="6"
-        r="4.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.25"
-      />
+    <IconFrame>
+      <Ring />
       <path d="M6 6V1.5A4.5 4.5 0 0 1 10 8.4Z" fill="currentColor" />
-    </svg>
+    </IconFrame>
   );
 }
 
 /** Zz — the target's ask is asleep for this month. */
 function SnoozeIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
+    <IconFrame>
       <path
         d="M2.25 2.25h4L2.25 6.75h4"
         fill="none"
@@ -91,22 +99,15 @@ function SnoozeIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-    </svg>
+    </IconFrame>
   );
 }
 
 /** Plus in a circle — assigned above this month's ask. */
 function ExtraIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
-      <circle
-        cx="6"
-        cy="6"
-        r="4.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.25"
-      />
+    <IconFrame>
+      <Ring />
       <path
         d="M6 3.75v4.5M3.75 6h4.5"
         fill="none"
@@ -114,7 +115,7 @@ function ExtraIcon() {
         strokeWidth="1.25"
         strokeLinecap="round"
       />
-    </svg>
+    </IconFrame>
   );
 }
 

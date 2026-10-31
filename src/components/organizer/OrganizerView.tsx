@@ -288,6 +288,17 @@ function OrganizerItemForm({
     return () => document.removeEventListener("keydown", onKeyDown);
   });
 
+  const itemPriorityField = (
+    <PriorityField
+      letter={priorityLetter}
+      rank={priorityRank}
+      onChange={(letter, rank) => {
+        setPriorityLetter(letter);
+        setPriorityRank(rank);
+      }}
+    />
+  );
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-surface">
       <main className="mx-auto flex min-h-full max-w-[72rem] flex-col px-4 pb-28 pt-5 sm:px-6 md:px-8 md:pb-24 md:pt-8">
@@ -352,14 +363,7 @@ function OrganizerItemForm({
             <div className="space-y-5">
               <FieldGrid columns={3}>
                 <TextField label="Name" value={name} onChange={setName} />
-                <PriorityField
-                  letter={priorityLetter}
-                  rank={priorityRank}
-                  onChange={(letter, rank) => {
-                    setPriorityLetter(letter);
-                    setPriorityRank(rank);
-                  }}
-                />
+                {itemPriorityField}
                 <EffortField
                   label="Effort"
                   value={effortMinutes}
@@ -424,14 +428,7 @@ function OrganizerItemForm({
             <div className="space-y-5">
               <FieldGrid>
                 <TextField label="Name" value={name} onChange={setName} />
-                <PriorityField
-                  letter={priorityLetter}
-                  rank={priorityRank}
-                  onChange={(letter, rank) => {
-                    setPriorityLetter(letter);
-                    setPriorityRank(rank);
-                  }}
-                />
+                {itemPriorityField}
               </FieldGrid>
               <ProjectDestination
                 label="Parent (result area, goal, or project)"
@@ -478,14 +475,7 @@ function OrganizerItemForm({
                 onEnd={setCalendarEnd}
               />
               <FieldGrid>
-                <PriorityField
-                  letter={priorityLetter}
-                  rank={priorityRank}
-                  onChange={(letter, rank) => {
-                    setPriorityLetter(letter);
-                    setPriorityRank(rank);
-                  }}
-                />
+                {itemPriorityField}
                 <ContextsField value={contexts} onChange={setContexts} />
               </FieldGrid>
               <ProjectDestination
