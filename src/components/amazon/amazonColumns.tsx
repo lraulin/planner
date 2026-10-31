@@ -9,6 +9,7 @@ import {
   type AmazonFieldId,
 } from "@/lib/amazon/amazonFields";
 import type { AmazonItemListRow } from "@/lib/amazon/types";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 export type AmazonColumnCtx = {
   onReview: (row: AmazonItemListRow) => void;
@@ -27,17 +28,6 @@ function accessors(id: AmazonFieldId) {
       ? (row: NodeGridRow<AmazonItemListRow>) => sortValue(row.node)
       : undefined,
   };
-}
-
-function Text({ value, muted = true }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
 }
 
 function Amount({ cents }: { cents: number | null }) {
@@ -135,7 +125,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     width: "6.5rem",
     ...accessors("register"),
     compact: "meta",
-    render: (row) => <Text value={row.node.registerLabel ?? ""} />,
+    render: (row) => <PlainTextCell value={row.node.registerLabel ?? ""} />,
   },
   {
     id: "unitPrice",
@@ -162,7 +152,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     ...accessors("payment"),
     compact: "meta",
     render: (row) => (
-      <Text
+      <PlainTextCell
         value={
           row.node.paymentLast4 ? `••${row.node.paymentLast4}` : row.node.paymentMethod
         }
@@ -176,7 +166,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     width: "3.5rem",
     ...accessors("sns"),
     compact: "meta",
-    render: (row) => <Text value={row.node.subscribeAndSave ? "Yes" : ""} />,
+    render: (row) => <PlainTextCell value={row.node.subscribeAndSave ? "Yes" : ""} />,
   },
   {
     id: "bill",
@@ -184,7 +174,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     width: "10rem",
     ...accessors("bill"),
     compact: "meta",
-    render: (row) => <Text value={row.node.billName ?? ""} />,
+    render: (row) => <PlainTextCell value={row.node.billName ?? ""} />,
   },
   {
     id: "match",
@@ -205,7 +195,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
           Review
         </button>
       ) : (
-        <Text value={row.node.matchLabel ?? ""} />
+        <PlainTextCell value={row.node.matchLabel ?? ""} />
       ),
   },
   {
@@ -214,7 +204,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     width: "7rem",
     ...accessors("status"),
     compact: "meta",
-    render: (row) => <Text value={row.node.orderStatus} />,
+    render: (row) => <PlainTextCell value={row.node.orderStatus} />,
   },
   {
     id: "channel",
@@ -223,7 +213,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     ...accessors("channel"),
     compact: "meta",
     render: (row) => (
-      <Text value={row.node.channel === "digital" ? "Digital" : "Retail"} />
+      <PlainTextCell value={row.node.channel === "digital" ? "Digital" : "Retail"} />
     ),
   },
   {
@@ -232,7 +222,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     width: "7rem",
     ...accessors("website"),
     compact: "meta",
-    render: (row) => <Text value={row.node.website} />,
+    render: (row) => <PlainTextCell value={row.node.website} />,
   },
   {
     id: "orderId",
@@ -240,7 +230,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     width: "10rem",
     ...accessors("orderId"),
     compact: "meta",
-    render: (row) => <Text value={row.node.amazonOrderId} />,
+    render: (row) => <PlainTextCell value={row.node.amazonOrderId} />,
   },
   {
     id: "asin",
@@ -248,7 +238,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     width: "7rem",
     ...accessors("asin"),
     compact: "meta",
-    render: (row) => <Text value={row.node.asin} />,
+    render: (row) => <PlainTextCell value={row.node.asin} />,
   },
   {
     id: "refunded",
@@ -256,6 +246,6 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     width: "5.5rem",
     ...accessors("refunded"),
     compact: "meta",
-    render: (row) => <Text value={row.node.refundCount > 0 ? "Yes" : ""} />,
+    render: (row) => <PlainTextCell value={row.node.refundCount > 0 ? "Yes" : ""} />,
   },
 ];

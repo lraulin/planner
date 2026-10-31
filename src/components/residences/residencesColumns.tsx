@@ -3,6 +3,7 @@
 import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
 import type { ResidenceGridRow } from "@/lib/residences/types";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 export type ResidencesColumnCtx = Record<string, never>;
 
@@ -16,17 +17,6 @@ export const RESIDENCES_COLUMN_IDS = [
   "address",
   "landlord",
 ] as const;
-
-function Text({ value, muted = true }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
-}
 
 /** Residences are read-only in the grid; the full address belongs in the drawer. */
 export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>[] = [
@@ -55,7 +45,7 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
     filterValue: (row) => row.node.country || null,
     sortValue: (row) => row.node.country.toLowerCase(),
     compact: "meta",
-    render: (row) => <Text value={row.node.country} />,
+    render: (row) => <PlainTextCell value={row.node.country} />,
   },
   {
     id: "movedIn",
@@ -113,7 +103,7 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
     filterValue: (row) => row.node.housingType || null,
     sortValue: (row) => row.node.housingType.toLowerCase(),
     compact: "hidden",
-    render: (row) => <Text value={row.node.housingType} />,
+    render: (row) => <PlainTextCell value={row.node.housingType} />,
   },
   {
     id: "address",
@@ -123,7 +113,7 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
     filterValue: (row) => row.node.address || null,
     sortValue: (row) => row.node.address.toLowerCase(),
     compact: "hidden",
-    render: (row) => <Text value={row.node.address} />,
+    render: (row) => <PlainTextCell value={row.node.address} />,
   },
   {
     id: "landlord",
@@ -133,6 +123,6 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
     filterValue: (row) => row.node.landlordName || null,
     sortValue: (row) => row.node.landlordName.toLowerCase(),
     compact: "hidden",
-    render: (row) => <Text value={row.node.landlordName} />,
+    render: (row) => <PlainTextCell value={row.node.landlordName} />,
   },
 ];

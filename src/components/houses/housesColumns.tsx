@@ -10,6 +10,7 @@ import { priorityOrderValue } from "@/lib/priority/order";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { formatPriority } from "@/lib/tree/format";
 import { formatPostalAddress } from "@/lib/address";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 export type HousesColumnCtx = Record<string, never>;
 
@@ -35,17 +36,6 @@ export const HOUSES_COLUMN_IDS = [
   "notes",
   "updated",
 ] as const;
-
-function Text({ value, muted = true }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
-}
 
 const TRI_STATE_LABELS: Record<string, string> = {
   yes: "Yes",
@@ -108,7 +98,7 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
       HOUSE_STATUS_LABELS[value as keyof typeof HOUSE_STATUS_LABELS] ?? value,
     sortValue: (row) => HOUSE_STATUS_LABELS[row.node.status],
     compact: "meta",
-    render: (row) => <Text value={HOUSE_STATUS_LABELS[row.node.status]} />,
+    render: (row) => <PlainTextCell value={HOUSE_STATUS_LABELS[row.node.status]} />,
   },
   {
     id: "address",
@@ -344,7 +334,7 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     filterKind: "text",
     filterValue: (row) => row.node.city || null,
     sortValue: (row) => row.node.city.toLowerCase(),
-    render: (row) => <Text value={row.node.city} />,
+    render: (row) => <PlainTextCell value={row.node.city} />,
   },
   {
     id: "notes",
@@ -354,7 +344,7 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     filterKind: "text",
     filterValue: (row) => row.node.notes || null,
     sortValue: (row) => row.node.notes.toLowerCase(),
-    render: (row) => <Text value={row.node.notes} />,
+    render: (row) => <PlainTextCell value={row.node.notes} />,
   },
   {
     id: "updated",

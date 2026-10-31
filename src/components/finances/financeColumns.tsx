@@ -16,6 +16,7 @@ import { categoryAssignmentRefusal } from "@/lib/finances/categoryEligibility";
 import type { EnvelopeCatalog } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind } from "@/db/schema";
 import { CategorySelect } from "./CategorySelect";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 /**
  * What the Envelope column needs. Every other column is pure presentation, which is why this
@@ -50,17 +51,6 @@ function accessors(id: RegisterFieldId) {
       ? (row: NodeGridRow<RegisterTransactionRow>) => sortValue(row.node)
       : undefined,
   };
-}
-
-function Text({ value, muted = true }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
 }
 
 /**
@@ -125,7 +115,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     width: "13rem",
     ...accessors("account"),
     compact: "meta",
-    render: (row) => <Text value={row.node.accountName} />,
+    render: (row) => <PlainTextCell value={row.node.accountName} />,
   },
   {
     id: "description",
@@ -196,7 +186,10 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     ...accessors("payee"),
     compact: "meta",
     render: (row) => (
-      <Text value={effectiveMerchant(row.node)} muted={row.node.payeeId === null} />
+      <PlainTextCell
+        value={effectiveMerchant(row.node)}
+        muted={row.node.payeeId === null}
+      />
     ),
   },
   {
@@ -267,7 +260,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     ...accessors("flow"),
     compact: "hidden",
     render: (row) => (
-      <Text
+      <PlainTextCell
         value={flowLabel(effectiveFlow(row.node))}
         muted={row.node.flowOverride === null}
       />
@@ -279,7 +272,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     width: "12rem",
     ...accessors("sourceCategory"),
     compact: "hidden",
-    render: (row) => <Text value={row.node.sourceCategory} />,
+    render: (row) => <PlainTextCell value={row.node.sourceCategory} />,
   },
   {
     id: "amount",
@@ -345,7 +338,9 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     // database query.
     ...accessors("source"),
     compact: "hidden",
-    render: (row) => <Text value={feedLabel(row.node.externalSource ?? null)} />,
+    render: (row) => (
+      <PlainTextCell value={feedLabel(row.node.externalSource ?? null)} />
+    ),
   },
   {
     id: "notes",
@@ -353,6 +348,6 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     width: "16rem",
     ...accessors("notes"),
     compact: "hidden",
-    render: (row) => <Text value={row.node.notes} />,
+    render: (row) => <PlainTextCell value={row.node.notes} />,
   },
 ];

@@ -4,6 +4,7 @@ import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
 import { formatUsd } from "@/lib/finances/money";
 import type { StatementViewRow } from "@/lib/finances/types";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 export type StatementColumnCtx = Record<string, never>;
 
@@ -22,17 +23,6 @@ export const STATEMENT_COLUMN_IDS = [
   "fees",
   "due",
 ] as const;
-
-function Text({ value, muted = false }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
-}
 
 function Amount({ cents, warn = false }: { cents: number | null; warn?: boolean }) {
   if (cents === null) return <span className="text-[0.8125rem] text-ink-muted">—</span>;
@@ -57,7 +47,7 @@ export const statementColumns: ColumnDef<StatementColumnCtx, StatementViewRow>[]
     filterValue: (row) => row.node.accountName,
     sortValue: (row) => row.node.accountName,
     compact: "primary",
-    render: (row) => <Text value={row.node.accountName} />,
+    render: (row) => <PlainTextCell value={row.node.accountName} muted={false} />,
   },
   {
     id: "periodEnd",
@@ -162,7 +152,7 @@ export const statementColumns: ColumnDef<StatementColumnCtx, StatementViewRow>[]
       row.node.paymentDueDate ? (
         <DateText dateKey={row.node.paymentDueDate} />
       ) : (
-        <Text value="" muted />
+        <PlainTextCell value="" />
       ),
   },
 ];

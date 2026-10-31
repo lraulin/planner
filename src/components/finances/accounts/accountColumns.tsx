@@ -10,6 +10,7 @@ import { UrlLink } from "@/components/url/UrlLink";
 import { toDateKey } from "@/lib/schedule/geometry";
 
 import { type PendingRow } from "@/lib/finances/workingBalance";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 export type AccountColumnCtx = {
   pending: readonly PendingRow[];
 };
@@ -25,17 +26,6 @@ export const ACCOUNT_COLUMN_IDS = [
   "source",
   "budget",
 ] as const;
-
-function Text({ value, muted = true }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
-}
 
 /**
  * The account name, linked to the bank site when one is stored. The link is the fast way
@@ -73,7 +63,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     filterValue: (row) => accountKindLabel(row.node.kind),
     sortValue: (row) => accountKindLabel(row.node.kind),
     compact: "meta",
-    render: (row) => <Text value={accountKindLabel(row.node.kind)} />,
+    render: (row) => <PlainTextCell value={accountKindLabel(row.node.kind)} />,
   },
   {
     id: "institution",
@@ -83,7 +73,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     filterValue: (row) => row.node.institution || null,
     sortValue: (row) => row.node.institution.toLowerCase(),
     compact: "meta",
-    render: (row) => <Text value={row.node.institution} />,
+    render: (row) => <PlainTextCell value={row.node.institution} />,
   },
   {
     id: "lastFour",
@@ -93,7 +83,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     filterValue: (row) => row.node.externalKey || null,
     sortValue: (row) => row.node.externalKey,
     compact: "meta",
-    render: (row) => <Text value={row.node.externalKey} />,
+    render: (row) => <PlainTextCell value={row.node.externalKey} />,
   },
   {
     id: "url",
@@ -132,7 +122,9 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     filterValue: (row) => (row.node.offBudget ? "Off budget" : "On budget"),
     sortValue: (row) => (row.node.offBudget ? 1 : 0),
     compact: "meta",
-    render: (row) => <Text value={row.node.offBudget ? "Off budget" : "On budget"} />,
+    render: (row) => (
+      <PlainTextCell value={row.node.offBudget ? "Off budget" : "On budget"} />
+    ),
   },
   {
     id: "balance",
@@ -208,7 +200,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     sortValue: (row) =>
       row.node.syncedBalanceAsOf?.toISOString() ?? row.node.statementPeriodEnd,
     render: (row) => (
-      <Text
+      <PlainTextCell
         value={
           row.node.syncedBalanceAsOf
             ? new Date(row.node.syncedBalanceAsOf).toLocaleString()
@@ -234,7 +226,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
           Reconnect bank
         </NavLink>
       ) : (
-        <Text value={row.node.freshness} />
+        <PlainTextCell value={row.node.freshness} />
       ),
   },
   {
@@ -257,6 +249,6 @@ export const accountColumns: ColumnDef<AccountColumnCtx, OperationalAccount>[] =
     filterKind: "enum",
     filterValue: (row) => row.node.balanceSourceLabel,
     sortValue: (row) => row.node.balanceSourceLabel,
-    render: (row) => <Text value={row.node.balanceSourceLabel} />,
+    render: (row) => <PlainTextCell value={row.node.balanceSourceLabel} />,
   },
 ];

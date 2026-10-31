@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@/components/grid/columns";
 import type { FindResult } from "@/lib/find/types";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 export type FindColumnCtx = Record<string, never>;
 
@@ -10,17 +11,6 @@ export const FIND_COLUMN_IDS = ["type", "name", "where", "field", "match"] as co
 /** The Field column joins every field that matched, since a record appears only once. */
 function hitLabels(row: FindResult): string {
   return row.hits.map((hit) => hit.label).join(", ");
-}
-
-function Text({ value, muted = true }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
 }
 
 export type FindColumn = ColumnDef<FindColumnCtx, FindResult>;
@@ -42,7 +32,7 @@ export const findColumns: FindColumn[] = [
     filterValue: (row) => row.node.typeLabel,
     sortValue: (row) => row.node.typeLabel.toLowerCase(),
     compact: "meta",
-    render: (row) => <Text value={row.node.typeLabel} />,
+    render: (row) => <PlainTextCell value={row.node.typeLabel} />,
   },
   {
     id: "name",
@@ -70,7 +60,7 @@ export const findColumns: FindColumn[] = [
     filterValue: (row) => row.node.where || null,
     sortValue: (row) => row.node.where.toLowerCase(),
     compact: "meta",
-    render: (row) => <Text value={row.node.where} />,
+    render: (row) => <PlainTextCell value={row.node.where} />,
   },
   {
     id: "field",
@@ -79,7 +69,7 @@ export const findColumns: FindColumn[] = [
     filterKind: "text",
     filterValue: (row) => hitLabels(row.node) || null,
     sortValue: (row) => hitLabels(row.node).toLowerCase(),
-    render: (row) => <Text value={hitLabels(row.node)} />,
+    render: (row) => <PlainTextCell value={hitLabels(row.node)} />,
   },
   {
     id: "match",
@@ -89,6 +79,6 @@ export const findColumns: FindColumn[] = [
     filterValue: (row) => row.node.hits[0]?.snippet ?? null,
     sortValue: (row) => (row.node.hits[0]?.snippet ?? "").toLowerCase(),
     compact: "meta",
-    render: (row) => <Text value={row.node.hits[0]?.snippet ?? ""} />,
+    render: (row) => <PlainTextCell value={row.node.hits[0]?.snippet ?? ""} />,
   },
 ];

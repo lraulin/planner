@@ -4,6 +4,7 @@ import type { ColumnDef } from "@/components/grid/columns";
 import { formatUsd } from "@/lib/finances/money";
 import { autoCategorySummary } from "@/lib/finances/payees/autoCategory";
 import type { PayeeRow } from "@/lib/finances/payees/queries";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 export type PayeeColumnCtx = {
   compact: boolean;
@@ -19,17 +20,6 @@ export const PAYEE_COLUMN_IDS = [
   "autoCategory",
   "envelope",
 ] as const;
-
-function Text({ value, muted = true }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
-}
 
 /** Every spelling this payee answers to, so a wrong grouping is visible without opening it. */
 function aliasSummary(row: PayeeRow): string {
@@ -48,7 +38,7 @@ export const payeeColumns: ColumnDef<PayeeColumnCtx, PayeeRow>[] = [
     compact: "primary",
     render: (row, ctx) =>
       ctx.compact ? (
-        <Text value={row.node.name} muted={false} />
+        <PlainTextCell value={row.node.name} muted={false} />
       ) : (
         <input
           key={row.node.name}
@@ -76,8 +66,8 @@ export const payeeColumns: ColumnDef<PayeeColumnCtx, PayeeRow>[] = [
       const summary = aliasSummary(row.node);
       // A payee with no alias claims nothing and will never be resolved onto a row. Saying so
       // here beats leaving a blank cell that reads as "no data".
-      if (summary === "") return <Text value="no spellings claimed" />;
-      return <Text value={summary} />;
+      if (summary === "") return <PlainTextCell value="no spellings claimed" />;
+      return <PlainTextCell value={summary} />;
     },
   },
   {
@@ -114,7 +104,7 @@ export const payeeColumns: ColumnDef<PayeeColumnCtx, PayeeRow>[] = [
     filterValue: (row) => autoCategorySummary(row.node),
     sortValue: (row) => autoCategorySummary(row.node).toLowerCase(),
     compact: "meta",
-    render: (row) => <Text value={autoCategorySummary(row.node)} />,
+    render: (row) => <PlainTextCell value={autoCategorySummary(row.node)} />,
   },
   {
     id: "envelope",
@@ -124,6 +114,6 @@ export const payeeColumns: ColumnDef<PayeeColumnCtx, PayeeRow>[] = [
     filterValue: (row) => row.node.claim?.name ?? null,
     sortValue: (row) => (row.node.claim?.name ?? "").toLowerCase(),
     compact: "meta",
-    render: (row) => <Text value={row.node.claim?.name ?? ""} />,
+    render: (row) => <PlainTextCell value={row.node.claim?.name ?? ""} />,
   },
 ];

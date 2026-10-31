@@ -4,6 +4,7 @@ import type { ColumnDef } from "@/components/grid/columns";
 import type { ContactListRow } from "@/lib/contacts/types";
 import { DateText } from "@/components/date/DateText";
 import { localDateKey } from "@/lib/schedule/geometry";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 /**
  * The Contacts grid's columns. Read-only, unlike the other list grids: a contact's fields
@@ -24,17 +25,6 @@ export const CONTACTS_COLUMN_IDS = [
   "contexts",
   "open",
 ] as const;
-
-function Text({ value, muted }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
-}
 
 export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
   {
@@ -61,7 +51,7 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
     filterKind: "text",
     filterValue: (row) => row.node.company || null,
     sortValue: (row) => row.node.company.toLowerCase(),
-    render: (row) => <Text value={row.node.company} muted />,
+    render: (row) => <PlainTextCell value={row.node.company} />,
   },
   {
     id: "jobTitle",
@@ -70,7 +60,7 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
     filterKind: "text",
     filterValue: (row) => row.node.jobTitle || null,
     sortValue: (row) => row.node.jobTitle.toLowerCase(),
-    render: (row) => <Text value={row.node.jobTitle} muted />,
+    render: (row) => <PlainTextCell value={row.node.jobTitle} />,
   },
   {
     id: "phone",
@@ -119,7 +109,7 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
     filterKind: "text",
     filterValue: (row) => row.node.primaryCity || null,
     sortValue: (row) => row.node.primaryCity.toLowerCase(),
-    render: (row) => <Text value={row.node.primaryCity} muted />,
+    render: (row) => <PlainTextCell value={row.node.primaryCity} />,
   },
   {
     id: "group",
@@ -128,7 +118,7 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
     filterKind: "enum",
     filterValue: (row) => row.node.groupName || null,
     sortValue: (row) => row.node.groupName.toLowerCase(),
-    render: (row) => <Text value={row.node.groupName} muted />,
+    render: (row) => <PlainTextCell value={row.node.groupName} />,
   },
   {
     id: "contexts",
@@ -136,7 +126,7 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
     width: "9rem",
     filterKind: "text",
     filterValue: (row) => row.node.contexts.join(", ") || null,
-    render: (row) => <Text value={row.node.contexts.join(", ")} muted />,
+    render: (row) => <PlainTextCell value={row.node.contexts.join(", ")} />,
   },
   {
     id: "open",

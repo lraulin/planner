@@ -5,6 +5,7 @@ import { DateText } from "@/components/date/DateText";
 import { DateKeyCell, TextCell } from "@/components/grid/cells";
 import { daysSince, elapsedParts, formatElapsed } from "@/lib/timeline/elapsed";
 import type { ChronologyRow, ChronologySource } from "@/lib/timeline/types";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 export type TimelineColumnCtx = {
   /** The browser's today, or null before hydration. Both computed columns need it. */
@@ -36,17 +37,6 @@ const SOURCE_LABELS: Record<ChronologySource, string> = {
 /** The record id behind an editable row, or null when the row is derived. */
 function eventIdOf(row: ChronologyRow): string | null {
   return row.source === "event" ? row.id.slice("event:".length) : null;
-}
-
-function Text({ value }: { value: string }) {
-  return (
-    <span
-      className="truncate text-[0.8125rem] text-ink-muted"
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
 }
 
 /**
@@ -130,7 +120,7 @@ export const timelineColumns: ColumnDef<TimelineColumnCtx, ChronologyRow>[] = [
           onChange={(value) => ctx.onEditEvent(eventId, { category: value })}
         />
       ) : (
-        <Text value={row.node.category} />
+        <PlainTextCell value={row.node.category} />
       );
     },
   },
@@ -177,7 +167,7 @@ export const timelineColumns: ColumnDef<TimelineColumnCtx, ChronologyRow>[] = [
     filterValue: (row) => SOURCE_LABELS[row.node.source],
     sortValue: (row) => SOURCE_LABELS[row.node.source],
     compact: "hidden",
-    render: (row) => <Text value={SOURCE_LABELS[row.node.source]} />,
+    render: (row) => <PlainTextCell value={SOURCE_LABELS[row.node.source]} />,
   },
   {
     id: "notes",
@@ -196,7 +186,7 @@ export const timelineColumns: ColumnDef<TimelineColumnCtx, ChronologyRow>[] = [
           onChange={(value) => ctx.onEditEvent(eventId, { notes: value })}
         />
       ) : (
-        <Text value={row.node.notes} />
+        <PlainTextCell value={row.node.notes} />
       );
     },
   },

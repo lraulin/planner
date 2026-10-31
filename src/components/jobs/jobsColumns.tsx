@@ -3,6 +3,7 @@
 import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
 import type { JobGridRow } from "@/lib/jobs/types";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 export type JobsColumnCtx = Record<string, never>;
 
@@ -17,17 +18,6 @@ export const JOBS_COLUMN_IDS = [
   "supervisor",
   "reason",
 ] as const;
-
-function Text({ value, muted = true }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
-}
 
 /** Jobs are read-only in the grid; twenty-five fields belong in the drawer. */
 export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
@@ -54,7 +44,7 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
     filterValue: (row) => row.node.jobTitle || null,
     sortValue: (row) => row.node.jobTitle.toLowerCase(),
     compact: "meta",
-    render: (row) => <Text value={row.node.jobTitle} />,
+    render: (row) => <PlainTextCell value={row.node.jobTitle} />,
   },
   {
     id: "start",
@@ -115,7 +105,7 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
     filterValue: (row) => row.node.employmentType || null,
     sortValue: (row) => row.node.employmentType.toLowerCase(),
     compact: "hidden",
-    render: (row) => <Text value={row.node.employmentType} />,
+    render: (row) => <PlainTextCell value={row.node.employmentType} />,
   },
   {
     id: "location",
@@ -125,7 +115,7 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
     filterValue: (row) => row.node.location || null,
     sortValue: (row) => row.node.location.toLowerCase(),
     compact: "hidden",
-    render: (row) => <Text value={row.node.location} />,
+    render: (row) => <PlainTextCell value={row.node.location} />,
   },
   {
     id: "supervisor",
@@ -135,7 +125,7 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
     filterValue: (row) => row.node.supervisorName || null,
     sortValue: (row) => row.node.supervisorName.toLowerCase(),
     compact: "hidden",
-    render: (row) => <Text value={row.node.supervisorName} />,
+    render: (row) => <PlainTextCell value={row.node.supervisorName} />,
   },
   {
     id: "reason",
@@ -145,6 +135,6 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
     filterValue: (row) => row.node.reasonForLeaving || null,
     sortValue: (row) => row.node.reasonForLeaving.toLowerCase(),
     compact: "hidden",
-    render: (row) => <Text value={row.node.reasonForLeaving} />,
+    render: (row) => <PlainTextCell value={row.node.reasonForLeaving} />,
   },
 ];

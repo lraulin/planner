@@ -5,6 +5,7 @@ import { DateText } from "@/components/date/DateText";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { formatEffort } from "@/lib/tree/format";
 import type { ResourceListRow } from "@/lib/resources/types";
+import { PlainTextCell } from "@/components/grid/PlainTextCell";
 
 export type ResourcesColumnCtx = Record<string, never>;
 
@@ -18,17 +19,6 @@ export const RESOURCES_COLUMN_IDS = [
   "description",
   "updated",
 ] as const;
-
-function Text({ value, muted = true }: { value: string; muted?: boolean }) {
-  return (
-    <span
-      className={`truncate text-[0.8125rem] ${muted ? "text-ink-muted" : "text-ink"}`}
-      title={value || undefined}
-    >
-      {value}
-    </span>
-  );
-}
 
 function effort(value: number): string {
   return formatEffort(value) || "0";
@@ -59,7 +49,7 @@ export const resourcesColumns: ColumnDef<ResourcesColumnCtx, ResourceListRow>[] 
     filterValue: (row) => row.node.contactName,
     sortValue: (row) => row.node.contactName?.toLowerCase() ?? null,
     compact: "meta",
-    render: (row) => <Text value={row.node.contactName ?? ""} />,
+    render: (row) => <PlainTextCell value={row.node.contactName ?? ""} />,
   },
   {
     id: "working",
@@ -129,7 +119,7 @@ export const resourcesColumns: ColumnDef<ResourcesColumnCtx, ResourceListRow>[] 
     filterValue: (row) => row.node.description || null,
     sortValue: (row) => row.node.description.toLowerCase(),
     compact: "hidden",
-    render: (row) => <Text value={row.node.description} />,
+    render: (row) => <PlainTextCell value={row.node.description} />,
   },
   {
     id: "updated",
