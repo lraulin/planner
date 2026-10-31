@@ -1,0 +1,62 @@
+import type { NodeItem } from "@/db/schema";
+
+/**
+ * A complete `NodeItem` for a pure test: every column blank, `sortKey` equal to the id, and
+ * whatever the test cares about in `overrides`.
+ */
+export function nodeItem(
+  overrides: Partial<NodeItem> & Pick<NodeItem, "id">,
+): NodeItem {
+  return {
+    userId: "u",
+    nodeId: "n",
+    kind: "benefit",
+    sortKey: overrides.id,
+    priorityLetter: null,
+    priorityRank: null,
+    title: "",
+    description: "",
+    criteria: "",
+    stakeholders: "",
+    itemType: null,
+    stake: "",
+    severity: null,
+    probability: null,
+    detection: "",
+    prevention: "",
+    mitigation: "",
+    advantages: "",
+    disadvantages: "",
+    decision: "",
+    idealCandidate: "",
+    candidates: "",
+    filled: false,
+    filledBy: "",
+    association: "",
+    contact: "",
+    contactId: null,
+    source: "",
+    resolution: "",
+    resolved: false,
+    url: "",
+    purpose: "",
+    strategy: "",
+    people: "",
+    completed: false,
+    received: false,
+    conditions: "",
+    awarded: false,
+    reason: "",
+    active: true,
+    category: "",
+    question: "",
+    target: "",
+    assignedTo: "",
+    entryDate: null,
+    score: null,
+    comments: "",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    ...overrides,
+  };
+}

@@ -1,62 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { NodeItem } from "@/db/schema";
+import { nodeItem } from "@/lib/testing/nodeItem";
 import { cycleItemSort, defaultItemSort, itemSortValue, sortItems } from "./itemSort";
-
-/** Minimal row for sort tests — only the fields sortItems actually reads. */
-function item(overrides: Partial<NodeItem> & Pick<NodeItem, "id">): NodeItem {
-  return {
-    userId: "u",
-    nodeId: "n",
-    kind: "benefit",
-    sortKey: overrides.id,
-    priorityLetter: null,
-    priorityRank: null,
-    title: "",
-    description: "",
-    criteria: "",
-    stakeholders: "",
-    itemType: null,
-    stake: "",
-    severity: null,
-    probability: null,
-    detection: "",
-    prevention: "",
-    mitigation: "",
-    advantages: "",
-    disadvantages: "",
-    decision: "",
-    idealCandidate: "",
-    candidates: "",
-    filled: false,
-    filledBy: "",
-    association: "",
-    contact: "",
-    contactId: null,
-    source: "",
-    resolution: "",
-    resolved: false,
-    url: "",
-    purpose: "",
-    strategy: "",
-    people: "",
-    completed: false,
-    received: false,
-    conditions: "",
-    awarded: false,
-    reason: "",
-    active: true,
-    category: "",
-    question: "",
-    target: "",
-    assignedTo: "",
-    entryDate: null,
-    score: null,
-    comments: "",
-    createdAt: new Date(0),
-    updatedAt: new Date(0),
-    ...overrides,
-  };
-}
 
 describe("defaultItemSort", () => {
   it("defaults to priority ascending when Pri is a column", () => {
@@ -96,10 +40,10 @@ describe("cycleItemSort", () => {
 describe("itemSortValue / sortItems", () => {
   it("orders A before B before blank, with ranks inside a letter", () => {
     const rows = [
-      item({ id: "1", priorityLetter: "B", priorityRank: null }),
-      item({ id: "2", priorityLetter: null, priorityRank: null }),
-      item({ id: "3", priorityLetter: "A", priorityRank: 2 }),
-      item({ id: "4", priorityLetter: "A", priorityRank: 1 }),
+      nodeItem({ id: "1", priorityLetter: "B", priorityRank: null }),
+      nodeItem({ id: "2", priorityLetter: null, priorityRank: null }),
+      nodeItem({ id: "3", priorityLetter: "A", priorityRank: 2 }),
+      nodeItem({ id: "4", priorityLetter: "A", priorityRank: 1 }),
     ];
 
     expect(
@@ -109,9 +53,9 @@ describe("itemSortValue / sortItems", () => {
 
   it("puts a ranked item above the bare letter it shares", () => {
     const rows = [
-      item({ id: "bare", priorityLetter: "B", priorityRank: null }),
-      item({ id: "b2", priorityLetter: "B", priorityRank: 2 }),
-      item({ id: "b1", priorityLetter: "B", priorityRank: 1 }),
+      nodeItem({ id: "bare", priorityLetter: "B", priorityRank: null }),
+      nodeItem({ id: "b2", priorityLetter: "B", priorityRank: 2 }),
+      nodeItem({ id: "b1", priorityLetter: "B", priorityRank: 1 }),
     ];
 
     expect(
@@ -121,9 +65,9 @@ describe("itemSortValue / sortItems", () => {
 
   it("keeps blanks last when sorting priority descending", () => {
     const rows = [
-      item({ id: "blank" }),
-      item({ id: "b", priorityLetter: "B", priorityRank: 1 }),
-      item({ id: "a", priorityLetter: "A", priorityRank: 1 }),
+      nodeItem({ id: "blank" }),
+      nodeItem({ id: "b", priorityLetter: "B", priorityRank: 1 }),
+      nodeItem({ id: "a", priorityLetter: "A", priorityRank: 1 }),
     ];
 
     expect(
@@ -133,9 +77,9 @@ describe("itemSortValue / sortItems", () => {
 
   it("sorts title text case-insensitively and keeps stored order on ties", () => {
     const rows = [
-      item({ id: "1", title: "beta", sortKey: "a" }),
-      item({ id: "2", title: "Alpha", sortKey: "b" }),
-      item({ id: "3", title: "alpha", sortKey: "c" }),
+      nodeItem({ id: "1", title: "beta", sortKey: "a" }),
+      nodeItem({ id: "2", title: "Alpha", sortKey: "b" }),
+      nodeItem({ id: "3", title: "alpha", sortKey: "c" }),
     ];
 
     expect(
@@ -145,9 +89,9 @@ describe("itemSortValue / sortItems", () => {
 
   it("sorts numeric columns numerically", () => {
     const rows = [
-      item({ id: "1", score: 10 }),
-      item({ id: "2", score: 2 }),
-      item({ id: "3", score: null }),
+      nodeItem({ id: "1", score: 10 }),
+      nodeItem({ id: "2", score: 2 }),
+      nodeItem({ id: "3", score: null }),
     ];
 
     expect(
@@ -161,9 +105,9 @@ describe("itemSortValue / sortItems", () => {
       ["id-a", "Zoe"],
     ]);
     const rows = [
-      item({ id: "1", contactId: "id-a" }),
-      item({ id: "2", contactId: "id-z" }),
-      item({ id: "3", contactId: null }),
+      nodeItem({ id: "1", contactId: "id-a" }),
+      nodeItem({ id: "2", contactId: "id-z" }),
+      nodeItem({ id: "3", contactId: null }),
     ];
 
     expect(
@@ -174,17 +118,20 @@ describe("itemSortValue / sortItems", () => {
   });
 
   it("returns the input order when sort is cleared", () => {
-    const rows = [item({ id: "z", sortKey: "1" }), item({ id: "a", sortKey: "2" })];
+    const rows = [
+      nodeItem({ id: "z", sortKey: "1" }),
+      nodeItem({ id: "a", sortKey: "2" }),
+    ];
     expect(sortItems(rows, null).map((r) => r.id)).toEqual(["z", "a"]);
   });
 
   it("encodes priority so A10 is after A2", () => {
-    const a2 = item({
+    const a2 = nodeItem({
       id: "a2",
       priorityLetter: "A",
       priorityRank: 2,
     });
-    const a10 = item({
+    const a10 = nodeItem({
       id: "a10",
       priorityLetter: "A",
       priorityRank: 10,

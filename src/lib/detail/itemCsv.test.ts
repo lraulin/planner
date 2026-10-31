@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NodeItem } from "@/db/schema";
+import { nodeItem } from "@/lib/testing/nodeItem";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import {
   itemsToCsv,
@@ -21,65 +21,10 @@ const PROGRESS_FIELDS: ItemCsvField[] = [
   { key: "comments", label: "Comments", kind: "textarea" },
 ];
 
-function item(overrides: Partial<NodeItem> & Pick<NodeItem, "id">): NodeItem {
-  return {
-    userId: "u",
-    nodeId: "n",
-    kind: "benefit",
-    sortKey: overrides.id,
-    priorityLetter: null,
-    priorityRank: null,
-    title: "",
-    description: "",
-    criteria: "",
-    stakeholders: "",
-    itemType: null,
-    stake: "",
-    severity: null,
-    probability: null,
-    detection: "",
-    prevention: "",
-    mitigation: "",
-    advantages: "",
-    disadvantages: "",
-    decision: "",
-    idealCandidate: "",
-    candidates: "",
-    filled: false,
-    filledBy: "",
-    association: "",
-    contact: "",
-    contactId: null,
-    source: "",
-    resolution: "",
-    resolved: false,
-    url: "",
-    purpose: "",
-    strategy: "",
-    people: "",
-    completed: false,
-    received: false,
-    conditions: "",
-    awarded: false,
-    reason: "",
-    active: true,
-    category: "",
-    question: "",
-    target: "",
-    assignedTo: "",
-    entryDate: null,
-    score: null,
-    comments: "",
-    createdAt: new Date(0),
-    updatedAt: new Date(0),
-    ...overrides,
-  };
-}
-
 describe("itemsToCsv / parseItemsCsv", () => {
   it("round-trips priority, title, description, and check", () => {
     const rows = [
-      item({
+      nodeItem({
         id: "1",
         priorityLetter: "A",
         priorityRank: 1,
@@ -87,7 +32,7 @@ describe("itemsToCsv / parseItemsCsv", () => {
         description: "More time",
         received: true,
       }),
-      item({
+      nodeItem({
         id: "2",
         priorityLetter: "B",
         priorityRank: null,
@@ -122,8 +67,8 @@ describe("itemsToCsv / parseItemsCsv", () => {
 
   it("writes formula-looking text as text and reads it back unchanged", () => {
     const rows = [
-      item({ id: "1", title: '=HYPERLINK("http://evil","x")', description: "-5" }),
-      item({ id: "2", title: "'=already quoted", description: "+1-1" }),
+      nodeItem({ id: "1", title: '=HYPERLINK("http://evil","x")', description: "-5" }),
+      nodeItem({ id: "2", title: "'=already quoted", description: "+1-1" }),
     ];
     const csv = itemsToCsv(BENEFIT_FIELDS, rows);
     expect(csv).toContain(`"'=HYPERLINK(""http://evil"",""x"")"`);
@@ -144,7 +89,7 @@ describe("itemsToCsv / parseItemsCsv", () => {
 
   it("round-trips multi-line descriptions", () => {
     const csv = itemsToCsv(BENEFIT_FIELDS, [
-      item({
+      nodeItem({
         id: "1",
         title: "Line break",
         description: "first\nsecond",
@@ -173,7 +118,7 @@ describe("itemsToCsv / parseItemsCsv", () => {
 
   it("parses progress dates and scores", () => {
     const csv = itemsToCsv(PROGRESS_FIELDS, [
-      item({
+      nodeItem({
         id: "1",
         kind: "progress_entry",
         entryDate: fromDateKey("2026-08-01"),
@@ -210,7 +155,7 @@ describe("itemsToCsv / parseItemsCsv", () => {
     const csv = itemsToCsv(
       fields,
       [
-        item({
+        nodeItem({
           id: "1",
           kind: "contact",
           contactId: "c-ada",
@@ -254,7 +199,7 @@ describe("itemsToCsv / parseItemsCsv", () => {
 
   it("skips a stamp preamble and still imports a file that has none", () => {
     const table = itemsToCsv(BENEFIT_FIELDS, [
-      item({
+      nodeItem({
         id: "1",
         title: "Sleep",
         description: "eight hours",
