@@ -1,44 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { AmazonItemListRow } from "./types";
 import {
   amazonGroupOrderTotals,
   amazonGroupPaidCents,
   amazonOrderGroupMatch,
   groupAmazonItems,
 } from "./grouping";
-
-function item(
-  over: Partial<AmazonItemListRow> & Pick<AmazonItemListRow, "id" | "orderDate">,
-): AmazonItemListRow {
-  return {
-    orderId: over.id,
-    amazonOrderId: over.amazonOrderId ?? `order-${over.id}`,
-    channel: "retail",
-    orderStatus: "Closed",
-    productName: over.productName ?? over.id,
-    asin: "B00TEST000",
-    quantity: 1,
-    unitPriceCents: 100,
-    itemPaidCents: 100,
-    discountsCents: 0,
-    paymentLast4: "3448",
-    paymentMethod: "Visa - 3448",
-    subscribeAndSave: false,
-    shipmentStatus: "Shipped",
-    shippingOption: "",
-    website: "Amazon.com",
-    currency: "USD",
-    refundCount: 0,
-    billName: null,
-    matchLabel: null,
-    chargeId: null,
-    orderGrandTotalCents: null,
-    orderSummaryStatus: null,
-    registerLabel: null,
-    registerTransactionId: null,
-    ...over,
-  };
-}
+import { amazonItem } from "@/lib/testing/amazonItem";
 
 function groupLabels(rows: ReturnType<typeof groupAmazonItems>): string[] {
   return rows.flatMap((row) => (row.kind === "group" ? [row.label] : []));
@@ -48,12 +15,12 @@ describe("groupAmazonItems", () => {
   it("puts newer orders above older ones, same as year and month", () => {
     const rows = groupAmazonItems(
       [
-        item({
+        amazonItem({
           id: "old",
           orderDate: "2000-09-11",
           amazonOrderId: "002-old",
         }),
-        item({
+        amazonItem({
           id: "new",
           orderDate: "2026-08-13",
           amazonOrderId: "111-new",
@@ -69,13 +36,13 @@ describe("amazonGroupPaidCents", () => {
   it("rolls each item into every enclosing group", () => {
     const rows = groupAmazonItems(
       [
-        item({
+        amazonItem({
           id: "a",
           orderDate: "2026-08-01",
           amazonOrderId: "114-aaa",
           itemPaidCents: 1800,
         }),
-        item({
+        amazonItem({
           id: "b",
           orderDate: "2026-08-01",
           amazonOrderId: "114-aaa",
@@ -96,14 +63,14 @@ describe("amazonOrderGroupMatch", () => {
   it("labels an order, not the year or month it sits in", () => {
     const rows = groupAmazonItems(
       [
-        item({
+        amazonItem({
           id: "a",
           orderDate: "2026-08-01",
           amazonOrderId: "114-aaa",
           matchLabel: "Review",
           chargeId: "charge-1",
         }),
-        item({
+        amazonItem({
           id: "b",
           orderDate: "2026-07-02",
           amazonOrderId: "114-bbb",
@@ -130,14 +97,14 @@ describe("amazonGroupOrderTotals", () => {
   it("counts an order's grand total once however many lines it has", () => {
     const grouped = groupAmazonItems(
       [
-        item({
+        amazonItem({
           id: "a",
           orderDate: "2026-08-01",
           amazonOrderId: "o1",
           orderGrandTotalCents: 2366,
           orderSummaryStatus: "reconciled",
         }),
-        item({
+        amazonItem({
           id: "b",
           orderDate: "2026-08-01",
           amazonOrderId: "o1",
@@ -157,14 +124,14 @@ describe("amazonGroupOrderTotals", () => {
   it("adds up distinct orders in a month and counts the ones that do not reconcile", () => {
     const grouped = groupAmazonItems(
       [
-        item({
+        amazonItem({
           id: "a",
           orderDate: "2026-08-01",
           amazonOrderId: "o1",
           orderGrandTotalCents: 2366,
           orderSummaryStatus: "reconciled",
         }),
-        item({
+        amazonItem({
           id: "b",
           orderDate: "2026-08-02",
           amazonOrderId: "o2",
@@ -181,7 +148,7 @@ describe("amazonGroupOrderTotals", () => {
 
   it("leaves a group with no stored total null rather than showing $0.00", () => {
     const grouped = groupAmazonItems(
-      [item({ id: "a", orderDate: "2026-08-01", amazonOrderId: "o1" })],
+      [amazonItem({ id: "a", orderDate: "2026-08-01", amazonOrderId: "o1" })],
       ["order"],
     );
     const [group] = [...amazonGroupOrderTotals(grouped).values()];

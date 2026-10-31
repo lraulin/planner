@@ -1,46 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { customFilter, optionsFilter } from "@/lib/grid/customFilter";
 import { amazonReviewChargeTitle } from "./grouping";
-import type { AmazonItemListRow } from "./types";
 import {
   parseAmazonOrdersQuery,
   prepareAmazonOrders,
   AMAZON_BLOCK_SIZE,
   type AmazonOrdersQuery,
 } from "./ordersQuery";
-
-function item(
-  over: Partial<AmazonItemListRow> & Pick<AmazonItemListRow, "id" | "orderDate">,
-): AmazonItemListRow {
-  return {
-    orderId: over.id,
-    amazonOrderId: over.amazonOrderId ?? `order-${over.id}`,
-    channel: "retail",
-    orderStatus: "Closed",
-    productName: over.productName ?? over.id,
-    asin: "B00TEST000",
-    quantity: 1,
-    unitPriceCents: 100,
-    itemPaidCents: 100,
-    discountsCents: 0,
-    paymentLast4: "3448",
-    paymentMethod: "Visa - 3448",
-    subscribeAndSave: false,
-    shipmentStatus: "Shipped",
-    shippingOption: "",
-    website: "Amazon.com",
-    currency: "USD",
-    refundCount: 0,
-    billName: null,
-    matchLabel: null,
-    chargeId: null,
-    orderGrandTotalCents: null,
-    orderSummaryStatus: null,
-    registerLabel: null,
-    registerTransactionId: null,
-    ...over,
-  };
-}
+import { amazonItem } from "@/lib/testing/amazonItem";
 
 function query(over: Partial<AmazonOrdersQuery> = {}): AmazonOrdersQuery {
   return parseAmazonOrdersQuery({
@@ -88,7 +55,7 @@ describe("parseAmazonOrdersQuery", () => {
 describe("prepareAmazonOrders", () => {
   it("returns only the first block of details, never every line item", () => {
     const items = Array.from({ length: AMAZON_BLOCK_SIZE + 5 }, (_, i) =>
-      item({
+      amazonItem({
         id: `row-${i}`,
         orderDate: "2026-08-01",
         productName: `Item ${i}`,
@@ -104,8 +71,12 @@ describe("prepareAmazonOrders", () => {
   it("searches product names across all history", () => {
     const prepared = prepareAmazonOrders(
       [
-        item({ id: "tp", orderDate: "2024-03-01", productName: "Toilet paper" }),
-        item({ id: "litter", orderDate: "2026-08-01", productName: "Cat litter" }),
+        amazonItem({ id: "tp", orderDate: "2024-03-01", productName: "Toilet paper" }),
+        amazonItem({
+          id: "litter",
+          orderDate: "2026-08-01",
+          productName: "Cat litter",
+        }),
       ],
       query({ search: "toilet", groupBy: [] }),
     );
@@ -116,8 +87,8 @@ describe("prepareAmazonOrders", () => {
 
   it("omits collapsed descendants from the index but not from shown", () => {
     const items = [
-      item({ id: "old", orderDate: "2025-06-15", productName: "OLD" }),
-      item({ id: "now", orderDate: "2026-08-02", productName: "NOW" }),
+      amazonItem({ id: "old", orderDate: "2025-06-15", productName: "OLD" }),
+      amazonItem({ id: "now", orderDate: "2026-08-02", productName: "NOW" }),
     ];
     const expanded = prepareAmazonOrders(items, query({ collapsedGroups: [] }));
     const collapsed = prepareAmazonOrders(
@@ -135,8 +106,8 @@ describe("prepareAmazonOrders", () => {
 
   it("filters Subscribe & Save without emptying the grid on a stale column", () => {
     const items = [
-      item({ id: "sns", orderDate: "2026-08-01", subscribeAndSave: true }),
-      item({ id: "once", orderDate: "2026-08-02", subscribeAndSave: false }),
+      amazonItem({ id: "sns", orderDate: "2026-08-01", subscribeAndSave: true }),
+      amazonItem({ id: "once", orderDate: "2026-08-02", subscribeAndSave: false }),
     ];
     expect(
       prepareAmazonOrders(
@@ -154,8 +125,8 @@ describe("prepareAmazonOrders", () => {
 
   it("filters Paid > 0 using the same number parser as the column", () => {
     const items = [
-      item({ id: "free", orderDate: "2026-08-01", itemPaidCents: 0 }),
-      item({ id: "paid", orderDate: "2026-08-02", itemPaidCents: 1200 }),
+      amazonItem({ id: "free", orderDate: "2026-08-01", itemPaidCents: 0 }),
+      amazonItem({ id: "paid", orderDate: "2026-08-02", itemPaidCents: 1200 }),
     ];
     const greaterThanZero = customFilter("and", [{ op: "gt", value: "0" }]);
     expect(
@@ -169,13 +140,13 @@ describe("prepareAmazonOrders", () => {
   it("puts the order total on the order group, not on each item", () => {
     const prepared = prepareAmazonOrders(
       [
-        item({
+        amazonItem({
           id: "a",
           orderDate: "2026-08-01",
           amazonOrderId: "114-aaa",
           itemPaidCents: 1800,
         }),
-        item({
+        amazonItem({
           id: "b",
           orderDate: "2026-08-01",
           amazonOrderId: "114-aaa",
@@ -183,7 +154,7 @@ describe("prepareAmazonOrders", () => {
           matchLabel: "Review",
           chargeId: "charge-1",
         }),
-        item({
+        amazonItem({
           id: "c",
           orderDate: "2026-08-02",
           amazonOrderId: "114-bbb",
