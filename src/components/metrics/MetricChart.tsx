@@ -14,6 +14,7 @@ import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatMetricNumber } from "@/lib/metrics/parse";
 import type { MetricEntryView, MetricType } from "@/lib/metrics/types";
 import { useElementSize } from "@/components/useElementSize";
+import { YGridLine } from "@/components/charts/YGridLine";
 
 /** The drawing's size until the pane has been measured; after that it is the pane's own. */
 const CHART_WIDTH = 640;
@@ -170,25 +171,14 @@ export function MetricChart({
           {yTicks.map((tick) => {
             const y = plotPoint(0, tick, width, height, CHART_PAD, yMin, yMax).y;
             return (
-              <g key={`y-${tick}`}>
-                <line
-                  x1={CHART_PAD.left}
-                  x2={width - CHART_PAD.right}
-                  y1={y}
-                  y2={y}
-                  stroke="var(--rule)"
-                  strokeWidth={1}
-                />
-                <text
-                  x={CHART_PAD.left - 6}
-                  y={y + 3}
-                  textAnchor="end"
-                  className="fill-ink-muted"
-                  style={{ fontSize: 9 }}
-                >
-                  {formatMetricNumber(tick)}
-                </text>
-              </g>
+              <YGridLine
+                key={`y-${tick}`}
+                y={y}
+                left={CHART_PAD.left}
+                right={width - CHART_PAD.right}
+                fontSize={9}
+                label={formatMetricNumber(tick)}
+              />
             );
           })}
 

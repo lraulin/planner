@@ -13,6 +13,7 @@ import { formatUsd, formatUsdCompact } from "@/lib/finances/money";
 import type { CashFlowPoint } from "@/lib/finances/analytics";
 import type { InsightsChartMode } from "@/lib/settings/finances";
 import { useIsCompact } from "@/components/shell/useIsCompact";
+import { YGridLine } from "@/components/charts/YGridLine";
 
 /**
  * Income against spending, one bar pair per bucket, with the trailing average over the top.
@@ -139,25 +140,14 @@ export function CashFlowChart({
           {ticks.map((tick) => {
             const y = toY(tick);
             return (
-              <g key={`y-${tick}`}>
-                <line
-                  x1={pad.left}
-                  x2={WIDTH - pad.right}
-                  y1={y}
-                  y2={y}
-                  stroke="var(--rule)"
-                  strokeWidth={1}
-                />
-                <text
-                  x={pad.left - 6}
-                  y={y + fontSize / 3}
-                  textAnchor="end"
-                  className="fill-ink-muted"
-                  style={{ fontSize }}
-                >
-                  {formatUsdCompact(tick)}
-                </text>
-              </g>
+              <YGridLine
+                key={`y-${tick}`}
+                y={y}
+                left={pad.left}
+                right={WIDTH - pad.right}
+                fontSize={fontSize}
+                label={formatUsdCompact(tick)}
+              />
             );
           })}
 
