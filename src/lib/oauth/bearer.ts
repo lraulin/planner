@@ -1,4 +1,4 @@
-import { requireAgentApiKey } from "@/lib/agent/auth";
+import { readBearerToken, requireAgentApiKey } from "@/lib/agent/auth";
 import { AgentError } from "@/lib/agent/errors";
 import { mcpResourceUrl, publicOrigin } from "./origin";
 import { verifyClaims } from "./tokens";
@@ -12,15 +12,7 @@ export function requireMcpAuth(
   request: Request,
   origin = publicOrigin(request),
 ): McpAuth {
-  const header = request.headers.get("authorization");
-  if (!header) {
-    throw new AgentError("unauthorized", "Missing Authorization header");
-  }
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  if (!match) {
-    throw new AgentError("unauthorized", "Authorization must be Bearer <token>");
-  }
-  const token = match[1].trim();
+  const token = readBearerToken(request);
 
   if (token.startsWith("p1.")) {
     const access = verifyAccessToken(token, origin);
