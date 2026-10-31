@@ -85,18 +85,17 @@ import { FileImportHost } from "@/components/import/FileImportHost";
 import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
 import { useSuspendCommandKeys } from "@/components/shell/CommandProvider";
 import { zoomBranch, zoomOutRoot } from "@/lib/tree/zoom";
-import { owningProjectId } from "@/lib/tree/owningProject";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { type GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import { rowSwipeFor } from "@/lib/grid/rowSwipe";
 import type { RowSwipe } from "@/components/grid/CompactRow";
-import { pasteMoves, pasteRefusal } from "@/lib/grid/rowClipboard";
+import { pasteMoves } from "@/lib/grid/rowClipboard";
 import { useRowClipboard } from "@/components/grid/RowClipboardProvider";
 import { useAttachFromClipboard } from "@/components/grid/useAttachFromClipboard";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import { depthForOutlineLevel } from "@/lib/tree/outlineLevel";
-import { lifecycleStateRefusal } from "@/lib/tree/lifecycle";
+import { clipboardCapability, nodeSelection } from "@/lib/grid/nodeCapabilities";
 
 const AchieveTransferPanel = dynamic(
   () =>
@@ -564,40 +563,12 @@ export function OutlineGrid({ wire }: { wire: OutlineWire }) {
       return {
         createKinds: ["result_area", "goal", "dream", "project", "task"],
         hierarchy: true,
-        clipboard: {
-          pickedUp: clipboard?.count ?? 0,
-          pasteAfterRefusal: pasteRefusal(
-            nodes,
-            clipboard,
-            id ? { at: "after", targetId: id } : null,
-          ),
-          pasteChildRefusal: pasteRefusal(
-            nodes,
-            clipboard,
-            id ? { at: "child", targetId: id } : null,
-          ),
-        },
+        clipboard: clipboardCapability(nodes, clipboard, id),
         conversionKinds: NODE_KINDS,
         setPriority: true,
         outlineZoom: { zoomed: zoom !== null },
         selection: {
-          id,
-          count,
-          label: node?.name ?? null,
-          kind: node ? kindOfNode(node) : undefined,
-          state: node?.state,
-          stateReason: lifecycleStateRefusal(
-            selectionIds.flatMap((entry) => {
-              const type = byId.get(entry)?.type;
-              return type ? [type] : [];
-            }),
-          ),
-          projectId: owningProjectId(nodes, id),
-          hasTasks: node?.hasChildren === true,
-          // Roots only: a child selected alongside its parent is already inside that parent's
-          // branch, so deleting both would delete it twice and count it twice in the warning.
-          // Same reduction the multi-row drag uses.
-          ids: selectionIds,
+          ...nodeSelection(nodes, byId, id, count, selectionIds),
           canMoveUp: index > 0,
           canMoveDown: index >= 0 && index < siblings.length - 1,
           canIndent: index > 0,

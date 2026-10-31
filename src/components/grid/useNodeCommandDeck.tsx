@@ -13,11 +13,9 @@ import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ConversionDialog } from "@/components/outline/ConversionDialog";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { NODE_KINDS, kindOfNode, type NodeKind } from "@/lib/tree/hierarchy";
-import { owningProjectId } from "@/lib/tree/owningProject";
 import { outlineSelectPath } from "@/lib/url/viewState";
-import { lifecycleStateRefusal } from "@/lib/tree/lifecycle";
 import { selectionMoveRoots } from "@/lib/grid/selection";
-import { pasteMoves, pasteRefusal } from "@/lib/grid/rowClipboard";
+import { pasteMoves } from "@/lib/grid/rowClipboard";
 import { useRowClipboard } from "./RowClipboardProvider";
 import type { NodeState } from "@/db/schema";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
@@ -30,6 +28,7 @@ import { rowMenuFor } from "./rowMenu";
 import { rowSwipeFor } from "@/lib/grid/rowSwipe";
 import { useAttachFromClipboard } from "./useAttachFromClipboard";
 import { SetPriorityDialog } from "@/components/outline/SetPriorityDialog";
+import { clipboardCapability, nodeSelection } from "@/lib/grid/nodeCapabilities";
 
 /** Shared non-structural commands for list views that are projections of the outline. */
 export function useNodeCommandDeck({
@@ -239,7 +238,6 @@ export function useNodeCommandDeck({
 
   const capabilitiesFor = useCallback(
     (id: string | null, count: number): GridCommandCapabilities => {
-      const node = id ? (byId.get(id) ?? null) : null;
       const selectionIds =
         id && selectedIds.has(id)
           ? selectionMoveRoots(
@@ -258,39 +256,8 @@ export function useNodeCommandDeck({
         createChild,
         conversionKinds: NODE_KINDS,
         setPriority: true,
-        clipboard: {
-          pickedUp: clipboard?.count ?? 0,
-          pasteAfterRefusal: pasteRefusal(
-            nodes,
-            clipboard,
-            id ? { at: "after", targetId: id } : null,
-          ),
-          pasteChildRefusal: pasteRefusal(
-            nodes,
-            clipboard,
-            id ? { at: "child", targetId: id } : null,
-          ),
-        },
-        selection: {
-          id,
-          count,
-          label: node?.name ?? null,
-          kind: node ? kindOfNode(node) : undefined,
-          state: node?.state,
-          stateReason: lifecycleStateRefusal(
-            selectionIds.flatMap((entry) => {
-              const type = byId.get(entry)?.type;
-              return type ? [type] : [];
-            }),
-          ),
-          projectId: owningProjectId(nodes, id),
-          // `hasChildren` is the honest proxy: if nothing is filed under this row there are no
-          // tasks to scope to, whatever level the row sits at.
-          hasTasks: node?.hasChildren === true,
-          // Roots only: a child selected alongside its parent is already inside that parent's
-          // branch, so deleting both would delete it twice and count it twice in the warning.
-          ids: selectionIds,
-        },
+        clipboard: clipboardCapability(nodes, clipboard, id),
+        selection: nodeSelection(nodes, byId, id, count, selectionIds),
         actions: {
           ...actions,
           /*
