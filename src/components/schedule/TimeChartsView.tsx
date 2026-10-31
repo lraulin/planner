@@ -23,6 +23,7 @@ import {
   TIME_CHARTS_COLUMN_IDS,
   type TimeChartsColumnCtx,
 } from "./timeChartsColumns";
+import { useOptimisticRows } from "@/components/grid/useOptimisticRows";
 
 /**
  * One built-in view. A person has three or four time charts, so what this list gains from
@@ -48,15 +49,13 @@ export function TimeChartsView({
   initialCharts: TimeChartListRow[];
 }) {
   const router = useRouter();
-  const [patches, setPatches] = useState<Record<string, Partial<TimeChartListRow>>>({});
-  // Keep patches until server props refresh — clearing on action settle flickers the old list.
-  const [baselineCharts, setBaselineCharts] = useState(initialCharts);
-  if (initialCharts !== baselineCharts) {
-    setBaselineCharts(initialCharts);
-    if (Object.keys(patches).length > 0) setPatches({});
-  }
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
+  const {
+    withPatches,
+    patch: patchRow,
+    apply,
+  } = useOptimisticRows(initialCharts, setError);
   const [pendingDelete, setPendingDelete] = useState<TimeChartListRow | null>(null);
   const [, startTransition] = useTransition();
 
@@ -69,13 +68,7 @@ export function TimeChartsView({
   });
   const gridState = views.grid;
 
-  const rows = useMemo(
-    () =>
-      initialCharts.map((row) =>
-        patches[row.id] ? { ...row, ...patches[row.id] } : row,
-      ),
-    [initialCharts, patches],
-  );
+  const rows = withPatches(initialCharts);
 
   const { gridRows, distinctValues, onIdsChange, multi } = useFlatGrid(
     rows,
@@ -90,25 +83,6 @@ export function TimeChartsView({
     headerState,
     move,
   } = multi;
-  const apply = useCallback(
-    (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
-      setError(null);
-      startTransition(async () => {
-        const result = await action();
-        if (!result.ok) {
-          setError(result.error);
-          // Rejected: revert immediately. Success waits for `initialCharts` above.
-          setPatches({});
-        }
-      });
-    },
-    [],
-  );
-
-  const patchRow = useCallback((id: string, changes: Partial<TimeChartListRow>) => {
-    setPatches((current) => ({ ...current, [id]: { ...current[id], ...changes } }));
-  }, []);
-
   const openEditor = useCallback(
     (chartId: string) => {
       router.push(

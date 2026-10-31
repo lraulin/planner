@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PriorityLetter } from "@/db/schema";
 import type { DetailNode, DetailWire } from "@/lib/tree/wireSlices";
@@ -28,6 +28,7 @@ import {
   type WishesColumnCtx,
 } from "./wishesColumns";
 import { useGridSelection } from "@/components/grid/useFlatGrid";
+import { useOptimisticRows } from "@/components/grid/useOptimisticRows";
 
 /**
  * One built-in view. The Wish List is a single list by nature; what it gains from views is
@@ -58,20 +59,16 @@ export function WishesGrid({
   nodesWire: DetailWire;
 }) {
   const nodes = useOutline(nodesWire);
-  /** Optimistic patches on top of the server list — same idea as the node grids. */
-  const [patches, setPatches] = useState<Record<string, Partial<WishListRow>>>({});
-  // Keep patches until server props refresh — clearing on action settle flickers the old list.
-  const [baselineWishes, setBaselineWishes] = useState(initialWishes);
-  if (initialWishes !== baselineWishes) {
-    setBaselineWishes(initialWishes);
-    if (Object.keys(patches).length > 0) setPatches({});
-  }
   const [scopeId, setScopeId] = useState("");
   const { detail: detailNodeId, setDetail: setDetailNodeId } = useViewStateUrl();
   const router = useRouter();
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  const {
+    withPatches,
+    patch: patchRow,
+    apply,
+  } = useOptimisticRows(initialWishes, setError);
 
   const views = useModuleViews({
     moduleId: "wishes",
@@ -82,13 +79,7 @@ export function WishesGrid({
   });
   const gridState = views.grid;
 
-  const rows = useMemo(
-    () =>
-      initialWishes.map((row) =>
-        patches[row.id] ? { ...row, ...patches[row.id] } : row,
-      ),
-    [initialWishes, patches],
-  );
+  const rows = withPatches(initialWishes);
 
   const byNodeId = useMemo(() => {
     const map = new Map<string, DetailNode>();
@@ -180,28 +171,6 @@ export function WishesGrid({
     headerState,
     move,
   } = multi;
-
-  const patchRow = useCallback((id: string, changes: Partial<WishListRow>) => {
-    setPatches((current) => ({
-      ...current,
-      [id]: { ...current[id], ...changes },
-    }));
-  }, []);
-
-  const apply = useCallback(
-    (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
-      setError(null);
-      startTransition(async () => {
-        const result = await action();
-        if (!result.ok) {
-          setError(result.error);
-          // Rejected: revert immediately. Success waits for `initialWishes` above.
-          setPatches({});
-        }
-      });
-    },
-    [],
-  );
 
   const detailNode = detailNodeId ? (byNodeId.get(detailNodeId) ?? null) : null;
 

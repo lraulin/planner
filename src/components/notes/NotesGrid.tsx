@@ -77,6 +77,7 @@ import { NoteFilterDialog } from "./NoteFilterDialog";
 import { NoteDrawer } from "./NoteDrawer";
 import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
 import { useGridSelection } from "@/components/grid/useFlatGrid";
+import { useOptimisticRows } from "@/components/grid/useOptimisticRows";
 
 const NOTES_VIEW_CODEC: SettingCodec<NotesViewSettings> = {
   parse: parseNotesView,
@@ -132,13 +133,6 @@ export function NotesGrid({
 }) {
   const nodes = useOutline(nodesWire);
   const { value: displaySettings } = useDisplaySettings();
-  const [patches, setPatches] = useState<Record<string, Partial<NoteSummary>>>({});
-  // Keep patches until server props refresh — clearing on action settle flickers the old tree.
-  const [baselineNotes, setBaselineNotes] = useState(initialNotes);
-  if (initialNotes !== baselineNotes) {
-    setBaselineNotes(initialNotes);
-    if (Object.keys(patches).length > 0) setPatches({});
-  }
   /** Server body-match ids for the active filter; null = local filter is enough. */
   const [bodyMatchIds, setBodyMatchIds] = useState<string[] | null>(
     initialBodyMatchIds,
@@ -236,6 +230,10 @@ export function NotesGrid({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<NoteSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { withPatches, patch, clearPatches, apply } = useOptimisticRows(
+    initialNotes,
+    setError,
+  );
   const [, startTransition] = useTransition();
 
   // Drawer id is the URL. Unknown ids stay in the bar but open nothing, so a stale
@@ -246,22 +244,16 @@ export function NotesGrid({
     () => new Map(contacts.map((contact) => [contact.id, contact.displayName])),
     [contacts],
   );
-  const notes = useMemo(
-    () =>
-      initialNotes.map((note) => {
-        const linkedContactName = note.contactId
-          ? (contactNameById.get(note.contactId) ?? null)
-          : null;
-        return {
-          ...note,
-          // Contact labels always come from `loadContactOptions`, the sole place where the
-          // email fallback and other name rules are derived. The Notes read stays a cheap
-          // tree query rather than duplicating that logic in SQL or a second helper.
-          contactName: linkedContactName,
-          ...patches[note.id],
-        };
-      }),
-    [initialNotes, patches, contactNameById],
+  const notes = withPatches(
+    initialNotes.map((note) => ({
+      ...note,
+      // Contact labels always come from `loadContactOptions`, the sole place where the
+      // email fallback and other name rules are derived. The Notes read stays a cheap
+      // tree query rather than duplicating that logic in SQL or a second helper.
+      contactName: note.contactId
+        ? (contactNameById.get(note.contactId) ?? null)
+        : null,
+    })),
   );
 
   const byId = useMemo(() => {
@@ -269,25 +261,6 @@ export function NotesGrid({
     for (const note of notes) map.set(note.id, note);
     return map;
   }, [notes]);
-
-  const patch = useCallback((id: string, changes: Partial<NoteSummary>) => {
-    setPatches((current) => ({ ...current, [id]: { ...current[id], ...changes } }));
-  }, []);
-
-  const apply = useCallback(
-    (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
-      setError(null);
-      startTransition(async () => {
-        const result = await action();
-        if (!result.ok) {
-          setError(result.error);
-          // Rejected: revert immediately. Success waits for `initialNotes` above.
-          setPatches({});
-        }
-      });
-    },
-    [],
-  );
 
   /**
    * When the filter starts needing bodies, ask the server for matching ids. Local title /
@@ -499,7 +472,7 @@ export function NotesGrid({
           setError(result.error);
           return;
         }
-        setPatches({});
+        clearPatches();
         // Open the new note straight away: a note with no body is not worth a row on its
         // own, and the reason you made one is to write in it.
         if (result.id) {
@@ -508,7 +481,7 @@ export function NotesGrid({
         }
       });
     },
-    [selected, setUrlNoteId, selectOne, patch],
+    [selected, setUrlNoteId, selectOne, patch, clearPatches],
   );
 
   const columnCtx: NotesColumnCtx = useMemo(
