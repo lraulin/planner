@@ -58,6 +58,31 @@ export type AmazonField = {
   sortValue?: (row: AmazonItemListRow) => string | number | null | undefined;
 };
 
+/** A money column: filtered on its dollar text, sorted by cents, blank when unknown. */
+function centsField(
+  id: AmazonFieldId,
+  cents: (row: AmazonItemListRow) => number | null,
+): AmazonField {
+  return {
+    id,
+    filterKind: "number",
+    filterValue: (row) => {
+      const value = cents(row);
+      return value === null ? null : formatUsd(value);
+    },
+    sortValue: cents,
+  };
+}
+
+/** A column of optional labels: blank rows filter as empty and sort first. */
+function labelField(
+  id: AmazonFieldId,
+  filterKind: FilterKind,
+  label: (row: AmazonItemListRow) => string | null,
+): AmazonField {
+  return { id, filterKind, filterValue: label, sortValue: (row) => label(row) ?? "" };
+}
+
 export const amazonFields: Record<AmazonFieldId, AmazonField> = {
   date: {
     id: "date",
@@ -77,64 +102,20 @@ export const amazonFields: Record<AmazonFieldId, AmazonField> = {
     filterValue: (row) => String(row.quantity),
     sortValue: (row) => row.quantity,
   },
-  paid: {
-    id: "paid",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.itemPaidCents === null ? null : formatUsd(row.itemPaidCents),
-    sortValue: (row) => row.itemPaidCents,
-  },
-  orderTotal: {
-    id: "orderTotal",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.orderGrandTotalCents === null ? null : formatUsd(row.orderGrandTotalCents),
-    sortValue: (row) => row.orderGrandTotalCents,
-  },
-  register: {
-    id: "register",
-    filterKind: "text",
-    filterValue: (row) => row.registerLabel,
-    sortValue: (row) => row.registerLabel ?? "",
-  },
-  unitPrice: {
-    id: "unitPrice",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.unitPriceCents === null ? null : formatUsd(row.unitPriceCents),
-    sortValue: (row) => row.unitPriceCents,
-  },
-  discounts: {
-    id: "discounts",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.discountsCents === null ? null : formatUsd(row.discountsCents),
-    sortValue: (row) => row.discountsCents,
-  },
-  payment: {
-    id: "payment",
-    filterKind: "enum",
-    filterValue: (row) => row.paymentLast4,
-    sortValue: (row) => row.paymentLast4 ?? "",
-  },
+  paid: centsField("paid", (row) => row.itemPaidCents),
+  orderTotal: centsField("orderTotal", (row) => row.orderGrandTotalCents),
+  register: labelField("register", "text", (row) => row.registerLabel),
+  unitPrice: centsField("unitPrice", (row) => row.unitPriceCents),
+  discounts: centsField("discounts", (row) => row.discountsCents),
+  payment: labelField("payment", "enum", (row) => row.paymentLast4),
   sns: {
     id: "sns",
     filterKind: "enum",
     filterValue: (row) => (row.subscribeAndSave ? "Yes" : "No"),
     sortValue: (row) => (row.subscribeAndSave ? 1 : 0),
   },
-  bill: {
-    id: "bill",
-    filterKind: "text",
-    filterValue: (row) => row.billName,
-    sortValue: (row) => row.billName ?? "",
-  },
-  match: {
-    id: "match",
-    filterKind: "enum",
-    filterValue: (row) => row.matchLabel,
-    sortValue: (row) => row.matchLabel ?? "",
-  },
+  bill: labelField("bill", "text", (row) => row.billName),
+  match: labelField("match", "enum", (row) => row.matchLabel),
   status: {
     id: "status",
     filterKind: "enum",
