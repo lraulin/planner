@@ -204,22 +204,38 @@ export function letterRankEngine<T extends { id: string }>(
     letter: PriorityLetter,
   ): LetterAssignment[] {
     const dragIds = Array.isArray(dragId) ? [...dragId] : [dragId];
-    if (dragIds.length === 0) return [];
+    return placeBlock(items, dragIds, letter, () => 0);
+  }
 
-    const dragSet = new Set(dragIds);
-    const dragged = dragIds
-      .map((id) => items.find((item) => item.id === id))
+  /**
+   * Put the items `ids` names into `letter` as a contiguous block, in the order given, at
+   * the 0-based slot `slotFor` picks among the letter's other members; renumber that letter
+   * and close the gaps the block left behind. An id that names no item cancels the whole
+   * placement.
+   */
+  function placeBlock(
+    items: T[],
+    ids: readonly string[],
+    letter: PriorityLetter,
+    slotFor: (memberCount: number) => number,
+  ): LetterAssignment[] {
+    if (ids.length === 0) return [];
+    const idSet = new Set(ids);
+    const block = ids
+      .map((entry) => items.find((item) => item.id === entry))
       .filter((item): item is T => item != null);
-    if (dragged.length !== dragIds.length) return [];
+    if (block.length !== ids.length) return [];
 
+    // Everything already in the letter *except* what is being placed — a row moving within
+    // its own letter vacates its old slot rather than counting twice.
     const members = items
-      .filter((item) => read(item).letter === letter && !dragSet.has(item.id))
+      .filter((item) => read(item).letter === letter && !idSet.has(item.id))
       .sort(byRank);
-    members.unshift(...dragged);
+    members.splice(slotFor(members.length), 0, ...block);
 
     return [
       ...renumber(members, letter),
-      ...compactSources(items, dragged, letter, dragSet),
+      ...compactSources(items, block, letter, idSet),
     ];
   }
 
@@ -274,26 +290,11 @@ export function letterRankEngine<T extends { id: string }>(
     if (ids.length === 0) return [];
     if (letter === null) return planClear(items, ids);
 
-    const idSet = new Set(ids);
-    const assigned = ids
-      .map((entry) => items.find((item) => item.id === entry))
-      .filter((item): item is T => item != null);
-    if (assigned.length !== ids.length) return [];
-
-    // Everything already in the letter *except* what is being placed — a row moving within
-    // its own letter vacates its old slot rather than counting twice.
-    const members = items
-      .filter((item) => read(item).letter === letter && !idSet.has(item.id))
-      .sort(byRank);
-    // A bare letter means "somewhere in this letter" — the end is the honest answer.
-    const requested = rank === null ? members.length + 1 : rank;
-    const insertAt = Math.min(Math.max(requested, 1), members.length + 1) - 1;
-    members.splice(insertAt, 0, ...assigned);
-
-    return [
-      ...renumber(members, letter),
-      ...compactSources(items, assigned, letter, idSet),
-    ];
+    return placeBlock(items, ids, letter, (memberCount) => {
+      // A bare letter means "somewhere in this letter" — the end is the honest answer.
+      const requested = rank === null ? memberCount + 1 : rank;
+      return Math.min(Math.max(requested, 1), memberCount + 1) - 1;
+    });
   }
 
   /**
