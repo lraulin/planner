@@ -2,18 +2,16 @@
 
 import { useId, useState } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
+import { FilterConditionCells } from "./FilterConditionCells";
 import {
   customFilter,
   defaultFilterOperand,
   describeCustom,
-  isCalendarDayKind,
-  operatorNeedsOperand,
   operatorsForKind,
   type FilterKind,
   type CustomColumnFilter,
   type FilterCondition,
   type FilterJoin,
-  type FilterOperator,
 } from "@/lib/grid/customFilter";
 
 /**
@@ -113,8 +111,6 @@ function CustomFilterDialogBody({
     draft,
     kind === "number" ? (value) => (value.trim() === "" ? "0" : value) : undefined,
   );
-  const useValueSelect = kind === "enum" && distinctValues.length > 0;
-  const useDateInput = isCalendarDayKind(kind);
 
   return (
     <ModalShell open onClose={onClose} labelledBy={titleId} width="max-w-xl">
@@ -162,74 +158,13 @@ function CustomFilterDialogBody({
                 key={index}
                 className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] items-center gap-0 border-b border-rule last:border-b-0"
               >
-                <div className="px-2 py-1.5">
-                  <select
-                    value={condition.op}
-                    onChange={(event) =>
-                      updateCondition(index, {
-                        op: event.target.value as FilterOperator,
-                      })
-                    }
-                    className={INPUT_CLASS}
-                  >
-                    {operators.map((op) => (
-                      <option key={op.id} value={op.id}>
-                        {op.symbol} {op.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="px-2 py-1.5">
-                  {operatorNeedsOperand(condition.op) ? (
-                    useValueSelect ? (
-                      <select
-                        value={condition.value}
-                        onChange={(event) =>
-                          updateCondition(index, { value: event.target.value })
-                        }
-                        className={INPUT_CLASS}
-                      >
-                        <option value="">(pick a value)</option>
-                        {distinctValues.map((value) => (
-                          <option key={value} value={value}>
-                            {value}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type={useDateInput ? "date" : "text"}
-                        inputMode={kind === "number" ? "decimal" : undefined}
-                        value={condition.value}
-                        onChange={(event) =>
-                          updateCondition(index, { value: event.target.value })
-                        }
-                        placeholder={
-                          kind === "priority"
-                            ? "A1"
-                            : isCalendarDayKind(kind)
-                              ? "YYYY-MM-DD"
-                              : kind === "number"
-                                ? "0.00"
-                                : "value"
-                        }
-                        className={INPUT_CLASS}
-                      />
-                    )
-                  ) : (
-                    <span className="px-1 text-[0.8125rem] text-ink-faint">—</span>
-                  )}
-                </div>
-                <div className="px-1">
-                  <button
-                    type="button"
-                    onClick={() => deleteCondition(index)}
-                    title="Delete condition"
-                    className="rounded px-2 py-1 text-[0.8125rem] text-ink-muted hover:bg-surface-raised hover:text-ink"
-                  >
-                    ×
-                  </button>
-                </div>
+                <FilterConditionCells
+                  condition={condition}
+                  kind={kind}
+                  values={distinctValues}
+                  onChange={(patch) => updateCondition(index, patch)}
+                  onDelete={() => deleteCondition(index)}
+                />
               </div>
             ))
           )}
@@ -272,9 +207,6 @@ function CustomFilterDialogBody({
     </ModalShell>
   );
 }
-
-const INPUT_CLASS =
-  "w-full rounded border border-rule bg-surface px-2 py-1 text-[0.8125rem] text-ink outline-none focus:border-select-edge";
 
 const BUTTON_CLASS =
   "rounded border border-rule px-2 py-1 text-[0.8125rem] leading-none text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40";

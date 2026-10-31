@@ -2,10 +2,9 @@
 
 import { useId, useMemo, useState } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
+import { FilterConditionCells } from "./FilterConditionCells";
 import {
   defaultFilterOperand,
-  isCalendarDayKind,
-  operatorNeedsOperand,
   operatorsForKind,
   type FilterJoin,
   type FilterOperator,
@@ -227,10 +226,8 @@ function GridFilterDialogBody({
           ) : (
             draft.conditions.map((condition, index) => {
               const column = byId.get(condition.columnId);
-              const operators = operatorsForKind(column?.filterKind);
               const hidden = column !== undefined && !visible.has(condition.columnId);
               const values = distinctValues[condition.columnId] ?? [];
-              const useValueSelect = column?.filterKind === "enum" && values.length > 0;
 
               return (
                 <div
@@ -265,74 +262,13 @@ function GridFilterDialogBody({
                     )}
                   </div>
 
-                  <div className="px-2 py-1.5">
-                    <select
-                      aria-label="Operator"
-                      value={condition.op}
-                      onChange={(event) =>
-                        updateCondition(index, {
-                          op: event.target.value as FilterOperator,
-                        })
-                      }
-                      className={INPUT_CLASS}
-                    >
-                      {operators.map((op) => (
-                        <option key={op.id} value={op.id}>
-                          {op.symbol} {op.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="px-2 py-1.5">
-                    {operatorNeedsOperand(condition.op) ? (
-                      useValueSelect ? (
-                        <select
-                          aria-label="Operand"
-                          value={condition.value}
-                          onChange={(event) =>
-                            updateCondition(index, { value: event.target.value })
-                          }
-                          className={INPUT_CLASS}
-                        >
-                          <option value="">(pick a value)</option>
-                          {values.map((value) => (
-                            <option key={value} value={value}>
-                              {value}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          aria-label="Operand"
-                          type={isCalendarDayKind(column?.filterKind) ? "date" : "text"}
-                          inputMode={
-                            column?.filterKind === "number" ? "decimal" : undefined
-                          }
-                          value={condition.value}
-                          onChange={(event) =>
-                            updateCondition(index, { value: event.target.value })
-                          }
-                          placeholder={placeholderFor(column?.filterKind)}
-                          className={INPUT_CLASS}
-                        />
-                      )
-                    ) : (
-                      <span className="px-1 text-[0.8125rem] text-ink-faint">—</span>
-                    )}
-                  </div>
-
-                  <div className="px-1 py-1.5">
-                    <button
-                      type="button"
-                      onClick={() => deleteCondition(index)}
-                      title="Delete condition"
-                      aria-label="Delete condition"
-                      className="min-h-tap rounded px-2 py-1 text-[0.8125rem] text-ink-muted hover:bg-surface-raised hover:text-ink md:min-h-0"
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <FilterConditionCells
+                    condition={condition}
+                    kind={column?.filterKind}
+                    values={values}
+                    onChange={(patch) => updateCondition(index, patch)}
+                    onDelete={() => deleteCondition(index)}
+                  />
                 </div>
               );
             })
@@ -394,13 +330,6 @@ function defaultOpFor(byId: Map<string, ColumnMeta>, columnId: string): FilterOp
 
 function defaultOperandFor(byId: Map<string, ColumnMeta>, columnId: string): string {
   return defaultFilterOperand(byId.get(columnId)?.filterKind);
-}
-
-function placeholderFor(kind: ColumnMeta["filterKind"]): string {
-  if (kind === "priority") return "A1";
-  if (isCalendarDayKind(kind)) return "YYYY-MM-DD";
-  if (kind === "number") return "0.00";
-  return "value";
 }
 
 const INPUT_CLASS =
