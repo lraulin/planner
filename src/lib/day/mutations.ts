@@ -22,7 +22,7 @@ import { rearmReminders } from "@/lib/reminders/arm";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
 import { assertNodeOwned } from "@/lib/tree/ownership";
-import { assertPlannableOn, effectiveShelfOf, setDayPlan } from "./sync";
+import { assertPlannableOn, effectiveShelfOf, endOfDay, setDayPlan } from "./sync";
 import { shelfHolds } from "@/lib/tree/shelving";
 import { JOURNAL_SUBJECT } from "./types";
 import type { DayAssignment } from "./priority";
@@ -36,18 +36,6 @@ import type { DayAssignment } from "./priority";
 
 async function requireItem(tx: DbExecutor, userId: string, itemId: string) {
   return requireOwnedRow(tx, dailyItems, itemId, userId, "Daily item not found.");
-}
-
-/** A sort key placing a new row at the end of `day`. */
-async function endOfDay(tx: DbExecutor, userId: string, day: string): Promise<string> {
-  const [last] = await tx
-    .select({ sortKey: dailyItems.sortKey })
-    .from(dailyItems)
-    .where(and(eq(dailyItems.userId, userId), eq(dailyItems.day, day)))
-    .orderBy(sql`${dailyItems.sortKey} desc`)
-    .limit(1);
-
-  return between(last?.sortKey ?? null, null);
 }
 
 /** The open row for a task, if it is currently planned for some day. */

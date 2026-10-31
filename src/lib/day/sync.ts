@@ -83,7 +83,11 @@ export async function effectiveShelfOf(
 }
 
 /** A sort key placing a new row at the end of `day`. */
-async function endOfDay(tx: DbExecutor, userId: string, day: string): Promise<string> {
+export async function endOfDay(
+  tx: DbExecutor,
+  userId: string,
+  day: string,
+): Promise<string> {
   const [last] = await tx
     .select({ sortKey: dailyItems.sortKey })
     .from(dailyItems)
