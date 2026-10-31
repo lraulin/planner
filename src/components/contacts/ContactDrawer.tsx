@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState, useTransition } from "react";
+import { useCallback, useId, useMemo, useState, useTransition } from "react";
 import type { ContactItemKind } from "@/db/schema";
 import type { ContactDetail, ContactInput } from "@/lib/contacts/types";
 import type { ContactItemField } from "@/lib/contacts/itemKinds";
@@ -31,6 +31,7 @@ import {
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import { ContactItemList } from "./ContactItemList";
 import { ContactDiscussionPanel } from "./ContactDiscussionPanel";
+import { useRecordById } from "@/components/detail/useRecordById";
 
 type TabId = "general" | "address" | "discussion" | "history";
 
@@ -61,46 +62,7 @@ export function ContactDrawer({
   const [saving, startSaving] = useTransition();
   const [busy, startBusy] = useTransition();
 
-  /**
-   * The fetch result carries the id it was fetched for, so a result for the previously
-   * opened contact reads as "not loaded yet" rather than being cleared by an effect — the
-   * same shape `NodeDetailDrawer` uses, and the reason a fast second open cannot show the
-   * first contact's record under the second one's title.
-   */
-  const [loaded, setLoaded] = useState<{
-    contactId: string;
-    detail: ContactDetail | null;
-    error: string | null;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!contactId) return;
-
-    let current = true;
-    void getContactDetailAction(contactId).then(
-      (result) => {
-        if (!current) return;
-        if (!result.ok) setLoaded({ contactId, detail: null, error: result.error });
-        else if (!result.data)
-          setLoaded({
-            contactId,
-            detail: null,
-            error: "That contact no longer exists.",
-          });
-        else setLoaded({ contactId, detail: result.data, error: null });
-      },
-      // A rejected action would otherwise leave the drawer on its loading state forever.
-      () => {
-        if (current) {
-          setLoaded({ contactId, detail: null, error: "Could not load this contact." });
-        }
-      },
-    );
-
-    return () => {
-      current = false;
-    };
-  }, [contactId]);
+  const record = useRecordById(contactId, getContactDetailAction, "contact");
 
   // A new record is a new form. Without this the draft from the last contact would bleed
   // into the next one and save their name onto someone else. Adjusted during render rather
@@ -114,8 +76,8 @@ export function ContactDrawer({
     setTab("general");
   }
 
-  const detail = loaded?.contactId === contactId ? loaded.detail : null;
-  const loadError = loaded?.contactId === contactId ? loaded.error : null;
+  const detail = record.current?.detail ?? null;
+  const loadError = record.current?.error ?? null;
   const dirty = Object.keys(draft).length > 0;
 
   const field = useCallback(
@@ -141,9 +103,9 @@ export function ContactDrawer({
       setError(result.error);
       return;
     }
-    setLoaded({ contactId, detail: result.data, error: null });
+    record.replace(contactId, result.data);
     onChanged();
-  }, [contactId, onChanged]);
+  }, [contactId, onChanged, record]);
 
   const save = useCallback(
     (thenClose: boolean) => {

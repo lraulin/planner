@@ -1,8 +1,9 @@
 "use client";
 
-import { Fragment, useEffect, useId, useState, type ReactNode } from "react";
+import { Fragment, useId, type ReactNode } from "react";
 import type { QueryResult } from "@/app/actionResult";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
+import { useRecordById } from "./useRecordById";
 
 /**
  * The drawer of a record catalog — Jobs, Residences, Houses, Resources: load the record named
@@ -32,42 +33,9 @@ export function RecordDrawer<TDetail extends { id: string }>({
   children: (detail: TDetail) => ReactNode;
 }) {
   const titleId = useId();
-  const [loaded, setLoaded] = useState<{
-    recordId: string;
-    detail: TDetail | null;
-    error: string | null;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!recordId) return;
-    let current = true;
-    void load(recordId).then(
-      (result) => {
-        if (!current) return;
-        if (!result.ok) setLoaded({ recordId, detail: null, error: result.error });
-        else if (!result.data) {
-          setLoaded({
-            recordId,
-            detail: null,
-            error: `That ${noun} no longer exists.`,
-          });
-        } else {
-          setLoaded({ recordId, detail: result.data, error: null });
-        }
-      },
-      () => {
-        if (current) {
-          setLoaded({ recordId, detail: null, error: `Could not load this ${noun}.` });
-        }
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [recordId, load, noun]);
+  const { current } = useRecordById(recordId, load, noun);
 
   if (!recordId) return null;
-  const current = loaded?.recordId === recordId ? loaded : null;
   const title = current?.detail
     ? titleOf(current.detail)
     : current?.error

@@ -53,6 +53,7 @@ import type { DetailFormProps } from "./formShared";
 import { categoryOptions } from "@/lib/tree/slice";
 import { formState } from "@/lib/detail/formState";
 import { useToday } from "@/components/grid/useToday";
+import { useRecordById } from "./useRecordById";
 
 const DRAWER_CODEC: SettingCodec<DrawerSettings> = {
   parse: parseDrawerSettings,
@@ -95,42 +96,8 @@ export function NodeDetailDrawer({
   const titleId = useId();
   const nodeId = node?.id ?? null;
 
-  // The fetch result carries the id it was fetched for, so a result for the previously
-  // opened row reads as "not loaded yet" rather than being cleared by an effect.
-  const [loaded, setLoaded] = useState<{
-    nodeId: string;
-    detail: NodeDetail | null;
-    error: string | null;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!nodeId) return;
-
-    let current = true;
-    void loadNodeDetailAction(nodeId).then(
-      (result) => {
-        // A second open may have overtaken this one; only the latest may write.
-        if (!current) return;
-        if (!result.ok) setLoaded({ nodeId, detail: null, error: result.error });
-        else if (!result.data)
-          setLoaded({ nodeId, detail: null, error: "That record no longer exists." });
-        else setLoaded({ nodeId, detail: result.data, error: null });
-      },
-      // A rejected action (dropped connection, server crash) would otherwise leave the
-      // drawer stuck on its loading state with nothing to explain why.
-      () => {
-        if (current) {
-          setLoaded({ nodeId, detail: null, error: "Could not load this record." });
-        }
-      },
-    );
-
-    return () => {
-      current = false;
-    };
-  }, [nodeId]);
-
-  const current = loaded?.nodeId === nodeId ? loaded : null;
+  const record = useRecordById(nodeId, loadNodeDetailAction, "record");
+  const current = record.current;
   const detail = current?.detail ?? null;
   const categories = useMemo(() => categoryOptions(nodes), [nodes]);
   const loadError = current?.error ?? null;
@@ -167,9 +134,7 @@ export function NodeDetailDrawer({
               node={node}
               detail={detail}
               categories={categories}
-              onReload={(next) =>
-                setLoaded({ nodeId: next.id, detail: next, error: null })
-              }
+              onReload={(next) => record.replace(next.id, next)}
               onClose={onClose}
               formCloseRef={formCloseRef}
             />
