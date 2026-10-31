@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useId, useState, useTransition } from "react";
 import type { ContactOption } from "@/lib/contacts/types";
 import { weeklyAvailableMinutes, weeklyWorkingMinutes } from "@/lib/resources/capacity";
 import type { ResourceDetail, ResourceInput } from "@/lib/resources/types";
@@ -8,12 +7,9 @@ import {
   getResourceDetailAction,
   updateResourceAction,
 } from "@/app/(shell)/library/resources/actions";
-import {
-  Drawer,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerLeaveGuard,
-} from "@/components/detail/Drawer";
+import { DrawerFooter, DrawerLeaveGuard } from "@/components/detail/Drawer";
+import { RecordDrawer } from "@/components/detail/RecordDrawer";
+import { useDrawerForm } from "@/components/detail/useDrawerForm";
 import {
   EffortField,
   FieldGrid,
@@ -42,6 +38,11 @@ function draftOf(detail: ResourceDetail): Required<ResourceInput> {
   };
 }
 
+/** The resource's name wherever it is shown: its grid row, its drawer, the delete confirm. */
+export function resourceName(resource: Pick<ResourceDetail, "shortName">): string {
+  return resource.shortName || "Untitled resource";
+}
+
 /** Explicit-save Resource Information form, following the shared structured drawer pattern. */
 export function ResourceDrawer({
   resourceId,
@@ -54,71 +55,23 @@ export function ResourceDrawer({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const titleId = useId();
-  const [loaded, setLoaded] = useState<{
-    resourceId: string;
-    detail: ResourceDetail | null;
-    error: string | null;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!resourceId) return;
-    let current = true;
-    void getResourceDetailAction(resourceId).then(
-      (result) => {
-        if (!current) return;
-        if (!result.ok) setLoaded({ resourceId, detail: null, error: result.error });
-        else if (!result.data) {
-          setLoaded({
-            resourceId,
-            detail: null,
-            error: "That resource no longer exists.",
-          });
-        } else {
-          setLoaded({ resourceId, detail: result.data, error: null });
-        }
-      },
-      () => {
-        if (current)
-          setLoaded({
-            resourceId,
-            detail: null,
-            error: "Could not load this resource.",
-          });
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [resourceId]);
-
-  if (!resourceId) return null;
-  const current = loaded?.resourceId === resourceId ? loaded : null;
-
   return (
-    <Drawer open onClose={onClose} labelledBy={titleId}>
-      <DrawerHeader
-        titleId={titleId}
-        eyebrow="Resource"
-        title={
-          current?.detail?.shortName ?? (current?.error ? "Could not open" : "Loading…")
-        }
-        onClose={onClose}
-      />
-      {current?.error ? (
-        <p role="alert" className="px-5 py-4 text-[0.875rem] text-priority-a">
-          {current.error}
-        </p>
-      ) : current?.detail ? (
+    <RecordDrawer
+      recordId={resourceId}
+      load={getResourceDetailAction}
+      noun="resource"
+      titleOf={resourceName}
+      onClose={onClose}
+    >
+      {(detail) => (
         <ResourceForm
-          key={current.detail.id}
-          detail={current.detail}
+          detail={detail}
           contacts={contacts}
           onClose={onClose}
           onChanged={onChanged}
         />
-      ) : null}
-    </Drawer>
+      )}
+    </RecordDrawer>
   );
 }
 
@@ -133,39 +86,14 @@ function ResourceForm({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const [draft, setDraft] = useState(() => draftOf(detail));
-  const [dirty, setDirty] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, startTransition] = useTransition();
+  const { draft, patch, dirty, footer } = useDrawerForm({
+    initial: () => draftOf(detail),
+    persist: (next) => updateResourceAction(detail.id, next),
+    onChanged,
+    onClose,
+  });
   const capacity = weeklyAvailableMinutes(draft);
   const working = weeklyWorkingMinutes(draft);
-
-  function patch<K extends keyof ResourceInput>(
-    key: K,
-    value: Required<ResourceInput>[K],
-  ) {
-    setJustSaved(false);
-    setDirty(true);
-    setDraft((current) => ({ ...current, [key]: value }));
-  }
-
-  function save(thenClose: boolean) {
-    setError(null);
-    startTransition(async () => {
-      if (dirty) {
-        const result = await updateResourceAction(detail.id, draft);
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        setDirty(false);
-        onChanged();
-      }
-      if (thenClose) onClose();
-      else setJustSaved(true);
-    });
-  }
 
   return (
     <>
@@ -268,15 +196,7 @@ function ResourceForm({
 
       <DrawerLeaveGuard dirty={dirty} />
 
-      <DrawerFooter
-        onSave={() => save(false)}
-        onSaveAndClose={() => save(true)}
-        onClose={onClose}
-        saving={saving}
-        dirty={dirty}
-        justSaved={justSaved}
-        error={error}
-      />
+      <DrawerFooter {...footer} />
     </>
   );
 }

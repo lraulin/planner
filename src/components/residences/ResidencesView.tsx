@@ -11,7 +11,7 @@ import { useCatalogGrid } from "@/components/grid/useCatalogGrid";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useToday } from "@/components/grid/useToday";
 import { spanDuration } from "@/lib/history/span";
-import { ResidenceDrawer } from "./ResidenceDrawer";
+import { ResidenceDrawer, residenceName } from "./ResidenceDrawer";
 import { RESIDENCES_COLUMN_IDS, residencesColumns } from "./residencesColumns";
 
 const RESIDENCE_VIEWS = [{ id: "all", label: "All Residences" }] as const;
@@ -21,10 +21,6 @@ function viewDefaults(): GridDefaults {
     order: [...RESIDENCES_COLUMN_IDS],
     sorts: [{ columnId: "movedIn", direction: "desc" }],
   };
-}
-
-function nameOf(row: ResidenceListRow): string {
-  return row.city || row.label || row.streetAddress || "Untitled residence";
 }
 
 /** Where you have lived — a catalog you maintain, whose dates feed the Timeline chronology. */
@@ -45,7 +41,7 @@ export function ResidencesView({
       ...row,
       duration: spanDuration({ start: row.movedIn, end: row.movedOut }, todayKey),
     }),
-    nameOf,
+    nameOf: residenceName,
     noun: { one: "residence", many: "residences" },
     actions: {
       list: listResidencesAction,

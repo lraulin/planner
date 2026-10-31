@@ -1,16 +1,13 @@
 "use client";
 
-import { useEffect, useId, useState, useTransition } from "react";
+import { useState } from "react";
 import {
   getJobDetailAction,
   updateJobAction,
 } from "@/app/(shell)/library/jobs/actions";
-import {
-  Drawer,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerLeaveGuard,
-} from "@/components/detail/Drawer";
+import { DrawerFooter, DrawerLeaveGuard } from "@/components/detail/Drawer";
+import { RecordDrawer } from "@/components/detail/RecordDrawer";
+import { useDrawerForm } from "@/components/detail/useDrawerForm";
 import { FormTabs } from "@/components/detail/FormTabs";
 import {
   CheckboxField,
@@ -56,6 +53,11 @@ function draftOf(detail: JobDetail): Required<JobInput> {
   };
 }
 
+/** The job's name wherever it is shown: its grid row, its drawer, the delete confirm. */
+export function jobName(job: Pick<JobDetail, "employer">): string {
+  return job.employer || "Untitled job";
+}
+
 /** Explicit-save Job form, following the shared structured drawer pattern. */
 export function JobDrawer({
   jobId,
@@ -66,62 +68,16 @@ export function JobDrawer({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const titleId = useId();
-  const [loaded, setLoaded] = useState<{
-    jobId: string;
-    detail: JobDetail | null;
-    error: string | null;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!jobId) return;
-    let current = true;
-    void getJobDetailAction(jobId).then(
-      (result) => {
-        if (!current) return;
-        if (!result.ok) setLoaded({ jobId, detail: null, error: result.error });
-        else if (!result.data) {
-          setLoaded({ jobId, detail: null, error: "That job no longer exists." });
-        } else {
-          setLoaded({ jobId, detail: result.data, error: null });
-        }
-      },
-      () => {
-        if (current)
-          setLoaded({ jobId, detail: null, error: "Could not load this job." });
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [jobId]);
-
-  if (!jobId) return null;
-  const current = loaded?.jobId === jobId ? loaded : null;
-
   return (
-    <Drawer open onClose={onClose} labelledBy={titleId}>
-      <DrawerHeader
-        titleId={titleId}
-        eyebrow="Job"
-        title={
-          current?.detail?.employer ?? (current?.error ? "Could not open" : "Loading…")
-        }
-        onClose={onClose}
-      />
-      {current?.error ? (
-        <p role="alert" className="px-5 py-4 text-[0.875rem] text-priority-a">
-          {current.error}
-        </p>
-      ) : current?.detail ? (
-        <JobForm
-          key={current.detail.id}
-          detail={current.detail}
-          onClose={onClose}
-          onChanged={onChanged}
-        />
-      ) : null}
-    </Drawer>
+    <RecordDrawer
+      recordId={jobId}
+      load={getJobDetailAction}
+      noun="job"
+      titleOf={jobName}
+      onClose={onClose}
+    >
+      {(detail) => <JobForm detail={detail} onClose={onClose} onChanged={onChanged} />}
+    </RecordDrawer>
   );
 }
 
@@ -134,35 +90,13 @@ function JobForm({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const [draft, setDraft] = useState(() => draftOf(detail));
+  const { draft, patch, dirty, footer } = useDrawerForm({
+    initial: () => draftOf(detail),
+    persist: (next) => updateJobAction(detail.id, next),
+    onChanged,
+    onClose,
+  });
   const [tab, setTab] = useState<TabId>("position");
-  const [dirty, setDirty] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, startTransition] = useTransition();
-
-  function patch<K extends keyof JobInput>(key: K, value: Required<JobInput>[K]) {
-    setJustSaved(false);
-    setDirty(true);
-    setDraft((current) => ({ ...current, [key]: value }));
-  }
-
-  function save(thenClose: boolean) {
-    setError(null);
-    startTransition(async () => {
-      if (dirty) {
-        const result = await updateJobAction(detail.id, draft);
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        setDirty(false);
-        onChanged();
-      }
-      if (thenClose) onClose();
-      else setJustSaved(true);
-    });
-  }
 
   const tabs = [
     {
@@ -346,15 +280,7 @@ function JobForm({
     <>
       <FormTabs tabs={tabs} active={tab} onSelect={(id) => setTab(id as TabId)} />
       <DrawerLeaveGuard dirty={dirty} />
-      <DrawerFooter
-        onSave={() => save(false)}
-        onSaveAndClose={() => save(true)}
-        onClose={onClose}
-        saving={saving}
-        dirty={dirty}
-        justSaved={justSaved}
-        error={error}
-      />
+      <DrawerFooter {...footer} />
     </>
   );
 }

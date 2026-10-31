@@ -11,7 +11,7 @@ import { useCatalogGrid } from "@/components/grid/useCatalogGrid";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useToday } from "@/components/grid/useToday";
 import { spanDuration } from "@/lib/history/span";
-import { JobDrawer } from "./JobDrawer";
+import { JobDrawer, jobName } from "./JobDrawer";
 import { JOBS_COLUMN_IDS, jobsColumns } from "./jobsColumns";
 
 const JOB_VIEWS = [{ id: "all", label: "All Jobs" }] as const;
@@ -21,10 +21,6 @@ function viewDefaults(): GridDefaults {
     order: [...JOBS_COLUMN_IDS],
     sorts: [{ columnId: "start", direction: "desc" }],
   };
-}
-
-function nameOf(row: JobListRow): string {
-  return row.employer || "Untitled job";
 }
 
 /** Employment history — a catalog you maintain, whose dates feed the Timeline chronology. */
@@ -42,7 +38,7 @@ export function JobsView({ initialJobs }: { initialJobs: JobListRow[] }) {
       ...row,
       duration: spanDuration({ start: row.startDate, end: row.endDate }, todayKey),
     }),
-    nameOf,
+    nameOf: jobName,
     noun: { one: "job", many: "jobs" },
     actions: { list: listJobsAction, create: createJobAction, remove: deleteJobAction },
   });

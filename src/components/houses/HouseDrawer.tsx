@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useId, useState, useTransition } from "react";
+import { useState } from "react";
 import type { PriorityLetter } from "@/db/schema";
 import {
   getHouseDetailAction,
   updateHouseAction,
 } from "@/app/(shell)/library/houses/actions";
-import {
-  Drawer,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerLeaveGuard,
-} from "@/components/detail/Drawer";
+import { DrawerFooter, DrawerLeaveGuard } from "@/components/detail/Drawer";
+import { RecordDrawer } from "@/components/detail/RecordDrawer";
+import { useDrawerForm } from "@/components/detail/useDrawerForm";
 import { FormTabs } from "@/components/detail/FormTabs";
 import {
   DecimalField,
@@ -87,6 +84,13 @@ function draftOf(detail: HouseDetail): HouseDraft {
   };
 }
 
+/** The house's name wherever it is shown: its grid row, its drawer, the delete confirm. */
+export function houseName(
+  house: Pick<HouseDetail, "nickname" | "streetAddress">,
+): string {
+  return house.nickname || house.streetAddress || "Untitled house";
+}
+
 /** Explicit-save House form, following the shared structured drawer pattern. */
 export function HouseDrawer({
   houseId,
@@ -97,64 +101,18 @@ export function HouseDrawer({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const titleId = useId();
-  const [loaded, setLoaded] = useState<{
-    houseId: string;
-    detail: HouseDetail | null;
-    error: string | null;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!houseId) return;
-    let current = true;
-    void getHouseDetailAction(houseId).then(
-      (result) => {
-        if (!current) return;
-        if (!result.ok) setLoaded({ houseId, detail: null, error: result.error });
-        else if (!result.data) {
-          setLoaded({ houseId, detail: null, error: "That house no longer exists." });
-        } else {
-          setLoaded({ houseId, detail: result.data, error: null });
-        }
-      },
-      () => {
-        if (current)
-          setLoaded({ houseId, detail: null, error: "Could not load this house." });
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [houseId]);
-
-  if (!houseId) return null;
-  const current = loaded?.houseId === houseId ? loaded : null;
-
   return (
-    <Drawer open onClose={onClose} labelledBy={titleId}>
-      <DrawerHeader
-        titleId={titleId}
-        eyebrow="House"
-        title={
-          current?.detail?.nickname ||
-          current?.detail?.streetAddress ||
-          (current?.error ? "Could not open" : "Loading…")
-        }
-        onClose={onClose}
-      />
-      {current?.error ? (
-        <p role="alert" className="px-5 py-4 text-[0.875rem] text-priority-a">
-          {current.error}
-        </p>
-      ) : current?.detail ? (
-        <HouseForm
-          key={current.detail.id}
-          detail={current.detail}
-          onClose={onClose}
-          onChanged={onChanged}
-        />
-      ) : null}
-    </Drawer>
+    <RecordDrawer
+      recordId={houseId}
+      load={getHouseDetailAction}
+      noun="house"
+      titleOf={houseName}
+      onClose={onClose}
+    >
+      {(detail) => (
+        <HouseForm detail={detail} onClose={onClose} onChanged={onChanged} />
+      )}
+    </RecordDrawer>
   );
 }
 
@@ -167,40 +125,17 @@ function HouseForm({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const [draft, setDraft] = useState(() => draftOf(detail));
+  const { draft, patch, dirty, footer } = useDrawerForm({
+    initial: () => draftOf(detail),
+    persist: (next) => updateHouseAction(detail.id, next),
+    onChanged,
+    onClose,
+  });
   const [tab, setTab] = useState<TabId>("details");
-  const [dirty, setDirty] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, startTransition] = useTransition();
-
-  function patch<K extends keyof HouseDraft>(key: K, value: HouseDraft[K]) {
-    setJustSaved(false);
-    setDirty(true);
-    setDraft((current) => ({ ...current, [key]: value }));
-  }
 
   function patchPriority(letter: PriorityLetter | null, rank: number | null) {
-    setJustSaved(false);
-    setDirty(true);
-    setDraft((current) => ({ ...current, priorityLetter: letter, priorityRank: rank }));
-  }
-
-  function save(thenClose: boolean) {
-    setError(null);
-    startTransition(async () => {
-      if (dirty) {
-        const result = await updateHouseAction(detail.id, draft);
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        setDirty(false);
-        onChanged();
-      }
-      if (thenClose) onClose();
-      else setJustSaved(true);
-    });
+    patch("priorityLetter", letter);
+    patch("priorityRank", rank);
   }
 
   const tabs = [
@@ -388,15 +323,7 @@ function HouseForm({
     <>
       <FormTabs tabs={tabs} active={tab} onSelect={(id) => setTab(id as TabId)} />
       <DrawerLeaveGuard dirty={dirty} />
-      <DrawerFooter
-        onSave={() => save(false)}
-        onSaveAndClose={() => save(true)}
-        onClose={onClose}
-        saving={saving}
-        dirty={dirty}
-        justSaved={justSaved}
-        error={error}
-      />
+      <DrawerFooter {...footer} />
     </>
   );
 }

@@ -10,17 +10,13 @@ import {
 import { CatalogGrid } from "@/components/grid/CatalogGrid";
 import { useCatalogGrid } from "@/components/grid/useCatalogGrid";
 import type { GridDefaults } from "@/components/grid/useGridState";
-import { ResourceDrawer } from "./ResourceDrawer";
+import { ResourceDrawer, resourceName } from "./ResourceDrawer";
 import { RESOURCES_COLUMN_IDS, resourcesColumns } from "./resourcesColumns";
 
 const RESOURCE_VIEWS = [{ id: "all", label: "All Resources" }] as const;
 
 function viewDefaults(): GridDefaults {
   return { order: [...RESOURCES_COLUMN_IDS] };
-}
-
-function nameOf(row: ResourceListRow): string {
-  return row.shortName || "Untitled resource";
 }
 
 /** Resources list — a small maintained catalog rather than a second schedule surface. */
@@ -38,7 +34,7 @@ export function ResourcesView({
     columns: resourcesColumns,
     initialRows: initialResources,
     toNode: (row) => row,
-    nameOf,
+    nameOf: resourceName,
     noun: { one: "resource", many: "resources" },
     actions: {
       list: listResourcesAction,

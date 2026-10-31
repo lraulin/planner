@@ -10,17 +10,13 @@ import {
 import { CatalogGrid } from "@/components/grid/CatalogGrid";
 import { useCatalogGrid } from "@/components/grid/useCatalogGrid";
 import type { GridDefaults } from "@/components/grid/useGridState";
-import { HouseDrawer } from "./HouseDrawer";
+import { HouseDrawer, houseName } from "./HouseDrawer";
 import { HOUSES_COLUMN_IDS, housesColumns } from "./housesColumns";
 
 const HOUSE_VIEWS = [{ id: "all", label: "All Houses" }] as const;
 
 function viewDefaults(): GridDefaults {
   return { order: [...HOUSES_COLUMN_IDS] };
-}
-
-function nameOf(row: HouseListRow): string {
-  return row.nickname || row.streetAddress || "Untitled house";
 }
 
 /** House-shopping comparison grid — a small maintained catalog, not a working queue. */
@@ -32,7 +28,7 @@ export function HousesView({ initialHouses }: { initialHouses: HouseListRow[] })
     columns: housesColumns,
     initialRows: initialHouses,
     toNode: (row) => row,
-    nameOf,
+    nameOf: houseName,
     noun: { one: "house", many: "houses" },
     actions: {
       list: listHousesAction,
