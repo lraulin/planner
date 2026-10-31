@@ -9,6 +9,8 @@
 
 import type { EnvelopeKind } from "@/db/schema";
 import { budgetChildren } from "./hierarchy";
+import type { BudgetGroupRow } from "./queries";
+import type { BudgetRow } from "./rows";
 
 export type EnvelopePickerOption = {
   id: string;
@@ -394,4 +396,37 @@ export function visibleEnvelopeCatalog(catalog: EnvelopeCatalog): EnvelopeCatalo
       (envelope) => !envelope.hidden && chainVisible(envelope.groupId),
     ),
   };
+}
+
+/** The Budget's groups as the envelope picker lists them. */
+export function budgetPickerGroups(
+  groups: readonly BudgetGroupRow[],
+): EnvelopePickerGroup[] {
+  return groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    parentGroupId: group.parentGroupId,
+    sortKey: group.sortKey,
+    hidden: group.hidden,
+  }));
+}
+
+/**
+ * The Budget's envelopes as the envelope picker lists them. `detail` adds a line under
+ * each name — Move Money shows the balance it would move from.
+ */
+export function budgetPickerEnvelopes(
+  rows: readonly BudgetRow[],
+  detail?: (row: BudgetRow) => string,
+): EnvelopePickerOption[] {
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.name,
+    name: row.name,
+    kind: row.kind,
+    groupId: row.groupId,
+    sortKey: row.sortKey,
+    hidden: row.hidden,
+    ...(detail ? { detail: detail(row) } : {}),
+  }));
 }

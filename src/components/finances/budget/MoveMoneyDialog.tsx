@@ -10,40 +10,9 @@ import type { BudgetRow } from "@/lib/finances/budget/rows";
 import {
   READY_TO_ASSIGN_DESTINATION,
   visibleEnvelopeCatalog,
-  type EnvelopePickerGroup,
-  type EnvelopePickerOption,
+  budgetPickerEnvelopes,
+  budgetPickerGroups,
 } from "@/lib/finances/budget/groupEnvelopeOptions";
-
-/**
- * Rule 3, as a dialog: take money out of one envelope and put it in another
- * envelope or back to Ready to Assign.
- *
- * The amount defaults to the whole balance and is capped at it. Moving more than an envelope
- * holds would fix one problem by making a second, and the server clamps it again — this is
- * the affordance, not the rule.
- */
-function pickerGroups(groups: readonly BudgetGroupRow[]): EnvelopePickerGroup[] {
-  return groups.map((group) => ({
-    id: group.id,
-    name: group.name,
-    parentGroupId: group.parentGroupId,
-    sortKey: group.sortKey,
-    hidden: group.hidden,
-  }));
-}
-
-function pickerEnvelopes(rows: readonly BudgetRow[]): EnvelopePickerOption[] {
-  return rows.map((row) => ({
-    id: row.id,
-    label: row.name,
-    name: row.name,
-    kind: row.kind,
-    groupId: row.groupId,
-    sortKey: row.sortKey,
-    hidden: row.hidden,
-    detail: formatUsd(row.balanceCents),
-  }));
-}
 
 export function MoveMoneyDialog({
   from,
@@ -64,8 +33,8 @@ export function MoveMoneyDialog({
   const catalog = useMemo(
     () =>
       visibleEnvelopeCatalog({
-        groups: pickerGroups(groups),
-        envelopes: pickerEnvelopes(targets),
+        groups: budgetPickerGroups(groups),
+        envelopes: budgetPickerEnvelopes(targets, (row) => formatUsd(row.balanceCents)),
       }),
     [groups, targets],
   );

@@ -12,8 +12,8 @@ import {
   defaultCategoryPickerChoice,
   visibleEnvelopeCatalog,
   type EnvelopeCatalog,
-  type EnvelopePickerGroup,
-  type EnvelopePickerOption,
+  budgetPickerEnvelopes,
+  budgetPickerGroups,
 } from "@/lib/finances/budget/groupEnvelopeOptions";
 import {
   ASSIGN_OPTION_LABELS,
@@ -21,28 +21,6 @@ import {
   type AssignOption,
   type AssignResult,
 } from "@/lib/finances/budget/assign/types";
-
-function pickerGroups(groups: readonly BudgetGroupRow[]): EnvelopePickerGroup[] {
-  return groups.map((group) => ({
-    id: group.id,
-    name: group.name,
-    parentGroupId: group.parentGroupId,
-    sortKey: group.sortKey,
-    hidden: group.hidden,
-  }));
-}
-
-function pickerEnvelopes(rows: readonly BudgetRow[]): EnvelopePickerOption[] {
-  return rows.map((row) => ({
-    id: row.id,
-    label: row.name,
-    name: row.name,
-    kind: row.kind,
-    groupId: row.groupId,
-    sortKey: row.sortKey,
-    hidden: row.hidden,
-  }));
-}
 
 function firstEnvelopeId(catalog: EnvelopeCatalog): string {
   const sections = categoryPickerSections(catalog.groups, catalog.envelopes, "", {
@@ -81,8 +59,8 @@ export function AssignDialog({
   const catalog = useMemo(
     () =>
       visibleEnvelopeCatalog({
-        groups: pickerGroups(groups),
-        envelopes: pickerEnvelopes(envelopes),
+        groups: budgetPickerGroups(groups),
+        envelopes: budgetPickerEnvelopes(envelopes),
       }),
     [groups, envelopes],
   );
