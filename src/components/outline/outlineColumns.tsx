@@ -1,6 +1,5 @@
 "use client";
 
-import { formatEffort } from "@/lib/tree/format";
 import type { ColumnDef } from "@/components/grid/columns";
 import {
   abbrStateColumn,
@@ -32,7 +31,7 @@ import {
   targetStartColumn,
   type OutlineColumnCtx,
 } from "@/components/grid/commonColumns";
-import { EffortCell } from "@/components/grid/cells";
+import { editableEffortColumn } from "@/components/grid/editableEffortColumn";
 
 /** Re-exported so the grid tabs keep importing their ctx type from here. */
 export type { OutlineColumnCtx };
@@ -64,22 +63,7 @@ export function buildOutlineColumns(
     priorityColumn(),
     nameColumn({ dragHandle: true }),
     categoryColumn(),
-    {
-      id: "effort",
-      label: "Effort",
-      width: "4.5rem",
-      align: "right",
-      filterKind: "text",
-      filterValue: (row) => formatEffort(row.node.effortRollupMinutes) || null,
-      sortValue: (row) => row.node.effortRollupMinutes ?? -1,
-      render: (row, ctx) => (
-        <EffortCell
-          key={`effort:${formatEffort(row.node.effortMinutes)}`}
-          node={row.node}
-          onChange={(minutes) => ctx.onEffortChange(row.node, minutes)}
-        />
-      ),
-    },
+    editableEffortColumn({ filter: true }),
     deadlineColumn(),
     stateColumn(today),
     focusColumn(),

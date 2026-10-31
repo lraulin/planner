@@ -44,7 +44,8 @@ import {
   targetEndColumn,
   targetStartColumn,
 } from "@/components/grid/commonColumns";
-import { EffortCell, ReadOnlyCell, StatusCell } from "@/components/grid/cells";
+import { ReadOnlyCell, StatusCell } from "@/components/grid/cells";
+import { editableEffortColumn } from "@/components/grid/editableEffortColumn";
 import { ResultAreaScopePicker, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import { NodeTabGrid, useNodeTabCommands } from "./NodeTabGrid";
@@ -111,22 +112,7 @@ function buildColumns(
         <ReadOnlyCell value={taskRatio(row.node.id, allNodes)} align="right" />
       ),
     },
-    {
-      id: "effort",
-      label: "Effort",
-      width: "4.5rem",
-      align: "right",
-      filterKind: "text",
-      filterValue: (row) => formatEffort(row.node.effortRollupMinutes) || null,
-      sortValue: (row) => row.node.effortRollupMinutes ?? -1,
-      render: (row, ctx) => (
-        <EffortCell
-          key={`effort:${formatEffort(row.node.effortMinutes)}`}
-          node={row.node}
-          onChange={(minutes) => ctx.onEffortChange(row.node, minutes)}
-        />
-      ),
-    },
+    editableEffortColumn({ filter: true }),
     {
       id: "effortLeft",
       label: "Left",

@@ -44,6 +44,7 @@ import {
   tcPriorityColumn,
 } from "@/components/grid/commonColumns";
 import { EffortCell, StatusCell } from "@/components/grid/cells";
+import { editableEffortColumn } from "@/components/grid/editableEffortColumn";
 import { ProjectScopePicker } from "@/components/projects/ProjectScopePicker";
 import { ToolbarToggle } from "./tabChrome";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
@@ -121,23 +122,9 @@ function buildColumns(
     priorityColumn(),
     nameColumn({ dragHandle: true }),
     categoryColumn(),
-    {
-      id: "effort",
-      label: "Effort",
-      width: "4.5rem",
-      align: "right",
-      sortValue: (row) => row.node.effortRollupMinutes ?? -1,
-      // This column has no filter to borrow text from, and "how long is it" is one of the
-      // three things worth a chip on a phone.
-      compactText: (row) => formatEffort(row.node.effortRollupMinutes) || null,
-      render: (row, ctx) => (
-        <EffortCell
-          key={`effort:${formatEffort(row.node.effortMinutes)}`}
-          node={row.node}
-          onChange={(minutes) => ctx.onEffortChange(row.node, minutes)}
-        />
-      ),
-    },
+    // This column has no filter to borrow text from, and "how long is it" is one of the
+    // three things worth a chip on a phone.
+    editableEffortColumn({ compactText: true }),
     {
       id: "effortLeft",
       label: "Left",

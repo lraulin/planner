@@ -16,6 +16,7 @@ import {
   priorityColumn,
   lapColumn,
 } from "@/components/grid/commonColumns";
+import { editableEffortColumn } from "@/components/grid/editableEffortColumn";
 
 /**
  * Columns for the Task Chooser, matching Achieve's own set (State / Pri / Name / Effort
@@ -130,20 +131,7 @@ export function buildChooserColumns(
     },
     nameColumn({ flat: true, dragHandle: true }),
     categoryColumn(),
-    {
-      id: "effort",
-      label: "Effort",
-      width: "4.5rem",
-      align: "right",
-      sortValue: (row) => row.node.effortRollupMinutes ?? -1,
-      render: (row, ctx) => (
-        <EffortCell
-          key={`effort:${formatEffort(row.node.effortMinutes)}`}
-          node={row.node}
-          onChange={(minutes) => ctx.onEffortChange(row.node, minutes)}
-        />
-      ),
-    },
+    editableEffortColumn(),
     {
       id: "effortLeft",
       label: "Left",
