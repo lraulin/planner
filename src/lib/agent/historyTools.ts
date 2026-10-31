@@ -210,7 +210,17 @@ function lifeEventInputFromArgs(args: Record<string, unknown>): LifeEventInput {
   };
 }
 
-export async function listJobsTool(userId: string, args: Record<string, unknown>) {
+/**
+ * One page of a catalog of spans — jobs, residences — filtered the way both list tools
+ * take it: `currentOnly` keeps the ones with no end, `from`/`to` bound the start, and
+ * `query` matches the row's text.
+ */
+function pageOfSpans<T>(
+  rows: readonly T[],
+  args: Record<string, unknown>,
+  span: (row: T) => { start: string | null; end: string | null },
+  text: (row: T) => string,
+) {
   const bounds = pageBounds(
     optionalNumber(args, "offset"),
     optionalNumber(args, "limit"),
@@ -219,18 +229,22 @@ export async function listJobsTool(userId: string, args: Record<string, unknown>
   const from = optionalDateKey(args, "from") ?? undefined;
   const to = optionalDateKey(args, "to") ?? undefined;
   const currentOnly = optionalBoolean(args, "currentOnly") ?? false;
+  const kept = rows.filter((row) => {
+    const { start, end } = span(row);
+    if (currentOnly && end !== null) return false;
+    return inDateWindow(start, from, to) && matchesQuery(text(row), query);
+  });
+  return paginate(kept, bounds);
+}
 
-  let rows = await listJobs(userId);
-  if (currentOnly) rows = rows.filter((row) => row.endDate === null);
-  rows = rows.filter((row) => inDateWindow(row.startDate, from, to));
-  rows = rows.filter((row) =>
-    matchesQuery(
+export async function listJobsTool(userId: string, args: Record<string, unknown>) {
+  const page = pageOfSpans(
+    await listJobs(userId),
+    args,
+    (row) => ({ start: row.startDate, end: row.endDate }),
+    (row) =>
       `${row.employer} ${row.jobTitle} ${row.employmentType} ${row.location} ${row.duties} ${row.notes}`,
-      query,
-    ),
   );
-
-  const page = paginate(rows, bounds);
   return { jobs: page.items.map(jobSummary), pageInfo: page.pageInfo };
 }
 
@@ -264,26 +278,13 @@ export async function listResidencesTool(
   userId: string,
   args: Record<string, unknown>,
 ) {
-  const bounds = pageBounds(
-    optionalNumber(args, "offset"),
-    optionalNumber(args, "limit"),
-  );
-  const query = optionalString(args, "query")?.trim().toLowerCase();
-  const from = optionalDateKey(args, "from") ?? undefined;
-  const to = optionalDateKey(args, "to") ?? undefined;
-  const currentOnly = optionalBoolean(args, "currentOnly") ?? false;
-
-  let rows = await listResidences(userId);
-  if (currentOnly) rows = rows.filter((row) => row.movedOut === null);
-  rows = rows.filter((row) => inDateWindow(row.movedIn, from, to));
-  rows = rows.filter((row) =>
-    matchesQuery(
+  const page = pageOfSpans(
+    await listResidences(userId),
+    args,
+    (row) => ({ start: row.movedIn, end: row.movedOut }),
+    (row) =>
       `${row.label} ${row.address} ${row.city} ${row.region} ${row.country} ${row.housingType} ${row.notes}`,
-      query,
-    ),
   );
-
-  const page = paginate(rows, bounds);
   return { residences: page.items.map(residenceSummary), pageInfo: page.pageInfo };
 }
 
