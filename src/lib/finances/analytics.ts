@@ -788,33 +788,46 @@ export type CategoryTotal = {
   count: number;
 };
 
-/** Spend by category, largest first. Refunds net off the category they came back to. */
-export function spendByCategory(rows: readonly AnalyticsRow[]): CategoryTotal[] {
+/**
+ * Spend grouped by `keyOf`, largest first, ties alphabetical. Refunds net off the key they
+ * came back to; a row with no spend after that is skipped.
+ */
+function spendBy(
+  rows: readonly AnalyticsRow[],
+  keyOf: (row: AnalyticsRow) => string,
+): { key: string; cents: number; share: number; count: number }[] {
   const totals = new Map<string, { cents: number; count: number }>();
   let total = 0;
 
   for (const row of rows) {
     const cost = spendCentsOf(row);
     if (cost === 0) continue;
-    const category = effectiveCategory(row);
-    const entry = totals.get(category) ?? { cents: 0, count: 0 };
+    const key = keyOf(row);
+    const entry = totals.get(key) ?? { cents: 0, count: 0 };
     entry.cents += cost;
     entry.count += 1;
-    totals.set(category, entry);
+    totals.set(key, entry);
     total += cost;
   }
 
   return [...totals.entries()]
-    .map(([category, entry]) => ({
-      category,
+    .map(([key, entry]) => ({
+      key,
       cents: entry.cents,
       count: entry.count,
       share: total > 0 ? entry.cents / total : 0,
     }))
     .sort(
-      (left, right) =>
-        right.cents - left.cents || left.category.localeCompare(right.category),
+      (left, right) => right.cents - left.cents || left.key.localeCompare(right.key),
     );
+}
+
+/** Spend by category, largest first. Refunds net off the category they came back to. */
+export function spendByCategory(rows: readonly AnalyticsRow[]): CategoryTotal[] {
+  return spendBy(rows, effectiveCategory).map(({ key, ...entry }) => ({
+    category: key,
+    ...entry,
+  }));
 }
 
 export type MerchantTotal = {
@@ -826,31 +839,10 @@ export type MerchantTotal = {
 
 /** Spend by merchant, largest first. Same rules as {@link spendByCategory}. */
 export function spendByMerchant(rows: readonly AnalyticsRow[]): MerchantTotal[] {
-  const totals = new Map<string, { cents: number; count: number }>();
-  let total = 0;
-
-  for (const row of rows) {
-    const cost = spendCentsOf(row);
-    if (cost === 0) continue;
-    const merchant = effectiveMerchant(row);
-    const entry = totals.get(merchant) ?? { cents: 0, count: 0 };
-    entry.cents += cost;
-    entry.count += 1;
-    totals.set(merchant, entry);
-    total += cost;
-  }
-
-  return [...totals.entries()]
-    .map(([merchant, entry]) => ({
-      merchant,
-      cents: entry.cents,
-      count: entry.count,
-      share: total > 0 ? entry.cents / total : 0,
-    }))
-    .sort(
-      (left, right) =>
-        right.cents - left.cents || left.merchant.localeCompare(right.merchant),
-    );
+  return spendBy(rows, effectiveMerchant).map(({ key, ...entry }) => ({
+    merchant: key,
+    ...entry,
+  }));
 }
 
 /** Folded into this bucket so a trend chart does not grow a colour per leftover category. */
