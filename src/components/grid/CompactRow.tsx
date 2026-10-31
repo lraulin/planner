@@ -457,7 +457,7 @@ function fullTextOf<TCtx, TRow>(
  *
  * A row with no priority still gets the bar's width, so titles line up down the list.
  */
-function AccentBar({ text }: { text: string | null }) {
+export function AccentBar({ text }: { text: string | null }) {
   const letter = text?.[0]?.toUpperCase();
   const colour =
     letter === "A"

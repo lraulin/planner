@@ -19,6 +19,7 @@ import {
 import type { MetricListRow } from "@/lib/metrics/types";
 import { useDisplaySettings } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey, type DateFormatId } from "@/lib/dateFormat";
+import { AccentBar } from "@/components/grid/CompactRow";
 
 export type MetricGroup = {
   key: string;
@@ -169,7 +170,7 @@ function MetricCompactRow({
         selected ? "bg-select" : "bg-surface"
       }`}
     >
-      <PriorityBar text={priority} />
+      <AccentBar text={priority} />
 
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex min-w-0 items-baseline gap-2">
@@ -192,27 +193,5 @@ function MetricCompactRow({
         )}
       </span>
     </button>
-  );
-}
-
-/**
- * Priority as a bar rather than a column, exactly as `CompactRow` draws it — a row with no
- * priority still spends the width, so the titles line up down the list.
- */
-function PriorityBar({ text }: { text: string }) {
-  const letter = text[0]?.toUpperCase();
-  const colour =
-    letter === "A"
-      ? "bg-priority-a"
-      : letter === "B"
-        ? "bg-priority-b"
-        : letter === "C"
-          ? "bg-priority-c"
-          : letter === "D"
-            ? "bg-priority-d"
-            : "bg-transparent";
-
-  return (
-    <span aria-hidden className={`h-8 w-[3px] flex-none rounded-full ${colour}`} />
   );
 }
