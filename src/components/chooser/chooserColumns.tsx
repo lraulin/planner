@@ -14,6 +14,7 @@ import {
   deadlineColumn,
   nameColumn,
   priorityColumn,
+  lapColumn,
 } from "@/components/grid/commonColumns";
 
 /**
@@ -109,23 +110,9 @@ export function buildChooserColumns(
         />
       ),
     },
-    {
-      // Inherited priority, which is what the score actually reads. Off by default, but
-      // it is the first thing to turn on when a row's position looks wrong.
-      id: "lap",
-      label: "L.A.P.",
-      width: "3.5rem",
-      align: "center",
-      filterKind: "priority",
-      filterValue: (row) =>
-        formatPriority(row.node.lapLetter, row.node.lapRank) || null,
-      sortValue: (row) => formatPriority(row.node.lapLetter, row.node.lapRank),
-      render: (row) => (
-        <span className="tabular text-[0.75rem] text-ink-muted">
-          {formatPriority(row.node.lapLetter, row.node.lapRank)}
-        </span>
-      ),
-    },
+    // Inherited priority, which is what the score actually reads. Off by default, but
+    // it is the first thing to turn on when a row's position looks wrong.
+    lapColumn(),
     {
       id: "focus",
       label: "Fo",

@@ -688,6 +688,17 @@ export function projectPriorityColumn(): ColumnDef<OutlineColumnCtx> {
   }));
 }
 
+/**
+ * The Task Chooser's flat cross-project ranking, read-only. Assigning a rank means placing
+ * the task among all the others, which is the chooser's job.
+ */
+export function tcPriorityColumn(): ColumnDef<OutlineColumnCtx> {
+  return derivedPriorityColumn("tcPriority", "TC Pri", "3.5rem", (node) => ({
+    letter: node.tcPriorityLetter,
+    rank: node.tcPriorityRank,
+  }));
+}
+
 export function lapColumn(): ColumnDef<OutlineColumnCtx> {
   return derivedPriorityColumn("lap", "L.A.P.", "3.5rem", (node) => ({
     letter: node.lapLetter,
