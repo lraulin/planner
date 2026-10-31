@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo } from "react";
 import {
   loadAmazonBlockAction,
   loadAmazonExportAction,
@@ -16,6 +16,7 @@ import {
 } from "@/lib/amazon/ordersQuery";
 import type { GridRow } from "@/lib/tree/slice";
 import type { NodeGridRow } from "@/components/grid/columns";
+import { useWindowedSource } from "@/components/grid/useWindowedSource";
 
 function placeholder(id: string): AmazonItemListRow {
   return {
@@ -49,10 +50,6 @@ function placeholder(id: string): AmazonItemListRow {
   };
 }
 
-function cacheFrom(prepared: AmazonOrdersPrepared): Map<string, AmazonItemListRow> {
-  return new Map(prepared.block.rows.map((row) => [row.id, row]));
-}
-
 export function useAmazonSource({
   initial,
   query,
@@ -60,93 +57,24 @@ export function useAmazonSource({
   initial: AmazonOrdersPrepared;
   query: AmazonOrdersQuery;
 }) {
-  const [seenInitial, setSeenInitial] = useState(initial);
-  const [index, setIndex] = useState(initial.index);
-  const [cache, setCache] = useState(() => cacheFrom(initial));
-  const [error, setError] = useState<string | null>(null);
-  const queryRef = useRef(query);
-  const requestId = useRef(0);
-  const inFlight = useRef<Set<string>>(new Set());
-  if (initial !== seenInitial) {
-    setSeenInitial(initial);
-    setIndex(initial.index);
-    setCache(cacheFrom(initial));
-  }
-  useEffect(() => {
-    queryRef.current = query;
+  const {
+    index,
+    cache,
+    error,
+    setError,
+    queryRef,
+    onVisibleRange,
+    pendingRowIds,
+    reload,
+  } = useWindowedSource({
+    initial,
+    query,
+    queryKey: amazonOrdersQueryKey,
+    loadIndex: loadAmazonIndexAction,
+    loadBlock: loadAmazonBlockAction,
+    blockSize: AMAZON_BLOCK_SIZE,
+    prefetch: AMAZON_PREFETCH,
   });
-
-  const key = amazonOrdersQueryKey(query);
-
-  useEffect(() => {
-    if (key === index.queryKey) return;
-    const handle = window.setTimeout(
-      () => {
-        const id = ++requestId.current;
-        void loadAmazonIndexAction(queryRef.current).then((result) => {
-          if (id !== requestId.current) return;
-          if (!result.ok) {
-            setError(result.error);
-            return;
-          }
-          setError(null);
-          setIndex(result.data.index);
-          setCache(cacheFrom(result.data));
-        });
-      },
-      query.search.trim() === "" ? 0 : 200,
-    );
-    return () => window.clearTimeout(handle);
-  }, [key, index.queryKey, query.search]);
-
-  const mergeRows = useCallback((rows: readonly AmazonItemListRow[]) => {
-    if (rows.length === 0) return;
-    setCache((current) => {
-      const next = new Map(current);
-      for (const row of rows) next.set(row.id, row);
-      return next;
-    });
-  }, []);
-
-  const ensureIds = useCallback(
-    (ids: readonly string[]) => {
-      const missing = ids.filter((id) => !cache.has(id) && !inFlight.current.has(id));
-      if (missing.length === 0) return;
-      const batch = missing.slice(0, AMAZON_BLOCK_SIZE);
-      for (const id of batch) inFlight.current.add(id);
-      void loadAmazonBlockAction(batch).then((result) => {
-        for (const id of batch) inFlight.current.delete(id);
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        mergeRows(result.data.rows);
-      });
-    },
-    [cache, mergeRows],
-  );
-
-  const onVisibleRange = useCallback(
-    (start: number, end: number) => {
-      const from = Math.max(0, start - AMAZON_PREFETCH);
-      const to = Math.min(index.entries.length - 1, end + AMAZON_PREFETCH);
-      const ids: string[] = [];
-      for (let i = from; i <= to; i++) {
-        const entry = index.entries[i];
-        if (entry?.kind === "node") ids.push(entry.id);
-      }
-      ensureIds(ids);
-    },
-    [index.entries, ensureIds],
-  );
-
-  const pendingRowIds = useMemo(() => {
-    const pending = new Set<string>();
-    for (const entry of index.entries) {
-      if (entry.kind === "node" && !cache.has(entry.id)) pending.add(entry.id);
-    }
-    return pending;
-  }, [index.entries, cache]);
 
   const gridRows: GridRow<AmazonItemListRow>[] = useMemo(
     () =>
@@ -171,19 +99,6 @@ export function useAmazonSource({
     [index.entries, cache],
   );
 
-  const reload = useCallback(async () => {
-    const id = ++requestId.current;
-    const result = await loadAmazonIndexAction(queryRef.current);
-    if (id !== requestId.current) return;
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    setError(null);
-    setIndex(result.data.index);
-    setCache(cacheFrom(result.data));
-  }, []);
-
   const loadExportRows = useCallback(async (): Promise<
     NodeGridRow<AmazonItemListRow>[]
   > => {
@@ -198,7 +113,7 @@ export function useAmazonSource({
       node: row,
       depth: 0,
     }));
-  }, []);
+  }, [queryRef, setError]);
 
   const rowById = useCallback(
     (id: string | null) => {

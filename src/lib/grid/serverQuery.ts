@@ -22,6 +22,8 @@ import { parseColumnFilter, type ColumnFilter, type FilterKind } from "./customF
 import type { GridFilterValue } from "./filterValue";
 import { filterActive, rowPassesFilters } from "./filters";
 import { rowMatchesSearch, searchActive } from "./search";
+import { sortRowsWithinGroups, type SortValue } from "./sortRows";
+import type { GridRow } from "@/lib/tree/slice";
 import { MAX_SORT_KEYS, type GridSort } from "@/lib/settings/grid";
 
 /** Records per block: what one server round trip returns. */
@@ -211,4 +213,26 @@ export function sliceBlock<Row extends { id: string }>(
     const row = byId.get(id);
     return row ? [row] : [];
   });
+}
+
+/**
+ * Sort the rows by the query's sort keys, within their groups. A key on a field with no
+ * sort value is skipped, as an unsortable column's header click would be.
+ */
+export function sortByQuery<T>(
+  rows: GridRow<T>[],
+  sorts: readonly GridSort[],
+  fields: Partial<Record<string, { sortValue?: (row: T) => SortValue }>>,
+): GridRow<T>[] {
+  const keys = sorts.flatMap((entry) => {
+    const sortValue = fields[entry.columnId]?.sortValue;
+    if (!sortValue) return [];
+    return [
+      {
+        valueOf: (row: { node: T }) => sortValue(row.node),
+        direction: entry.direction,
+      },
+    ];
+  });
+  return sortRowsWithinGroups(rows, keys);
 }

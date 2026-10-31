@@ -19,6 +19,7 @@ import {
 } from "@/lib/finances/registerQuery";
 import type { GridRow } from "@/lib/tree/slice";
 import type { NodeGridRow } from "@/components/grid/columns";
+import { useWindowedSource } from "@/components/grid/useWindowedSource";
 
 /** Stable identity while the lists have not arrived, so nothing downstream re-renders. */
 const NO_FACETS: Record<string, string[]> = {};
@@ -64,10 +65,6 @@ function placeholder(id: string): TransactionListRow {
   };
 }
 
-function cacheFrom(prepared: RegisterPrepared): Map<string, TransactionListRow> {
-  return new Map(prepared.block.rows.map((row) => [row.id, row]));
-}
-
 function asRegisterRow(
   row: TransactionListRow,
   notBudgetedIds: ReadonlySet<string>,
@@ -92,10 +89,6 @@ export function useRegisterSource({
    */
   wantFacets?: boolean;
 }) {
-  const [seenInitial, setSeenInitial] = useState(initial);
-  const [index, setIndex] = useState(initial.index);
-  const [cache, setCache] = useState(() => cacheFrom(initial));
-  const [error, setError] = useState<string | null>(null);
   /**
    * Split children, held apart from `cache` and keyed by parent.
    *
@@ -119,17 +112,31 @@ export function useRegisterSource({
     values: Record<string, string[]>;
   } | null>(null);
   const facetsAsked = useRef<string | null>(null);
-  const queryRef = useRef(query);
-  const requestId = useRef(0);
-  const inFlight = useRef<Set<string>>(new Set());
-  if (initial !== seenInitial) {
-    setSeenInitial(initial);
-    setIndex(initial.index);
-    setCache(cacheFrom(initial));
-    setFacets(null);
-  }
-  useEffect(() => {
-    queryRef.current = query;
+  const {
+    key,
+    index,
+    cache,
+    setCache,
+    error,
+    setError,
+    queryRef,
+    onVisibleRange,
+    pendingRowIds,
+    reload,
+  } = useWindowedSource({
+    initial,
+    query,
+    queryKey: registerQueryKey,
+    loadIndex: loadRegisterIndexAction,
+    loadBlock: loadRegisterBlockAction,
+    blockSize: REGISTER_BLOCK_SIZE,
+    prefetch: REGISTER_PREFETCH,
+    onNewRender: () => setFacets(null),
+    onReload: () => {
+      // The rows behind the lists may have changed; the next menu asks again.
+      facetsAsked.current = null;
+      setFacets(null);
+    },
   });
   useEffect(() => {
     // A new server render means the rows may have changed under the lists.
@@ -152,20 +159,23 @@ export function useRegisterSource({
       }
       setFacets({ viewKey, values: result.data });
     });
-  }, []);
+  }, [queryRef, setError]);
 
-  const loadSplitChildren = useCallback(async (parentId: string) => {
-    const result = await listSplitChildrenAction(parentId);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    setChildrenByParent((current) => {
-      const next = new Map(current);
-      next.set(parentId, result.data);
-      return next;
-    });
-  }, []);
+  const loadSplitChildren = useCallback(
+    async (parentId: string) => {
+      const result = await listSplitChildrenAction(parentId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setChildrenByParent((current) => {
+        const next = new Map(current);
+        next.set(parentId, result.data);
+        return next;
+      });
+    },
+    [setError],
+  );
 
   /** Show or hide one parent's children. Fetches them the first time, then keeps them. */
   const toggleSplit = useCallback(
@@ -181,7 +191,6 @@ export function useRegisterSource({
     [loadSplitChildren],
   );
 
-  const key = registerQueryKey(query);
   const viewKey = viewKeyOf(query);
   useEffect(() => {
     if (wantFacets) ensureFacets();
@@ -190,76 +199,6 @@ export function useRegisterSource({
     () => new Set(index.notBudgetedIds),
     [index.notBudgetedIds],
   );
-
-  useEffect(() => {
-    if (key === index.queryKey) return;
-    const handle = window.setTimeout(
-      () => {
-        const id = ++requestId.current;
-        void loadRegisterIndexAction(queryRef.current).then((result) => {
-          if (id !== requestId.current) return;
-          if (!result.ok) {
-            setError(result.error);
-            return;
-          }
-          setError(null);
-          setIndex(result.data.index);
-          setCache(cacheFrom(result.data));
-        });
-      },
-      query.search.trim() === "" ? 0 : 200,
-    );
-    return () => window.clearTimeout(handle);
-  }, [key, index.queryKey, query.search]);
-
-  const mergeRows = useCallback((rows: readonly TransactionListRow[]) => {
-    if (rows.length === 0) return;
-    setCache((current) => {
-      const next = new Map(current);
-      for (const row of rows) next.set(row.id, row);
-      return next;
-    });
-  }, []);
-
-  const ensureIds = useCallback(
-    (ids: readonly string[]) => {
-      const missing = ids.filter((id) => !cache.has(id) && !inFlight.current.has(id));
-      if (missing.length === 0) return;
-      const batch = missing.slice(0, REGISTER_BLOCK_SIZE);
-      for (const id of batch) inFlight.current.add(id);
-      void loadRegisterBlockAction(batch).then((result) => {
-        for (const id of batch) inFlight.current.delete(id);
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        mergeRows(result.data.rows);
-      });
-    },
-    [cache, mergeRows],
-  );
-
-  const onVisibleRange = useCallback(
-    (start: number, end: number) => {
-      const from = Math.max(0, start - REGISTER_PREFETCH);
-      const to = Math.min(index.entries.length - 1, end + REGISTER_PREFETCH);
-      const ids: string[] = [];
-      for (let i = from; i <= to; i++) {
-        const entry = index.entries[i];
-        if (entry?.kind === "node") ids.push(entry.id);
-      }
-      ensureIds(ids);
-    },
-    [index.entries, ensureIds],
-  );
-
-  const pendingRowIds = useMemo(() => {
-    const pending = new Set<string>();
-    for (const entry of index.entries) {
-      if (entry.kind === "node" && !cache.has(entry.id)) pending.add(entry.id);
-    }
-    return pending;
-  }, [index.entries, cache]);
 
   const gridRows: GridRow<RegisterTransactionRow>[] = useMemo(
     () =>
@@ -325,24 +264,8 @@ export function useRegisterSource({
         return current;
       });
     },
-    [],
+    [setCache],
   );
-
-  const reload = useCallback(async () => {
-    const id = ++requestId.current;
-    const result = await loadRegisterIndexAction(queryRef.current);
-    if (id !== requestId.current) return;
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    setError(null);
-    setIndex(result.data.index);
-    setCache(cacheFrom(result.data));
-    // The rows behind the lists may have changed; the next menu asks again.
-    facetsAsked.current = null;
-    setFacets(null);
-  }, []);
 
   const loadExportRows = useCallback(async (): Promise<
     NodeGridRow<RegisterTransactionRow>[]
@@ -358,7 +281,7 @@ export function useRegisterSource({
       node: asRegisterRow(row, notBudgetedIds),
       depth: 0,
     }));
-  }, [notBudgetedIds]);
+  }, [notBudgetedIds, queryRef, setError]);
 
   const rowById = useCallback(
     (id: string | null) => {
@@ -374,13 +297,16 @@ export function useRegisterSource({
     [cache, notBudgetedIds, childrenByParent],
   );
 
-  const putRow = useCallback((row: TransactionListRow) => {
-    setCache((current) => {
-      const next = new Map(current);
-      next.set(row.id, row);
-      return next;
-    });
-  }, []);
+  const putRow = useCallback(
+    (row: TransactionListRow) => {
+      setCache((current) => {
+        const next = new Map(current);
+        next.set(row.id, row);
+        return next;
+      });
+    },
+    [setCache],
+  );
 
   return {
     index,

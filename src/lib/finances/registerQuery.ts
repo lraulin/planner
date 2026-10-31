@@ -46,9 +46,9 @@ import {
   SERVER_GRID_BLOCK_SIZE,
   SERVER_GRID_PREFETCH,
   sliceBlock,
+  sortByQuery,
   type ServerGridFields,
 } from "@/lib/grid/serverQuery";
-import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import type { GridSort } from "@/lib/settings/grid";
 
 export const REGISTER_BLOCK_SIZE = SERVER_GRID_BLOCK_SIZE;
@@ -420,18 +420,7 @@ export function prepareRegister(
   const matched = passingRows(base, query, registerFilterValues, FIELD_KINDS);
   const grouped = groupTransactions(matched, query.groupBy);
   const collapsed = applyGroupCollapse(grouped, new Set(query.collapsedGroups));
-  const keys = query.sorts.flatMap((entry) => {
-    const field = registerFields[entry.columnId as keyof typeof registerFields];
-    if (!field?.sortValue) return [];
-    const sortValue = field.sortValue;
-    return [
-      {
-        valueOf: (row: { node: TransactionListRow }) => sortValue(row.node),
-        direction: entry.direction,
-      },
-    ];
-  });
-  const display = keys.length > 0 ? sortRowsWithinGroups(collapsed, keys) : collapsed;
+  const display = sortByQuery(collapsed, query.sorts, registerFields);
 
   const entries: RegisterIndexEntry[] = [];
   const nodeIds: string[] = [];

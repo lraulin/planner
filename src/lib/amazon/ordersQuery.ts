@@ -17,9 +17,9 @@ import {
   SERVER_GRID_BLOCK_SIZE,
   SERVER_GRID_PREFETCH,
   sliceBlock,
+  sortByQuery,
   type ServerGridFields,
 } from "@/lib/grid/serverQuery";
-import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import type { GridSort } from "@/lib/settings/grid";
 import {
   AMAZON_FIELD_ID_SET,
@@ -136,18 +136,7 @@ export function prepareAmazonOrders(
   const orderTotalsByGroup = amazonGroupOrderTotals(grouped);
   const matchByGroup = amazonOrderGroupMatch(grouped);
   const collapsed = applyGroupCollapse(grouped, new Set(query.collapsedGroups));
-  const keys = query.sorts.flatMap((entry) => {
-    const field = amazonFields[entry.columnId as keyof typeof amazonFields];
-    if (!field?.sortValue) return [];
-    const sortValue = field.sortValue;
-    return [
-      {
-        valueOf: (row: { node: AmazonItemListRow }) => sortValue(row.node),
-        direction: entry.direction,
-      },
-    ];
-  });
-  const display = keys.length > 0 ? sortRowsWithinGroups(collapsed, keys) : collapsed;
+  const display = sortByQuery(collapsed, query.sorts, amazonFields);
 
   const entries: AmazonOrdersIndexEntry[] = [];
   const nodeIds: string[] = [];
