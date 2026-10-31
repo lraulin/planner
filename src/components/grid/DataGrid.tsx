@@ -47,6 +47,7 @@ import {
   gridExportCommands,
   gridExportFormatOf,
   serializeGridExport,
+  type GridExportFormat,
 } from "@/lib/grid/exportCsv";
 import { writeClipboardText } from "@/lib/tree/copyAsText";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
@@ -788,6 +789,33 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     };
   });
   const exportCommands = useMemo(() => {
+    /** The grid as it stands, serialized: every row the export covers, visible columns only. */
+    async function exportText(format: GridExportFormat, exportedAt: Date) {
+      const {
+        columns: visible,
+        displayRows: shown,
+        ariaLabel: label,
+        loadExportRows: loadRows,
+        exportFilters: filters,
+      } = exportSnapshot.current;
+      const nodeRows = loadRows
+        ? await loadRows()
+        : shown.filter((row): row is Row => row.kind === "node");
+      return {
+        label,
+        text: serializeGridExport(format, exportableColumns(visible), nodeRows, {
+          title: label,
+          exportedAt,
+          filters,
+        }),
+      };
+    }
+    function copyExport(format: GridExportFormat) {
+      void (async () => {
+        void writeClipboardText((await exportText(format, new Date())).text);
+      })();
+    }
+
     const downloads = gridExportCommands(() => {}).map((command) => {
       const format = gridExportFormatOf(command.id);
       if (!format) return command;
@@ -795,24 +823,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         ...command,
         run: () => {
           void (async () => {
-            const {
-              columns: visible,
-              displayRows: shown,
-              ariaLabel: label,
-              loadExportRows: loadRows,
-              exportFilters: filtersApplied,
-            } = exportSnapshot.current;
-            const nodeRows = loadRows
-              ? await loadRows()
-              : shown.filter((row): row is Row => row.kind === "node");
             const exportedAt = new Date();
+            const { label, text } = await exportText(format, exportedAt);
             downloadTextFile(
               exportFilename(label, FORMAT_EXTENSION[format], exportedAt),
-              serializeGridExport(format, exportableColumns(visible), nodeRows, {
-                title: label,
-                exportedAt,
-                filters: filtersApplied,
-              }),
+              text,
               exportMimeType(format),
             );
           })();
@@ -820,57 +835,14 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         alternate: {
           label: command.alternate?.label ?? "",
           title: command.alternate?.title,
-          run: () => {
-            void (async () => {
-              const {
-                columns: visible,
-                displayRows: shown,
-                ariaLabel: label,
-                loadExportRows: loadRows,
-                exportFilters: filtersApplied,
-              } = exportSnapshot.current;
-              const nodeRows = loadRows
-                ? await loadRows()
-                : shown.filter((row): row is Row => row.kind === "node");
-              void writeClipboardText(
-                serializeGridExport(format, exportableColumns(visible), nodeRows, {
-                  title: label,
-                  exportedAt: new Date(),
-                  filters: filtersApplied,
-                }),
-              );
-            })();
-          },
+          run: () => copyExport(format),
         },
       };
     });
     const copies = gridCopyCommands(() => {}).map((command) => {
       const format = gridExportFormatOf(command.id);
       if (!format) return command;
-      return {
-        ...command,
-        run: () => {
-          void (async () => {
-            const {
-              columns: visible,
-              displayRows: shown,
-              ariaLabel: label,
-              loadExportRows: loadRows,
-              exportFilters: filtersApplied,
-            } = exportSnapshot.current;
-            const nodeRows = loadRows
-              ? await loadRows()
-              : shown.filter((row): row is Row => row.kind === "node");
-            void writeClipboardText(
-              serializeGridExport(format, exportableColumns(visible), nodeRows, {
-                title: label,
-                exportedAt: new Date(),
-                filters: filtersApplied,
-              }),
-            );
-          })();
-        },
-      };
+      return { ...command, run: () => copyExport(format) };
     });
     return [...downloads, ...copies];
   }, []);
