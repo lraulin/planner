@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { GridRow } from "@/lib/tree/slice";
 import type { TimeChartListRow } from "@/lib/schedule/queries";
 import {
   createTimeChartAction,
@@ -16,11 +15,9 @@ import { rowMenuFor } from "@/components/grid/rowMenu";
 import { catalogCapabilities } from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
+import { useFlatGrid } from "@/components/grid/useFlatGrid";
 import {
   timeChartsColumns,
   TIME_CHARTS_COLUMN_IDS,
@@ -80,23 +77,10 @@ export function TimeChartsView({
     [initialCharts, patches],
   );
 
-  const gridRows: GridRow<TimeChartListRow>[] = useMemo(
-    () => rows.map((row) => ({ kind: "node", id: row.id, node: row, depth: 0 })),
-    [rows],
+  const { gridRows, distinctValues, onIdsChange, multi } = useFlatGrid(
+    rows,
+    timeChartsColumns,
   );
-
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        timeChartsColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
-  );
-
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const { order, onIdsChange } = useNavigableIds(rowIds);
-  const multi = useMultiSelect(order, null);
   const {
     selectedId,
     selectedIds,

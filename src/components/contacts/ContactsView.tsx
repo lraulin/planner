@@ -9,7 +9,6 @@ import {
   useTransition,
 } from "react";
 import { useRouter } from "next/navigation";
-import type { GridRow } from "@/lib/tree/slice";
 import type { ContactListRow } from "@/lib/contacts/types";
 import {
   createContactAction,
@@ -28,11 +27,9 @@ import {
 } from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
+import { useFlatGrid } from "@/components/grid/useFlatGrid";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { ContactDrawer } from "./ContactDrawer";
 import {
@@ -151,23 +148,10 @@ export function ContactsView({
   });
   const gridState = views.grid;
 
-  const gridRows: GridRow<ContactListRow>[] = useMemo(
-    () => rows.map((row) => ({ kind: "node", id: row.id, node: row, depth: 0 })),
-    [rows],
+  const { gridRows, distinctValues, order, onIdsChange, multi } = useFlatGrid(
+    rows,
+    contactsColumns,
   );
-
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        contactsColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
-  );
-
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const { order, onIdsChange } = useNavigableIds(rowIds);
-  const multi = useMultiSelect(order, null);
   const {
     selectedId,
     selectedIds,

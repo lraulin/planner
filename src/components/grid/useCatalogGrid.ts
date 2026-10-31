@@ -12,17 +12,12 @@ import { rowMenuFor } from "@/components/grid/rowMenu";
 import { useArrowKeySelection } from "@/components/grid/useArrowKeySelection";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { type BuiltInView, useModuleViews } from "@/components/grid/useModuleViews";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
+import { useFlatGrid } from "@/components/grid/useFlatGrid";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridPageCommand } from "@/lib/grid/commandDeck";
-import type { GridRow } from "@/lib/tree/slice";
 
 /** The record catalogs carry no column context: every cell reads its own row. */
 export type CatalogColumnCtx = Record<string, never>;
-
-type CatalogNodeRow<TNode> = Extract<GridRow<TNode>, { kind: "node" }>;
 
 /** Runs a server action for a page command, then reloads the list or shows the error. */
 export type CatalogRun = (action: () => Promise<ActionResult>) => void;
@@ -100,15 +95,10 @@ export function useCatalogGrid<TRow extends { id: string }, TNode extends TRow>(
     defaultsFor,
   });
 
-  const gridRows: CatalogNodeRow<TNode>[] = rows.map((row) => ({
-    kind: "node",
-    id: row.id,
-    depth: 0,
-    node: toNode(row),
-  }));
-  const distinctValues = collectDistinctValues(columns, gridRows);
-
-  const { order, onIdsChange } = useNavigableIds(rows.map((row) => row.id));
+  const { gridRows, distinctValues, order, onIdsChange, multi } = useFlatGrid(
+    rows.map(toNode),
+    columns,
+  );
   const {
     selectedId,
     selectedIds,
@@ -117,7 +107,7 @@ export function useCatalogGrid<TRow extends { id: string }, TNode extends TRow>(
     toggleSelectAll,
     headerState,
     move,
-  } = useMultiSelect(order, null);
+  } = multi;
 
   async function reload() {
     const result = await actions.list();

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation";
 import type { ChronologyRow } from "@/lib/timeline/types";
 import type { Ribbon, RibbonBar, RibbonPin } from "@/lib/timeline/ribbon";
-import type { GridRow } from "@/lib/tree/slice";
 import {
   createLifeEventAction,
   deleteLifeEventAction,
@@ -20,8 +19,7 @@ import { catalogCapabilities } from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
+import { useFlatGrid } from "@/components/grid/useFlatGrid";
 import { useToday } from "@/components/grid/useToday";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
@@ -31,7 +29,6 @@ import {
   ToolbarSegments,
 } from "@/components/tabs/tabChrome";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { TIMELINE_SCOPE } from "@/lib/settings/scopes";
 import {
@@ -131,23 +128,12 @@ export function TimelineView({
   });
   const gridState = views.grid;
 
-  const gridRows: GridRow<ChronologyRow>[] = useMemo(
-    () => rows.map((row) => ({ kind: "node", id: row.id, node: row, depth: 0 })),
-    [rows],
-  );
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        timelineColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
-  );
-
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const { order, onIdsChange } = useNavigableIds(rowIds);
   const eventRowId = openId ? `event:${openId}` : null;
-  const multi = useMultiSelect(order, eventRowId);
+  const { gridRows, distinctValues, onIdsChange, multi } = useFlatGrid(
+    rows,
+    timelineColumns,
+    eventRowId,
+  );
   const {
     selectedId,
     selectedIds,
