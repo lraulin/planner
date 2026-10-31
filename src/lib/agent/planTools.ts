@@ -25,6 +25,7 @@ import {
   optionalString,
   parseDate,
   requireString,
+  optionalNullableNumber,
 } from "./parse";
 import { iso } from "./serialize";
 
@@ -70,29 +71,14 @@ export async function updateWeeklyPlanTool(
   args: Record<string, unknown>,
 ) {
   const id = requireString(args, "id");
-  const patch: WeeklyPlanPatch = {};
-  if (args.weekStartsOn !== undefined) {
-    patch.weekStartsOn = optionalNumber(args, "weekStartsOn");
-  }
-  if (args.reviewAreasGoals !== undefined) {
-    patch.reviewAreasGoals = optionalBoolean(args, "reviewAreasGoals");
-  }
-  if (args.availableMinutes !== undefined) {
-    const v = args.availableMinutes;
-    if (v !== null && typeof v !== "number") {
-      throw new AgentError("validation", "availableMinutes must be a number or null");
-    }
-    patch.availableMinutes = v;
-  }
-  if (args.timeChartId !== undefined) {
-    patch.timeChartId = optionalNullableString(args, "timeChartId") ?? null;
-  }
-  if (args.blockSizeMinutes !== undefined) {
-    patch.blockSizeMinutes = optionalNumber(args, "blockSizeMinutes");
-  }
-  if (args.avoidCollisions !== undefined) {
-    patch.avoidCollisions = optionalBoolean(args, "avoidCollisions");
-  }
+  const patch: WeeklyPlanPatch = {
+    weekStartsOn: optionalNumber(args, "weekStartsOn"),
+    reviewAreasGoals: optionalBoolean(args, "reviewAreasGoals"),
+    availableMinutes: optionalNullableNumber(args, "availableMinutes"),
+    timeChartId: optionalNullableString(args, "timeChartId"),
+    blockSizeMinutes: optionalNumber(args, "blockSizeMinutes"),
+    avoidCollisions: optionalBoolean(args, "avoidCollisions"),
+  };
 
   const plan = await updateWeeklyPlan(userId, id, patch);
   return {
@@ -108,23 +94,36 @@ export async function updateWeeklyPlanTool(
   };
 }
 
+/**
+ * One weekly-plan entry's decision fields, from a single upsert or one item of a batch.
+ * `at` locates a bad value in a batch's error: "entries[2].committedMinutes …".
+ */
+function planEntryPatchFromArgs(
+  args: Record<string, unknown>,
+  at = "",
+): PlanEntryPatch {
+  const minutes = args.committedMinutes;
+  if (minutes !== undefined && minutes !== null && typeof minutes !== "number") {
+    throw new AgentError(
+      "validation",
+      `${at}committedMinutes must be a number or null`,
+    );
+  }
+  return {
+    focus: optionalBoolean(args, "focus"),
+    reviewed: optionalBoolean(args, "reviewed"),
+    rewrite: optionalString(args, "rewrite"),
+    committedMinutes: minutes,
+  };
+}
+
 export async function upsertPlanEntryTool(
   userId: string,
   args: Record<string, unknown>,
 ) {
   const planId = requireString(args, "planId");
   const nodeId = requireString(args, "nodeId");
-  const patch: PlanEntryPatch = {};
-  if (args.focus !== undefined) patch.focus = optionalBoolean(args, "focus");
-  if (args.reviewed !== undefined) patch.reviewed = optionalBoolean(args, "reviewed");
-  if (args.rewrite !== undefined) patch.rewrite = optionalString(args, "rewrite") ?? "";
-  if (args.committedMinutes !== undefined) {
-    const v = args.committedMinutes;
-    if (v !== null && typeof v !== "number") {
-      throw new AgentError("validation", "committedMinutes must be a number or null");
-    }
-    patch.committedMinutes = v;
-  }
+  const patch = planEntryPatchFromArgs(args);
 
   const entry = await upsertPlanEntry(userId, planId, nodeId, patch);
   return {
@@ -175,26 +174,7 @@ export async function updateWeeklyPlanEntriesTool(
     }
     const entryArgs = value as Record<string, unknown>;
     const nodeId = requireString(entryArgs, "nodeId");
-    const patch: PlanEntryPatch = {};
-    if (entryArgs.focus !== undefined) {
-      patch.focus = optionalBoolean(entryArgs, "focus");
-    }
-    if (entryArgs.reviewed !== undefined) {
-      patch.reviewed = optionalBoolean(entryArgs, "reviewed");
-    }
-    if (entryArgs.rewrite !== undefined) {
-      patch.rewrite = optionalString(entryArgs, "rewrite") ?? "";
-    }
-    if (entryArgs.committedMinutes !== undefined) {
-      const minutes = entryArgs.committedMinutes;
-      if (minutes !== null && typeof minutes !== "number") {
-        throw new AgentError(
-          "validation",
-          `entries[${index}].committedMinutes must be a number or null`,
-        );
-      }
-      patch.committedMinutes = minutes;
-    }
+    const patch = planEntryPatchFromArgs(entryArgs, `entries[${index}].`);
     return { nodeId, ...patch };
   });
 

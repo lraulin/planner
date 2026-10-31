@@ -218,3 +218,85 @@ export function optionalExternalRef(
   }
   return { source, id };
 }
+
+export function parseDateKey(
+  value: string | null | undefined,
+  field: string,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new AgentError("validation", `${field} must be YYYY-MM-DD`);
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
+    throw new AgentError("validation", `${field} is not a date that exists: ${value}`);
+  }
+  return value;
+}
+
+export function optionalDateKey(
+  args: Record<string, unknown>,
+  key: string,
+): string | null | undefined {
+  if (!(key in args)) return undefined;
+  const value = args[key];
+  if (value === null || value === "") return null;
+  if (typeof value !== "string") {
+    throw new AgentError("validation", `${key} must be a date or null`);
+  }
+  return parseDateKey(value, key);
+}
+
+export function optionalMoney(
+  args: Record<string, unknown>,
+  key: string,
+): string | null | undefined {
+  if (!(key in args)) return undefined;
+  const value = args[key];
+  if (value === null || value === "") return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new AgentError("validation", `${key} must be a money amount or null`);
+    }
+    return String(value);
+  }
+  if (typeof value === "string") return value;
+  throw new AgentError("validation", `${key} must be a money amount or null`);
+}
+
+export function optionalNullableNumber(
+  obj: Record<string, unknown>,
+  key: string,
+): number | null | undefined {
+  if (!(key in obj)) return undefined;
+  const v = obj[key];
+  if (v === null) return null;
+  if (typeof v !== "number" || Number.isNaN(v)) {
+    throw new AgentError("validation", `${key} must be a number or null`);
+  }
+  return v;
+}
+
+export function optionalNullableBoolean(
+  obj: Record<string, unknown>,
+  key: string,
+): boolean | null | undefined {
+  if (!(key in obj)) return undefined;
+  const v = obj[key];
+  if (v === null) return null;
+  if (typeof v !== "boolean") {
+    throw new AgentError("validation", `${key} must be a boolean or null`);
+  }
+  return v;
+}
+
+/**
+ * Refuse an update that would change nothing. A field counts when it has a value, not when
+ * its key is present: parsed inputs carry every key, `undefined` for what was not sent.
+ */
+export function requireSomeField(input: Record<string, unknown>): void {
+  if (Object.values(input).every((value) => value === undefined)) {
+    throw new AgentError("validation", "Provide at least one field to update");
+  }
+}

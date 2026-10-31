@@ -10,6 +10,7 @@ import {
   parseDate,
   parseNodeState,
   parseNodeType,
+  requireSomeField,
   parsePriorityLetter,
   requireString,
 } from "./parse";
@@ -160,5 +161,17 @@ describe("parseDate", () => {
     expect(parseDate("2026-06-30T09:00:00.000Z", "deadline")).toEqual(
       new Date("2026-06-30T09:00:00.000Z"),
     );
+  });
+});
+
+describe("requireSomeField", () => {
+  it("refuses an update whose every field is unsent, though every key is present", () => {
+    expect(() => requireSomeField({ title: undefined, notes: undefined })).toThrow(
+      "Provide at least one field to update",
+    );
+  });
+
+  it("accepts an update that clears a field", () => {
+    expect(() => requireSomeField({ title: undefined, endDate: null })).not.toThrow();
   });
 });

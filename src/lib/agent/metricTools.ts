@@ -9,7 +9,6 @@ import {
   updateMetricEntry as updateMetricEntryMutation,
 } from "@/lib/metrics/mutations";
 import { getMetricDetail, getMetricEntry, listMetrics } from "@/lib/metrics/queries";
-import { isDateKey } from "@/lib/metrics/parse";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { isMetricType } from "@/lib/metrics/derive";
 import type { MetricEntryInput, MetricInput, MetricType } from "@/lib/metrics/types";
@@ -22,6 +21,9 @@ import {
   parsePriorityLetter,
   requireString,
   optionalExternalRef,
+  optionalNullableNumber,
+  parseDateKey,
+  requireSomeField,
 } from "./parse";
 import { pageBounds, paginate } from "./pagination";
 
@@ -33,38 +35,6 @@ function parseMetricType(value: unknown, field = "metricType"): MetricType {
     );
   }
   return value;
-}
-
-function parseDateKey(
-  value: string | null | undefined,
-  field: string,
-): string | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === "") return null;
-  if (!isDateKey(value)) {
-    // Two different mistakes, and telling them apart is the difference between "reformat it"
-    // and "count the days in that month again". `2026-06-31` is the right shape.
-    throw new AgentError(
-      "validation",
-      /^\d{4}-\d{2}-\d{2}$/.test(value)
-        ? `${field} is not a date that exists: ${value}`
-        : `${field} must be YYYY-MM-DD`,
-    );
-  }
-  return value;
-}
-
-function optionalNullableNumber(
-  obj: Record<string, unknown>,
-  key: string,
-): number | null | undefined {
-  if (!(key in obj)) return undefined;
-  const v = obj[key];
-  if (v === null) return null;
-  if (typeof v !== "number" || Number.isNaN(v)) {
-    throw new AgentError("validation", `${key} must be a number or null`);
-  }
-  return v;
 }
 
 function metricListSummary(m: Awaited<ReturnType<typeof listMetrics>>[number]) {
@@ -163,34 +133,33 @@ export async function getMetricTool(userId: string, args: Record<string, unknown
   return { metric: metricDetailSummary(detail, entryLimit, entryOffset) };
 }
 
+/** A metric's fields from tool arguments: only what was sent, for create and update alike. */
+function metricInputFromArgs(args: Record<string, unknown>): MetricInput {
+  return {
+    title: args.title === undefined ? undefined : requireString(args, "title"),
+    category: optionalString(args, "category"),
+    question: optionalString(args, "question"),
+    description: optionalString(args, "description"),
+    reason: optionalString(args, "reason"),
+    units: optionalString(args, "units"),
+    active: optionalBoolean(args, "active"),
+    metricType:
+      args.metricType === undefined ? undefined : parseMetricType(args.metricType),
+    priorityLetter:
+      args.priorityLetter === undefined
+        ? undefined
+        : parsePriorityLetter(args.priorityLetter),
+    priorityRank: optionalNullableNumber(args, "priorityRank"),
+    objectiveTarget: optionalNullableNumber(args, "objectiveTarget"),
+    ownerNodeId: optionalNullableString(args, "ownerNodeId"),
+  };
+}
+
 export async function createMetricTool(userId: string, args: Record<string, unknown>) {
-  const input: MetricInput = {};
-  if (args.title !== undefined) input.title = requireString(args, "title");
-  if (args.category !== undefined)
-    input.category = optionalString(args, "category") ?? "";
-  if (args.question !== undefined)
-    input.question = optionalString(args, "question") ?? "";
-  if (args.description !== undefined) {
-    input.description = optionalString(args, "description") ?? "";
-  }
-  if (args.reason !== undefined) input.reason = optionalString(args, "reason") ?? "";
-  if (args.units !== undefined) input.units = optionalString(args, "units") ?? "";
-  if (args.active !== undefined) input.active = optionalBoolean(args, "active");
-  if (args.metricType !== undefined)
-    input.metricType = parseMetricType(args.metricType);
-  if (args.priorityLetter !== undefined) {
-    input.priorityLetter = parsePriorityLetter(args.priorityLetter);
-  }
-  if (args.priorityRank !== undefined) {
-    input.priorityRank = optionalNullableNumber(args, "priorityRank") ?? null;
-  }
-  if (args.objectiveTarget !== undefined) {
-    input.objectiveTarget = optionalNullableNumber(args, "objectiveTarget") ?? null;
-  }
-  if (args.ownerNodeId !== undefined) {
-    input.ownerNodeId = optionalNullableString(args, "ownerNodeId") ?? null;
-  }
-  input.external = optionalExternalRef(args);
+  const input: MetricInput = {
+    ...metricInputFromArgs(args),
+    external: optionalExternalRef(args),
+  };
 
   const result = await createMetricOnce(userId, input);
   const payload = (await getMetricTool(userId, {
@@ -205,42 +174,9 @@ export async function updateMetricTool(userId: string, args: Record<string, unkn
   // Prove ownership before patching (mutations throw on missing, but we want a clear 404).
   await getMetricTool(userId, { id, entryLimit: 1 });
 
-  const input: MetricInput = {};
-  if (args.title !== undefined) input.title = requireString(args, "title");
-  if (args.category !== undefined)
-    input.category = optionalString(args, "category") ?? "";
-  if (args.question !== undefined)
-    input.question = optionalString(args, "question") ?? "";
-  if (args.description !== undefined) {
-    input.description = optionalString(args, "description") ?? "";
-  }
-  if (args.reason !== undefined) input.reason = optionalString(args, "reason") ?? "";
-  if (args.units !== undefined) input.units = optionalString(args, "units") ?? "";
-  if (args.active !== undefined) {
-    const active = optionalBoolean(args, "active");
-    if (active === undefined) {
-      throw new AgentError("validation", "active must be a boolean");
-    }
-    input.active = active;
-  }
-  if (args.metricType !== undefined)
-    input.metricType = parseMetricType(args.metricType);
-  if (args.priorityLetter !== undefined) {
-    input.priorityLetter = parsePriorityLetter(args.priorityLetter);
-  }
-  if (args.priorityRank !== undefined) {
-    input.priorityRank = optionalNullableNumber(args, "priorityRank") ?? null;
-  }
-  if (args.objectiveTarget !== undefined) {
-    input.objectiveTarget = optionalNullableNumber(args, "objectiveTarget") ?? null;
-  }
-  if (args.ownerNodeId !== undefined) {
-    input.ownerNodeId = optionalNullableString(args, "ownerNodeId") ?? null;
-  }
+  const input = metricInputFromArgs(args);
 
-  if (Object.keys(input).length === 0) {
-    throw new AgentError("validation", "Provide at least one field to update");
-  }
+  requireSomeField(input);
 
   await updateMetricMutation(userId, id, input);
   return getMetricTool(userId, { id, entryLimit: 5 });
@@ -323,9 +259,7 @@ export async function updateMetricEntryTool(
     patch.entryType = requireString(args, "entryType");
   }
 
-  if (Object.keys(patch).length === 0) {
-    throw new AgentError("validation", "Provide at least one field to update");
-  }
+  requireSomeField(patch);
 
   await updateMetricEntryMutation(userId, id, patch);
 

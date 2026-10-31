@@ -5,7 +5,6 @@
  * today, and the server does not know the user's day.
  */
 
-import { daysInMonth } from "@/lib/dateMath";
 import { createJobOnce, updateJob } from "@/lib/jobs/mutations";
 import { getJobDetail, listJobs } from "@/lib/jobs/queries";
 import type { JobDetail, JobInput, JobListRow } from "@/lib/jobs/types";
@@ -27,53 +26,11 @@ import {
   optionalNumber,
   optionalString,
   requireString,
+  optionalDateKey,
+  optionalMoney,
+  parseDateKey,
+  requireSomeField,
 } from "./parse";
-
-function parseDateKey(
-  value: string | null | undefined,
-  field: string,
-): string | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === "") return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new AgentError("validation", `${field} must be YYYY-MM-DD`);
-  }
-  const [year, month, day] = value.split("-").map(Number);
-  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
-    throw new AgentError("validation", `${field} is not a date that exists: ${value}`);
-  }
-  return value;
-}
-
-function optionalDateKey(
-  args: Record<string, unknown>,
-  key: string,
-): string | null | undefined {
-  if (!(key in args)) return undefined;
-  const value = args[key];
-  if (value === null || value === "") return null;
-  if (typeof value !== "string") {
-    throw new AgentError("validation", `${key} must be a date or null`);
-  }
-  return parseDateKey(value, key);
-}
-
-function optionalMoney(
-  args: Record<string, unknown>,
-  key: string,
-): string | null | undefined {
-  if (!(key in args)) return undefined;
-  const value = args[key];
-  if (value === null || value === "") return null;
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      throw new AgentError("validation", `${key} must be a money amount or null`);
-    }
-    return String(value);
-  }
-  if (typeof value === "string") return value;
-  throw new AgentError("validation", `${key} must be a money amount or null`);
-}
 
 function inDateWindow(
   date: string | null,
@@ -191,113 +148,66 @@ function lifeEventDetail(row: LifeEventDetail) {
 }
 
 function jobInputFromArgs(args: Record<string, unknown>): JobInput {
-  const input: JobInput = {};
-  if (args.employer !== undefined)
-    input.employer = optionalString(args, "employer") ?? "";
-  if (args.jobTitle !== undefined)
-    input.jobTitle = optionalString(args, "jobTitle") ?? "";
-  if (args.employmentType !== undefined) {
-    input.employmentType = optionalString(args, "employmentType") ?? "";
-  }
-  if (args.startDate !== undefined)
-    input.startDate = optionalDateKey(args, "startDate");
-  if (args.endDate !== undefined) input.endDate = optionalDateKey(args, "endDate");
-  if (args.duties !== undefined) input.duties = optionalString(args, "duties") ?? "";
-  if (args.reasonForLeaving !== undefined) {
-    input.reasonForLeaving = optionalString(args, "reasonForLeaving") ?? "";
-  }
-  if (args.startingPay !== undefined)
-    input.startingPay = optionalMoney(args, "startingPay");
-  if (args.endingPay !== undefined) input.endingPay = optionalMoney(args, "endingPay");
-  if (args.payPeriod !== undefined)
-    input.payPeriod = optionalString(args, "payPeriod") ?? "";
-  if (args.phone !== undefined) input.phone = optionalString(args, "phone") ?? "";
-  if (args.streetAddress !== undefined) {
-    input.streetAddress = optionalString(args, "streetAddress") ?? "";
-  }
-  if (args.extendedAddress !== undefined) {
-    input.extendedAddress = optionalString(args, "extendedAddress") ?? "";
-  }
-  if (args.city !== undefined) input.city = optionalString(args, "city") ?? "";
-  if (args.region !== undefined) input.region = optionalString(args, "region") ?? "";
-  if (args.postalCode !== undefined) {
-    input.postalCode = optionalString(args, "postalCode") ?? "";
-  }
-  if (args.country !== undefined) input.country = optionalString(args, "country") ?? "";
-  if (args.countryCode !== undefined) {
-    input.countryCode = optionalString(args, "countryCode") ?? "";
-  }
-  if (args.supervisorName !== undefined) {
-    input.supervisorName = optionalString(args, "supervisorName") ?? "";
-  }
-  if (args.supervisorTitle !== undefined) {
-    input.supervisorTitle = optionalString(args, "supervisorTitle") ?? "";
-  }
-  if (args.supervisorPhone !== undefined) {
-    input.supervisorPhone = optionalString(args, "supervisorPhone") ?? "";
-  }
-  if (args.supervisorEmail !== undefined) {
-    input.supervisorEmail = optionalString(args, "supervisorEmail") ?? "";
-  }
-  if (args.mayContactSupervisor !== undefined) {
-    input.mayContactSupervisor = optionalBoolean(args, "mayContactSupervisor");
-  }
-  if (args.notes !== undefined) input.notes = optionalString(args, "notes") ?? "";
-  return input;
+  return {
+    employer: optionalString(args, "employer"),
+    jobTitle: optionalString(args, "jobTitle"),
+    employmentType: optionalString(args, "employmentType"),
+    startDate: optionalDateKey(args, "startDate"),
+    endDate: optionalDateKey(args, "endDate"),
+    duties: optionalString(args, "duties"),
+    reasonForLeaving: optionalString(args, "reasonForLeaving"),
+    startingPay: optionalMoney(args, "startingPay"),
+    endingPay: optionalMoney(args, "endingPay"),
+    payPeriod: optionalString(args, "payPeriod"),
+    phone: optionalString(args, "phone"),
+    streetAddress: optionalString(args, "streetAddress"),
+    extendedAddress: optionalString(args, "extendedAddress"),
+    city: optionalString(args, "city"),
+    region: optionalString(args, "region"),
+    postalCode: optionalString(args, "postalCode"),
+    country: optionalString(args, "country"),
+    countryCode: optionalString(args, "countryCode"),
+    supervisorName: optionalString(args, "supervisorName"),
+    supervisorTitle: optionalString(args, "supervisorTitle"),
+    supervisorPhone: optionalString(args, "supervisorPhone"),
+    supervisorEmail: optionalString(args, "supervisorEmail"),
+    mayContactSupervisor: optionalBoolean(args, "mayContactSupervisor"),
+    notes: optionalString(args, "notes"),
+  };
 }
 
 function residenceInputFromArgs(args: Record<string, unknown>): ResidenceInput {
-  const input: ResidenceInput = {};
-  if (args.label !== undefined) input.label = optionalString(args, "label") ?? "";
-  if (args.streetAddress !== undefined) {
-    input.streetAddress = optionalString(args, "streetAddress") ?? "";
-  }
-  if (args.extendedAddress !== undefined) {
-    input.extendedAddress = optionalString(args, "extendedAddress") ?? "";
-  }
-  if (args.city !== undefined) input.city = optionalString(args, "city") ?? "";
-  if (args.region !== undefined) input.region = optionalString(args, "region") ?? "";
-  if (args.postalCode !== undefined) {
-    input.postalCode = optionalString(args, "postalCode") ?? "";
-  }
-  if (args.country !== undefined) input.country = optionalString(args, "country") ?? "";
-  if (args.countryCode !== undefined) {
-    input.countryCode = optionalString(args, "countryCode") ?? "";
-  }
-  if (args.movedIn !== undefined) input.movedIn = optionalDateKey(args, "movedIn");
-  if (args.movedOut !== undefined) input.movedOut = optionalDateKey(args, "movedOut");
-  if (args.housingType !== undefined) {
-    input.housingType = optionalString(args, "housingType") ?? "";
-  }
-  if (args.monthlyRent !== undefined)
-    input.monthlyRent = optionalMoney(args, "monthlyRent");
-  if (args.reasonForLeaving !== undefined) {
-    input.reasonForLeaving = optionalString(args, "reasonForLeaving") ?? "";
-  }
-  if (args.landlordName !== undefined) {
-    input.landlordName = optionalString(args, "landlordName") ?? "";
-  }
-  if (args.landlordPhone !== undefined) {
-    input.landlordPhone = optionalString(args, "landlordPhone") ?? "";
-  }
-  if (args.landlordEmail !== undefined) {
-    input.landlordEmail = optionalString(args, "landlordEmail") ?? "";
-  }
-  if (args.notes !== undefined) input.notes = optionalString(args, "notes") ?? "";
-  return input;
+  return {
+    label: optionalString(args, "label"),
+    streetAddress: optionalString(args, "streetAddress"),
+    extendedAddress: optionalString(args, "extendedAddress"),
+    city: optionalString(args, "city"),
+    region: optionalString(args, "region"),
+    postalCode: optionalString(args, "postalCode"),
+    country: optionalString(args, "country"),
+    countryCode: optionalString(args, "countryCode"),
+    movedIn: optionalDateKey(args, "movedIn"),
+    movedOut: optionalDateKey(args, "movedOut"),
+    housingType: optionalString(args, "housingType"),
+    monthlyRent: optionalMoney(args, "monthlyRent"),
+    reasonForLeaving: optionalString(args, "reasonForLeaving"),
+    landlordName: optionalString(args, "landlordName"),
+    landlordPhone: optionalString(args, "landlordPhone"),
+    landlordEmail: optionalString(args, "landlordEmail"),
+    notes: optionalString(args, "notes"),
+  };
 }
 
 function lifeEventInputFromArgs(args: Record<string, unknown>): LifeEventInput {
-  const input: LifeEventInput = {};
-  if (args.eventDate !== undefined) {
-    const eventDate = optionalDateKey(args, "eventDate");
-    if (eventDate) input.eventDate = eventDate;
-  }
-  if (args.title !== undefined) input.title = optionalString(args, "title") ?? "";
-  if (args.category !== undefined)
-    input.category = optionalString(args, "category") ?? "";
-  if (args.notes !== undefined) input.notes = optionalString(args, "notes") ?? "";
-  return input;
+  // An event always has a date, so a null or blank one leaves the stored date alone rather
+  // than clearing it.
+  const eventDate = optionalDateKey(args, "eventDate");
+  return {
+    eventDate: eventDate === null ? undefined : eventDate,
+    title: optionalString(args, "title"),
+    category: optionalString(args, "category"),
+    notes: optionalString(args, "notes"),
+  };
 }
 
 export async function listJobsTool(userId: string, args: Record<string, unknown>) {
@@ -345,9 +255,7 @@ export async function updateJobTool(userId: string, args: Record<string, unknown
   const id = requireString(args, "id");
   await getJobTool(userId, { id });
   const input = jobInputFromArgs(args);
-  if (Object.keys(input).length === 0) {
-    throw new AgentError("validation", "Provide at least one field to update");
-  }
+  requireSomeField(input);
   await updateJob(userId, id, input);
   return getJobTool(userId, { id });
 }
@@ -408,9 +316,7 @@ export async function updateResidenceTool(
   const id = requireString(args, "id");
   await getResidenceTool(userId, { id });
   const input = residenceInputFromArgs(args);
-  if (Object.keys(input).length === 0) {
-    throw new AgentError("validation", "Provide at least one field to update");
-  }
+  requireSomeField(input);
   await updateResidence(userId, id, input);
   return getResidenceTool(userId, { id });
 }
@@ -469,9 +375,7 @@ export async function updateLifeEventTool(
   const id = requireString(args, "id");
   await getLifeEventTool(userId, { id });
   const input = lifeEventInputFromArgs(args);
-  if (Object.keys(input).length === 0) {
-    throw new AgentError("validation", "Provide at least one field to update");
-  }
+  requireSomeField(input);
   await updateLifeEvent(userId, id, input);
   return getLifeEventTool(userId, { id });
 }

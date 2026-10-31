@@ -19,6 +19,9 @@ import {
   optionalString,
   parsePriorityLetter,
   requireString,
+  optionalNullableBoolean,
+  optionalNullableNumber,
+  requireSomeField,
 } from "./parse";
 
 function parseHouseStatus(value: unknown, field = "status"): HouseStatus {
@@ -29,32 +32,6 @@ function parseHouseStatus(value: unknown, field = "status"): HouseStatus {
     );
   }
   return value as HouseStatus;
-}
-
-function optionalNullableNumber(
-  obj: Record<string, unknown>,
-  key: string,
-): number | null | undefined {
-  if (!(key in obj)) return undefined;
-  const v = obj[key];
-  if (v === null) return null;
-  if (typeof v !== "number" || Number.isNaN(v)) {
-    throw new AgentError("validation", `${key} must be a number or null`);
-  }
-  return v;
-}
-
-function optionalNullableBoolean(
-  obj: Record<string, unknown>,
-  key: string,
-): boolean | null | undefined {
-  if (!(key in obj)) return undefined;
-  const v = obj[key];
-  if (v === null) return null;
-  if (typeof v !== "boolean") {
-    throw new AgentError("validation", `${key} must be a boolean or null`);
-  }
-  return v;
 }
 
 function houseSummary(row: HouseListRow) {
@@ -109,62 +86,32 @@ function houseDetail(row: HouseDetail) {
 
 /** Every field but `external` — shared by create and update, which treat it differently. */
 function houseInputFromArgs(args: Record<string, unknown>): HouseInput {
-  const input: HouseInput = {};
-  if (args.nickname !== undefined) {
-    input.nickname = optionalString(args, "nickname") ?? "";
-  }
-  if (args.listingUrl !== undefined) {
-    input.listingUrl = optionalString(args, "listingUrl") ?? "";
-  }
-  if (args.streetAddress !== undefined) {
-    input.streetAddress = optionalString(args, "streetAddress") ?? "";
-  }
-  if (args.city !== undefined) input.city = optionalString(args, "city") ?? "";
-  if (args.state !== undefined) input.state = optionalString(args, "state") ?? "";
-  if (args.postalCode !== undefined) {
-    input.postalCode = optionalString(args, "postalCode") ?? "";
-  }
-  if (args.askingPriceCents !== undefined) {
-    input.askingPriceCents = optionalNullableNumber(args, "askingPriceCents") ?? null;
-  }
-  if (args.hoaFeeCents !== undefined) {
-    input.hoaFeeCents = optionalNullableNumber(args, "hoaFeeCents") ?? null;
-  }
-  if (args.propertyTaxCents !== undefined) {
-    input.propertyTaxCents = optionalNullableNumber(args, "propertyTaxCents") ?? null;
-  }
-  if (args.squareFeet !== undefined) {
-    input.squareFeet = optionalNullableNumber(args, "squareFeet") ?? null;
-  }
-  if (args.beds !== undefined)
-    input.beds = optionalNullableNumber(args, "beds") ?? null;
-  if (args.baths !== undefined) {
-    input.baths = optionalNullableNumber(args, "baths") ?? null;
-  }
-  if (args.yearBuilt !== undefined) {
-    input.yearBuilt = optionalNullableNumber(args, "yearBuilt") ?? null;
-  }
-  if (args.lotAcres !== undefined) {
-    input.lotAcres = optionalNullableNumber(args, "lotAcres") ?? null;
-  }
-  if (args.hasFence !== undefined) {
-    input.hasFence = optionalNullableBoolean(args, "hasFence") ?? null;
-  }
-  if (args.hasBasement !== undefined) {
-    input.hasBasement = optionalNullableBoolean(args, "hasBasement") ?? null;
-  }
-  if (args.hasGarage !== undefined) {
-    input.hasGarage = optionalNullableBoolean(args, "hasGarage") ?? null;
-  }
-  if (args.status !== undefined) input.status = parseHouseStatus(args.status);
-  if (args.priorityLetter !== undefined) {
-    input.priorityLetter = parsePriorityLetter(args.priorityLetter);
-  }
-  if (args.priorityRank !== undefined) {
-    input.priorityRank = optionalNullableNumber(args, "priorityRank") ?? null;
-  }
-  if (args.notes !== undefined) input.notes = optionalString(args, "notes") ?? "";
-  return input;
+  return {
+    nickname: optionalString(args, "nickname"),
+    listingUrl: optionalString(args, "listingUrl"),
+    streetAddress: optionalString(args, "streetAddress"),
+    city: optionalString(args, "city"),
+    state: optionalString(args, "state"),
+    postalCode: optionalString(args, "postalCode"),
+    askingPriceCents: optionalNullableNumber(args, "askingPriceCents"),
+    hoaFeeCents: optionalNullableNumber(args, "hoaFeeCents"),
+    propertyTaxCents: optionalNullableNumber(args, "propertyTaxCents"),
+    squareFeet: optionalNullableNumber(args, "squareFeet"),
+    beds: optionalNullableNumber(args, "beds"),
+    baths: optionalNullableNumber(args, "baths"),
+    yearBuilt: optionalNullableNumber(args, "yearBuilt"),
+    lotAcres: optionalNullableNumber(args, "lotAcres"),
+    hasFence: optionalNullableBoolean(args, "hasFence"),
+    hasBasement: optionalNullableBoolean(args, "hasBasement"),
+    hasGarage: optionalNullableBoolean(args, "hasGarage"),
+    status: args.status === undefined ? undefined : parseHouseStatus(args.status),
+    priorityLetter:
+      args.priorityLetter === undefined
+        ? undefined
+        : parsePriorityLetter(args.priorityLetter),
+    priorityRank: optionalNullableNumber(args, "priorityRank"),
+    notes: optionalString(args, "notes"),
+  };
 }
 
 export async function listHousesTool(userId: string, args: Record<string, unknown>) {
@@ -208,9 +155,7 @@ export async function updateHouseTool(userId: string, args: Record<string, unkno
   const id = requireString(args, "id");
   await getHouseTool(userId, { id });
   const input = houseInputFromArgs(args);
-  if (Object.keys(input).length === 0) {
-    throw new AgentError("validation", "Provide at least one field to update");
-  }
+  requireSomeField(input);
   await updateHouse(userId, id, input);
   return getHouseTool(userId, { id });
 }
