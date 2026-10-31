@@ -203,6 +203,32 @@ export async function applyClaimedPayees(
 }
 
 /**
+ * The rows auto-categorisation may file, over the payee and account joins: the caller's
+ * uncategorised, on-budget rows that are not internal transfers, narrowed to new rows or
+ * to some payees when asked. Read twice — once to scope the audit checkpoint, once to
+ * file what the claims pass left — and the two reads must agree.
+ */
+function autoCategoryScope(
+  userId: string,
+  options: { createdSince?: Date; payeeIds?: readonly string[] },
+) {
+  return and(
+    eq(financeTransactions.userId, userId),
+    eq(financePayees.userId, userId),
+    eq(financeAccounts.userId, userId),
+    eq(financeAccounts.offBudget, false),
+    isNull(financeTransactions.budgetCategoryId),
+    sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
+    ...(options.createdSince
+      ? [gte(financeTransactions.createdAt, options.createdSince)]
+      : []),
+    ...(options.payeeIds && options.payeeIds.length > 0
+      ? [inArray(financePayees.id, [...options.payeeIds])]
+      : []),
+  );
+}
+
+/**
  * Fill uncategorised eligible rows from claim, then from the payee's learned/fixed default.
  *
  * Never rewrites a Category that is already set.
@@ -226,22 +252,7 @@ export async function applyPayeeAutoCategories(
       .from(financeTransactions)
       .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
       .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          eq(financePayees.userId, userId),
-          eq(financeAccounts.userId, userId),
-          eq(financeAccounts.offBudget, false),
-          isNull(financeTransactions.budgetCategoryId),
-          sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
-          ...(options.createdSince
-            ? [gte(financeTransactions.createdAt, options.createdSince)]
-            : []),
-          ...(options.payeeIds && options.payeeIds.length > 0
-            ? [inArray(financePayees.id, [...options.payeeIds])]
-            : []),
-        ),
-      );
+      .where(autoCategoryScope(userId, options));
     const scope = {
       accountIds: [...new Set(candidates.map((row) => row.accountId))],
       budgetMonths: [
@@ -269,22 +280,7 @@ export async function applyPayeeAutoCategories(
       .from(financeTransactions)
       .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
       .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          eq(financePayees.userId, userId),
-          eq(financeAccounts.userId, userId),
-          eq(financeAccounts.offBudget, false),
-          isNull(financeTransactions.budgetCategoryId),
-          sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
-          ...(options.createdSince
-            ? [gte(financeTransactions.createdAt, options.createdSince)]
-            : []),
-          ...(options.payeeIds && options.payeeIds.length > 0
-            ? [inArray(financePayees.id, [...options.payeeIds])]
-            : []),
-        ),
-      );
+      .where(autoCategoryScope(userId, options));
 
     const byCategory = new Map<string, string[]>();
     for (const row of rows) {
