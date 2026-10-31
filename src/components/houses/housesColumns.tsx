@@ -69,6 +69,51 @@ function addressText(row: HouseListRow): string {
  * (as Metrics renders it) is the right fit rather than a second entry point for the
  * same value the drawer already edits.
  */
+type HouseField = Pick<
+  ColumnDef<HousesColumnCtx, HouseListRow>,
+  "filterKind" | "filterValue" | "sortValue" | "render"
+>;
+
+/** A count or measure: filtered and sorted as a number, blank when unknown. */
+function quantityField(
+  value: (house: HouseListRow) => number | null,
+  format: (value: number) => string = String,
+): HouseField {
+  return {
+    filterKind: "number",
+    filterValue: (row) => {
+      const v = value(row.node);
+      return v === null ? null : String(v);
+    },
+    sortValue: (row) => value(row.node),
+    render: (row) => {
+      const v = value(row.node);
+      return (
+        <span className="tabular text-[0.8125rem] text-ink-muted">
+          {v === null ? "" : format(v)}
+        </span>
+      );
+    },
+  };
+}
+
+/** A running cost: filtered on its dollar text, sorted by cents. */
+function moneyField(cents: (house: HouseListRow) => number | null): HouseField {
+  return {
+    filterKind: "number",
+    filterValue: (row) => {
+      const v = cents(row.node);
+      return v === null ? null : formatUsd(v);
+    },
+    sortValue: (row) => cents(row.node),
+    render: (row) => (
+      <span className="tabular text-[0.8125rem] text-ink-muted">
+        {formatUsd(cents(row.node))}
+      </span>
+    ),
+  };
+}
+
 export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
   {
     id: "priority",
@@ -138,14 +183,9 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     label: "Sqft",
     width: "6rem",
     align: "right",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.node.squareFeet === null ? null : String(row.node.squareFeet),
-    sortValue: (row) => row.node.squareFeet,
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {row.node.squareFeet === null ? "" : row.node.squareFeet.toLocaleString()}
-      </span>
+    ...quantityField(
+      (house) => house.squareFeet,
+      (feet) => feet.toLocaleString(),
     ),
   },
   {
@@ -153,14 +193,7 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     label: "Beds",
     width: "4.5rem",
     align: "right",
-    filterKind: "number",
-    filterValue: (row) => (row.node.beds === null ? null : String(row.node.beds)),
-    sortValue: (row) => row.node.beds,
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {row.node.beds ?? ""}
-      </span>
-    ),
+    ...quantityField((house) => house.beds),
   },
   {
     id: "baths",
@@ -269,15 +302,7 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     width: "6.5rem",
     align: "right",
     compact: "hidden",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.node.yearBuilt === null ? null : String(row.node.yearBuilt),
-    sortValue: (row) => row.node.yearBuilt,
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {row.node.yearBuilt ?? ""}
-      </span>
-    ),
+    ...quantityField((house) => house.yearBuilt),
   },
   {
     id: "lotAcres",
@@ -300,15 +325,7 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     width: "6.5rem",
     align: "right",
     compact: "hidden",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.node.hoaFeeCents === null ? null : formatUsd(row.node.hoaFeeCents),
-    sortValue: (row) => row.node.hoaFeeCents,
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {formatUsd(row.node.hoaFeeCents)}
-      </span>
-    ),
+    ...moneyField((house) => house.hoaFeeCents),
   },
   {
     id: "taxes",
@@ -316,15 +333,7 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     width: "7rem",
     align: "right",
     compact: "hidden",
-    filterKind: "number",
-    filterValue: (row) =>
-      row.node.propertyTaxCents === null ? null : formatUsd(row.node.propertyTaxCents),
-    sortValue: (row) => row.node.propertyTaxCents,
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {formatUsd(row.node.propertyTaxCents)}
-      </span>
-    ),
+    ...moneyField((house) => house.propertyTaxCents),
   },
   {
     id: "city",
