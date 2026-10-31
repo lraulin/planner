@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { OutlineWire } from "@/lib/tree/wire";
 import { asGroupBy, treeGridRows, type GroupBy } from "@/lib/tree/slice";
@@ -12,17 +12,9 @@ import {
 } from "@/lib/tree/status";
 import { taskRatio } from "@/lib/tree/taskRatio";
 import type { ColumnDef } from "@/components/grid/columns";
-import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
-import { DataGrid } from "@/components/grid/DataGrid";
 import { type GridDefaults, useIncludeDeferred } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
-import {
-  GridToolbar,
-  switchValue,
-  type GridSwitch,
-} from "@/components/grid/GridToolbar";
-import { collectDistinctValues } from "@/lib/grid/distinct";
+import { switchValue, type GridSwitch } from "@/components/grid/GridToolbar";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import {
   abbrStateColumn,
@@ -53,10 +45,9 @@ import {
   targetStartColumn,
 } from "@/components/grid/commonColumns";
 import { EffortCell, ReadOnlyCell, StatusCell } from "@/components/grid/cells";
-import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
-import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
+import { NodeTabGrid, useNodeTabCommands } from "./NodeTabGrid";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
 /** Projects' default order leads with the narrow State column, which filters on codes. */
@@ -276,32 +267,17 @@ const PROJECT_GROUP_DIMENSIONS: GroupBy[] = [
 
 export function ProjectsGrid({ wire }: { wire: OutlineWire }) {
   const tab = useGridTab(wire);
-  const nodeCommands = useNodeCommandDeck({
-    nodes: tab.nodes,
-    selectedId: tab.selectedId,
-    selectedIds: tab.selectedIds,
-    apply: tab.apply,
-    create: {
-      kinds: PROJECT_CREATE_KINDS,
-      // Narrowed to a Result Area, `New project` makes one *in* that area — otherwise the row
-      // would be filed where this view cannot show it, and naming it would never begin.
-      parentId: tab.scope ?? null,
-      child: true,
-      onCreated: tab.startNaming,
-    },
-    onOpen: tab.openDetail,
-    onRename: tab.setEditingId,
-    onCopyAsText: tab.copySelectionAsText,
-    onSelectAll: tab.selectAll,
-    onStateChange: tab.cellHandlers.onStateChange,
+  // Narrowed to a Result Area, `New project` makes one *in* that area — otherwise the row
+  // would be filed where this view cannot show it, and naming it would never begin.
+  const nodeCommands = useNodeTabCommands(tab, {
+    kinds: PROJECT_CREATE_KINDS,
+    parentId: tab.scope ?? null,
   });
   // From `?scope=` rather than local state, so the narrowing survives reload and Back —
   // and so `View tasks…` from another module is a plain navigation into it.
   const scopeId = tab.scope ?? "";
   const setScopeId = tab.setScope;
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("projects");
-  const [counts, setCounts] = useState({ shown: 0, total: 0 });
-  const [groupIds, setGroupIds] = useState<string[]>([]);
 
   const resultAreas = useMemo(
     () => tab.nodes.filter((n) => n.type === "result_area"),
@@ -320,20 +296,8 @@ export function ProjectsGrid({ wire }: { wire: OutlineWire }) {
     defaultsFor: viewDefaults,
   });
   const gridState = views.grid;
-  const rowDrag = useTreeRowDrag({
-    nodes: tab.nodes,
-    byId: tab.byId,
-    apply: tab.apply,
-    patch: tab.patch,
-    selectOne: tab.selectOne,
-    headerSorts: gridState.sorts,
-    clearHeaderSort: gridState.clearSort,
-  });
 
   const includeGoals = switchValue(gridState, PROJECT_SWITCHES[0]);
-
-  // When the view changes, reset to that view's preset (still overridable via Show Fields).
-  const columns = gridState.columns;
 
   const preparedRows = useMemo(() => {
     const groupBy = asGroupBy(gridState.groupBy);
@@ -349,90 +313,38 @@ export function ProjectsGrid({ wire }: { wire: OutlineWire }) {
   }, [tab.nodes, tab.today, gridState.groupBy, includeGoals, includeDeferred, scopeId]);
   const { rows, narrowingRows } = preparedRows;
 
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        allColumns,
-        narrowingRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [allColumns, narrowingRows],
-  );
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <GridToolbar
-        grid={gridState}
-        gridLabel="Projects"
-        allColumns={allColumns}
-        distinctValues={distinctValues}
-        groupDimensions={PROJECT_GROUP_DIMENSIONS}
-        groupIds={groupIds}
-        switches={PROJECT_SWITCHES}
-        counts={counts}
-        error={tab.error}
-        views={views}
-        left={
-          <>
-            <ToolbarSelect
-              label="Result Area"
-              value={scopeId}
-              onChange={setScopeId}
-              options={[
-                { value: "", label: "All Result Areas" },
-                ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
-              ]}
-            />
-            {/* Tab-scoped, not per-view: one Postponed setting covers every sub-view. */}
-            <ToolbarToggle
-              checked={includeDeferred}
-              onChange={() => setIncludeDeferred(!includeDeferred)}
-              label="Postponed"
-            />
-          </>
-        }
-        commandCapabilities={nodeCommands.capabilities}
-      />
-
-      {nodeCommands.dialogs}
-
-      <DataGrid
-        rows={rows}
-        narrowingRows={narrowingRows}
-        columns={columns}
-        allColumns={allColumns}
-        columnCtx={tab.cellHandlers}
-        selectedId={tab.selectedId}
-        selectedIds={tab.selectedIds}
-        selectAllState={tab.headerState}
-        onToggleSelectAll={tab.toggleSelectAll}
-        gutter="handle"
-        onSelect={tab.select}
-        onOpenDetail={tab.openDetail}
-        ariaLabel="Projects"
-        onNavigableIdsChange={tab.setNavigableIds}
-        rowMenu={nodeCommands.rowMenu}
-        rowSwipe={nodeCommands.rowSwipe}
-        rowDrag={rowDrag}
-        enableFilters
-        enableSort
-        grid={gridState}
-        distinctValues={distinctValues}
-        onCountsChange={setCounts}
-        onGroupIdsChange={setGroupIds}
-        empty={
-          <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
-            No projects match this view.
-          </div>
-        }
-      />
-
-      <CascadeConfirm state={tab.stateChange} />
-
-      <NodeDetailDrawer
-        node={tab.detailNode}
-        nodes={tab.nodes}
-        onClose={() => tab.setDetailId(null)}
-      />
-    </div>
+    <NodeTabGrid
+      tab={tab}
+      commands={nodeCommands}
+      views={views}
+      label="Projects"
+      noun="projects"
+      allColumns={allColumns}
+      columnCtx={tab.cellHandlers}
+      rows={rows}
+      narrowingRows={narrowingRows}
+      groupDimensions={PROJECT_GROUP_DIMENSIONS}
+      switches={PROJECT_SWITCHES}
+      left={
+        <>
+          <ToolbarSelect
+            label="Result Area"
+            value={scopeId}
+            onChange={setScopeId}
+            options={[
+              { value: "", label: "All Result Areas" },
+              ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
+            ]}
+          />
+          {/* Tab-scoped, not per-view: one Postponed setting covers every sub-view. */}
+          <ToolbarToggle
+            checked={includeDeferred}
+            onChange={() => setIncludeDeferred(!includeDeferred)}
+            label="Postponed"
+          />
+        </>
+      }
+    />
   );
 }

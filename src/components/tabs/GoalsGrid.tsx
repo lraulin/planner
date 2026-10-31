@@ -1,19 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { OutlineWire } from "@/lib/tree/wire";
 import { asGroupBy, treeGridRows, type GroupBy } from "@/lib/tree/slice";
 import { formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
 import type { ColumnDef } from "@/components/grid/columns";
-import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
-import { DataGrid } from "@/components/grid/DataGrid";
 import { useIncludeDeferred, type GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
-import { GridToolbar } from "@/components/grid/GridToolbar";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   categoryColumn,
   typeColumn,
@@ -22,12 +18,10 @@ import {
   stateColumn,
 } from "@/components/grid/commonColumns";
 import { DeadlineCell, NameCell, TextCell } from "@/components/grid/cells";
-import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { setGoalFieldAction } from "@/app/(shell)/plan/outline/detail-actions";
 import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
-import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
-import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
+import { NodeTabGrid, useNodeTabCommands } from "./NodeTabGrid";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 import { LetterRankCell } from "@/components/grid/LetterRankCell";
 
@@ -181,30 +175,15 @@ const GOAL_GROUP_DIMENSIONS: GroupBy[] = [
 
 export function GoalsGrid({ wire }: { wire: OutlineWire }) {
   const tab = useGridTab(wire);
-  const nodeCommands = useNodeCommandDeck({
-    nodes: tab.nodes,
-    selectedId: tab.selectedId,
-    selectedIds: tab.selectedIds,
-    apply: tab.apply,
-    create: {
-      kinds: GOAL_CREATE_KINDS,
-      // Narrowed to a Result Area, a new goal belongs to it.
-      parentId: tab.scope ?? null,
-      child: true,
-      onCreated: tab.startNaming,
-    },
-    onOpen: tab.openDetail,
-    onRename: tab.setEditingId,
-    onCopyAsText: tab.copySelectionAsText,
-    onSelectAll: tab.selectAll,
-    onStateChange: tab.cellHandlers.onStateChange,
+  // Narrowed to a Result Area, a new goal belongs to it.
+  const nodeCommands = useNodeTabCommands(tab, {
+    kinds: GOAL_CREATE_KINDS,
+    parentId: tab.scope ?? null,
   });
   // From `?scope=` rather than local state, so the narrowing survives reload and Back —
   // and so `View tasks…` from another module is a plain navigation into it.
   const scopeId = tab.scope ?? "";
   const setScopeId = tab.setScope;
-  const [counts, setCounts] = useState({ shown: 0, total: 0 });
-  const [groupIds, setGroupIds] = useState<string[]>([]);
 
   const resultAreas = useMemo(
     () => tab.nodes.filter((n) => n.type === "result_area"),
@@ -220,17 +199,6 @@ export function GoalsGrid({ wire }: { wire: OutlineWire }) {
     defaultsFor: viewDefaults,
   });
   const gridState = views.grid;
-  // Goals nest under result areas and under each other exactly as projects do, so they
-  // get the same drag: structural move plus a sibling priority renumber.
-  const rowDrag = useTreeRowDrag({
-    nodes: tab.nodes,
-    byId: tab.byId,
-    apply: tab.apply,
-    patch: tab.patch,
-    selectOne: tab.selectOne,
-    headerSorts: gridState.sorts,
-    clearHeaderSort: gridState.clearSort,
-  });
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("goals");
 
   const preparedRows = useMemo(
@@ -251,15 +219,6 @@ export function GoalsGrid({ wire }: { wire: OutlineWire }) {
   );
   const { rows, narrowingRows } = preparedRows;
 
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        allColumns,
-        narrowingRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [allColumns, narrowingRows],
-  );
-
   const columnCtx: GoalsCtx = useMemo(
     () => ({
       ...tab.cellHandlers,
@@ -276,83 +235,40 @@ export function GoalsGrid({ wire }: { wire: OutlineWire }) {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <GridToolbar
-        grid={gridState}
-        gridLabel="Goals"
-        allColumns={allColumns}
-        distinctValues={distinctValues}
-        groupDimensions={GOAL_GROUP_DIMENSIONS}
-        groupIds={groupIds}
-        counts={counts}
-        error={tab.error}
-        views={views}
-        left={
-          <>
-            <ToolbarSelect
-              label="Result Area"
-              value={scopeId}
-              onChange={setScopeId}
-              options={[
-                { value: "", label: "All Result Areas" },
-                ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
-              ]}
-            />
-            {/*
-              Parity with Tasks and Projects. Goals used to hard-code `includeDeferred: true`,
-              so a goal shelved until next quarter sat in the list with no way to put it away
-              — the one node tab where shelving did nothing.
-            */}
-            <ToolbarToggle
-              checked={includeDeferred}
-              onChange={() => setIncludeDeferred(!includeDeferred)}
-              label="Postponed"
-            />
-          </>
-        }
-        commandCapabilities={nodeCommands.capabilities}
-      />
-
-      {nodeCommands.dialogs}
-
-      <DataGrid
-        rows={rows}
-        narrowingRows={narrowingRows}
-        columns={gridState.columns}
-        allColumns={allColumns}
-        columnCtx={columnCtx}
-        selectedId={tab.selectedId}
-        selectedIds={tab.selectedIds}
-        selectAllState={tab.headerState}
-        onToggleSelectAll={tab.toggleSelectAll}
-        gutter="handle"
-        rowDrag={rowDrag}
-        onSelect={tab.select}
-        onOpenDetail={tab.openDetail}
-        ariaLabel="Goals"
-        onNavigableIdsChange={tab.setNavigableIds}
-        rowMenu={nodeCommands.rowMenu}
-        rowSwipe={nodeCommands.rowSwipe}
-        enableFilters
-        enableSort
-        grid={gridState}
-        distinctValues={distinctValues}
-        onCountsChange={setCounts}
-        onGroupIdsChange={setGroupIds}
-        empty={
-          <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
-            No goals match this view.
-          </div>
-        }
-      />
-
-      <CascadeConfirm state={tab.stateChange} />
-
-      <NodeDetailDrawer
-        node={tab.detailNode}
-        nodes={tab.nodes}
-        onClose={() => tab.setDetailId(null)}
-      />
-    </div>
+    <NodeTabGrid
+      tab={tab}
+      commands={nodeCommands}
+      views={views}
+      label="Goals"
+      noun="goals"
+      allColumns={allColumns}
+      columnCtx={columnCtx}
+      rows={rows}
+      narrowingRows={narrowingRows}
+      groupDimensions={GOAL_GROUP_DIMENSIONS}
+      left={
+        <>
+          <ToolbarSelect
+            label="Result Area"
+            value={scopeId}
+            onChange={setScopeId}
+            options={[
+              { value: "", label: "All Result Areas" },
+              ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
+            ]}
+          />
+          {/*
+                Parity with Tasks and Projects. Goals used to hard-code `includeDeferred: true`,
+                so a goal shelved until next quarter sat in the list with no way to put it away
+                — the one node tab where shelving did nothing.
+              */}
+          <ToolbarToggle
+            checked={includeDeferred}
+            onChange={() => setIncludeDeferred(!includeDeferred)}
+            label="Postponed"
+          />
+        </>
+      }
+    />
   );
 }

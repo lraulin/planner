@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { OutlineWire } from "@/lib/tree/wire";
 import type { ContactOption } from "@/lib/contacts/types";
@@ -13,17 +13,9 @@ import {
   STATUS_LABELS,
 } from "@/lib/tree/status";
 import type { ColumnDef } from "@/components/grid/columns";
-import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
-import { DataGrid } from "@/components/grid/DataGrid";
 import { type GridDefaults, useIncludeDeferred } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
-import {
-  GridToolbar,
-  switchValue,
-  type GridSwitch,
-} from "@/components/grid/GridToolbar";
-import { collectDistinctValues } from "@/lib/grid/distinct";
+import { switchValue, type GridSwitch } from "@/components/grid/GridToolbar";
 import {
   abbrStateColumn,
   actualEffortColumn,
@@ -51,13 +43,12 @@ import {
   targetStartColumn,
 } from "@/components/grid/commonColumns";
 import { EffortCell, StatusCell } from "@/components/grid/cells";
-import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { ProjectScopePicker } from "@/components/projects/ProjectScopePicker";
 import { ToolbarToggle } from "./tabChrome";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import { nextActionsOnly } from "@/lib/tree/nextActions";
 import { useGridTab } from "./useGridTab";
-import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
+import { NodeTabGrid, useNodeTabCommands } from "./NodeTabGrid";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
 type ViewId = "active-status" | "active-schedule" | "completed" | "all";
@@ -298,33 +289,18 @@ export function TasksGrid({
   contactOptions: ContactOption[];
 }) {
   const tab = useGridTab(wire);
-  const nodeCommands = useNodeCommandDeck({
-    nodes: tab.nodes,
-    selectedId: tab.selectedId,
-    selectedIds: tab.selectedIds,
-    apply: tab.apply,
-    create: {
-      kinds: TASK_CREATE_KINDS,
-      // Scoped to a project, `New task` makes one *in* that project. `__none__` is the opposite
-      // filter — tasks with no project above them — so it creates at the top level, which is
-      // exactly the row that view is for.
-      parentId: tab.scope && tab.scope !== "__none__" ? tab.scope : null,
-      child: true,
-      onCreated: tab.startNaming,
-    },
-    onOpen: tab.openDetail,
-    onRename: tab.setEditingId,
-    onCopyAsText: tab.copySelectionAsText,
-    onSelectAll: tab.selectAll,
-    onStateChange: tab.cellHandlers.onStateChange,
+  // Scoped to a project, `New task` makes one *in* that project. `__none__` is the opposite
+  // filter — tasks with no project above them — so it creates at the top level, which is
+  // exactly the row that view is for.
+  const nodeCommands = useNodeTabCommands(tab, {
+    kinds: TASK_CREATE_KINDS,
+    parentId: tab.scope && tab.scope !== "__none__" ? tab.scope : null,
   });
   // From `?scope=` rather than local state, so the narrowing survives reload and Back —
   // and so `View tasks…` from another module is a plain navigation into it.
   const scopeId = tab.scope ?? "";
   const setScopeId = tab.setScope;
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("tasks");
-  const [counts, setCounts] = useState({ shown: 0, total: 0 });
-  const [groupIds, setGroupIds] = useState<string[]>([]);
 
   const contactById = useMemo(
     () => new Map(contactOptions.map((contact) => [contact.id, contact.displayName])),
@@ -346,15 +322,6 @@ export function TasksGrid({
     branchScope: tab.scope,
   });
   const gridState = views.grid;
-  const rowDrag = useTreeRowDrag({
-    nodes: tab.nodes,
-    byId: tab.byId,
-    apply: tab.apply,
-    patch: tab.patch,
-    selectOne: tab.selectOne,
-    headerSorts: gridState.sorts,
-    clearHeaderSort: gridState.clearSort,
-  });
 
   const nextActions = switchValue(gridState, TASK_SWITCHES[0]);
   const showPurpose = switchValue(gridState, TASK_SWITCHES[1]);
@@ -400,99 +367,48 @@ export function TasksGrid({
   }, [sourceNodes, tab.nodes, tab.today, gridState.groupBy, includeDeferred, scopeId]);
   const { rows, narrowingRows } = preparedRows;
 
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        allColumns,
-        narrowingRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [allColumns, narrowingRows],
-  );
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <GridToolbar
-        grid={gridState}
-        gridLabel="Tasks"
-        allColumns={allColumns}
-        distinctValues={distinctValues}
-        groupDimensions={TASK_GROUP_DIMENSIONS}
-        groupIds={groupIds}
-        switches={TASK_SWITCHES}
-        counts={counts}
-        error={tab.error}
-        views={views}
-        left={
-          <>
-            <ProjectScopePicker
-              nodes={tab.nodes}
-              scopeId={scopeId}
-              onChange={setScopeId}
-            />
-            {/* Tab-scoped, not per-view: one Postponed setting covers every sub-view. */}
-            <ToolbarToggle
-              checked={includeDeferred}
-              onChange={() => setIncludeDeferred(!includeDeferred)}
-              label="Postponed"
-            />
-          </>
-        }
-        commandCapabilities={nodeCommands.capabilities}
-      />
-
-      {nodeCommands.dialogs}
-
-      {showPurpose && (
-        <div className="flex-none border-b border-rule bg-surface-raised/60 px-4 py-2">
-          <p className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
-            Project&apos;s Purpose
-          </p>
-          <p className="mt-0.5 whitespace-pre-wrap text-[0.8125rem] text-ink-muted">
-            {scopeId
-              ? purposeText || "No purpose recorded for this project."
-              : "Select a project to show its purpose."}
-          </p>
-        </div>
-      )}
-
-      <DataGrid
-        rows={rows}
-        narrowingRows={narrowingRows}
-        columns={gridState.columns}
-        allColumns={allColumns}
-        columnCtx={tab.cellHandlers}
-        selectedId={tab.selectedId}
-        selectedIds={tab.selectedIds}
-        selectAllState={tab.headerState}
-        onToggleSelectAll={tab.toggleSelectAll}
-        gutter="handle"
-        onSelect={tab.select}
-        onOpenDetail={tab.openDetail}
-        ariaLabel="Tasks"
-        onNavigableIdsChange={tab.setNavigableIds}
-        rowMenu={nodeCommands.rowMenu}
-        rowSwipe={nodeCommands.rowSwipe}
-        rowDrag={rowDrag}
-        enableFilters
-        enableSort
-        grid={gridState}
-        distinctValues={distinctValues}
-        onCountsChange={setCounts}
-        onGroupIdsChange={setGroupIds}
-        empty={
-          <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
-            No tasks match this view.
+    <NodeTabGrid
+      tab={tab}
+      commands={nodeCommands}
+      views={views}
+      label="Tasks"
+      noun="tasks"
+      allColumns={allColumns}
+      columnCtx={tab.cellHandlers}
+      rows={rows}
+      narrowingRows={narrowingRows}
+      groupDimensions={TASK_GROUP_DIMENSIONS}
+      switches={TASK_SWITCHES}
+      left={
+        <>
+          <ProjectScopePicker
+            nodes={tab.nodes}
+            scopeId={scopeId}
+            onChange={setScopeId}
+          />
+          {/* Tab-scoped, not per-view: one Postponed setting covers every sub-view. */}
+          <ToolbarToggle
+            checked={includeDeferred}
+            onChange={() => setIncludeDeferred(!includeDeferred)}
+            label="Postponed"
+          />
+        </>
+      }
+      banner={
+        showPurpose && (
+          <div className="flex-none border-b border-rule bg-surface-raised/60 px-4 py-2">
+            <p className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
+              Project&apos;s Purpose
+            </p>
+            <p className="mt-0.5 whitespace-pre-wrap text-[0.8125rem] text-ink-muted">
+              {scopeId
+                ? purposeText || "No purpose recorded for this project."
+                : "Select a project to show its purpose."}
+            </p>
           </div>
-        }
-      />
-
-      <CascadeConfirm state={tab.stateChange} />
-
-      <NodeDetailDrawer
-        node={tab.detailNode}
-        nodes={tab.nodes}
-        onClose={() => tab.setDetailId(null)}
-      />
-    </div>
+        )
+      }
+    />
   );
 }

@@ -5,11 +5,8 @@ import type { OutlineNode } from "@/lib/tree/types";
 import type { OutlineWire } from "@/lib/tree/wire";
 import { asGroupBy, treeGridRows, type GroupBy } from "@/lib/tree/slice";
 import type { ColumnDef } from "@/components/grid/columns";
-import { DataGrid } from "@/components/grid/DataGrid";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { GridToolbar } from "@/components/grid/GridToolbar";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   actualEffortColumn,
   categoryColumn,
@@ -21,11 +18,9 @@ import {
   percentColumn,
 } from "@/components/grid/commonColumns";
 import { NameCell, TextCell } from "@/components/grid/cells";
-import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { setResultAreaFieldsAction } from "@/app/(shell)/plan/outline/detail-actions";
 import { useGridTab } from "./useGridTab";
-import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
-import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
+import { NodeTabGrid, useNodeTabCommands } from "./NodeTabGrid";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
 type ViewId = "all";
@@ -153,26 +148,9 @@ const RESULT_AREA_CREATE_KINDS = ["result_area"] as const;
  */
 export function ResultAreasGrid({ wire }: { wire: OutlineWire }) {
   const tab = useGridTab(wire);
-  const nodeCommands = useNodeCommandDeck({
-    nodes: tab.nodes,
-    selectedId: tab.selectedId,
-    selectedIds: tab.selectedIds,
-    apply: tab.apply,
-    // Result areas are the outline's top level, so there is no scope to create into — and a
-    // sub-area is the one nesting this module can express, which `New sub-area` now does.
-    create: {
-      kinds: RESULT_AREA_CREATE_KINDS,
-      child: true,
-      onCreated: tab.startNaming,
-    },
-    onOpen: tab.openDetail,
-    onRename: tab.setEditingId,
-    onCopyAsText: tab.copySelectionAsText,
-    onSelectAll: tab.selectAll,
-    onStateChange: tab.cellHandlers.onStateChange,
-  });
-  const [counts, setCounts] = useState({ shown: 0, total: 0 });
-  const [groupIds, setGroupIds] = useState<string[]>([]);
+  // Result areas are the outline's top level, so there is no scope to create into — and a
+  // sub-area is the one nesting this module can express, which `New sub-area` now does.
+  const nodeCommands = useNodeTabCommands(tab, { kinds: RESULT_AREA_CREATE_KINDS });
 
   const allColumns = useMemo(() => buildColumns(), []);
   const views = useModuleViews({
@@ -183,17 +161,6 @@ export function ResultAreasGrid({ wire }: { wire: OutlineWire }) {
     defaultsFor: viewDefaults,
   });
   const gridState = views.grid;
-  // Sub-areas are the one nesting this module expresses, and reordering the top level is
-  // how the areas get ranked — the same drag the other tree tabs have.
-  const rowDrag = useTreeRowDrag({
-    nodes: tab.nodes,
-    byId: tab.byId,
-    apply: tab.apply,
-    patch: tab.patch,
-    selectOne: tab.selectOne,
-    headerSorts: gridState.sorts,
-    clearHeaderSort: gridState.clearSort,
-  });
   const preparedRows = useMemo(
     () =>
       treeGridRows(tab.nodes, {
@@ -206,15 +173,6 @@ export function ResultAreasGrid({ wire }: { wire: OutlineWire }) {
     [tab.nodes, tab.today, gridState.groupBy],
   );
   const { rows, narrowingRows } = preparedRows;
-
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        allColumns,
-        narrowingRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [allColumns, narrowingRows],
-  );
 
   const columnCtx: ResultAreasCtx = useMemo(
     () => ({
@@ -237,59 +195,18 @@ export function ResultAreasGrid({ wire }: { wire: OutlineWire }) {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <GridToolbar
-        grid={gridState}
-        gridLabel="Result Areas"
-        allColumns={allColumns}
-        distinctValues={distinctValues}
-        groupDimensions={RESULT_AREA_GROUP_DIMENSIONS}
-        groupIds={groupIds}
-        counts={counts}
-        error={tab.error}
-        views={views}
-        commandCapabilities={nodeCommands.capabilities}
-      />
-
-      {nodeCommands.dialogs}
-
-      <DataGrid
-        rows={rows}
-        narrowingRows={narrowingRows}
-        columns={gridState.columns}
-        allColumns={allColumns}
-        columnCtx={columnCtx}
-        selectedId={tab.selectedId}
-        selectedIds={tab.selectedIds}
-        selectAllState={tab.headerState}
-        onToggleSelectAll={tab.toggleSelectAll}
-        gutter="handle"
-        rowDrag={rowDrag}
-        onSelect={tab.select}
-        onOpenDetail={tab.openDetail}
-        ariaLabel="Result Areas"
-        onNavigableIdsChange={tab.setNavigableIds}
-        rowMenu={nodeCommands.rowMenu}
-        rowSwipe={nodeCommands.rowSwipe}
-        enableFilters
-        enableSort
-        grid={gridState}
-        distinctValues={distinctValues}
-        onCountsChange={setCounts}
-        onGroupIdsChange={setGroupIds}
-        empty={
-          <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
-            No result areas match this view.
-          </div>
-        }
-      />
-
-      <NodeDetailDrawer
-        node={tab.detailNode}
-        nodes={tab.nodes}
-        onClose={() => tab.setDetailId(null)}
-      />
-    </div>
+    <NodeTabGrid
+      tab={tab}
+      commands={nodeCommands}
+      views={views}
+      label="Result Areas"
+      noun="result areas"
+      allColumns={allColumns}
+      columnCtx={columnCtx}
+      rows={rows}
+      narrowingRows={narrowingRows}
+      groupDimensions={RESULT_AREA_GROUP_DIMENSIONS}
+    />
   );
 }
 
