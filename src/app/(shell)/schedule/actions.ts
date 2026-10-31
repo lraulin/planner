@@ -1,12 +1,6 @@
 "use server";
 
-import type {
-  AppointmentCheck,
-  PriorityLetter,
-  RecurrenceEnd,
-  RecurrenceFrequency,
-  ShowAs,
-} from "@/db/schema";
+import type { AppointmentCheck } from "@/db/schema";
 import * as schedule from "@/lib/schedule/mutations";
 import type {
   AppointmentInput,
@@ -63,28 +57,17 @@ export async function deleteTimeChartAreaAction(id: string): Promise<ActionResul
 
 // ── Appointments ─────────────────────────────────────────────────────────────
 
-export type AppointmentFormPayload = {
-  subject: string;
-  location?: string;
-  startAt: string; // ISO
+/**
+ * An appointment as the form sends it: `AppointmentInput` with its instants as ISO strings,
+ * since a Date does not survive the trip to a server action. The import receipt is not the
+ * form's to set.
+ */
+export type AppointmentFormPayload = Omit<
+  AppointmentInput,
+  "startAt" | "endAt" | "recurrenceUntil" | "organizerSourceNodeId"
+> & {
+  startAt: string;
   endAt: string;
-  allDay?: boolean;
-  checkState?: AppointmentCheck;
-  reminderMinutes?: number | null;
-  showAs?: ShowAs;
-  /** Google event colour id `"1"`–`"11"`, or null for calendar default. */
-  colorId?: string | null;
-  priorityLetter?: PriorityLetter | null;
-  priorityRank?: number | null;
-  projectId?: string | null;
-  notes?: string;
-  contexts?: string[];
-  private?: boolean;
-  recurrenceFrequency?: RecurrenceFrequency;
-  recurrenceInterval?: number;
-  recurrenceByWeekday?: number[] | null;
-  recurrenceEnd?: RecurrenceEnd;
-  recurrenceCount?: number | null;
   recurrenceUntil?: string | null;
 };
 
