@@ -19,7 +19,7 @@ import {
 } from "@/components/grid/commonColumns";
 import { DeadlineCell, NameCell, TextCell } from "@/components/grid/cells";
 import { setGoalFieldAction } from "@/app/(shell)/plan/outline/detail-actions";
-import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
+import { ResultAreaScopePicker, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import { NodeTabGrid, useNodeTabCommands } from "./NodeTabGrid";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
@@ -185,11 +185,6 @@ export function GoalsGrid({ wire }: { wire: OutlineWire }) {
   const scopeId = tab.scope ?? "";
   const setScopeId = tab.setScope;
 
-  const resultAreas = useMemo(
-    () => tab.nodes.filter((n) => n.type === "result_area"),
-    [tab.nodes],
-  );
-
   const allColumns = useMemo(() => buildColumns(tab.today), [tab.today]);
   const views = useModuleViews({
     moduleId: "goals",
@@ -248,14 +243,10 @@ export function GoalsGrid({ wire }: { wire: OutlineWire }) {
       groupDimensions={GOAL_GROUP_DIMENSIONS}
       left={
         <>
-          <ToolbarSelect
-            label="Result Area"
-            value={scopeId}
+          <ResultAreaScopePicker
+            nodes={tab.nodes}
+            scopeId={scopeId}
             onChange={setScopeId}
-            options={[
-              { value: "", label: "All Result Areas" },
-              ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
-            ]}
           />
           {/*
                 Parity with Tasks and Projects. Goals used to hard-code `includeDeferred: true`,

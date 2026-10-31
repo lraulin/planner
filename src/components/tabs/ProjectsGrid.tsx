@@ -45,7 +45,7 @@ import {
   targetStartColumn,
 } from "@/components/grid/commonColumns";
 import { EffortCell, ReadOnlyCell, StatusCell } from "@/components/grid/cells";
-import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
+import { ResultAreaScopePicker, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import { NodeTabGrid, useNodeTabCommands } from "./NodeTabGrid";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
@@ -279,11 +279,6 @@ export function ProjectsGrid({ wire }: { wire: OutlineWire }) {
   const setScopeId = tab.setScope;
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("projects");
 
-  const resultAreas = useMemo(
-    () => tab.nodes.filter((n) => n.type === "result_area"),
-    [tab.nodes],
-  );
-
   const allColumns = useMemo(
     () => buildColumns(tab.nodes, tab.today),
     [tab.nodes, tab.today],
@@ -328,14 +323,10 @@ export function ProjectsGrid({ wire }: { wire: OutlineWire }) {
       switches={PROJECT_SWITCHES}
       left={
         <>
-          <ToolbarSelect
-            label="Result Area"
-            value={scopeId}
+          <ResultAreaScopePicker
+            nodes={tab.nodes}
+            scopeId={scopeId}
             onChange={setScopeId}
-            options={[
-              { value: "", label: "All Result Areas" },
-              ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
-            ]}
           />
           {/* Tab-scoped, not per-view: one Postponed setting covers every sub-view. */}
           <ToolbarToggle

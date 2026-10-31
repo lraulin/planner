@@ -2,6 +2,7 @@
 
 import type { CommandIcon } from "@/lib/commands/icons";
 import { CommandGlyph } from "@/components/icons/commandIcons";
+import type { OutlineNode } from "@/lib/tree/types";
 
 /** Shared toolbar chrome for every grid tab. */
 
@@ -282,5 +283,33 @@ export function ErrorBanner({ message }: { message: string }) {
     >
       {message}
     </p>
+  );
+}
+
+/**
+ * Narrow a tab to one Result Area — Goals and Projects. Tasks narrows by project instead,
+ * through `ProjectScopePicker`.
+ */
+export function ResultAreaScopePicker({
+  nodes,
+  scopeId,
+  onChange,
+}: {
+  nodes: readonly OutlineNode[];
+  scopeId: string;
+  onChange: (scopeId: string) => void;
+}) {
+  return (
+    <ToolbarSelect
+      label="Result Area"
+      value={scopeId}
+      onChange={onChange}
+      options={[
+        { value: "", label: "All Result Areas" },
+        ...nodes
+          .filter((node) => node.type === "result_area")
+          .map((area) => ({ value: area.id, label: area.name })),
+      ]}
+    />
   );
 }
