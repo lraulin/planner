@@ -1,12 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
   financeCaptureCoverage,
   financeStatements,
-  financePaymentResolutions,
-  financePayeeAliases,
   financePayees,
   financeTransactions,
 } from "@/db/schema";
@@ -28,16 +25,14 @@ import {
 } from "./bankSnapshotReconcile";
 import { capturedRanges, planCoverage } from "./captureCoverage";
 import { recordSourceState } from "./sourceStateWrite";
-import { changedRows, planReclassify } from "./classify/reclassify";
 import type { FinanceExecutor } from "./dbExecutor";
+import { loadAndPlanReclassify, writeReclassified } from "./reclassifyPlan";
 import { centsToNumericString, numericStringToCents } from "./money";
-import type { PaypalResolution } from "./paypalMatch";
 import {
   categoryForNewTransaction,
   type AutoCategoryMode,
 } from "./payees/autoCategory";
 import { refusedBillClaims } from "./payees/billClaimGate";
-import { payeeIndex } from "./payees/resolve";
 
 export type BankSnapshotApplyResult = {
   accountId: string;
@@ -233,87 +228,8 @@ export async function reclassifyInsideTransaction(
   executor: FinanceExecutor,
   userId: string,
 ): Promise<void> {
-  const [rows, accounts, storedResolutions, aliases] = await Promise.all([
-    executor
-      .select({
-        id: financeTransactions.id,
-        accountId: financeTransactions.accountId,
-        transactionDate: financeTransactions.transactionDate,
-        description: financeTransactions.description,
-        amount: financeTransactions.amount,
-        sourceCategory: financeTransactions.sourceCategory,
-        transferGroupId: financeTransactions.transferGroupId,
-        payeeId: financeTransactions.payeeId,
-        derivedFlow: financeTransactions.derivedFlow,
-      })
-      .from(financeTransactions)
-      .where(eq(financeTransactions.userId, userId)),
-    executor
-      .select({ id: financeAccounts.id, externalKey: financeAccounts.externalKey })
-      .from(financeAccounts)
-      .where(eq(financeAccounts.userId, userId)),
-    executor
-      .select({
-        externalId: financePaymentResolutions.externalId,
-        transactionDate: financePaymentResolutions.transactionDate,
-        amount: financePaymentResolutions.amount,
-        counterparty: financePaymentResolutions.counterparty,
-        direction: financePaymentResolutions.direction,
-      })
-      .from(financePaymentResolutions)
-      .where(eq(financePaymentResolutions.userId, userId)),
-    executor
-      .select({
-        alias: financePayeeAliases.alias,
-        payeeId: financePayeeAliases.payeeId,
-      })
-      .from(financePayeeAliases)
-      .where(eq(financePayeeAliases.userId, userId)),
-  ]);
-  const parsed = rows.map((row) => ({
-    id: row.id,
-    accountId: row.accountId,
-    transactionDate: row.transactionDate,
-    description: row.description,
-    amountCents: numericStringToCents(row.amount) ?? 0,
-    sourceCategory: row.sourceCategory,
-    transferGroupId: row.transferGroupId,
-    payeeId: row.payeeId,
-    derivedFlow: row.derivedFlow,
-  }));
-  const resolutions: PaypalResolution[] = storedResolutions.flatMap((row) => {
-    const amountCents = numericStringToCents(row.amount);
-    if (amountCents === null || (row.direction !== "in" && row.direction !== "out")) {
-      return [];
-    }
-    return [
-      {
-        externalId: row.externalId,
-        date: row.transactionDate,
-        amountCents,
-        counterparty: row.counterparty,
-        direction: row.direction,
-      },
-    ];
-  });
-  const plan = planReclassify(
-    parsed,
-    accounts,
-    randomUUID,
-    resolutions,
-    payeeIndex(aliases),
-  );
-  for (const row of changedRows(parsed, plan)) {
-    await executor
-      .update(financeTransactions)
-      .set({
-        derivedFlow: row.derivedFlow,
-        transferGroupId: row.transferGroupId,
-        payeeId: row.payeeId,
-        updatedAt: new Date(),
-      })
-      .where(ownedRow(financeTransactions, row.id, userId));
-  }
+  const { changed } = await loadAndPlanReclassify(executor, userId);
+  await writeReclassified(executor, userId, changed);
 }
 
 export async function autoFileNewRows(
