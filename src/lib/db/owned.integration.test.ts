@@ -1,9 +1,9 @@
 import { beforeAll, expect, it } from "vitest";
 import { db } from "@/db";
-import { masterContexts } from "@/db/schema";
+import { jobs, masterContexts } from "@/db/schema";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
-import { findOwnedRow, requireOwnedRow } from "./owned";
+import { findByExternalRef, findOwnedRow, requireOwnedRow } from "./owned";
 
 const describeDb = await describeWithDatabase("owned row lookups");
 const makeUser = testUsers("owned-row");
@@ -57,5 +57,41 @@ describeDb("findOwnedRow and requireOwnedRow", () => {
       return row.name;
     });
     expect(name).toBe("@Home");
+  });
+});
+
+describeDb("findByExternalRef", () => {
+  const external = { source: "test-import", id: "row-1" };
+  let owner: string;
+  let intruder: string;
+  let jobId: string;
+
+  beforeAll(async () => {
+    owner = await makeUser("Importer");
+    intruder = await makeUser("Other importer");
+    const [row] = await db
+      .insert(jobs)
+      .values({
+        userId: owner,
+        employer: "Imported",
+        externalSource: external.source,
+        externalId: external.id,
+      })
+      .returning({ id: jobs.id });
+    jobId = row.id;
+  });
+
+  it("finds the owner's imported row", async () => {
+    expect(await findByExternalRef(db, jobs, owner, external)).toEqual({ id: jobId });
+  });
+
+  it("does not find another user's row with the same external id", async () => {
+    expect(await findByExternalRef(db, jobs, intruder, external)).toBeNull();
+  });
+
+  it("does not match a different source with the same id", async () => {
+    expect(
+      await findByExternalRef(db, jobs, owner, { source: "other", id: external.id }),
+    ).toBeNull();
   });
 });
