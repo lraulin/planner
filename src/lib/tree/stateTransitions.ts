@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { dailyItems, nodes, taskCompletions, taskDetails } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { daysBetween } from "@/lib/dateMath";
@@ -72,7 +73,7 @@ export async function applyStateTransition(
   const [node] = await tx
     .select({ type: nodes.type, deferredDate: nodes.deferredDate })
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
   // Mutations in this module historically no-op for a missing/foreign id. Preserve that
   // user-isolation contract while still rejecting an owned Result Area explicitly.
@@ -87,7 +88,7 @@ export async function applyStateTransition(
     await tx
       .update(nodes)
       .set({ state: "cancelled", completedAt: null, updatedAt: now })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
     await syncDayLineOnCancel(tx, userId, nodeId, now);
     await applySettlePriorityClear(tx, userId, nodeId, state, false);
     return;
@@ -110,7 +111,7 @@ export async function applyStateTransition(
         ...(staleShelf && node.deferredDate ? { deferredDate: null } : {}),
         updatedAt: now,
       })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
     await reopenDayLine(tx, userId, nodeId, now);
     // Shelving clears descendant plans that fall inside the shelf and drops their day lines.
     // Re-syncing this node itself covers the indefinite case (no open line whatever its plan).
@@ -135,7 +136,7 @@ export async function applyStateTransition(
     await tx
       .update(nodes)
       .set({ state, completedAt: now, updatedAt: now })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
     await tx
       .update(taskDetails)
       .set({ dateCompleted: completedDay })
@@ -221,7 +222,7 @@ export async function applyStateTransition(
       state: "postponed",
       updatedAt: now,
     })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, nodeId, userId));
 
   // A dated shelf on the routine itself rarely conflicts with its children's plans (they
   // were just reset), but the rule is the same as any other shelve.
@@ -305,7 +306,7 @@ async function settleDayLine(
     await tx
       .update(dailyItems)
       .set({ state, completedAt: at, updatedAt: at })
-      .where(and(eq(dailyItems.id, open.id), eq(dailyItems.userId, userId)));
+      .where(ownedRow(dailyItems, open.id, userId));
   } else if (!settledToday) {
     await addDayLine(tx, userId, nodeId, today, {
       state,
@@ -385,7 +386,7 @@ async function reopenDayLine(
   await tx
     .update(dailyItems)
     .set({ state: "not_started", completedAt: null, updatedAt: now })
-    .where(and(eq(dailyItems.id, doneToday.id), eq(dailyItems.userId, userId)));
+    .where(ownedRow(dailyItems, doneToday.id, userId));
 
   // The line is open again on today, so the task's target start date has to say today —
   // that column is what decides which day a task sits on, and reopening something you
@@ -400,7 +401,7 @@ async function reopenDayLine(
   const [node] = await tx
     .select({ deferredDate: nodes.deferredDate })
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
 
   await tx
@@ -412,7 +413,7 @@ async function reopenDayLine(
         : {}),
       updatedAt: now,
     })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, nodeId, userId));
 }
 
 /**
@@ -549,7 +550,7 @@ async function selfAndAncestors(
     const [row] = await tx
       .select(CASCADE_SELECT)
       .from(nodes)
-      .where(and(eq(nodes.userId, userId), eq(nodes.id, currentId)));
+      .where(ownedRow(nodes, currentId, userId));
     if (!row) break;
     out.push(row);
     currentId = row.parentId;

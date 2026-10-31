@@ -7,6 +7,7 @@ import {
   type NodeState,
   type PriorityLetter,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { ensureInbox } from "@/lib/capture/mutations";
 import { assertRankedLetterPriorities } from "@/lib/priority/letterRank";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
@@ -40,7 +41,7 @@ async function requireItem(tx: Executor, userId: string, itemId: string) {
   const [item] = await tx
     .select()
     .from(dailyItems)
-    .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)))
+    .where(ownedRow(dailyItems, itemId, userId))
     .limit(1);
 
   if (!item) throw new Error("Daily item not found.");
@@ -142,7 +143,7 @@ export async function updateDailyItemTitle(
   await db
     .update(dailyItems)
     .set({ title, updatedAt: new Date() })
-    .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+    .where(ownedRow(dailyItems, itemId, userId));
 }
 
 /**
@@ -203,7 +204,7 @@ export async function setDailyItemState(
             completedAt: null,
             updatedAt: new Date(),
           })
-          .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+          .where(ownedRow(dailyItems, itemId, userId));
       }
     } else {
       // Jotted line: no task behind it, so the row is the whole record.
@@ -214,7 +215,7 @@ export async function setDailyItemState(
           completedAt: settling ? new Date() : null,
           updatedAt: new Date(),
         })
-        .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+        .where(ownedRow(dailyItems, itemId, userId));
     }
   });
   // Ticking a repeating task here cycles it, which moves its reminder.
@@ -234,7 +235,7 @@ export async function setDailyPriorities(
       await tx
         .update(dailyItems)
         .set({ priorityLetter: letter, priorityRank: rank, updatedAt: new Date() })
-        .where(and(eq(dailyItems.id, id), eq(dailyItems.userId, userId)));
+        .where(ownedRow(dailyItems, id, userId));
     }
   });
 }
@@ -275,14 +276,14 @@ async function moveItemToDay(
       sortKey: await endOfDay(tx, userId, day),
       updatedAt: new Date(),
     })
-    .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+    .where(ownedRow(dailyItems, itemId, userId));
 
   if (replannedNodeId) {
     const date = fromDateKey(day);
     await tx
       .update(nodes)
       .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
-      .where(and(eq(nodes.id, replannedNodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, replannedNodeId, userId));
   }
 }
 
@@ -296,9 +297,7 @@ export async function moveDailyItemToDay(
 
 /** Take a line off a day. Deletes only the row — a linked task is untouched. */
 export async function deleteDailyItem(userId: string, itemId: string): Promise<void> {
-  await db
-    .delete(dailyItems)
-    .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+  await db.delete(dailyItems).where(ownedRow(dailyItems, itemId, userId));
 }
 
 /**
@@ -325,7 +324,7 @@ export async function planNodeForDay(
     const [node] = await tx
       .select({ type: nodes.type })
       .from(nodes)
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+      .where(ownedRow(nodes, nodeId, userId))
       .limit(1);
 
     if (!node) throw new Error("Task not found.");
@@ -358,7 +357,7 @@ export async function promoteToTask(userId: string, itemId: string): Promise<str
   await db
     .update(dailyItems)
     .set({ nodeId, updatedAt: new Date() })
-    .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+    .where(ownedRow(dailyItems, itemId, userId));
 
   // The line now stands for a task, and a task says which day it is on with its target
   // dates. Without this the new task would have a day line and no dates to explain it. Both
@@ -367,7 +366,7 @@ export async function promoteToTask(userId: string, itemId: string): Promise<str
   await db
     .update(nodes)
     .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, nodeId, userId));
 
   return nodeId;
 }
@@ -436,7 +435,7 @@ export async function forwardOpenItems(
       await tx
         .update(dailyItems)
         .set({ forwardedTo: today, updatedAt: new Date() })
-        .where(and(eq(dailyItems.id, row.id), eq(dailyItems.userId, userId)));
+        .where(ownedRow(dailyItems, row.id, userId));
 
       await tx.insert(dailyItems).values({
         userId,
@@ -496,7 +495,7 @@ export async function saveJournal(
       await tx
         .update(notes)
         .set({ body, updatedAt: new Date() })
-        .where(and(eq(notes.id, existing.id), eq(notes.userId, userId)));
+        .where(ownedRow(notes, existing.id, userId));
       return existing.id;
     }
 

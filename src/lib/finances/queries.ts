@@ -23,6 +23,7 @@ import {
   financeStatements,
   financeTransactions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { FinanceExecutor } from "./dbExecutor";
 import { effectiveFlow } from "./analytics";
 import { collapsedYearGroupIds } from "./grouping";
@@ -690,12 +691,7 @@ export async function getTransaction(
   transactionId: string,
 ): Promise<TransactionListRow | null> {
   const [row] = await transactionListQuery(userId)
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeTransactions, transactionId, userId))
     .limit(1);
 
   return row ? toTransactionListRow(row) : null;
@@ -972,12 +968,7 @@ export async function getPaymentResolution(
       direction: financePaymentResolutions.direction,
     })
     .from(financePaymentResolutions)
-    .where(
-      and(
-        eq(financePaymentResolutions.id, resolutionId),
-        eq(financePaymentResolutions.userId, userId),
-      ),
-    )
+    .where(ownedRow(financePaymentResolutions, resolutionId, userId))
     .limit(1);
   if (!row) return null;
   return {

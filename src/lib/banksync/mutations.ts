@@ -19,6 +19,7 @@ import {
   financeAccounts,
   financeTransactions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { captureFinanceMoneyCheckpoint } from "@/lib/finances/audit/checkpoints";
 import type { FinanceAuditChange } from "@/lib/finances/audit/types";
@@ -34,9 +35,7 @@ async function requireConnection(userId: string, connectionId: string): Promise<
   const [row] = await db
     .select({ id: bankConnections.id })
     .from(bankConnections)
-    .where(
-      and(eq(bankConnections.id, connectionId), eq(bankConnections.userId, userId)),
-    )
+    .where(ownedRow(bankConnections, connectionId, userId))
     .limit(1);
   if (!row) throw new Error("Bank connection not found.");
 }
@@ -45,7 +44,7 @@ async function requireAccount(userId: string, accountId: string): Promise<void> 
   const [row] = await db
     .select({ id: financeAccounts.id })
     .from(financeAccounts)
-    .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
+    .where(ownedRow(financeAccounts, accountId, userId))
     .limit(1);
   if (!row) throw new Error("Account not found.");
 }
@@ -77,9 +76,7 @@ export async function renameConnection(
   await db
     .update(bankConnections)
     .set({ label, updatedAt: new Date() })
-    .where(
-      and(eq(bankConnections.id, connectionId), eq(bankConnections.userId, userId)),
-    );
+    .where(ownedRow(bankConnections, connectionId, userId));
 }
 
 /** Replace the access URL on an existing connection, e.g. after re-claiming a fresh token. */
@@ -92,9 +89,7 @@ export async function replaceAccessUrl(
   await db
     .update(bankConnections)
     .set({ accessUrl, reauthRequiredAt: null, updatedAt: new Date() })
-    .where(
-      and(eq(bankConnections.id, connectionId), eq(bankConnections.userId, userId)),
-    );
+    .where(ownedRow(bankConnections, connectionId, userId));
 }
 
 /**
@@ -176,7 +171,7 @@ export async function linkAccount(
 export async function unlinkAccount(userId: string, linkId: string): Promise<void> {
   const deleted = await db
     .delete(bankAccountLinks)
-    .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)))
+    .where(ownedRow(bankAccountLinks, linkId, userId))
     .returning({ id: bankAccountLinks.id });
   if (deleted.length === 0) throw new Error("Link not found.");
 }
@@ -188,9 +183,7 @@ export async function deleteConnection(
 ): Promise<void> {
   const deleted = await db
     .delete(bankConnections)
-    .where(
-      and(eq(bankConnections.id, connectionId), eq(bankConnections.userId, userId)),
-    )
+    .where(ownedRow(bankConnections, connectionId, userId))
     .returning({ id: bankConnections.id });
   if (deleted.length === 0) throw new Error("Bank connection not found.");
 }
@@ -205,9 +198,7 @@ export async function setReauthRequired(
   await db
     .update(bankConnections)
     .set({ reauthRequiredAt: required ? new Date() : null, updatedAt: new Date() })
-    .where(
-      and(eq(bankConnections.id, connectionId), eq(bankConnections.userId, userId)),
-    );
+    .where(ownedRow(bankConnections, connectionId, userId));
 }
 
 /**
@@ -245,9 +236,7 @@ export async function saveBalance(
           eq(financeAccounts.userId, userId),
         ),
       )
-      .where(
-        and(eq(bankAccountLinks.id, input.linkId), eq(bankAccountLinks.userId, userId)),
-      )
+      .where(ownedRow(bankAccountLinks, input.linkId, userId))
       .limit(1);
     if (!existing) throw new Error("Link not found.");
 
@@ -330,12 +319,7 @@ export async function applySync(
     const [connection] = await tx
       .select({ id: bankConnections.id })
       .from(bankConnections)
-      .where(
-        and(
-          eq(bankConnections.id, input.connectionId),
-          eq(bankConnections.userId, userId),
-        ),
-      )
+      .where(ownedRow(bankConnections, input.connectionId, userId))
       .limit(1);
     if (!connection) throw new Error("Bank connection not found.");
     const externalIds = [
@@ -566,12 +550,7 @@ export async function applySync(
       const rows = await tx
         .update(financeTransactions)
         .set({ ...carry.carry, updatedAt: new Date() })
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            eq(financeTransactions.id, targetId),
-          ),
-        )
+        .where(ownedRow(financeTransactions, targetId, userId))
         .returning({ id: financeTransactions.id });
       for (const row of rows) {
         changes.push({
@@ -641,12 +620,7 @@ export async function applySync(
         unmatchedAccountCount: input.unmatchedAccountCount,
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(bankConnections.id, input.connectionId),
-          eq(bankConnections.userId, userId),
-        ),
-      )
+      .where(ownedRow(bankConnections, input.connectionId, userId))
       .returning({ id: bankConnections.id });
     if (advanced.length === 0) throw new Error("Bank connection not found.");
 

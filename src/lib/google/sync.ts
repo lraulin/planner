@@ -8,6 +8,7 @@
 import { and, eq, gte, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { appointments } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import {
   GoogleNotLinkedError,
   listCalendars,
@@ -149,7 +150,7 @@ export async function syncWindow(
     await db
       .update(appointments)
       .set({ ...fields, updatedAt: new Date() })
-      .where(and(eq(appointments.id, id), eq(appointments.userId, userId)));
+      .where(ownedRow(appointments, id, userId));
   }
 
   if (plan.toDelete.length > 0) {

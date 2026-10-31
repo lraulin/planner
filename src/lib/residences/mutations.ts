@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { residences, type ExternalRef } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import {
   dateKeyOrNull,
   moneyOrNull,
@@ -38,7 +39,7 @@ async function requireResidence(tx: Executor, userId: string, residenceId: strin
   const [row] = await tx
     .select()
     .from(residences)
-    .where(and(eq(residences.id, residenceId), eq(residences.userId, userId)))
+    .where(ownedRow(residences, residenceId, userId))
     .limit(1);
   if (!row) throw new Error("Residence not found.");
   return row;
@@ -141,7 +142,7 @@ export async function updateResidence(
     await tx
       .update(residences)
       .set(patch)
-      .where(and(eq(residences.id, residenceId), eq(residences.userId, userId)));
+      .where(ownedRow(residences, residenceId, userId));
   });
 }
 
@@ -151,7 +152,7 @@ export async function deleteResidence(
 ): Promise<void> {
   const deleted = await db
     .delete(residences)
-    .where(and(eq(residences.id, residenceId), eq(residences.userId, userId)))
+    .where(ownedRow(residences, residenceId, userId))
     .returning({ id: residences.id });
   if (deleted.length === 0) throw new Error("Residence not found.");
 }

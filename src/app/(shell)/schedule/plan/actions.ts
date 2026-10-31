@@ -1,8 +1,8 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes, resultAreaDetails } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import * as planning from "@/lib/planning/mutations";
 import type { PlanEntryPatch, WeeklyPlanPatch } from "@/lib/planning/mutations";
@@ -64,7 +64,7 @@ export async function saveMissionAction(
     const [node] = await db
       .select({ id: nodes.id, type: nodes.type })
       .from(nodes)
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+      .where(ownedRow(nodes, nodeId, userId))
       .limit(1);
     if (!node) throw new Error("Item not found.");
     if (node.type !== "result_area") {
@@ -77,6 +77,6 @@ export async function saveMissionAction(
     await db
       .update(nodes)
       .set({ updatedAt: new Date() })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
   });
 }

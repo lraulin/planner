@@ -7,6 +7,7 @@ import {
   resultAreaDetails,
   taskDetails,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { NodeItemKind } from "@/db/schema";
 import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { assertContactOwned } from "@/lib/contacts/ownership";
@@ -344,7 +345,7 @@ async function requireNode(tx: Executor, userId: string, nodeId: string) {
       priorityRank: nodes.priorityRank,
     })
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
 
   if (!node) throw new Error(`Node not found: ${nodeId}`);
@@ -355,7 +356,7 @@ async function requireItem(tx: Executor, userId: string, itemId: string) {
   const [item] = await tx
     .select({ id: nodeItems.id, nodeId: nodeItems.nodeId, kind: nodeItems.kind })
     .from(nodeItems)
-    .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)))
+    .where(ownedRow(nodeItems, itemId, userId))
     .limit(1);
 
   if (!item) throw new Error(`List row not found: ${itemId}`);
@@ -550,7 +551,7 @@ export async function saveNodeDetail(
           : {}),
         updatedAt: new Date(),
       })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
 
     // Priority is not written verbatim. A node's priority is blank or a letter *with* a
     // rank, dense and unique among its siblings, which cannot be maintained one row at a
@@ -822,7 +823,7 @@ async function requireResultArea(userId: string, id: string): Promise<void> {
   const [row] = await db
     .select({ type: nodes.type })
     .from(nodes)
-    .where(and(eq(nodes.id, id), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, id, userId))
     .limit(1);
   if (!row) throw new Error(`Node not found: ${id}`);
   if (row.type !== "result_area") {
@@ -853,7 +854,7 @@ export async function setGoalFields(
     await tx
       .update(nodes)
       .set({ updatedAt: new Date() })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
   });
 }
 
@@ -884,7 +885,7 @@ export async function setResultAreaFields(
     await tx
       .update(nodes)
       .set({ updatedAt: new Date() })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
   });
 }
 
@@ -926,7 +927,7 @@ async function applyResultAreaCategory(
     await tx
       .update(nodes)
       .set({ parentId: null, sortKey, updatedAt: new Date() })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
   }
 
   // Cascade so nested areas do not keep a stale category that would split Projects
@@ -1079,7 +1080,7 @@ export async function updateNodeItem(
     const [item] = await tx
       .select({ id: nodeItems.id, nodeId: nodeItems.nodeId })
       .from(nodeItems)
-      .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)))
+      .where(ownedRow(nodeItems, itemId, userId))
       .limit(1);
     // Missing or someone else's: same silent no-op as every other scoped update.
     if (!item) return;
@@ -1095,7 +1096,7 @@ export async function updateNodeItem(
           : {}),
         updatedAt: new Date(),
       })
-      .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)));
+      .where(ownedRow(nodeItems, itemId, userId));
   });
 }
 
@@ -1126,7 +1127,7 @@ export async function autofillAttachmentTitleFromUrl(
       url: nodeItems.url,
     })
     .from(nodeItems)
-    .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)))
+    .where(ownedRow(nodeItems, itemId, userId))
     .limit(1);
 
   if (!item) return { outcome: "skipped" };
@@ -1147,15 +1148,13 @@ export async function autofillAttachmentTitleFromUrl(
   await db
     .update(nodeItems)
     .set({ title, updatedAt: new Date() })
-    .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)));
+    .where(ownedRow(nodeItems, itemId, userId));
 
   return { outcome: "filled", title };
 }
 
 export async function deleteNodeItem(userId: string, itemId: string): Promise<void> {
-  await db
-    .delete(nodeItems)
-    .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)));
+  await db.delete(nodeItems).where(ownedRow(nodeItems, itemId, userId));
 }
 
 /** Moves a list row one place up or down. A row at the end of its list stays put. */
@@ -1189,6 +1188,6 @@ export async function moveNodeItem(
     await tx
       .update(nodeItems)
       .set({ sortKey, updatedAt: new Date() })
-      .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)));
+      .where(ownedRow(nodeItems, itemId, userId));
   });
 }

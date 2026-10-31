@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { nodeTypeEnum, noteFlagEnum, notes } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { oneOf, oneOfOrNull } from "@/lib/oneOf";
 import { deriveNotes } from "./derive";
 import { filterRequiresBody, notePassesFilter, type NoteFilter } from "./filter";
@@ -290,7 +291,7 @@ export async function noteOwnedBy(userId: string, noteId: string): Promise<boole
   const [row] = await db
     .select({ id: notes.id })
     .from(notes)
-    .where(and(eq(notes.id, noteId), eq(notes.userId, userId)))
+    .where(ownedRow(notes, noteId, userId))
     .limit(1);
   return Boolean(row);
 }

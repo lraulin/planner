@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { financeBudgetCategories, financeCategoryGroups } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import * as sortKey from "@/lib/tree/sortKey";
 
 /**
@@ -20,12 +21,7 @@ export async function requireCategory(userId: string, categoryId: string) {
       kind: financeBudgetCategories.kind,
     })
     .from(financeBudgetCategories)
-    .where(
-      and(
-        eq(financeBudgetCategories.id, categoryId),
-        eq(financeBudgetCategories.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeBudgetCategories, categoryId, userId))
     .limit(1);
   if (!row) throw new Error("That envelope does not exist.");
   return row;
@@ -40,12 +36,7 @@ export async function requireGroup(userId: string, groupId: string) {
       kind: financeCategoryGroups.kind,
     })
     .from(financeCategoryGroups)
-    .where(
-      and(
-        eq(financeCategoryGroups.id, groupId),
-        eq(financeCategoryGroups.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeCategoryGroups, groupId, userId))
     .limit(1);
   if (!row) throw new Error("That group does not exist.");
   return row;

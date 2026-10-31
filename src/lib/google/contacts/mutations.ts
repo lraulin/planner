@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { contactItems, contacts, googleContactSyncs } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { between } from "@/lib/tree/sortKey";
 import type { RemoteContactItem, RemoteGoogleContact } from "./mapping";
 import { planContactItems, planContactMirror } from "./mirror";
@@ -154,7 +155,7 @@ export async function applyGoogleContactSync(
       await tx
         .update(contacts)
         .set({ ...googleOwned, notes, updatedAt: new Date() })
-        .where(and(eq(contacts.id, id), eq(contacts.userId, userId)));
+        .where(ownedRow(contacts, id, userId));
       await syncContactItems(tx, userId, id, remote.items);
     }
 

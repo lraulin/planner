@@ -6,6 +6,7 @@ import {
   amazonOrderItems,
   amazonSubscriptions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 
 /**
  * Delete one line item the user owns. Used by isolation tests; the Orders page does
@@ -14,7 +15,7 @@ import {
 export async function deleteAmazonItem(userId: string, id: string): Promise<boolean> {
   const deleted = await db
     .delete(amazonOrderItems)
-    .where(and(eq(amazonOrderItems.id, id), eq(amazonOrderItems.userId, userId)))
+    .where(ownedRow(amazonOrderItems, id, userId))
     .returning({ id: amazonOrderItems.id });
   return deleted.length > 0;
 }
@@ -25,7 +26,7 @@ export async function deleteAmazonSubscription(
 ): Promise<boolean> {
   const deleted = await db
     .delete(amazonSubscriptions)
-    .where(and(eq(amazonSubscriptions.id, id), eq(amazonSubscriptions.userId, userId)))
+    .where(ownedRow(amazonSubscriptions, id, userId))
     .returning({ id: amazonSubscriptions.id });
   return deleted.length > 0;
 }
@@ -33,7 +34,7 @@ export async function deleteAmazonSubscription(
 export async function deleteAmazonCharge(userId: string, id: string): Promise<boolean> {
   const deleted = await db
     .delete(amazonCharges)
-    .where(and(eq(amazonCharges.id, id), eq(amazonCharges.userId, userId)))
+    .where(ownedRow(amazonCharges, id, userId))
     .returning({ id: amazonCharges.id });
   return deleted.length > 0;
 }
@@ -50,7 +51,7 @@ export async function updateAmazonSubscriptionReview(
       reviewReason: patch.reviewReason,
       updatedAt: new Date(),
     })
-    .where(and(eq(amazonSubscriptions.id, id), eq(amazonSubscriptions.userId, userId)))
+    .where(ownedRow(amazonSubscriptions, id, userId))
     .returning({ id: amazonSubscriptions.id });
   return updated.length > 0;
 }
@@ -67,7 +68,7 @@ export async function updateAmazonChargeReview(
       reviewReason: patch.reviewReason,
       updatedAt: new Date(),
     })
-    .where(and(eq(amazonCharges.id, id), eq(amazonCharges.userId, userId)))
+    .where(ownedRow(amazonCharges, id, userId))
     .returning({ id: amazonCharges.id });
   return updated.length > 0;
 }

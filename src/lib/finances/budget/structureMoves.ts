@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeBudgetCategories, financeCategoryGroups } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import * as sortKey from "@/lib/tree/sortKey";
 import {
   budgetSiblings,
@@ -94,12 +95,7 @@ export async function moveBudgetStructureItem(
         sortKey: nextSortKey,
         updatedAt,
       })
-      .where(
-        and(
-          eq(financeCategoryGroups.id, moving.id),
-          eq(financeCategoryGroups.userId, userId),
-        ),
-      );
+      .where(ownedRow(financeCategoryGroups, moving.id, userId));
     return;
   }
 
@@ -110,12 +106,7 @@ export async function moveBudgetStructureItem(
       sortKey: nextSortKey,
       updatedAt,
     })
-    .where(
-      and(
-        eq(financeBudgetCategories.id, moving.id),
-        eq(financeBudgetCategories.userId, userId),
-      ),
-    );
+    .where(ownedRow(financeBudgetCategories, moving.id, userId));
 }
 
 /** Move an item to the end of a group, or move a group back to the root. */
@@ -145,12 +136,7 @@ export async function moveBudgetStructureItemIntoGroup(
         sortKey: sortKeyValue,
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(financeBudgetCategories.id, moving.id),
-          eq(financeBudgetCategories.userId, userId),
-        ),
-      );
+      .where(ownedRow(financeBudgetCategories, moving.id, userId));
     return;
   }
   await requireGroup(userId, moving.id);
@@ -161,10 +147,5 @@ export async function moveBudgetStructureItemIntoGroup(
       sortKey: sortKeyValue,
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(financeCategoryGroups.id, moving.id),
-        eq(financeCategoryGroups.userId, userId),
-      ),
-    );
+    .where(ownedRow(financeCategoryGroups, moving.id, userId));
 }

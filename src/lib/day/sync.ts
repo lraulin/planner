@@ -39,6 +39,7 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { localDateKey, fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { isSettled } from "@/lib/tree/completionCascade";
 import { laterShelf, ownShelf, shelfHolds, type Shelf } from "@/lib/tree/shelving";
@@ -74,7 +75,7 @@ export async function effectiveShelfOf(
         deferredDate: nodes.deferredDate,
       })
       .from(nodes)
-      .where(and(eq(nodes.id, currentId), eq(nodes.userId, userId)))
+      .where(ownedRow(nodes, currentId, userId))
       .limit(1);
 
     if (!row) break;
@@ -163,9 +164,7 @@ export async function syncDayLineToTargetStart(
 
   if (!wanted) {
     if (open) {
-      await tx
-        .delete(dailyItems)
-        .where(and(eq(dailyItems.id, open.id), eq(dailyItems.userId, userId)));
+      await tx.delete(dailyItems).where(ownedRow(dailyItems, open.id, userId));
     }
     return;
   }
@@ -184,7 +183,7 @@ export async function syncDayLineToTargetStart(
         sortKey: await endOfDay(tx, userId, wanted),
         updatedAt: new Date(),
       })
-      .where(and(eq(dailyItems.id, open.id), eq(dailyItems.userId, userId)));
+      .where(ownedRow(dailyItems, open.id, userId));
     return;
   }
 
@@ -222,7 +221,7 @@ export async function clearConflictingDescendantPlans(
       deferredDate: nodes.deferredDate,
     })
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
 
   // Only a postponed row shelves anything. A deferred date on any other state is residue.
@@ -343,7 +342,7 @@ export async function assertPlannableOn(
   const [row] = await tx
     .select({ deferredDate: nodes.deferredDate, name: nodes.name })
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
 
   if (row?.deferredDate && toDateKey(row.deferredDate) > day) {
@@ -366,7 +365,7 @@ export async function setDayPlan(
   await tx
     .update(nodes)
     .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, nodeId, userId));
 
   await syncDayLineToTargetStart(tx, userId, nodeId);
 }

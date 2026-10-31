@@ -1,6 +1,7 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { metricEntries, metrics, nodes } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { displayValue, normalizeMetricType } from "./derive";
 import { parseNumeric } from "./parse";
 import type { MetricDetail, MetricEntryView, MetricListRow } from "./types";
@@ -128,7 +129,7 @@ export async function getMetricEntry(
       value: metricEntries.value,
     })
     .from(metricEntries)
-    .where(and(eq(metricEntries.id, entryId), eq(metricEntries.userId, userId)))
+    .where(ownedRow(metricEntries, entryId, userId))
     .limit(1);
   if (!row) return null;
   return mapEntry(row);
@@ -158,7 +159,7 @@ export async function getMetricDetail(
     })
     .from(metrics)
     .leftJoin(nodes, and(eq(nodes.id, metrics.ownerNodeId), eq(nodes.userId, userId)))
-    .where(and(eq(metrics.id, metricId), eq(metrics.userId, userId)))
+    .where(ownedRow(metrics, metricId, userId))
     .limit(1);
 
   if (!row) return null;

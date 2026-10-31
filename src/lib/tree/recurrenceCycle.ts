@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { nodes, taskDetails } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { and, eq, ne } from "drizzle-orm";
 import { addDays, daysBetween } from "@/lib/dateMath";
 import { nextDue } from "@/lib/recurrence/nextDue";
@@ -227,7 +228,7 @@ export async function skipRecurrence(userId: string, nodeId: string): Promise<vo
     await tx
       .update(nodes)
       .set({ ...dates.node, state: "postponed", updatedAt: now })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
 
     await clearConflictingDescendantPlans(tx, userId, nodeId);
 

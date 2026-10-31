@@ -8,6 +8,7 @@ import {
   taskCompletions,
   taskDetails,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { ExternalRef, NodeType } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { asCalendarDay } from "@/lib/schedule/geometry";
@@ -183,7 +184,7 @@ export async function createNodeOnce(
  * have no foreign key to cascade through, so they are closed by a sweep afterwards.
  */
 export async function deleteNode(userId: string, nodeId: string): Promise<void> {
-  await db.delete(nodes).where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+  await db.delete(nodes).where(ownedRow(nodes, nodeId, userId));
   await supersedeOrphanedReminders(userId);
 }
 
@@ -195,7 +196,7 @@ export async function renameNode(
   await db
     .update(nodes)
     .set({ name, updatedAt: new Date() })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, nodeId, userId));
   // Outline create is blank-then-rename; promote is a no-op for non-tasks and URL-free names.
   await promoteUrlsFromTaskName(userId, nodeId);
 }
@@ -308,7 +309,7 @@ export async function convertNode(
         sortKey,
         updatedAt: new Date(),
       })
-      .where(and(eq(nodes.userId, userId), eq(nodes.id, nodeId)));
+      .where(ownedRow(nodes, nodeId, userId));
 
     if (targetType === "goal") {
       if (source.type === "goal") {
@@ -345,7 +346,7 @@ export async function setFocus(
   await db
     .update(nodes)
     .set({ focus, updatedAt: new Date() })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, nodeId, userId));
 }
 
 export async function setCollapsed(
@@ -356,7 +357,7 @@ export async function setCollapsed(
   await db
     .update(nodes)
     .set({ collapsed, updatedAt: new Date() })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, nodeId, userId));
 }
 
 /**
@@ -464,7 +465,7 @@ export async function setDeadline(
     const [node] = await tx
       .select({ id: nodes.id, type: nodes.type, deadline: nodes.deadline })
       .from(nodes)
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+      .where(ownedRow(nodes, nodeId, userId))
       .limit(1);
     // A missing or foreign id is a no-op here, as for the module's other plain writes.
     if (!node) return;
@@ -473,7 +474,7 @@ export async function setDeadline(
     await tx
       .update(nodes)
       .set({ deadline: nextDeadline, updatedAt: new Date() })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
     if (reminder !== undefined && (node.type === "task" || node.type === "project")) {
       await writeReminder(tx, { id: nodeId, type: node.type }, reminder);
     }

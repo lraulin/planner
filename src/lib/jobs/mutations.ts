@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { jobs, type ExternalRef } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import {
   dateKeyOrNull,
   moneyOrNull,
@@ -43,7 +44,7 @@ async function requireJob(tx: Executor, userId: string, jobId: string) {
   const [row] = await tx
     .select()
     .from(jobs)
-    .where(and(eq(jobs.id, jobId), eq(jobs.userId, userId)))
+    .where(ownedRow(jobs, jobId, userId))
     .limit(1);
   if (!row) throw new Error("Job not found.");
   return row;
@@ -152,14 +153,14 @@ export async function updateJob(
     await tx
       .update(jobs)
       .set(patch)
-      .where(and(eq(jobs.id, jobId), eq(jobs.userId, userId)));
+      .where(ownedRow(jobs, jobId, userId));
   });
 }
 
 export async function deleteJob(userId: string, jobId: string): Promise<void> {
   const deleted = await db
     .delete(jobs)
-    .where(and(eq(jobs.id, jobId), eq(jobs.userId, userId)))
+    .where(ownedRow(jobs, jobId, userId))
     .returning({ id: jobs.id });
   if (deleted.length === 0) throw new Error("Job not found.");
 }

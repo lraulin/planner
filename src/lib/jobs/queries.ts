@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { jobs } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { formatPostalAddress } from "@/lib/address";
 import type { JobDetail, JobListRow } from "./types";
 
@@ -73,7 +74,7 @@ export async function getJobDetail(
   const [row] = await db
     .select()
     .from(jobs)
-    .where(and(eq(jobs.id, jobId), eq(jobs.userId, userId)))
+    .where(ownedRow(jobs, jobId, userId))
     .limit(1);
   return row ? toDetail(row) : null;
 }

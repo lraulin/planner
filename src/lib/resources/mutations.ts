@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { resources } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { assertContactOwned } from "@/lib/contacts/ownership";
 import { RESOURCE_MINUTE_FIELDS, type ResourceMinuteField } from "./capacity";
 import type { ResourceInput } from "./types";
@@ -15,7 +15,7 @@ async function requireResource(tx: Executor, userId: string, resourceId: string)
   const [row] = await tx
     .select()
     .from(resources)
-    .where(and(eq(resources.id, resourceId), eq(resources.userId, userId)))
+    .where(ownedRow(resources, resourceId, userId))
     .limit(1);
   if (!row) throw new Error("Resource not found.");
   return row;
@@ -109,7 +109,7 @@ export async function updateResource(
     await tx
       .update(resources)
       .set(patch)
-      .where(and(eq(resources.id, resourceId), eq(resources.userId, userId)));
+      .where(ownedRow(resources, resourceId, userId));
   });
 }
 
@@ -119,7 +119,7 @@ export async function deleteResource(
 ): Promise<void> {
   const deleted = await db
     .delete(resources)
-    .where(and(eq(resources.id, resourceId), eq(resources.userId, userId)))
+    .where(ownedRow(resources, resourceId, userId))
     .returning({ id: resources.id });
   if (deleted.length === 0) throw new Error("Resource not found.");
 }

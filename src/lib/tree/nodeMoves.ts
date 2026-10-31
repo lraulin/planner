@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { nodes, resultAreaDetails } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { and, eq, inArray } from "drizzle-orm";
 import { syncDayLinesInSubtree } from "@/lib/day/sync";
 import { assertCanNest } from "./hierarchy";
@@ -71,7 +72,7 @@ export async function moveNode(params: {
     await tx
       .update(nodes)
       .set({ parentId, sortKey, updatedAt: new Date() })
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, nodeId, userId));
 
     // Same reason create expands: indent, paste-as-child, and drop-inside would otherwise
     // file the row under a closed parent and read as the node vanishing.

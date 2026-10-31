@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financeTransactions } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { parseBudget } from "@/lib/settings/finances";
 import { readSetting } from "@/lib/settings/queries";
@@ -38,7 +38,7 @@ export async function reconcileAccount(
     const [account] = await tx
       .select({ id: financeAccounts.id, name: financeAccounts.name })
       .from(financeAccounts)
-      .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
+      .where(ownedRow(financeAccounts, accountId, userId))
       .limit(1);
     if (!account) throw new Error("Account not found.");
 

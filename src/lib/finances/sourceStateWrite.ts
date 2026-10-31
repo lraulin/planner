@@ -23,6 +23,7 @@ import {
   financeAccountSourceState,
   financeTransactions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { FinanceAuditChange } from "./audit/types";
 import type { FinanceExecutor } from "./dbExecutor";
 import { postedDaysHeld } from "./importedPostedBalance";
@@ -261,7 +262,7 @@ export async function recomputeAccountBalanceAuthority(
       balanceSource: financeAccounts.balanceSource,
     })
     .from(financeAccounts)
-    .where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, accountId)))
+    .where(ownedRow(financeAccounts, accountId, userId))
     .limit(1);
   // A file import may record what it saw for an account whose history comes only from files
   // — that is why the source rows are keyed on the account. Such an account has no live
@@ -337,9 +338,7 @@ export async function recomputeAccountBalanceAuthority(
         balanceSource: after.balanceSource,
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, account.id)),
-      );
+      .where(ownedRow(financeAccounts, account.id, userId));
   }
 
   return {

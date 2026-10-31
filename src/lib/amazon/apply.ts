@@ -21,6 +21,7 @@ import {
   financeSupplyOptions,
   financeTransactions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { createCategoryGroup } from "@/lib/finances/budget/mutations";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { splitTransaction, upsertBillEnvelope } from "@/lib/finances/mutations";
@@ -167,9 +168,7 @@ async function applyPreview(
             reviewReason: decision.reason,
             updatedAt: new Date(),
           })
-          .where(
-            and(eq(amazonCharges.id, charge.id), eq(amazonCharges.userId, userId)),
-          );
+          .where(ownedRow(amazonCharges, charge.id, userId));
       }
       continue;
     }
@@ -401,12 +400,7 @@ async function applyMatch(
       amount: financeTransactions.amount,
     })
     .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        eq(financeTransactions.id, input.transactionId),
-      ),
-    )
+    .where(ownedRow(financeTransactions, input.transactionId, userId))
     .limit(1);
   if (!transaction) throw new Error("Transaction not found.");
   if (transaction.isParent && !existing[0]) {
@@ -447,12 +441,7 @@ async function applyMatch(
         cardMismatch: input.cardMismatch,
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(amazonChargeMatches.id, existing[0].id),
-          eq(amazonChargeMatches.userId, userId),
-        ),
-      );
+      .where(ownedRow(amazonChargeMatches, existing[0].id, userId));
   } else {
     await db.insert(amazonChargeMatches).values({
       userId,
@@ -467,7 +456,7 @@ async function applyMatch(
   await db
     .update(amazonCharges)
     .set({ needsReview: false, reviewReason: "", updatedAt: new Date() })
-    .where(and(eq(amazonCharges.id, input.chargeId), eq(amazonCharges.userId, userId)));
+    .where(ownedRow(amazonCharges, input.chargeId, userId));
 
   const children = splitChildrenFromAllocation(
     input.allocation,
@@ -485,12 +474,7 @@ async function applyMatch(
         budgetCategoryId: billChildren[0].budgetCategoryId,
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(financeTransactions.id, input.transactionId),
-          eq(financeTransactions.userId, userId),
-        ),
-      );
+      .where(ownedRow(financeTransactions, input.transactionId, userId));
     return;
   }
   if (realChildren.length >= 1 && !transaction.isParent) {
@@ -696,7 +680,7 @@ async function requireOwnedCharge(userId: string, chargeId: string) {
   const [row] = await db
     .select()
     .from(amazonCharges)
-    .where(and(eq(amazonCharges.id, chargeId), eq(amazonCharges.userId, userId)))
+    .where(ownedRow(amazonCharges, chargeId, userId))
     .limit(1);
   if (!row) throw new Error("Amazon charge not found.");
   return row;
@@ -706,12 +690,7 @@ async function requireOwnedTransaction(userId: string, transactionId: string) {
   const [row] = await db
     .select()
     .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeTransactions, transactionId, userId))
     .limit(1);
   if (!row) throw new Error("Transaction not found.");
   return row;

@@ -9,6 +9,7 @@ import {
   financeTransactions,
   type EnvelopeKind,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { rearmReminders, supersedeOrphanedReminders } from "@/lib/reminders/arm";
 import { serializeBudget } from "@/lib/settings/finances";
 import { writeUserSetting } from "@/lib/settings/mutations";
@@ -140,9 +141,7 @@ export async function seedBudget(
       await tx
         .update(financeAccounts)
         .set({ budgetOpeningCents: account.openingCents, updatedAt: new Date() })
-        .where(
-          and(eq(financeAccounts.id, account.id), eq(financeAccounts.userId, userId)),
-        );
+        .where(ownedRow(financeAccounts, account.id, userId));
     }
   });
 
@@ -369,12 +368,7 @@ async function writeBudgetCategory(
         : {}),
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(financeBudgetCategories.id, categoryId),
-        eq(financeBudgetCategories.userId, userId),
-      ),
-    );
+    .where(ownedRow(financeBudgetCategories, categoryId, userId));
 }
 
 export async function renameCategoryGroup(
@@ -389,12 +383,7 @@ export async function renameCategoryGroup(
   await db
     .update(financeCategoryGroups)
     .set({ name: trimmed, updatedAt: new Date() })
-    .where(
-      and(
-        eq(financeCategoryGroups.id, groupId),
-        eq(financeCategoryGroups.userId, userId),
-      ),
-    );
+    .where(ownedRow(financeCategoryGroups, groupId, userId));
 }
 
 /**
@@ -417,12 +406,7 @@ export async function deleteBudgetCategory(
         groupId: financeBudgetCategories.groupId,
       })
       .from(financeBudgetCategories)
-      .where(
-        and(
-          eq(financeBudgetCategories.id, categoryId),
-          eq(financeBudgetCategories.userId, userId),
-        ),
-      )
+      .where(ownedRow(financeBudgetCategories, categoryId, userId))
       .limit(1);
     if (!category) throw new Error("That envelope does not exist.");
     const [allocations, filedTransactions] = await Promise.all([
@@ -490,12 +474,7 @@ export async function deleteBudgetCategory(
       );
     await tx
       .delete(financeBudgetCategories)
-      .where(
-        and(
-          eq(financeBudgetCategories.id, categoryId),
-          eq(financeBudgetCategories.userId, userId),
-        ),
-      );
+      .where(ownedRow(financeBudgetCategories, categoryId, userId));
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await writeFinanceAuditEvent(tx, userId, {
       kind: "budget_delete",
@@ -571,10 +550,5 @@ export async function deleteCategoryGroup(
   }
   await db
     .delete(financeCategoryGroups)
-    .where(
-      and(
-        eq(financeCategoryGroups.id, groupId),
-        eq(financeCategoryGroups.userId, userId),
-      ),
-    );
+    .where(ownedRow(financeCategoryGroups, groupId, userId));
 }

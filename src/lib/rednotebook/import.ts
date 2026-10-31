@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notes } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import { between } from "@/lib/tree/sortKey";
 import { mapRedNotebookFiles } from "./map";
@@ -92,7 +93,7 @@ export async function importRedNotebookFiles(params: {
             await tx
               .update(notes)
               .set({ contexts: mergedContexts, updatedAt: new Date() })
-              .where(and(eq(notes.id, existing.id), eq(notes.userId, userId)));
+              .where(ownedRow(notes, existing.id, userId));
             updated++;
           } else {
             skipped++;
@@ -121,7 +122,7 @@ export async function importRedNotebookFiles(params: {
             contexts: mergedContexts,
             updatedAt: new Date(),
           })
-          .where(and(eq(notes.id, existing.id), eq(notes.userId, userId)));
+          .where(ownedRow(notes, existing.id, userId));
         updated++;
         continue;
       }

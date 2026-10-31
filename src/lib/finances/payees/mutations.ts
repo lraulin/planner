@@ -21,6 +21,7 @@ import {
   financePayees,
   financeTransactions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import { amountMatches } from "../amountMatch";
 import { normalizeMerchant } from "../classify/merchant";
@@ -40,7 +41,7 @@ async function requirePayee(userId: string, payeeId: string) {
       budgetCategoryId: financePayees.claimedBudgetCategoryId,
     })
     .from(financePayees)
-    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+    .where(ownedRow(financePayees, payeeId, userId));
   if (!row) throw new Error("That payee does not exist.");
   return row;
 }
@@ -123,12 +124,7 @@ export async function ensurePayeeForTransaction(
       payeeId: financeTransactions.payeeId,
     })
     .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeTransactions, transactionId, userId))
     .limit(1);
   if (!row) throw new Error("That transaction does not exist.");
   if (row.payeeId) return row.payeeId;
@@ -172,12 +168,7 @@ export async function ensurePayeeForTransaction(
   await db
     .update(financeTransactions)
     .set({ payeeId, updatedAt: new Date() })
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    );
+    .where(ownedRow(financeTransactions, transactionId, userId));
   return payeeId;
 }
 
@@ -197,12 +188,7 @@ export async function isolatePayeeForBill(
   const [row] = await db
     .select({ description: financeTransactions.description })
     .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeTransactions, transactionId, userId))
     .limit(1);
   if (!row) throw new Error("That transaction does not exist.");
   const alias = aliasFor(row.description);
@@ -329,12 +315,7 @@ export async function isolateSimilarAmountForBill(
       description: financeTransactions.description,
     })
     .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeTransactions, transactionId, userId))
     .limit(1);
   if (!selected) throw new Error("That transaction does not exist.");
   const targetCents = absCents(selected.amount);
@@ -417,7 +398,7 @@ export async function renamePayee(
     await db
       .update(financePayees)
       .set({ name: clean, updatedAt: new Date() })
-      .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+      .where(ownedRow(financePayees, payeeId, userId));
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new Error(`A payee called "${clean}" already exists.`);
@@ -438,7 +419,7 @@ export async function updatePayeeDetails(
       const [owned] = await tx
         .select({ id: financePayees.id })
         .from(financePayees)
-        .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+        .where(ownedRow(financePayees, payeeId, userId));
       if (!owned) throw new Error("That payee does not exist.");
       await tx
         .update(financePayees)
@@ -447,7 +428,7 @@ export async function updatePayeeDetails(
           notes: input.notes,
           updatedAt: new Date(),
         })
-        .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+        .where(ownedRow(financePayees, payeeId, userId));
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -477,12 +458,7 @@ export async function setPayeeAutoCategory(
     const [category] = await db
       .select({ id: financeBudgetCategories.id })
       .from(financeBudgetCategories)
-      .where(
-        and(
-          eq(financeBudgetCategories.userId, userId),
-          eq(financeBudgetCategories.id, input.defaultBudgetCategoryId),
-        ),
-      )
+      .where(ownedRow(financeBudgetCategories, input.defaultBudgetCategoryId, userId))
       .limit(1);
     if (!category) throw new Error("That Category does not exist.");
   }
@@ -493,7 +469,7 @@ export async function setPayeeAutoCategory(
       defaultBudgetCategoryId: input.defaultBudgetCategoryId,
       updatedAt: new Date(),
     })
-    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)))
+    .where(ownedRow(financePayees, payeeId, userId))
     .returning({ id: financePayees.id });
   if (!owned) throw new Error("That payee does not exist.");
 }
@@ -520,7 +496,7 @@ export async function clearPayeeRouting(
         ? { claimedBudgetCategoryId: null, updatedAt: new Date() }
         : { defaultBudgetCategoryId: null, updatedAt: new Date() },
     )
-    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+    .where(ownedRow(financePayees, payeeId, userId));
 }
 
 /**
@@ -579,7 +555,7 @@ export async function deletePayee(userId: string, payeeId: string): Promise<void
         budgetCategoryId: financePayees.claimedBudgetCategoryId,
       })
       .from(financePayees)
-      .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+      .where(ownedRow(financePayees, payeeId, userId));
     if (!payee) throw new Error("That payee does not exist.");
     if (payee.budgetCategoryId) {
       throw new Error(
@@ -587,9 +563,7 @@ export async function deletePayee(userId: string, payeeId: string): Promise<void
       );
     }
 
-    await tx
-      .delete(financePayees)
-      .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+    await tx.delete(financePayees).where(ownedRow(financePayees, payeeId, userId));
   });
 }
 
@@ -661,7 +635,7 @@ export async function mergePayees(
         await tx
           .update(financePayees)
           .set({ claimedBudgetCategoryId: carried.id, updatedAt: new Date() })
-          .where(and(eq(financePayees.userId, userId), eq(financePayees.id, targetId)));
+          .where(ownedRow(financePayees, targetId, userId));
       }
 
       await tx
@@ -693,7 +667,7 @@ export async function claimPayeeForCommitment(
   await db
     .update(financePayees)
     .set({ claimedBudgetCategoryId: claim?.id ?? null, updatedAt: new Date() })
-    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+    .where(ownedRow(financePayees, payeeId, userId));
   if (claim) await applyClaimedPayees(userId, claim.id, [payeeId]);
 }
 
@@ -707,7 +681,7 @@ export async function setPayeeNotACommitment(
   await db
     .update(financePayees)
     .set({ notACommitment, updatedAt: new Date() })
-    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+    .where(ownedRow(financePayees, payeeId, userId));
 }
 
 /** Replace an envelope's complete payee set atomically, refusing identities held elsewhere. */
@@ -736,12 +710,7 @@ export async function replaceCommitmentPayeesInTransaction(
   const [envelope] = await tx
     .select({ id: financeBudgetCategories.id })
     .from(financeBudgetCategories)
-    .where(
-      and(
-        eq(financeBudgetCategories.userId, userId),
-        eq(financeBudgetCategories.id, claim.id),
-      ),
-    );
+    .where(ownedRow(financeBudgetCategories, claim.id, userId));
   if (!envelope) throw new Error("That envelope does not exist.");
 
   const selected =
@@ -765,12 +734,7 @@ export async function replaceCommitmentPayeesInTransaction(
     const [owner] = await tx
       .select({ name: financeBudgetCategories.name })
       .from(financeBudgetCategories)
-      .where(
-        and(
-          eq(financeBudgetCategories.userId, userId),
-          eq(financeBudgetCategories.id, heldBy),
-        ),
-      );
+      .where(ownedRow(financeBudgetCategories, heldBy, userId));
     throw new Error(
       `"${held.name}" already belongs to "${owner?.name ?? "another envelope"}". Free it there first.`,
     );

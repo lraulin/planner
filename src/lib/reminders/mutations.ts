@@ -6,6 +6,7 @@ import {
   reminderOccurrences,
   type ReminderOccurrence,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
 import { setAppointmentCheckState } from "@/lib/schedule/mutations";
 import {
@@ -36,7 +37,7 @@ async function requireOccurrence(userId: string, id: string) {
   const [row] = await db
     .select()
     .from(reminderOccurrences)
-    .where(and(eq(reminderOccurrences.id, id), eq(reminderOccurrences.userId, userId)))
+    .where(ownedRow(reminderOccurrences, id, userId))
     .limit(1);
   if (!row) throw new Error("Reminder not found.");
   return row;
@@ -62,7 +63,7 @@ export async function snoozeReminder(
   await db
     .update(reminderOccurrences)
     .set({ state: "scheduled", fireAt, updatedAt: now })
-    .where(and(eq(reminderOccurrences.id, id), eq(reminderOccurrences.userId, userId)));
+    .where(ownedRow(reminderOccurrences, id, userId));
   await publishAll([{ id, fireAt }]);
   return fireAt;
 }
@@ -73,7 +74,7 @@ export async function dismissReminder(userId: string, id: string): Promise<void>
   await db
     .update(reminderOccurrences)
     .set({ state: "dismissed", updatedAt: new Date() })
-    .where(and(eq(reminderOccurrences.id, id), eq(reminderOccurrences.userId, userId)));
+    .where(ownedRow(reminderOccurrences, id, userId));
 }
 
 /** Clears the panel. Snoozed rows are not in the panel, so they are left to fire. */
@@ -115,7 +116,7 @@ export async function completeReminder(
     const [node] = await db
       .select({ id: nodes.id })
       .from(nodes)
-      .where(and(eq(nodes.id, row.sourceId), eq(nodes.userId, userId)))
+      .where(ownedRow(nodes, row.sourceId, userId))
       .limit(1);
     if (!node) {
       await supersedeOrphanedReminders(userId);
@@ -141,7 +142,7 @@ export async function completeReminder(
   await db
     .update(reminderOccurrences)
     .set({ state: "completed", updatedAt: now })
-    .where(and(eq(reminderOccurrences.id, id), eq(reminderOccurrences.userId, userId)));
+    .where(ownedRow(reminderOccurrences, id, userId));
 
   const ref = sourceRefOf(row);
   if (ref) await rearmReminders(userId, [ref]);
@@ -203,7 +204,7 @@ export async function removePushSubscription(
 ): Promise<void> {
   const removed = await db
     .delete(pushSubscriptions)
-    .where(and(eq(pushSubscriptions.id, id), eq(pushSubscriptions.userId, userId)))
+    .where(ownedRow(pushSubscriptions, id, userId))
     .returning({ id: pushSubscriptions.id });
   if (removed.length === 0) throw new Error("Device not found.");
 }

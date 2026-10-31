@@ -11,6 +11,7 @@
 
 import { db } from "@/db";
 import { nodeItems, nodes } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { and, asc, eq } from "drizzle-orm";
 import { between } from "@/lib/tree/sortKey";
 import { fetchPageTitle, normalizeHttpUrl } from "./pageTitle";
@@ -33,7 +34,7 @@ export async function promoteUrlsFromTaskName(
   const [node] = await db
     .select({ id: nodes.id, type: nodes.type, name: nodes.name })
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
 
   if (!node || node.type !== "task") return;
@@ -109,5 +110,5 @@ export async function promoteUrlsFromTaskName(
   await db
     .update(nodes)
     .set({ name: nextName, updatedAt: new Date() })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, nodeId, userId));
 }

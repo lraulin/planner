@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, appointments, googleCalendarLinks } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { GoogleCalendarListEntry } from "./client";
 import { clearGoogleContactMirror } from "./contacts/mutations";
 
@@ -43,12 +44,7 @@ export async function refreshCalendarLinks(
       await db
         .update(googleCalendarLinks)
         .set(googleOwned)
-        .where(
-          and(
-            eq(googleCalendarLinks.id, prior.id),
-            eq(googleCalendarLinks.userId, userId),
-          ),
-        );
+        .where(ownedRow(googleCalendarLinks, prior.id, userId));
       continue;
     }
 

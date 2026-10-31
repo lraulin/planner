@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contactItems, contacts, nodes, taskDetails } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { ContactItemKind } from "@/db/schema";
 import { loadNotesForContact } from "@/lib/notes/queries";
 import { noteSnippet } from "@/lib/notes/snippet";
@@ -138,7 +139,7 @@ export async function getContactDetail(
   const [row] = await db
     .select()
     .from(contacts)
-    .where(and(eq(contacts.id, contactId), eq(contacts.userId, userId)))
+    .where(ownedRow(contacts, contactId, userId))
     .limit(1);
   if (!row) return null;
 

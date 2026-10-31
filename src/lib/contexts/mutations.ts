@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { masterContexts } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { and, eq } from "drizzle-orm";
 import { normaliseContextName } from "./catalog";
 
@@ -30,7 +31,5 @@ export async function deleteMasterContext(
   userId: string,
   contextId: string,
 ): Promise<void> {
-  await db
-    .delete(masterContexts)
-    .where(and(eq(masterContexts.id, contextId), eq(masterContexts.userId, userId)));
+  await db.delete(masterContexts).where(ownedRow(masterContexts, contextId, userId));
 }

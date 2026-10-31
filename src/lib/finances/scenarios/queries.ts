@@ -5,6 +5,7 @@ import {
   financeScenarioOverrides,
   financeScenarios,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { lineSourceOf } from "./amount";
 import type { ScenarioLineInput, ScenarioOverrideInput } from "./compose";
 
@@ -64,9 +65,7 @@ export async function loadScenario(
   const [scenario] = await db
     .select(scenarioColumns)
     .from(financeScenarios)
-    .where(
-      and(eq(financeScenarios.userId, userId), eq(financeScenarios.id, scenarioId)),
-    )
+    .where(ownedRow(financeScenarios, scenarioId, userId))
     .limit(1);
   if (!scenario) return null;
 

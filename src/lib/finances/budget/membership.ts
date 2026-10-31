@@ -18,6 +18,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, userSettings, type FinanceAccountKind } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { isCoreBudgetKind, resolvedOffBudget } from "../accountKind";
 import { serializeBudget } from "@/lib/settings/finances";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
@@ -129,7 +130,7 @@ async function requireOwnedAccount(
       offBudget: financeAccounts.offBudget,
     })
     .from(financeAccounts)
-    .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
+    .where(ownedRow(financeAccounts, accountId, userId))
     .limit(1);
   if (!row) throw new Error("Account not found.");
   return row;
@@ -173,12 +174,7 @@ async function applyTransitions(
           ? { budgetOpeningCents: transition.positionCents }
           : {}),
       })
-      .where(
-        and(
-          eq(financeAccounts.id, transition.accountId),
-          eq(financeAccounts.userId, userId),
-        ),
-      )
+      .where(ownedRow(financeAccounts, transition.accountId, userId))
       .returning({ id: financeAccounts.id });
     if (!updated) throw new Error("Account not found.");
   }
@@ -360,9 +356,7 @@ export async function includeNewOnBudgetAccount(
     await tx
       .update(financeAccounts)
       .set({ budgetOpeningCents: positionCents, updatedAt: new Date() })
-      .where(
-        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
-      );
+      .where(ownedRow(financeAccounts, accountId, userId));
     await writeOpeningCents(tx, userId, startMonth, nextOpeningCents);
     const afterData = await loadBudget(userId, null, tx);
     const after = snapshotOf(afterData);

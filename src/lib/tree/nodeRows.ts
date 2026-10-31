@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { nodes, resultAreaDetails } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { between } from "./sortKey";
 import type { Position } from "./types";
@@ -23,7 +24,7 @@ export async function requireNode(tx: Executor, userId: string, nodeId: string) 
   const [node] = await tx
     .select()
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
 
   if (!node) throw new Error(`Node not found: ${nodeId}`);
@@ -109,7 +110,7 @@ export async function isSelfOrDescendant(
     const [row] = await tx
       .select({ parentId: nodes.parentId })
       .from(nodes)
-      .where(and(eq(nodes.id, id), eq(nodes.userId, userId)))
+      .where(ownedRow(nodes, id, userId))
       .limit(1);
     return row?.parentId;
   });
@@ -144,7 +145,7 @@ export async function resultAreaCategory(
     .select({ category: resultAreaDetails.category })
     .from(resultAreaDetails)
     .innerJoin(nodes, eq(nodes.id, resultAreaDetails.nodeId))
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
   return row?.category ?? null;
 }

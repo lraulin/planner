@@ -17,6 +17,7 @@ import {
   financeAuditEvents,
   financeTransactions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import type { FinanceAuditChange } from "./audit/types";
 import { writeFinanceAuditEvent } from "./audit/writes";
@@ -198,7 +199,7 @@ async function cutover(
       historySourceSince: financeAccounts.historySourceSince,
     })
     .from(financeAccounts)
-    .where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, accountId)));
+    .where(ownedRow(financeAccounts, accountId, userId));
   if (!account) throw new Error("Account not found.");
 
   const scope = { accountIds: [account.id], accountNames: [account.name] };
@@ -259,9 +260,7 @@ async function cutover(
         historySourceSince: since,
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, account.id)),
-      );
+      .where(ownedRow(financeAccounts, account.id, userId));
     // The link stays. The sync ignores a linked account whose source is not SimpleFIN, and
     // counts a provider account with no link as unmatched: deleting it left a red "Match
     // accounts" line on Accounts that only re-linking cleared.
@@ -317,9 +316,7 @@ async function cutover(
         historySourceSince: null,
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, account.id)),
-      );
+      .where(ownedRow(financeAccounts, account.id, userId));
   } else if (to === "simplefin" && account.historySource !== "simplefin") {
     throw new Error(
       `${account.name} takes its history from ${account.historySource}; link it to SimpleFIN instead.`,

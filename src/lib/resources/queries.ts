@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { resources } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { loadContactOptions } from "@/lib/contacts/queries";
 import { weeklyAvailableMinutes, weeklyWorkingMinutes } from "./capacity";
 import type { ResourceDetail, ResourceListRow } from "./types";
@@ -69,7 +70,7 @@ export async function getResourceDetail(
     db
       .select()
       .from(resources)
-      .where(and(eq(resources.id, resourceId), eq(resources.userId, userId)))
+      .where(ownedRow(resources, resourceId, userId))
       .limit(1),
     loadContactOptions(userId),
   ]);

@@ -46,7 +46,6 @@ const OVERSIZE_FILES = [
   "src/lib/finances/payees/mutations.ts",
   "src/lib/finances/queries.ts",
   "src/lib/finances/scenarios/mutations.ts",
-  "src/lib/finances/supplies/mutations.ts",
   "src/lib/find/queries.ts",
   "src/lib/grid/commandDeck.ts",
 ];

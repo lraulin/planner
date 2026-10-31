@@ -8,6 +8,7 @@ import {
   financeStatements,
   financeTransactions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { fromDateKey, toDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import {
   looksLikeCapitalOneCardStatement,
@@ -208,7 +209,7 @@ async function recordImportedPostedHeadline(
       balanceAsOf: financeAccounts.balanceAsOf,
     })
     .from(financeAccounts)
-    .where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, accountId)))
+    .where(ownedRow(financeAccounts, accountId, userId))
     .limit(1);
 
   const headline = importedPostedHeadline({
@@ -444,7 +445,7 @@ async function authorableFileRows<
       historySourceSince: financeAccounts.historySourceSince,
     })
     .from(financeAccounts)
-    .where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.id, accountId)));
+    .where(ownedRow(financeAccounts, accountId, userId));
   if (!account) throw new Error("Could not read the account for this import.");
   if (account.historySource !== "bank_page") return { keep: [...rows], withheld: 0 };
   const covered = await tx

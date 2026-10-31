@@ -7,6 +7,7 @@ import {
   workoutSessions,
   workoutSets,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { between } from "@/lib/tree/sortKey";
 import { DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
 import { parseDurationSeconds } from "./duration";
@@ -34,7 +35,7 @@ async function requireExercise(tx: Executor, userId: string, exerciseId: string)
   const [row] = await tx
     .select()
     .from(exercises)
-    .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)))
+    .where(ownedRow(exercises, exerciseId, userId))
     .limit(1);
   if (!row) throw new Error("Exercise not found.");
   return row;
@@ -44,7 +45,7 @@ async function requireSession(tx: Executor, userId: string, sessionId: string) {
   const [row] = await tx
     .select()
     .from(workoutSessions)
-    .where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)))
+    .where(ownedRow(workoutSessions, sessionId, userId))
     .limit(1);
   if (!row) throw new Error("Session not found.");
   return row;
@@ -144,7 +145,7 @@ export async function updateExercise(
   const result = await db
     .update(exercises)
     .set(patch)
-    .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)))
+    .where(ownedRow(exercises, exerciseId, userId))
     .returning({ id: exercises.id });
 
   if (result.length === 0) throw new Error("Exercise not found.");
@@ -230,9 +231,7 @@ export async function deleteExercise(
       throw new Error("Cannot delete an exercise that has workout history.");
     }
 
-    await tx
-      .delete(exercises)
-      .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)));
+    await tx.delete(exercises).where(ownedRow(exercises, exerciseId, userId));
   });
 }
 
@@ -379,9 +378,7 @@ export async function replaceSession(
         durationMinutes: input.durationMinutes ?? null,
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)),
-      );
+      .where(ownedRow(workoutSessions, sessionId, userId));
 
     // Exercises first: their sets cascade, and the group rows are then unreferenced.
     await tx
@@ -409,7 +406,7 @@ export async function replaceSession(
 export async function deleteSession(userId: string, sessionId: string): Promise<void> {
   const result = await db
     .delete(workoutSessions)
-    .where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)))
+    .where(ownedRow(workoutSessions, sessionId, userId))
     .returning({ id: workoutSessions.id });
 
   if (result.length === 0) throw new Error("Session not found.");

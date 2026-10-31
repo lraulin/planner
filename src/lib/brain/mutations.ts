@@ -7,6 +7,7 @@ import {
   brainThoughtTypes,
   brainThoughts,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { canonicalLink, planLink, type LinkRelation } from "./links";
 
 /** Brain is standalone per-user data. Every write scopes by `userId`. */
@@ -30,7 +31,7 @@ async function requireThought(tx: Executor, userId: string, thoughtId: string) {
   const [row] = await tx
     .select({ id: brainThoughts.id })
     .from(brainThoughts)
-    .where(and(eq(brainThoughts.id, thoughtId), eq(brainThoughts.userId, userId)))
+    .where(ownedRow(brainThoughts, thoughtId, userId))
     .limit(1);
   if (!row) throw new Error("Thought not found.");
 }
@@ -39,7 +40,7 @@ async function requireType(tx: Executor, userId: string, typeId: string) {
   const [row] = await tx
     .select({ id: brainThoughtTypes.id })
     .from(brainThoughtTypes)
-    .where(and(eq(brainThoughtTypes.id, typeId), eq(brainThoughtTypes.userId, userId)))
+    .where(ownedRow(brainThoughtTypes, typeId, userId))
     .limit(1);
   if (!row) throw new Error("Thought type not found.");
 }
@@ -91,14 +92,14 @@ async function linkIn(
     await tx
       .update(brainLinks)
       .set({ ...plan.link, ...(cleanLabel === undefined ? {} : { label: cleanLabel }) })
-      .where(and(eq(brainLinks.id, plan.id), eq(brainLinks.userId, userId)));
+      .where(ownedRow(brainLinks, plan.id, userId));
     return plan.id;
   }
   if (cleanLabel !== undefined) {
     await tx
       .update(brainLinks)
       .set({ label: cleanLabel })
-      .where(and(eq(brainLinks.id, plan.id), eq(brainLinks.userId, userId)));
+      .where(ownedRow(brainLinks, plan.id, userId));
   }
   return plan.id;
 }
@@ -174,7 +175,7 @@ async function touch(tx: Executor, userId: string, thoughtId: string, set: objec
   const rows = await tx
     .update(brainThoughts)
     .set({ ...set, updatedAt: sql`now()` })
-    .where(and(eq(brainThoughts.id, thoughtId), eq(brainThoughts.userId, userId)))
+    .where(ownedRow(brainThoughts, thoughtId, userId))
     .returning({ id: brainThoughts.id });
   if (rows.length === 0) throw new Error("Thought not found.");
 }
@@ -210,7 +211,7 @@ export async function setHomeThought(userId: string, thoughtId: string | null) {
       await tx
         .update(brainThoughts)
         .set({ isHome: true })
-        .where(and(eq(brainThoughts.id, thoughtId), eq(brainThoughts.userId, userId)));
+        .where(ownedRow(brainThoughts, thoughtId, userId));
     }
   });
 }
@@ -219,13 +220,13 @@ export async function markThoughtVisited(userId: string, thoughtId: string) {
   await db
     .update(brainThoughts)
     .set({ lastVisitedAt: sql`now()` })
-    .where(and(eq(brainThoughts.id, thoughtId), eq(brainThoughts.userId, userId)));
+    .where(ownedRow(brainThoughts, thoughtId, userId));
 }
 
 export async function deleteThought(userId: string, thoughtId: string) {
   const rows = await db
     .delete(brainThoughts)
-    .where(and(eq(brainThoughts.id, thoughtId), eq(brainThoughts.userId, userId)))
+    .where(ownedRow(brainThoughts, thoughtId, userId))
     .returning({ id: brainThoughts.id });
   if (rows.length === 0) throw new Error("Thought not found.");
 }
@@ -300,7 +301,7 @@ export async function setLinkLabel(userId: string, linkId: string, label: string
   const rows = await db
     .update(brainLinks)
     .set({ label: cleanLabelText(label) })
-    .where(and(eq(brainLinks.id, linkId), eq(brainLinks.userId, userId)))
+    .where(ownedRow(brainLinks, linkId, userId))
     .returning({ id: brainLinks.id });
   if (rows.length === 0) throw new Error("Link not found.");
 }
@@ -337,8 +338,6 @@ export async function deleteThoughtType(userId: string, typeId: string) {
       .where(and(eq(brainThoughts.userId, userId), eq(brainThoughts.typeId, typeId)));
     await tx
       .delete(brainThoughtTypes)
-      .where(
-        and(eq(brainThoughtTypes.id, typeId), eq(brainThoughtTypes.userId, userId)),
-      );
+      .where(ownedRow(brainThoughtTypes, typeId, userId));
   });
 }

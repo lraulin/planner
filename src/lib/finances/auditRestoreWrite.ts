@@ -8,6 +8,7 @@ import {
   financePayees,
   financeTransactions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import { writeFinanceAuditEvent } from "./audit/writes";
 import { restorableHold } from "./auditRestore";
@@ -83,21 +84,14 @@ export async function restoreDeletedHold(
     const [account] = await tx
       .select({ id: financeAccounts.id })
       .from(financeAccounts)
-      .where(
-        and(eq(financeAccounts.id, hold.accountId), eq(financeAccounts.userId, userId)),
-      )
+      .where(ownedRow(financeAccounts, hold.accountId, userId))
       .limit(1);
     if (!account) throw new Error("The account that held it no longer exists.");
 
     const [present] = await tx
       .select({ id: financeTransactions.id })
       .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.id, transactionId),
-          eq(financeTransactions.userId, userId),
-        ),
-      )
+      .where(ownedRow(financeTransactions, transactionId, userId))
       .limit(1);
     if (present) throw new Error("That transaction is already back.");
 
@@ -152,21 +146,14 @@ export async function restoreDeletedHold(
       ? await tx
           .select({ id: financeBudgetCategories.id })
           .from(financeBudgetCategories)
-          .where(
-            and(
-              eq(financeBudgetCategories.id, hold.budgetCategoryId),
-              eq(financeBudgetCategories.userId, userId),
-            ),
-          )
+          .where(ownedRow(financeBudgetCategories, hold.budgetCategoryId, userId))
           .limit(1)
       : [];
     const [payee] = hold.payeeId
       ? await tx
           .select({ id: financePayees.id })
           .from(financePayees)
-          .where(
-            and(eq(financePayees.id, hold.payeeId), eq(financePayees.userId, userId)),
-          )
+          .where(ownedRow(financePayees, hold.payeeId, userId))
           .limit(1)
       : [];
 

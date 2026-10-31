@@ -9,6 +9,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { financePayeeAliases, financePayees, financeTransactions } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { reclassifyInsideTransaction } from "../bankSnapshotApply";
 import { normalizeMerchant } from "../classify/merchant";
 import type { FinanceExecutor } from "../dbExecutor";
@@ -112,7 +113,7 @@ export async function updatePayeeAliases(
       const [payee] = await tx
         .select({ id: financePayees.id, name: financePayees.name })
         .from(financePayees)
-        .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+        .where(ownedRow(financePayees, payeeId, userId));
       if (!payee) throw new PayeeAliasEditRefused("not_found", "Payee not found.");
 
       const wanted: { input: string; alias: string }[] = [];

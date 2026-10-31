@@ -13,6 +13,7 @@ import {
   timeChartAreas,
   timeCharts,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { NodeType } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { assertCanNest } from "@/lib/tree/hierarchy";
@@ -292,7 +293,7 @@ export async function writeMappedImport(params: {
       await tx
         .update(nodes)
         .set({ parentId: goalId, updatedAt: new Date() })
-        .where(and(eq(nodes.id, projectId), eq(nodes.userId, userId)));
+        .where(ownedRow(nodes, projectId, userId));
     }
 
     // Densify every sibling group, now that the relinking above has settled which nodes are

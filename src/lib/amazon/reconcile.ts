@@ -15,6 +15,7 @@ import {
   amazonCharges,
   amazonSubscriptions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { persistSlim } from "./import";
 import { isAmazonChargeKey } from "./snapshot";
@@ -120,9 +121,7 @@ async function ensureOrderTotalCharges(
       if (standIn && !matched.has(standIn.id)) {
         await tx
           .delete(amazonCharges)
-          .where(
-            and(eq(amazonCharges.id, standIn.id), eq(amazonCharges.userId, userId)),
-          );
+          .where(ownedRow(amazonCharges, standIn.id, userId));
       }
       continue;
     }
@@ -173,7 +172,7 @@ async function ensureOrderTotalCharges(
         capturedOn: values.capturedOn,
         updatedAt: new Date(),
       })
-      .where(and(eq(amazonCharges.id, standIn.id), eq(amazonCharges.userId, userId)));
+      .where(ownedRow(amazonCharges, standIn.id, userId));
   }
   return created;
 }
@@ -330,12 +329,7 @@ async function upsertSubscriptions(
         capturedOn: values.capturedOn,
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(amazonSubscriptions.id, found.id),
-          eq(amazonSubscriptions.userId, userId),
-        ),
-      );
+      .where(ownedRow(amazonSubscriptions, found.id, userId));
     counts.updated += 1;
   }
   return counts;
@@ -402,7 +396,7 @@ async function upsertCharges(
             capturedOn: values.capturedOn,
             updatedAt: new Date(),
           })
-          .where(and(eq(amazonCharges.id, found.id), eq(amazonCharges.userId, userId)));
+          .where(ownedRow(amazonCharges, found.id, userId));
         counts.updated += 1;
       }
     }
@@ -428,7 +422,7 @@ async function upsertCharges(
           "Captured before order totals; re-capture supersedes it. Check for a duplicate.",
         updatedAt: new Date(),
       })
-      .where(and(eq(amazonCharges.id, row.id), eq(amazonCharges.userId, userId)));
+      .where(ownedRow(amazonCharges, row.id, userId));
   }
   return counts;
 }

@@ -10,6 +10,7 @@ import {
   financePayees,
   financeTransactions,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import type { FinanceAuditChange, FinanceMoneyCheckpoint } from "./audit/types";
@@ -311,9 +312,7 @@ export async function reclassifyInsideTransaction(
         payeeId: row.payeeId,
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(financeTransactions.userId, userId), eq(financeTransactions.id, row.id)),
-      );
+      .where(ownedRow(financeTransactions, row.id, userId));
   }
 }
 
@@ -375,9 +374,7 @@ export async function autoFileNewRows(
     await executor
       .update(financeTransactions)
       .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
-      .where(
-        and(eq(financeTransactions.userId, userId), eq(financeTransactions.id, row.id)),
-      );
+      .where(ownedRow(financeTransactions, row.id, userId));
   }
 }
 

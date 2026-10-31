@@ -12,6 +12,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { z } from "zod";
 import { db } from "@/db";
 import { financeTransactions, type EnvelopeKind } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import {
   categoryMonth,
@@ -642,7 +643,7 @@ async function splitState(
       isParent: financeTransactions.isParent,
     })
     .from(financeTransactions)
-    .where(and(eq(financeTransactions.userId, userId), eq(financeTransactions.id, id)))
+    .where(ownedRow(financeTransactions, id, userId))
     .limit(1);
   if (!parent) throw new AgentError("not_found", "Transaction not found.");
   const children = parent.isParent ? await listSplitChildren(userId, id) : [];

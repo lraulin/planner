@@ -10,6 +10,7 @@
 import { and, eq, gte, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { financeTransactions } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { FinanceAuditChange } from "./audit/types";
 import type { FinanceExecutor } from "./dbExecutor";
 import { SCRAPE_FEEDS } from "./bankSnapshot";
@@ -210,12 +211,7 @@ export async function retireRowsOntoOtherSources(
           ...(step.moveSplitTo ? { isParent: true, budgetCategoryId: null } : {}),
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            eq(financeTransactions.id, step.replacementId),
-          ),
-        )
+        .where(ownedRow(financeTransactions, step.replacementId, userId))
         .returning({ id: financeTransactions.id });
       if (updated.length === 0) throw new Error("Handover target not found.");
       carried += 1;

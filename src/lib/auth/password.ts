@@ -1,7 +1,7 @@
 import { hashPassword, verifyPassword } from "better-auth/crypto";
-import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { credentialAccountFor } from "./accountKey";
 import { MIN_PASSWORD_LENGTH } from "./passwordPolicy";
 
@@ -46,7 +46,7 @@ export async function changePassword(
   const [updated] = await db
     .update(accounts)
     .set({ password: hashed, updatedAt: new Date() })
-    .where(and(eq(accounts.id, row.id), eq(accounts.userId, userId)))
+    .where(ownedRow(accounts, row.id, userId))
     .returning({ id: accounts.id });
   if (!updated) {
     throw new Error("This account has no password to change.");

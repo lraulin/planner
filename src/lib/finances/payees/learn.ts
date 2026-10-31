@@ -5,6 +5,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financePayees, financeTransactions } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { effectiveFlow } from "../analytics";
 import { categoryAssignableIds } from "../categoryEligibility";
 import { numericStringToCents } from "../money";
@@ -76,7 +77,7 @@ async function loadPayeeAutoCategory(userId: string, payeeId: string) {
       autoCategoryMode: financePayees.autoCategoryMode,
     })
     .from(financePayees)
-    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)))
+    .where(ownedRow(financePayees, payeeId, userId))
     .limit(1);
   if (!payee) return null;
   return {
@@ -101,7 +102,7 @@ export async function learnFromCategoryEdit(
   await db
     .update(financePayees)
     .set({ defaultBudgetCategoryId: next, updatedAt: new Date() })
-    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+    .where(ownedRow(financePayees, payeeId, userId));
 }
 
 /** After a merge into a learning-mode target, recompute from the combined history. */
@@ -119,5 +120,5 @@ export async function relearnPayeeDefault(
   await db
     .update(financePayees)
     .set({ defaultBudgetCategoryId: next, updatedAt: new Date() })
-    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+    .where(ownedRow(financePayees, payeeId, userId));
 }

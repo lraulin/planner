@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appointments, timeChartAreas, timeCharts } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { eventColorHex } from "@/lib/google/eventColors";
 import { syncWindowFor } from "@/lib/google/mirror";
 import { SYNC_MAX_AGE_MS, syncWindow, type SyncStatus } from "@/lib/google/sync";
@@ -57,7 +58,7 @@ export async function getTimeChart(userId: string, id: string) {
   const [chart] = await db
     .select()
     .from(timeCharts)
-    .where(and(eq(timeCharts.id, id), eq(timeCharts.userId, userId)))
+    .where(ownedRow(timeCharts, id, userId))
     .limit(1);
   return chart ?? null;
 }
@@ -112,7 +113,7 @@ export async function getAppointment(userId: string, id: string) {
   const [row] = await db
     .select()
     .from(appointments)
-    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .where(ownedRow(appointments, id, userId))
     .limit(1);
   return row ?? null;
 }

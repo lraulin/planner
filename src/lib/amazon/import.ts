@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   amazonOrderItems,
@@ -7,6 +7,7 @@ import {
   amazonReplacements,
   amazonReturns,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { deriveAmazonOrderSummary, type AmazonOrderSummary } from "./orderSummary";
 import { parseSlimJson } from "./slim";
@@ -295,7 +296,7 @@ async function upsertOrders(
         summarySource: next.summarySource,
         updatedAt: new Date(),
       })
-      .where(and(eq(amazonOrders.id, found.id), eq(amazonOrders.userId, userId)));
+      .where(ownedRow(amazonOrders, found.id, userId));
     counts.updated += 1;
   }
 
@@ -414,9 +415,7 @@ async function upsertItems(
         shipDate: next.shipDate,
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(amazonOrderItems.id, found.id), eq(amazonOrderItems.userId, userId)),
-      );
+      .where(ownedRow(amazonOrderItems, found.id, userId));
     counts.updated += 1;
   }
 
@@ -484,7 +483,7 @@ async function upsertRefunds(
         asin: values.asin,
         updatedAt: new Date(),
       })
-      .where(and(eq(amazonRefunds.id, found.id), eq(amazonRefunds.userId, userId)));
+      .where(ownedRow(amazonRefunds, found.id, userId));
     counts.updated += 1;
   }
 
@@ -549,7 +548,7 @@ async function upsertReturns(
         replacementOrderId: values.replacementOrderId,
         updatedAt: new Date(),
       })
-      .where(and(eq(amazonReturns.id, found.id), eq(amazonReturns.userId, userId)));
+      .where(ownedRow(amazonReturns, found.id, userId));
     counts.updated += 1;
   }
 
@@ -594,9 +593,7 @@ async function upsertReplacements(
         replacementOrderId: values.replacementOrderId,
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(amazonReplacements.id, found.id), eq(amazonReplacements.userId, userId)),
-      );
+      .where(ownedRow(amazonReplacements, found.id, userId));
     counts.updated += 1;
   }
 

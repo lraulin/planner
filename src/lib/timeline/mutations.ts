@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { lifeEvents, type ExternalRef } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { patchText, requireDateKey } from "@/lib/history/fields";
 import type { LifeEventInput } from "./types";
 
@@ -85,7 +86,7 @@ export async function updateLifeEvent(
     const [existing] = await tx
       .select({ id: lifeEvents.id })
       .from(lifeEvents)
-      .where(and(eq(lifeEvents.id, eventId), eq(lifeEvents.userId, userId)))
+      .where(ownedRow(lifeEvents, eventId, userId))
       .limit(1);
     if (!existing) throw new Error("Event not found.");
 
@@ -98,14 +99,14 @@ export async function updateLifeEvent(
     await tx
       .update(lifeEvents)
       .set(patch)
-      .where(and(eq(lifeEvents.id, eventId), eq(lifeEvents.userId, userId)));
+      .where(ownedRow(lifeEvents, eventId, userId));
   });
 }
 
 export async function deleteLifeEvent(userId: string, eventId: string): Promise<void> {
   const deleted = await db
     .delete(lifeEvents)
-    .where(and(eq(lifeEvents.id, eventId), eq(lifeEvents.userId, userId)))
+    .where(ownedRow(lifeEvents, eventId, userId))
     .returning({ id: lifeEvents.id });
   if (deleted.length === 0) throw new Error("Event not found.");
 }

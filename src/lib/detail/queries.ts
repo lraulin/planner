@@ -8,6 +8,7 @@ import {
   resultAreaDetails,
   taskDetails,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { plannedDayForNode } from "@/lib/day/queries";
 import { noteSnippet } from "@/lib/notes/snippet";
@@ -46,7 +47,7 @@ export async function loadNodeDetail(
       notes: nodes.notes,
     })
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
 
   if (!node) return null;

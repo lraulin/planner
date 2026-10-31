@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes, timeCharts, weeklyPlanEntries, weeklyPlans } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { startOfWeek } from "@/lib/schedule/geometry";
 
 /**
@@ -96,7 +97,7 @@ export async function updateWeeklyPlan(
       const [chart] = await db
         .select({ id: timeCharts.id })
         .from(timeCharts)
-        .where(and(eq(timeCharts.id, patch.timeChartId), eq(timeCharts.userId, userId)))
+        .where(ownedRow(timeCharts, patch.timeChartId, userId))
         .limit(1);
       if (!chart) throw new Error("Time Chart not found.");
     }
@@ -111,7 +112,7 @@ export async function updateWeeklyPlan(
   const [row] = await db
     .update(weeklyPlans)
     .set(values)
-    .where(and(eq(weeklyPlans.id, id), eq(weeklyPlans.userId, userId)))
+    .where(ownedRow(weeklyPlans, id, userId))
     .returning();
   if (!row) throw new Error("Weekly plan not found.");
   return row;
@@ -126,7 +127,7 @@ export async function setWeeklyPlanCompleted(
   const [row] = await db
     .update(weeklyPlans)
     .set({ completedAt: completed ? new Date() : null, updatedAt: new Date() })
-    .where(and(eq(weeklyPlans.id, id), eq(weeklyPlans.userId, userId)))
+    .where(ownedRow(weeklyPlans, id, userId))
     .returning();
   if (!row) throw new Error("Weekly plan not found.");
   return row;
@@ -135,7 +136,7 @@ export async function setWeeklyPlanCompleted(
 export async function deleteWeeklyPlan(userId: string, id: string) {
   const deleted = await db
     .delete(weeklyPlans)
-    .where(and(eq(weeklyPlans.id, id), eq(weeklyPlans.userId, userId)))
+    .where(ownedRow(weeklyPlans, id, userId))
     .returning({ id: weeklyPlans.id });
   if (deleted.length === 0) throw new Error("Weekly plan not found.");
 }
@@ -168,14 +169,14 @@ export async function upsertPlanEntry(
   const [plan] = await db
     .select({ id: weeklyPlans.id })
     .from(weeklyPlans)
-    .where(and(eq(weeklyPlans.id, planId), eq(weeklyPlans.userId, userId)))
+    .where(ownedRow(weeklyPlans, planId, userId))
     .limit(1);
   if (!plan) throw new Error("Weekly plan not found.");
 
   const [node] = await db
     .select({ id: nodes.id })
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
   if (!node) throw new Error("Item not found.");
 
@@ -253,7 +254,7 @@ export async function updateWeeklyPlanEntries(
     const [plan] = await tx
       .select({ id: weeklyPlans.id })
       .from(weeklyPlans)
-      .where(and(eq(weeklyPlans.id, planId), eq(weeklyPlans.userId, userId)))
+      .where(ownedRow(weeklyPlans, planId, userId))
       .limit(1);
     if (!plan) throw new Error("Weekly plan not found.");
 
@@ -294,6 +295,6 @@ export async function setFocusArea(
   await db
     .update(nodes)
     .set({ focus, updatedAt: new Date() })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, nodeId, userId));
   return entry;
 }

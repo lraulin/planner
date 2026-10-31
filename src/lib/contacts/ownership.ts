@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 
 type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -19,7 +19,7 @@ export async function assertContactOwned(
   const [contact] = await tx
     .select({ id: contacts.id })
     .from(contacts)
-    .where(and(eq(contacts.id, contactId), eq(contacts.userId, userId)))
+    .where(ownedRow(contacts, contactId, userId))
     .limit(1);
   if (!contact) throw new Error("Contact not found.");
 }

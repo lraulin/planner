@@ -6,6 +6,7 @@ import {
   type HouseStatus,
   type PriorityLetter,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { letterRankEngine } from "@/lib/priority/letterRank";
 import { between } from "@/lib/tree/sortKey";
 import { DRIVE_DESTINATION } from "./destination";
@@ -23,7 +24,7 @@ async function requireHouse(tx: Executor, userId: string, houseId: string) {
   const [row] = await tx
     .select()
     .from(houses)
-    .where(and(eq(houses.id, houseId), eq(houses.userId, userId)))
+    .where(ownedRow(houses, houseId, userId))
     .limit(1);
   if (!row) throw new Error("House not found.");
   return row;
@@ -127,7 +128,7 @@ async function assignHousePriority(
         priorityRank: assignment.rank,
         updatedAt: new Date(),
       })
-      .where(and(eq(houses.id, assignment.id), eq(houses.userId, userId)));
+      .where(ownedRow(houses, assignment.id, userId));
   }
 }
 
@@ -251,7 +252,7 @@ export async function updateHouse(
     await tx
       .update(houses)
       .set(patch)
-      .where(and(eq(houses.id, houseId), eq(houses.userId, userId)));
+      .where(ownedRow(houses, houseId, userId));
 
     // Priority goes through the shared ranking engine, not a raw column write — see
     // assignHousePriority. Touch it whenever the caller set either half: a rank alone
@@ -281,7 +282,7 @@ export async function updateHouse(
 export async function deleteHouse(userId: string, houseId: string): Promise<void> {
   const deleted = await db
     .delete(houses)
-    .where(and(eq(houses.id, houseId), eq(houses.userId, userId)))
+    .where(ownedRow(houses, houseId, userId))
     .returning({ id: houses.id });
   if (deleted.length === 0) throw new Error("House not found.");
 }
@@ -308,7 +309,7 @@ export async function refreshHouseRoute(
     await db
       .update(houses)
       .set({ routeError: "Could not find that address.", updatedAt: new Date() })
-      .where(and(eq(houses.id, houseId), eq(houses.userId, userId)));
+      .where(ownedRow(houses, houseId, userId));
     return;
   }
 
@@ -323,7 +324,7 @@ export async function refreshHouseRoute(
         routeError: "Could not compute a drive time to it.",
         updatedAt: new Date(),
       })
-      .where(and(eq(houses.id, houseId), eq(houses.userId, userId)));
+      .where(ownedRow(houses, houseId, userId));
     return;
   }
 
@@ -338,5 +339,5 @@ export async function refreshHouseRoute(
       routeError: null,
       updatedAt: new Date(),
     })
-    .where(and(eq(houses.id, houseId), eq(houses.userId, userId)));
+    .where(ownedRow(houses, houseId, userId));
 }

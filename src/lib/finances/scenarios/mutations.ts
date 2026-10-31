@@ -11,6 +11,7 @@ import {
   SCENARIO_LINE_KINDS,
   type ScenarioLineKind,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { between, after, compare, first } from "@/lib/tree/sortKey";
 import {
@@ -63,9 +64,7 @@ async function requireScenario(
   const [row] = await executor
     .select({ id: financeScenarios.id })
     .from(financeScenarios)
-    .where(
-      and(eq(financeScenarios.userId, userId), eq(financeScenarios.id, scenarioId)),
-    )
+    .where(ownedRow(financeScenarios, scenarioId, userId))
     .limit(1);
   if (!row) throw new Error(NOT_YOURS.scenario);
 }
@@ -80,9 +79,7 @@ async function requireLine(
   const [row] = await executor
     .select()
     .from(financeScenarioLines)
-    .where(
-      and(eq(financeScenarioLines.userId, userId), eq(financeScenarioLines.id, lineId)),
-    )
+    .where(ownedRow(financeScenarioLines, lineId, userId))
     .limit(1);
   if (!row) throw new Error(NOT_YOURS.line);
   return row;
@@ -96,12 +93,7 @@ async function requireEnvelope(
   const [row] = await db
     .select({ kind: financeBudgetCategories.kind })
     .from(financeBudgetCategories)
-    .where(
-      and(
-        eq(financeBudgetCategories.userId, userId),
-        eq(financeBudgetCategories.id, envelopeId),
-      ),
-    )
+    .where(ownedRow(financeBudgetCategories, envelopeId, userId))
     .limit(1);
   if (!row) throw new Error(NOT_YOURS.envelope);
   if (kinds && !kinds.includes(row.kind)) {
@@ -113,12 +105,7 @@ async function requireBudgetGroup(userId: string, groupId: string): Promise<void
   const [row] = await db
     .select({ id: financeCategoryGroups.id })
     .from(financeCategoryGroups)
-    .where(
-      and(
-        eq(financeCategoryGroups.userId, userId),
-        eq(financeCategoryGroups.id, groupId),
-      ),
-    )
+    .where(ownedRow(financeCategoryGroups, groupId, userId))
     .limit(1);
   if (!row) throw new Error(NOT_YOURS.budgetGroup);
 }
@@ -127,9 +114,7 @@ async function requireSupplyItem(userId: string, itemId: string): Promise<void> 
   const [row] = await db
     .select({ id: financeSupplyItems.id })
     .from(financeSupplyItems)
-    .where(
-      and(eq(financeSupplyItems.userId, userId), eq(financeSupplyItems.id, itemId)),
-    )
+    .where(ownedRow(financeSupplyItems, itemId, userId))
     .limit(1);
   if (!row) throw new Error(NOT_YOURS.supplyItem);
 }
@@ -138,9 +123,7 @@ async function requireSupplyGroup(userId: string, groupId: string): Promise<void
   const [row] = await db
     .select({ id: financeSupplyGroups.id })
     .from(financeSupplyGroups)
-    .where(
-      and(eq(financeSupplyGroups.userId, userId), eq(financeSupplyGroups.id, groupId)),
-    )
+    .where(ownedRow(financeSupplyGroups, groupId, userId))
     .limit(1);
   if (!row) throw new Error(NOT_YOURS.supplyGroup);
 }
@@ -237,9 +220,7 @@ export async function updateScenario(
       ...(edit.notes !== undefined ? { notes: edit.notes } : {}),
       updatedAt: new Date(),
     })
-    .where(
-      and(eq(financeScenarios.userId, userId), eq(financeScenarios.id, scenarioId)),
-    );
+    .where(ownedRow(financeScenarios, scenarioId, userId));
 }
 
 /** Cascades to its lines and overrides. */
@@ -250,9 +231,7 @@ export async function deleteScenario(
   await requireScenario(userId, scenarioId);
   await db
     .delete(financeScenarios)
-    .where(
-      and(eq(financeScenarios.userId, userId), eq(financeScenarios.id, scenarioId)),
-    );
+    .where(ownedRow(financeScenarios, scenarioId, userId));
 }
 
 /**
@@ -269,9 +248,7 @@ export async function duplicateScenario(
     const [source] = await tx
       .select()
       .from(financeScenarios)
-      .where(
-        and(eq(financeScenarios.userId, userId), eq(financeScenarios.id, scenarioId)),
-      )
+      .where(ownedRow(financeScenarios, scenarioId, userId))
       .limit(1);
     if (!source) throw new Error(NOT_YOURS.scenario);
 
@@ -447,12 +424,7 @@ async function openRollup(
   await executor
     .update(financeScenarioLines)
     .set({ ...plan.parent, updatedAt: new Date() })
-    .where(
-      and(
-        eq(financeScenarioLines.userId, userId),
-        eq(financeScenarioLines.id, parent.id),
-      ),
-    );
+    .where(ownedRow(financeScenarioLines, parent.id, userId));
   return plan.child;
 }
 
@@ -559,12 +531,7 @@ export async function updateLine(
       ...(edit.link !== undefined ? linkColumns(edit.link) : {}),
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(financeScenarioLines.userId, userId),
-        eq(financeScenarioLines.id, line.id),
-      ),
-    );
+    .where(ownedRow(financeScenarioLines, line.id, userId));
 }
 
 /** Cascades to its sub-lines. */
@@ -572,9 +539,7 @@ export async function deleteLine(userId: string, lineId: string): Promise<void> 
   await requireLine(userId, lineId);
   await db
     .delete(financeScenarioLines)
-    .where(
-      and(eq(financeScenarioLines.userId, userId), eq(financeScenarioLines.id, lineId)),
-    );
+    .where(ownedRow(financeScenarioLines, lineId, userId));
 }
 
 /** Whether `candidateId` is `lineId` or sits beneath it — a line cannot move into itself. */
@@ -588,9 +553,7 @@ async function isSelfOrDescendant(
     const [row] = await executor
       .select({ parentId: financeScenarioLines.parentId })
       .from(financeScenarioLines)
-      .where(
-        and(eq(financeScenarioLines.userId, userId), eq(financeScenarioLines.id, id)),
-      )
+      .where(ownedRow(financeScenarioLines, id, userId))
       .limit(1);
     return row?.parentId;
   });
@@ -671,12 +634,7 @@ export async function moveLine(
     await tx
       .update(financeScenarioLines)
       .set({ parentId: parent?.id ?? null, sortKey, updatedAt: new Date() })
-      .where(
-        and(
-          eq(financeScenarioLines.userId, userId),
-          eq(financeScenarioLines.id, line.id),
-        ),
-      );
+      .where(ownedRow(financeScenarioLines, line.id, userId));
   });
 }
 

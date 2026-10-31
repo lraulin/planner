@@ -8,6 +8,7 @@ import {
   taskCompletions,
   taskDetails,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { and, count, desc, eq, isNull } from "drizzle-orm";
 import {
   clearConflictingDescendantPlans,
@@ -86,7 +87,7 @@ async function isSelfOrDescendant(
     const [current] = await tx
       .select({ parentId: nodes.parentId })
       .from(nodes)
-      .where(and(eq(nodes.id, id), eq(nodes.userId, userId)))
+      .where(ownedRow(nodes, id, userId))
       .limit(1);
     return current?.parentId;
   });
@@ -107,7 +108,7 @@ async function requireDestinationParent(
   const [parent] = await tx
     .select({ id: nodes.id, type: nodes.type, isInbox: nodes.isInbox })
     .from(nodes)
-    .where(and(eq(nodes.id, parentId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, parentId, userId))
     .limit(1);
   if (!parent || parent.isInbox) throw new Error("Destination not found.");
   assertCanNest(childType, parent.type);
@@ -200,7 +201,7 @@ async function organizeAsTask(
       completedAt: null,
       updatedAt: new Date(),
     })
-    .where(and(eq(nodes.id, item.id), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, item.id, userId));
   // After the move, so the pool this ranks against is the destination's children and
   // includes the row itself.
   await assignPriorityAmongSiblings(
@@ -265,7 +266,7 @@ async function organizeAsProject(
       completedAt: null,
       updatedAt: new Date(),
     })
-    .where(and(eq(nodes.id, item.id), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, item.id, userId));
   await assignPriorityAmongSiblings(
     tx,
     userId,
@@ -299,7 +300,7 @@ async function organizeAsDeferred(
       targetEndDate: null,
       updatedAt: new Date(),
     })
-    .where(and(eq(nodes.id, item.id), eq(nodes.userId, userId)));
+    .where(ownedRow(nodes, item.id, userId));
 
   if (outcome.followUpName.trim()) {
     const [followUp] = await tx
@@ -337,7 +338,7 @@ async function organizeAsReferenceNote(
     noteDate: fromDateKey(today),
     contexts: item.contexts,
   });
-  await tx.delete(nodes).where(and(eq(nodes.id, item.id), eq(nodes.userId, userId)));
+  await tx.delete(nodes).where(ownedRow(nodes, item.id, userId));
 }
 
 async function organizeAsCalendar(
@@ -392,7 +393,7 @@ async function organizeAsCalendar(
         "Calendar event was created, but the Inbox branch now has subtasks.",
       );
     }
-    await tx.delete(nodes).where(and(eq(nodes.id, itemId), eq(nodes.userId, userId)));
+    await tx.delete(nodes).where(ownedRow(nodes, itemId, userId));
   });
 }
 
@@ -427,9 +428,7 @@ export async function organizeInboxItem(
         await organizeAsDeferred(tx, userId, item, outcome);
         break;
       case "delete":
-        await tx
-          .delete(nodes)
-          .where(and(eq(nodes.id, item.id), eq(nodes.userId, userId)));
+        await tx.delete(nodes).where(ownedRow(nodes, item.id, userId));
         break;
       case "reference_note":
         await organizeAsReferenceNote(tx, userId, item, outcome, today);

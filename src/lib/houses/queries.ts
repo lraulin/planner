@@ -1,6 +1,7 @@
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { houses, type HouseStatus } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { HouseDetail, HouseListRow } from "./types";
 
 function toDetail(row: typeof houses.$inferSelect): HouseDetail {
@@ -75,7 +76,7 @@ export async function getHouseDetail(
   const [row] = await db
     .select()
     .from(houses)
-    .where(and(eq(houses.id, houseId), eq(houses.userId, userId)))
+    .where(ownedRow(houses, houseId, userId))
     .limit(1);
   return row ? toDetail(row) : null;
 }

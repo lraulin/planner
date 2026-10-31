@@ -2,6 +2,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { db } from "@/db";
 import { notes, type NewNote, type NoteFlag } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { assertContactOwned } from "@/lib/contacts/ownership";
 import { assertNodeOwned } from "@/lib/tree/ownership";
 import type { ExternalRef } from "@/db/schema";
@@ -26,7 +27,7 @@ async function requireNote(tx: Executor, userId: string, noteId: string) {
   const [note] = await tx
     .select()
     .from(notes)
-    .where(and(eq(notes.id, noteId), eq(notes.userId, userId)))
+    .where(ownedRow(notes, noteId, userId))
     .limit(1);
 
   if (!note) throw new Error("Note not found.");
@@ -126,7 +127,7 @@ async function isSelfOrDescendant(
     const [row] = await tx
       .select({ parentId: notes.parentId })
       .from(notes)
-      .where(and(eq(notes.id, id), eq(notes.userId, userId)))
+      .where(ownedRow(notes, id, userId))
       .limit(1);
     return row?.parentId;
   });
@@ -266,7 +267,7 @@ export async function updateNote(
   const updated = await db
     .update(notes)
     .set(patch)
-    .where(and(eq(notes.id, noteId), eq(notes.userId, userId)))
+    .where(ownedRow(notes, noteId, userId))
     .returning({ id: notes.id });
 
   if (updated.length === 0) throw new Error("Note not found.");
@@ -276,7 +277,7 @@ export async function updateNote(
 export async function deleteNote(userId: string, noteId: string): Promise<void> {
   const deleted = await db
     .delete(notes)
-    .where(and(eq(notes.id, noteId), eq(notes.userId, userId)))
+    .where(ownedRow(notes, noteId, userId))
     .returning({ id: notes.id });
 
   if (deleted.length === 0) throw new Error("Note not found.");
@@ -290,7 +291,7 @@ export async function setNoteCollapsed(
   const updated = await db
     .update(notes)
     .set({ collapsed, updatedAt: new Date() })
-    .where(and(eq(notes.id, noteId), eq(notes.userId, userId)))
+    .where(ownedRow(notes, noteId, userId))
     .returning({ id: notes.id });
 
   if (updated.length === 0) throw new Error("Note not found.");
@@ -330,7 +331,7 @@ export async function moveNote(params: {
     await tx
       .update(notes)
       .set({ parentId, sortKey, updatedAt: new Date() })
-      .where(and(eq(notes.id, noteId), eq(notes.userId, userId)));
+      .where(ownedRow(notes, noteId, userId));
 
     await expandParent(tx, userId, parentId);
   });

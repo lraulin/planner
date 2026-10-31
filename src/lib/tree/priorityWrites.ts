@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { nodes } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { assertRankedLetterPriorities } from "@/lib/priority/letterRank";
@@ -151,7 +152,7 @@ export async function applyPriorityAssignments(
         priorityRank: assignment.letter === null ? null : assignment.rank,
         updatedAt: new Date(),
       })
-      .where(and(eq(nodes.userId, userId), eq(nodes.id, assignment.id)));
+      .where(ownedRow(nodes, assignment.id, userId));
   }
 }
 
@@ -176,7 +177,7 @@ export async function applySettlePriorityClear(
     const [node] = await tx
       .select({ parentId: nodes.parentId })
       .from(nodes)
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+      .where(ownedRow(nodes, nodeId, userId))
       .limit(1);
     if (node) {
       const siblings = await siblingPriorityPool(tx, userId, node.parentId);
@@ -249,6 +250,6 @@ async function applyTcAssignments(
         tcPriorityRank: assignment.rank,
         updatedAt: new Date(),
       })
-      .where(and(eq(nodes.id, assignment.nodeId), eq(nodes.userId, userId)));
+      .where(ownedRow(nodes, assignment.nodeId, userId));
   }
 }

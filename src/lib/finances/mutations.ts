@@ -12,6 +12,7 @@ import {
   type FinanceAccountKind,
   type FinanceFlowKind,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import * as sortKey from "@/lib/tree/sortKey";
 import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
@@ -75,12 +76,7 @@ async function requireTransaction(
   const [row] = await db
     .select({ id: financeTransactions.id })
     .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeTransactions, transactionId, userId))
     .limit(1);
   if (!row) throw new Error("Transaction not found.");
 }
@@ -173,12 +169,7 @@ export async function updateTransaction(
     const [before] = await tx
       .select(TRANSACTION_AUDIT_COLUMNS)
       .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.id, transactionId),
-          eq(financeTransactions.userId, userId),
-        ),
-      )
+      .where(ownedRow(financeTransactions, transactionId, userId))
       .limit(1);
     if (!before) throw new Error("Transaction not found.");
 
@@ -193,12 +184,7 @@ export async function updateTransaction(
     await tx
       .update(financeTransactions)
       .set(values)
-      .where(
-        and(
-          eq(financeTransactions.id, transactionId),
-          eq(financeTransactions.userId, userId),
-        ),
-      );
+      .where(ownedRow(financeTransactions, transactionId, userId));
 
     if (!moneyChanged) return;
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
@@ -415,12 +401,7 @@ async function requirePaymentResolution(
   const [row] = await db
     .select({ id: financePaymentResolutions.id })
     .from(financePaymentResolutions)
-    .where(
-      and(
-        eq(financePaymentResolutions.id, resolutionId),
-        eq(financePaymentResolutions.userId, userId),
-      ),
-    )
+    .where(ownedRow(financePaymentResolutions, resolutionId, userId))
     .limit(1);
   if (!row) throw new Error("Payment resolution not found.");
 }
@@ -438,12 +419,7 @@ export async function updatePaymentResolution(
   await db
     .update(financePaymentResolutions)
     .set({ counterparty: edit.counterparty.trim(), updatedAt: new Date() })
-    .where(
-      and(
-        eq(financePaymentResolutions.id, resolutionId),
-        eq(financePaymentResolutions.userId, userId),
-      ),
-    );
+    .where(ownedRow(financePaymentResolutions, resolutionId, userId));
 }
 
 export async function deletePaymentResolution(
@@ -453,12 +429,7 @@ export async function deletePaymentResolution(
   await requirePaymentResolution(userId, resolutionId);
   await db
     .delete(financePaymentResolutions)
-    .where(
-      and(
-        eq(financePaymentResolutions.id, resolutionId),
-        eq(financePaymentResolutions.userId, userId),
-      ),
-    );
+    .where(ownedRow(financePaymentResolutions, resolutionId, userId));
 }
 
 export type AccountEdit = {
@@ -497,7 +468,7 @@ export async function updateAccount(
       offBudget: financeAccounts.offBudget,
     })
     .from(financeAccounts)
-    .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
+    .where(ownedRow(financeAccounts, accountId, userId))
     .limit(1);
   if (!current) throw new Error("Account not found.");
 
@@ -547,9 +518,7 @@ export async function updateAccount(
     await db
       .update(financeAccounts)
       .set({ kind: values.kind, updatedAt: new Date() })
-      .where(
-        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
-      );
+      .where(ownedRow(financeAccounts, accountId, userId));
     delete values.kind;
   }
 
@@ -570,9 +539,7 @@ export async function updateAccount(
     await db
       .update(financeAccounts)
       .set(values)
-      .where(
-        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
-      );
+      .where(ownedRow(financeAccounts, accountId, userId));
   }
 }
 
@@ -838,7 +805,7 @@ export async function deleteAccount(userId: string, accountId: string): Promise<
         externalKey: financeAccounts.externalKey,
       })
       .from(financeAccounts)
-      .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
+      .where(ownedRow(financeAccounts, accountId, userId))
       .limit(1);
     if (!account) throw new Error("Account not found.");
     const transactions = await tx
@@ -860,9 +827,7 @@ export async function deleteAccount(userId: string, accountId: string): Promise<
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await tx
       .delete(financeAccounts)
-      .where(
-        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
-      );
+      .where(ownedRow(financeAccounts, accountId, userId));
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await writeFinanceAuditEvent(tx, userId, {
       kind: "account_delete",
@@ -1055,12 +1020,7 @@ async function attachUnassignedMerchantHistory(
   const [row] = await db
     .select({ description: financeTransactions.description })
     .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeTransactions, transactionId, userId))
     .limit(1);
   if (!row) return;
   const alias = aliasFor(row.description);
@@ -1202,12 +1162,7 @@ export async function upsertBillEnvelope(
       await tx
         .update(financeBudgetCategories)
         .set(changes)
-        .where(
-          and(
-            eq(financeBudgetCategories.id, categoryId),
-            eq(financeBudgetCategories.userId, userId),
-          ),
-        );
+        .where(ownedRow(financeBudgetCategories, categoryId, userId));
     } else {
       if (
         edit.cancelledOn !== undefined &&
@@ -1390,12 +1345,7 @@ async function requireSplitParent(
   const [row] = await db
     .select(SPLIT_PARENT_COLUMNS)
     .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeTransactions, transactionId, userId))
     .limit(1);
   if (!row) throw new Error("Transaction not found.");
   return row;
@@ -1529,12 +1479,7 @@ async function writeSplitChildren(
         await tx
           .update(financeTransactions)
           .set(values)
-          .where(
-            and(
-              eq(financeTransactions.userId, userId),
-              eq(financeTransactions.id, child.id),
-            ),
-          );
+          .where(ownedRow(financeTransactions, child.id, userId));
         continue;
       }
       await tx.insert(financeTransactions).values({
@@ -1560,12 +1505,7 @@ async function writeSplitChildren(
     await tx
       .update(financeTransactions)
       .set({ isParent: true, budgetCategoryId: null, updatedAt: now })
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          eq(financeTransactions.id, parent.id),
-        ),
-      );
+      .where(ownedRow(financeTransactions, parent.id, userId));
 
     const afterRows = await tx
       .select(TRANSACTION_AUDIT_COLUMNS)
@@ -1711,21 +1651,11 @@ export async function unsplitTransaction(
     await tx
       .update(financeTransactions)
       .set({ isParent: false, updatedAt: now })
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          eq(financeTransactions.id, transactionId),
-        ),
-      );
+      .where(ownedRow(financeTransactions, transactionId, userId));
     const [afterParent] = await tx
       .select(TRANSACTION_AUDIT_COLUMNS)
       .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          eq(financeTransactions.id, transactionId),
-        ),
-      )
+      .where(ownedRow(financeTransactions, transactionId, userId))
       .limit(1);
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await writeFinanceAuditEvent(tx, userId, {

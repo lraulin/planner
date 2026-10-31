@@ -10,6 +10,7 @@
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { financeTransactions } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { ALERT_FEEDS } from "./alertEmail";
 import type { FinanceAuditChange } from "./audit/types";
 import { SCRAPE_FEEDS } from "./bankSnapshot";
@@ -168,12 +169,7 @@ export async function retireAlertHolds(
         await executor
           .update(financeTransactions)
           .set({ ...carry, updatedAt: new Date() })
-          .where(
-            and(
-              eq(financeTransactions.userId, userId),
-              eq(financeTransactions.id, resolution.postedId),
-            ),
-          );
+          .where(ownedRow(financeTransactions, resolution.postedId, userId));
         result.carried += 1;
         result.changes.push({
           entityType: "transaction",
@@ -209,12 +205,7 @@ export async function retireAlertHolds(
       await executor
         .update(financeTransactions)
         .set({ unlistedAt: new Date(), updatedAt: new Date() })
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            eq(financeTransactions.id, hold.id),
-          ),
-        );
+        .where(ownedRow(financeTransactions, hold.id, userId));
       result.flagged += 1;
       result.warnings.push(
         resolution.outcome === "ambiguous"

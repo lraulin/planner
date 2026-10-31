@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 
 type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -23,7 +23,7 @@ export async function assertNodeOwned(
   const [node] = await tx
     .select({ id: nodes.id })
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, nodeId, userId))
     .limit(1);
   if (!node) throw new Error(`${what} not found.`);
 }

@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { financeBudgetAllocations, financeBudgetCategories } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { snoozeUnavailableReason } from "./snooze";
 import { monthKeyOf, type MonthKey } from "./envelope";
@@ -128,12 +129,7 @@ export async function setTargetSnooze(
       target: financeBudgetCategories.target,
     })
     .from(financeBudgetCategories)
-    .where(
-      and(
-        eq(financeBudgetCategories.id, params.categoryId),
-        eq(financeBudgetCategories.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeBudgetCategories, params.categoryId, userId))
     .limit(1);
   if (!category) throw new Error("That envelope does not exist.");
 
@@ -174,12 +170,7 @@ async function requireTargetableCategory(
       kind: financeBudgetCategories.kind,
     })
     .from(financeBudgetCategories)
-    .where(
-      and(
-        eq(financeBudgetCategories.id, categoryId),
-        eq(financeBudgetCategories.userId, userId),
-      ),
-    )
+    .where(ownedRow(financeBudgetCategories, categoryId, userId))
     .limit(1);
   if (!row) throw new Error("That envelope does not exist.");
   if (row.kind === "income") {
@@ -210,10 +201,5 @@ export async function saveEnvelopeTarget(
   await db
     .update(financeBudgetCategories)
     .set({ target: stamped, updatedAt: new Date() })
-    .where(
-      and(
-        eq(financeBudgetCategories.id, categoryId),
-        eq(financeBudgetCategories.userId, userId),
-      ),
-    );
+    .where(ownedRow(financeBudgetCategories, categoryId, userId));
 }

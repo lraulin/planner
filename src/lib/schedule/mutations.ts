@@ -12,6 +12,7 @@ import {
   type RecurrenceFrequency,
   type ShowAs,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { syncWindow } from "@/lib/google/sync";
 import {
   pushCreate,
@@ -90,7 +91,7 @@ export async function updateTimeChart(
   const [row] = await db
     .update(timeCharts)
     .set(values)
-    .where(and(eq(timeCharts.id, id), eq(timeCharts.userId, userId)))
+    .where(ownedRow(timeCharts, id, userId))
     .returning();
   if (!row) throw new Error("Time Chart not found.");
   return row;
@@ -103,7 +104,7 @@ export async function renameTimeChart(userId: string, id: string, name: string) 
 export async function deleteTimeChart(userId: string, id: string) {
   const deleted = await db
     .delete(timeCharts)
-    .where(and(eq(timeCharts.id, id), eq(timeCharts.userId, userId)))
+    .where(ownedRow(timeCharts, id, userId))
     .returning({ id: timeCharts.id });
   if (deleted.length === 0) throw new Error("Time Chart not found.");
 }
@@ -128,7 +129,7 @@ export async function createTimeChartArea(
   const [chart] = await db
     .select({ id: timeCharts.id })
     .from(timeCharts)
-    .where(and(eq(timeCharts.id, timeChartId), eq(timeCharts.userId, userId)))
+    .where(ownedRow(timeCharts, timeChartId, userId))
     .limit(1);
   if (!chart) throw new Error("Time Chart not found.");
   await assertNodeOwned(db, userId, input.resultAreaId, "Result Area");
@@ -174,7 +175,7 @@ export async function updateTimeChartArea(
   const [row] = await db
     .update(timeChartAreas)
     .set(patch)
-    .where(and(eq(timeChartAreas.id, id), eq(timeChartAreas.userId, userId)))
+    .where(ownedRow(timeChartAreas, id, userId))
     .returning();
   if (!row) throw new Error("Time Chart area not found.");
   return row;
@@ -183,7 +184,7 @@ export async function updateTimeChartArea(
 export async function deleteTimeChartArea(userId: string, id: string) {
   const deleted = await db
     .delete(timeChartAreas)
-    .where(and(eq(timeChartAreas.id, id), eq(timeChartAreas.userId, userId)))
+    .where(ownedRow(timeChartAreas, id, userId))
     .returning({ id: timeChartAreas.id });
   if (deleted.length === 0) throw new Error("Time Chart area not found.");
 }
@@ -384,7 +385,7 @@ export async function adoptExistingEvent(
     const [updated] = await db
       .update(appointments)
       .set({ ...annotations, updatedAt: new Date() })
-      .where(and(eq(appointments.id, mirrored.id), eq(appointments.userId, userId)))
+      .where(ownedRow(appointments, mirrored.id, userId))
       .returning();
     return updated;
   }
@@ -427,7 +428,7 @@ export async function updateAppointment(
   const [existing] = await db
     .select()
     .from(appointments)
-    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .where(ownedRow(appointments, id, userId))
     .limit(1);
   if (!existing) throw new Error("Appointment not found.");
   await assertNodeOwned(db, userId, input.projectId, "Project");
@@ -486,7 +487,7 @@ export async function updateAppointment(
   const [row] = await db
     .update(appointments)
     .set(patch)
-    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .where(ownedRow(appointments, id, userId))
     .returning();
   await rearmReminders(userId, [{ kind: "appointment", id }]);
   return row;
@@ -496,7 +497,7 @@ export async function deleteAppointment(userId: string, id: string) {
   const [existing] = await db
     .select()
     .from(appointments)
-    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .where(ownedRow(appointments, id, userId))
     .limit(1);
   if (!existing) throw new Error("Appointment not found.");
 
@@ -506,7 +507,7 @@ export async function deleteAppointment(userId: string, id: string) {
 
   const deleted = await db
     .delete(appointments)
-    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .where(ownedRow(appointments, id, userId))
     .returning({ id: appointments.id });
   if (deleted.length === 0) throw new Error("Appointment not found.");
   await rearmReminders(userId, [{ kind: "appointment", id }]);
@@ -524,7 +525,7 @@ export async function setAppointmentCheckState(
   const [row] = await db
     .update(appointments)
     .set({ checkState, updatedAt: new Date() })
-    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .where(ownedRow(appointments, id, userId))
     .returning();
   if (!row) throw new Error("Appointment not found.");
   await rearmReminders(userId, [{ kind: "appointment", id }]);
@@ -556,7 +557,7 @@ export async function rescheduleAppointment(
   const [existing] = await db
     .select()
     .from(appointments)
-    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .where(ownedRow(appointments, id, userId))
     .limit(1);
   if (!existing) throw new Error("Appointment not found.");
 
@@ -573,7 +574,7 @@ export async function rescheduleAppointment(
   const [row] = await db
     .update(appointments)
     .set(patch)
-    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .where(ownedRow(appointments, id, userId))
     .returning();
   if (!row) throw new Error("Appointment not found.");
   await rearmReminders(userId, [{ kind: "appointment", id }]);

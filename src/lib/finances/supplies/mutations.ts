@@ -7,6 +7,7 @@ import {
   financeSupplyOptions,
   type SupplyRateBasis,
 } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { after, first } from "@/lib/tree/sortKey";
 import { parsePackCount } from "./packSize";
 import { listAmazonRepeatPurchases, listSupplyItems } from "./queries";
@@ -79,9 +80,7 @@ async function requireSupplyItem(userId: string, itemId: string): Promise<void> 
   const [row] = await db
     .select({ id: financeSupplyItems.id })
     .from(financeSupplyItems)
-    .where(
-      and(eq(financeSupplyItems.userId, userId), eq(financeSupplyItems.id, itemId)),
-    )
+    .where(ownedRow(financeSupplyItems, itemId, userId))
     .limit(1);
   if (!row) throw new Error("That supply item does not exist.");
 }
@@ -93,12 +92,7 @@ async function requireSupplyOption(
   const [row] = await db
     .select({ itemId: financeSupplyOptions.itemId })
     .from(financeSupplyOptions)
-    .where(
-      and(
-        eq(financeSupplyOptions.userId, userId),
-        eq(financeSupplyOptions.id, optionId),
-      ),
-    )
+    .where(ownedRow(financeSupplyOptions, optionId, userId))
     .limit(1);
   if (!row) throw new Error("That supply option does not exist.");
   return row;
@@ -113,12 +107,7 @@ async function requireEnvelope(userId: string, envelopeId: string): Promise<void
   const [row] = await db
     .select({ id: financeBudgetCategories.id })
     .from(financeBudgetCategories)
-    .where(
-      and(
-        eq(financeBudgetCategories.userId, userId),
-        eq(financeBudgetCategories.id, envelopeId),
-      ),
-    )
+    .where(ownedRow(financeBudgetCategories, envelopeId, userId))
     .limit(1);
   if (!row) throw new Error("That envelope does not exist.");
 }
@@ -128,9 +117,7 @@ async function requireGroup(userId: string, groupId: string): Promise<void> {
   const [row] = await db
     .select({ id: financeSupplyGroups.id })
     .from(financeSupplyGroups)
-    .where(
-      and(eq(financeSupplyGroups.userId, userId), eq(financeSupplyGroups.id, groupId)),
-    )
+    .where(ownedRow(financeSupplyGroups, groupId, userId))
     .limit(1);
   if (!row) throw new Error("That supply group does not exist.");
 }
@@ -229,9 +216,7 @@ export async function renameSupplyGroup(
   await db
     .update(financeSupplyGroups)
     .set({ name: trimmed, updatedAt: new Date() })
-    .where(
-      and(eq(financeSupplyGroups.userId, userId), eq(financeSupplyGroups.id, groupId)),
-    );
+    .where(ownedRow(financeSupplyGroups, groupId, userId));
 }
 
 /** The items stay, ungrouped — the foreign key is `set null`. */
@@ -242,9 +227,7 @@ export async function deleteSupplyGroup(
   await requireGroup(userId, groupId);
   await db
     .delete(financeSupplyGroups)
-    .where(
-      and(eq(financeSupplyGroups.userId, userId), eq(financeSupplyGroups.id, groupId)),
-    );
+    .where(ownedRow(financeSupplyGroups, groupId, userId));
 }
 
 /** What typing in the Group cell does: blank ungroups, anything else picks or creates. */
@@ -299,9 +282,7 @@ export async function updateSupplyItem(
       ...(edit.rate !== undefined ? rateColumns(edit.rate) : {}),
       updatedAt: new Date(),
     })
-    .where(
-      and(eq(financeSupplyItems.userId, userId), eq(financeSupplyItems.id, itemId)),
-    );
+    .where(ownedRow(financeSupplyItems, itemId, userId));
 }
 
 /** Cascades to its options — an offer for a thing you no longer buy prices nothing. */
@@ -309,9 +290,7 @@ export async function deleteSupplyItem(userId: string, itemId: string): Promise<
   await requireSupplyItem(userId, itemId);
   await db
     .delete(financeSupplyItems)
-    .where(
-      and(eq(financeSupplyItems.userId, userId), eq(financeSupplyItems.id, itemId)),
-    );
+    .where(ownedRow(financeSupplyItems, itemId, userId));
 }
 
 /**
@@ -384,12 +363,7 @@ export async function updateSupplyOption(
       ...(edit.notes !== undefined ? { notes: edit.notes } : {}),
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(financeSupplyOptions.userId, userId),
-        eq(financeSupplyOptions.id, optionId),
-      ),
-    );
+    .where(ownedRow(financeSupplyOptions, optionId, userId));
 }
 
 export async function deleteSupplyOption(
@@ -399,12 +373,7 @@ export async function deleteSupplyOption(
   await requireSupplyOption(userId, optionId);
   await db
     .delete(financeSupplyOptions)
-    .where(
-      and(
-        eq(financeSupplyOptions.userId, userId),
-        eq(financeSupplyOptions.id, optionId),
-      ),
-    );
+    .where(ownedRow(financeSupplyOptions, optionId, userId));
 }
 
 /**
@@ -434,12 +403,7 @@ export async function setSupplyOptionInUse(
     await tx
       .update(financeSupplyOptions)
       .set({ inUse: true, updatedAt: new Date() })
-      .where(
-        and(
-          eq(financeSupplyOptions.userId, userId),
-          eq(financeSupplyOptions.id, optionId),
-        ),
-      );
+      .where(ownedRow(financeSupplyOptions, optionId, userId));
   });
 }
 
@@ -630,24 +594,14 @@ export async function mergeSupplyItems(
           brand: preservedOptionBrand(option.brand, itemName),
           updatedAt: now,
         })
-        .where(
-          and(
-            eq(financeSupplyOptions.userId, userId),
-            eq(financeSupplyOptions.id, option.id),
-          ),
-        );
+        .where(ownedRow(financeSupplyOptions, option.id, userId));
     }
 
     if (promoteOptionId) {
       await tx
         .update(financeSupplyOptions)
         .set({ inUse: true, updatedAt: new Date() })
-        .where(
-          and(
-            eq(financeSupplyOptions.userId, userId),
-            eq(financeSupplyOptions.id, promoteOptionId),
-          ),
-        );
+        .where(ownedRow(financeSupplyOptions, promoteOptionId, userId));
     }
 
     await tx

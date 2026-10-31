@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { metricEntries, metrics, nodes } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import type { PriorityLetter } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
 import { isMetricType } from "./derive";
@@ -28,7 +29,7 @@ async function requireMetric(tx: Executor, userId: string, metricId: string) {
   const [row] = await tx
     .select()
     .from(metrics)
-    .where(and(eq(metrics.id, metricId), eq(metrics.userId, userId)))
+    .where(ownedRow(metrics, metricId, userId))
     .limit(1);
   if (!row) throw new Error("Metric not found.");
   return row;
@@ -38,7 +39,7 @@ async function requireEntry(tx: Executor, userId: string, entryId: string) {
   const [row] = await tx
     .select()
     .from(metricEntries)
-    .where(and(eq(metricEntries.id, entryId), eq(metricEntries.userId, userId)))
+    .where(ownedRow(metricEntries, entryId, userId))
     .limit(1);
   if (!row) throw new Error("Metric entry not found.");
   return row;
@@ -54,7 +55,7 @@ async function assertOwnerOk(
   const [node] = await tx
     .select({ id: nodes.id, type: nodes.type })
     .from(nodes)
-    .where(and(eq(nodes.id, ownerNodeId), eq(nodes.userId, userId)))
+    .where(ownedRow(nodes, ownerNodeId, userId))
     .limit(1);
   if (!node) throw new Error("Owner not found.");
   if (node.type !== "goal") throw new Error("Metric owner must be a goal.");
@@ -195,14 +196,14 @@ export async function updateMetric(
     await tx
       .update(metrics)
       .set(patch)
-      .where(and(eq(metrics.id, metricId), eq(metrics.userId, userId)));
+      .where(ownedRow(metrics, metricId, userId));
   });
 }
 
 export async function deleteMetric(userId: string, metricId: string): Promise<void> {
   const result = await db
     .delete(metrics)
-    .where(and(eq(metrics.id, metricId), eq(metrics.userId, userId)))
+    .where(ownedRow(metrics, metricId, userId))
     .returning({ id: metrics.id });
   if (result.length === 0) throw new Error("Metric not found.");
 }
@@ -278,7 +279,7 @@ export async function createMetricEntryOnce(
     await tx
       .update(metrics)
       .set({ updatedAt: new Date() })
-      .where(and(eq(metrics.id, metricId), eq(metrics.userId, userId)));
+      .where(ownedRow(metrics, metricId, userId));
 
     return { id: row.id, created: true };
   });
@@ -355,7 +356,7 @@ export async function importMetricEntries(
       await tx
         .update(metrics)
         .set({ updatedAt: new Date() })
-        .where(and(eq(metrics.id, metricId), eq(metrics.userId, userId)));
+        .where(ownedRow(metrics, metricId, userId));
     }
 
     return { created: createdIds.length, skipped, createdIds };
@@ -386,12 +387,12 @@ export async function updateMetricEntry(
     await tx
       .update(metricEntries)
       .set(patch)
-      .where(and(eq(metricEntries.id, entryId), eq(metricEntries.userId, userId)));
+      .where(ownedRow(metricEntries, entryId, userId));
 
     await tx
       .update(metrics)
       .set({ updatedAt: new Date() })
-      .where(and(eq(metrics.id, entry.metricId), eq(metrics.userId, userId)));
+      .where(ownedRow(metrics, entry.metricId, userId));
   });
 }
 
@@ -401,13 +402,11 @@ export async function deleteMetricEntry(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const entry = await requireEntry(tx, userId, entryId);
-    await tx
-      .delete(metricEntries)
-      .where(and(eq(metricEntries.id, entryId), eq(metricEntries.userId, userId)));
+    await tx.delete(metricEntries).where(ownedRow(metricEntries, entryId, userId));
     await tx
       .update(metrics)
       .set({ updatedAt: new Date() })
-      .where(and(eq(metrics.id, entry.metricId), eq(metrics.userId, userId)));
+      .where(ownedRow(metrics, entry.metricId, userId));
   });
 }
 

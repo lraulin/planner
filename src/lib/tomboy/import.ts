@@ -1,6 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notes } from "@/db/schema";
+import { ownedRow } from "@/lib/db/owned";
 import { between } from "@/lib/tree/sortKey";
 import { mapTomboyFiles } from "./map";
 import type { ParsedTomboyNote, TomboyFile } from "./parse";
@@ -125,7 +126,7 @@ export async function importTomboyFiles(params: {
             noteDate: incoming.noteDate,
             updatedAt: incoming.updatedAt,
           })
-          .where(and(eq(notes.id, existing.id), eq(notes.userId, userId)));
+          .where(ownedRow(notes, existing.id, userId));
         updated++;
         continue;
       }
