@@ -390,6 +390,35 @@ async function applyEdit(
   });
 }
 
+/** Write a funding plan's allocations for `month` as one bulk-funding edit. */
+async function applyAllocations(
+  userId: string,
+  month: MonthKey,
+  plan: {
+    allocations: readonly {
+      categoryId: string;
+      amountCents: number;
+      goalCents?: number | null;
+    }[];
+    note: string;
+  },
+): Promise<void> {
+  await applyEdit(
+    userId,
+    {
+      allocations: plan.allocations.map((row) => ({
+        month,
+        categoryId: row.categoryId,
+        amountCents: row.amountCents,
+        goalCents: row.goalCents,
+      })),
+      buffered: null,
+      note: plan.note,
+    },
+    "budget_bulk_funding",
+  );
+}
+
 export async function applyBudgetTemplates(
   userId: string,
   params: {
@@ -436,20 +465,7 @@ export async function applyBudgetTemplates(
     return { applied: 0, errors: result.errors.map((error) => error.message) };
   }
 
-  await applyEdit(
-    userId,
-    {
-      allocations: result.allocations.map((row) => ({
-        month: month.month,
-        categoryId: row.categoryId,
-        amountCents: row.amountCents,
-        goalCents: row.goalCents,
-      })),
-      buffered: null,
-      note: result.note,
-    },
-    "budget_bulk_funding",
-  );
+  await applyAllocations(userId, month.month, result);
 
   return {
     applied: result.allocations.length,
@@ -495,20 +511,7 @@ export async function assignBudget(
     return { applied: 0, errors: result.errors.map((error) => error.message) };
   }
 
-  await applyEdit(
-    userId,
-    {
-      allocations: result.allocations.map((row) => ({
-        month: month.month,
-        categoryId: row.categoryId,
-        amountCents: row.amountCents,
-        goalCents: row.goalCents,
-      })),
-      buffered: null,
-      note: result.note,
-    },
-    "budget_bulk_funding",
-  );
+  await applyAllocations(userId, month.month, result);
 
   return {
     applied: result.lines.filter((line) => line.deltaCents !== 0).length,
