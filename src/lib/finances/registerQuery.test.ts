@@ -1,8 +1,8 @@
 import { sliceBlock } from "@/lib/grid/serverQuery";
 import { describe, expect, it } from "vitest";
 import { customFilter, optionsFilter } from "@/lib/grid/customFilter";
-import { effectiveFlow } from "./analytics";
 import { activityViewFilters } from "./registerActivity";
+import { categoryEligibilityRow } from "./categoryEligibility";
 import { THIS_MONTH_DATE_FILTER } from "./registerFields";
 import type { TransactionListRow } from "./types";
 import {
@@ -802,13 +802,7 @@ describe("a windowed prepare", () => {
         row.transferGroupId !== null ||
         row.derivedFlow === "internal_transfer",
     )
-    .map((row) => ({
-      id: row.id,
-      accountId: row.accountId,
-      transactionDate: row.transactionDate,
-      transferGroupId: row.transferGroupId ?? null,
-      effectiveFlow: effectiveFlow(row),
-    }));
+    .map(categoryEligibilityRow);
 
   it("answers a This Month query exactly as the whole ledger does", () => {
     const thisMonth = query({ filters: { date: THIS_MONTH_DATE_FILTER }, groupBy: [] });

@@ -1,3 +1,5 @@
+import { effectiveFlow, type FlowFields } from "./analytics";
+
 export type CategoryEligibilityRow = {
   id: string;
   accountId: string;
@@ -5,6 +7,24 @@ export type CategoryEligibilityRow = {
   transferGroupId: string | null;
   effectiveFlow: string;
 };
+
+type EligibilitySource = FlowFields & {
+  id: string;
+  accountId: string;
+  transactionDate: string;
+  transferGroupId?: string | null;
+};
+
+/** Project a ledger row onto the fields {@link categoryAssignableIds} reads. */
+export function categoryEligibilityRow(row: EligibilitySource): CategoryEligibilityRow {
+  return {
+    id: row.id,
+    accountId: row.accountId,
+    transactionDate: row.transactionDate,
+    transferGroupId: row.transferGroupId ?? null,
+    effectiveFlow: effectiveFlow(row),
+  };
+}
 
 /**
  * Rows whose Category may be edited.

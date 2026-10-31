@@ -7,10 +7,10 @@
  */
 
 import { asRecordId } from "@/lib/url/viewState";
-import { effectiveFlow } from "./analytics";
 import { monthKeyFromParam, type MonthKey } from "./budget/envelope";
 import {
   categoryAssignableIds,
+  categoryEligibilityRow,
   categoryEligibleIds,
   type CategoryEligibilityRow,
 } from "./categoryEligibility";
@@ -177,13 +177,7 @@ export function annotateCategoryAssignability(
   offBudgetAccountIds: ReadonlySet<string>,
 ): RegisterTransactionRow[] {
   const assignable = categoryAssignableIds(
-    ledger.map((row) => ({
-      id: row.id,
-      accountId: row.accountId,
-      transactionDate: row.transactionDate,
-      transferGroupId: row.transferGroupId ?? null,
-      effectiveFlow: effectiveFlow(row),
-    })),
+    ledger.map(categoryEligibilityRow),
     offBudgetAccountIds,
   );
   return ledger.map((row) => ({
@@ -208,13 +202,7 @@ function viewRows(
   }
   if (query.viewId === "uncategorized") {
     const eligible = categoryEligibleIds(
-      ledger.map((row) => ({
-        id: row.id,
-        accountId: row.accountId,
-        transactionDate: row.transactionDate,
-        transferGroupId: row.transferGroupId ?? null,
-        effectiveFlow: effectiveFlow(row),
-      })),
+      ledger.map(categoryEligibilityRow),
       ctx.offBudgetAccountIds,
       ctx.budgetStartMonth,
     );

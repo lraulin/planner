@@ -1,6 +1,6 @@
 import { isDateKey } from "@/lib/metrics/parse";
 import { asRecordId } from "@/lib/url/viewState";
-import { categoryAssignableIds } from "./categoryEligibility";
+import { categoryAssignableIds, categoryEligibilityRow } from "./categoryEligibility";
 import { effectiveFlow } from "./analytics";
 import type { TransactionListRow } from "./types";
 export type ReportDrill = {
@@ -67,11 +67,7 @@ export function reportContributionIds(
   supersededIds: ReadonlySet<string>,
 ): Set<string> {
   const eligible = categoryAssignableIds(
-    rows.map((row) => ({
-      ...row,
-      transferGroupId: row.transferGroupId ?? null,
-      effectiveFlow: effectiveFlow(row),
-    })),
+    rows.map(categoryEligibilityRow),
     offBudgetIds,
   );
   return new Set(

@@ -12,7 +12,6 @@ import {
   type ColumnFilter,
 } from "@/lib/grid/customFilter";
 import { asRecordId } from "@/lib/url/viewState";
-import { effectiveFlow } from "./analytics";
 import {
   monthEndKey,
   monthKeyFromParam,
@@ -21,7 +20,7 @@ import {
   monthParamOf,
   type MonthKey,
 } from "./budget/envelope";
-import { categoryAssignableIds } from "./categoryEligibility";
+import { categoryAssignableIds, categoryEligibilityRow } from "./categoryEligibility";
 import type { TransactionListRow } from "./types";
 
 export type ActivityRegisterParams = {
@@ -91,13 +90,7 @@ export function activityContributionIds(
   supersededPendingIds: ReadonlySet<string> = new Set(),
 ): Set<string> {
   const assignable = categoryAssignableIds(
-    rows.map((row) => ({
-      id: row.id,
-      accountId: row.accountId,
-      transactionDate: row.transactionDate,
-      transferGroupId: row.transferGroupId ?? null,
-      effectiveFlow: effectiveFlow(row),
-    })),
+    rows.map(categoryEligibilityRow),
     offBudgetAccountIds,
   );
   return new Set(
