@@ -6,10 +6,11 @@
  * sees the registry. New pages insert in their registry neighbourhood rather than last, so
  * a saved order cannot hide work that shipped after it was written.
  *
- * Slot arithmetic matches `placeField` in `lib/grid/fieldOrder.ts` on purpose, but this
- * module does not import it: navigation must not depend on the grid.
+ * Drop slots come from `placeAt` in `lib/listOrder.ts`, which the grid's field order uses
+ * too — neutral ground, so navigation still does not depend on the grid.
  */
 
+import { placeAt } from "@/lib/listOrder";
 import type { PageEntry } from "./pages";
 
 /**
@@ -54,29 +55,10 @@ export function applyPageOrder(
 }
 
 /**
- * Place `id` so it sits at the drop slot `toIndex` (0 = before the first item,
- * `ids.length` = after the last). If `id` is already in the list, the slot is measured
- * against the list **including** it — the same index a drag-over midpoint reports — so
- * dragging rightward past later tabs does not overshoot by one.
- */
-export function placePage(
-  ids: readonly string[],
-  id: string,
-  toIndex: number,
-): string[] {
-  const from = ids.indexOf(id);
-  const without = ids.filter((entry) => entry !== id);
-  let index = toIndex;
-  if (from >= 0 && from < toIndex) index -= 1;
-  index = Math.max(0, Math.min(index, without.length));
-  return [...without.slice(0, index), id, ...without.slice(index)];
-}
-
-/**
  * Move `id` one slot toward the start or the end of the list.
  *
  * The keyboard and button path into the same reorder the drag does, for the phone (where there
- * is no HTML5 drag) and for anyone arranging from the keyboard. Expressed in `placePage`'s drop
+ * is no HTML5 drag) and for anyone arranging from the keyboard. Expressed in `placeAt`'s drop
  * slots rather than as a swap so the two paths cannot drift apart about what an index means:
  * a slot is measured against the list *including* the moving id, so one step right is `+2`.
  *
@@ -91,5 +73,5 @@ export function movePage(
   if (from < 0) return [...ids];
   if (direction === "left" && from === 0) return [...ids];
   if (direction === "right" && from === ids.length - 1) return [...ids];
-  return placePage(ids, id, direction === "left" ? from - 1 : from + 2);
+  return placeAt(ids, id, direction === "left" ? from - 1 : from + 2);
 }

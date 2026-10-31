@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPageOrder, movePage, placePage } from "./pageOrder";
+import { applyPageOrder, movePage } from "./pageOrder";
 import type { PageEntry } from "./pages";
 
 function pages(...ids: string[]): PageEntry[] {
@@ -115,25 +115,6 @@ describe("applyPageOrder", () => {
     expect(
       applyPageOrder(pages("a", "b", "c"), ["c", "a", "c", "b"]).map((page) => page.id),
     ).toEqual(["c", "a", "b"]);
-  });
-});
-
-describe("placePage", () => {
-  it("inserts a new id at the requested drop slot", () => {
-    expect(placePage(["a", "c"], "b", 1)).toEqual(["a", "b", "c"]);
-    expect(placePage(["a", "b"], "c", 0)).toEqual(["c", "a", "b"]);
-    expect(placePage(["a", "b"], "c", 99)).toEqual(["a", "b", "c"]);
-  });
-
-  it("moves an existing id using list-including drop slots", () => {
-    // Drag c before a (slot 0).
-    expect(placePage(["a", "b", "c"], "c", 0)).toEqual(["c", "a", "b"]);
-    // Drag a to the end (slot 3) or just before where c was after a left (slot 2).
-    expect(placePage(["a", "b", "c"], "a", 3)).toEqual(["b", "c", "a"]);
-    expect(placePage(["a", "b", "c"], "a", 2)).toEqual(["b", "a", "c"]);
-    // Dropping on its own slot is a no-op.
-    expect(placePage(["a", "b", "c"], "b", 1)).toEqual(["a", "b", "c"]);
-    expect(placePage(["a", "b", "c"], "b", 2)).toEqual(["a", "b", "c"]);
   });
 });
 

@@ -7,7 +7,7 @@
  * asks this and renders; it never re-derives a rule.
  */
 
-import { placeField } from "./fieldOrder";
+import { placeAt } from "@/lib/listOrder";
 
 export type ColumnSortKey = { columnId: string; direction: "asc" | "desc" };
 
@@ -69,7 +69,7 @@ export function columnMenuState({
  * left half, after it when in the right.
  *
  * The slot is measured against the order **including** the dragged column, which is what
- * `placeField` expects — see the note there about the drop marker counting the dragged row.
+ * `placeAt` expects — see the note there about the drop marker counting the dragged row.
  */
 export function headerDropIndex(hoveredIndex: number, pastMidpoint: boolean): number {
   return pastMidpoint ? hoveredIndex + 1 : hoveredIndex;
@@ -82,5 +82,5 @@ export function reorderByHeaderDrag(
   hoveredIndex: number,
   pastMidpoint: boolean,
 ): string[] {
-  return placeField(order, columnId, headerDropIndex(hoveredIndex, pastMidpoint));
+  return placeAt(order, columnId, headerDropIndex(hoveredIndex, pastMidpoint));
 }

@@ -22,13 +22,8 @@ import {
 } from "@/lib/settings/grid";
 import { EMPTY_CROSS_FILTER, type CrossColumnFilter } from "@/lib/grid/crossFilter";
 import type { ColumnFilter } from "@/lib/grid/customFilter";
-import {
-  hideField,
-  moveField,
-  placeField,
-  showField,
-  withNewColumns,
-} from "@/lib/grid/fieldOrder";
+import { hideField, moveField, showField, withNewColumns } from "@/lib/grid/fieldOrder";
+import { placeAt } from "@/lib/listOrder";
 import { gridScope } from "@/lib/settings/scopes";
 import type { ColumnControls, ColumnMeta } from "./columns";
 
@@ -304,7 +299,7 @@ export function useGridState<TCol extends ColumnMeta>(
         setOrder(showField(order, id));
         return;
       }
-      setOrder(placeField(order, id, atIndex));
+      setOrder(placeAt(order, id, atIndex));
     },
     [byId, order, setOrder],
   );
@@ -331,7 +326,7 @@ export function useGridState<TCol extends ColumnMeta>(
   const place = useCallback(
     (id: string, toIndex: number) => {
       if (!byId.has(id)) return;
-      setOrder(placeField(order, id, toIndex));
+      setOrder(placeAt(order, id, toIndex));
     },
     [byId, order, setOrder],
   );

@@ -14,7 +14,8 @@ import { moduleById, modulePages } from "./modules";
 import type { ModuleId } from "./modules";
 import { usePresentedPathname } from "./pendingNavigation";
 import { useCurrentModule } from "./useActiveModule";
-import { movePage, placePage } from "@/lib/navigation/pageOrder";
+import { placeAt } from "@/lib/listOrder";
+import { movePage } from "@/lib/navigation/pageOrder";
 import { pageForPathname } from "@/lib/navigation/pages";
 import { useRegisterCommands } from "./CommandProvider";
 import { NavLink } from "./NavLink";
@@ -207,7 +208,7 @@ export function PageBar() {
     const target = dropIndex ?? dropSlot(index, event);
     const id = dragId;
     endDrag();
-    const next = placePage(ids, id, target);
+    const next = placeAt(ids, id, target);
     if (next.every((pageId, i) => pageId === ids[i])) return;
     setOrder(active, next);
   }
