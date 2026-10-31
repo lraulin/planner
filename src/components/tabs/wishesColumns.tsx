@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { TextCell } from "@/components/grid/cells";
 import type { PriorityLetter } from "@/db/schema";
 import {
   WISH_TYPE_CODES,
   type WishKind,
   type WishListRow,
 } from "@/lib/detail/wishTypes";
-import { isComposingKey } from "@/lib/keyboard";
 import { priorityOrderValue } from "@/lib/priority/order";
 import { formatPriority, parsePriority } from "@/lib/tree/format";
 import type { ColumnDef } from "@/components/grid/columns";
@@ -78,7 +78,7 @@ export const wishesColumns: ColumnDef<WishesColumnCtx, WishListRow>[] = [
     filterValue: (row) => row.node.title || null,
     sortValue: (row) => row.node.title.toLowerCase(),
     render: (row, ctx) => (
-      <WishTextCell
+      <TextCell
         key={`title:${row.node.title}`}
         value={row.node.title}
         ariaLabel="Title"
@@ -94,7 +94,7 @@ export const wishesColumns: ColumnDef<WishesColumnCtx, WishListRow>[] = [
     filterValue: (row) => row.node.description || null,
     sortValue: (row) => row.node.description.toLowerCase(),
     render: (row, ctx) => (
-      <WishTextCell
+      <TextCell
         key={`desc:${row.node.description}`}
         value={row.node.description}
         ariaLabel="Description"
@@ -158,43 +158,6 @@ function WishPriorityCell({
         "tabular w-full border-none bg-transparent text-center text-[0.8125rem] font-medium uppercase outline-none placeholder:text-ink-faint/50",
         invalid ? "text-priority-a" : "text-ink-muted",
       ].join(" ")}
-    />
-  );
-}
-
-function WishTextCell({
-  value,
-  ariaLabel,
-  onChange,
-}: {
-  value: string;
-  ariaLabel: string;
-  onChange: (next: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-
-  return (
-    <input
-      value={draft}
-      onClick={(event) => event.stopPropagation()}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        const next = draft.trim();
-        if (next !== value) onChange(next);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          if (isComposingKey(event.nativeEvent)) return;
-          event.preventDefault();
-          event.currentTarget.blur();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          setDraft(value);
-          event.currentTarget.blur();
-        }
-      }}
-      aria-label={ariaLabel}
-      className="w-full truncate border-none bg-transparent text-[0.8125rem] text-ink outline-none"
     />
   );
 }

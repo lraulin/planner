@@ -738,31 +738,28 @@ export function PercentCell({ node }: { node: OutlineNode }) {
   );
 }
 
-/** Free-text inline editor — Goals Definition / Range, Wish titles, etc. */
+/** Free-text inline editor — Goals Definition / Range, Wish titles, Time Chart names. */
 export function TextCell({
   value,
   ariaLabel,
+  placeholder,
   onChange,
 }: {
   value: string;
   ariaLabel: string;
+  placeholder?: string;
   onChange: (next: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
-  const [invalid, setInvalid] = useState(false);
 
   return (
     <input
       value={draft}
       onClick={(event) => event.stopPropagation()}
-      onChange={(event) => {
-        setInvalid(false);
-        setDraft(event.target.value);
-      }}
+      onChange={(event) => setDraft(event.target.value)}
       onBlur={() => {
         const next = draft.trim();
-        if (next === value) return;
-        onChange(next);
+        if (next !== value) onChange(next);
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
@@ -772,13 +769,12 @@ export function TextCell({
         } else if (event.key === "Escape") {
           event.preventDefault();
           setDraft(value);
-          setInvalid(false);
           event.currentTarget.blur();
         }
       }}
       aria-label={ariaLabel}
-      aria-invalid={invalid}
-      className="w-full truncate border-none bg-transparent text-[0.8125rem] text-ink outline-none"
+      placeholder={placeholder}
+      className="w-full truncate border-none bg-transparent text-[0.8125rem] text-ink outline-none placeholder:text-ink-faint/60"
     />
   );
 }

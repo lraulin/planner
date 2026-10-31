@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { TextCell } from "@/components/grid/cells";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
-import { isComposingKey } from "@/lib/keyboard";
 import { localDateKey } from "@/lib/schedule/geometry";
 import type { TimeChartListRow } from "@/lib/schedule/queries";
 
@@ -33,7 +32,7 @@ export const timeChartsColumns: ColumnDef<TimeChartsColumnCtx, TimeChartListRow>
     filterValue: (row) => row.node.name || null,
     sortValue: (row) => row.node.name.toLowerCase(),
     render: (row, ctx) => (
-      <ChartTextCell
+      <TextCell
         key={`name:${row.node.name}`}
         value={row.node.name}
         ariaLabel="Name"
@@ -50,7 +49,7 @@ export const timeChartsColumns: ColumnDef<TimeChartsColumnCtx, TimeChartListRow>
     filterValue: (row) => row.node.description || null,
     sortValue: (row) => row.node.description.toLowerCase(),
     render: (row, ctx) => (
-      <ChartTextCell
+      <TextCell
         key={`desc:${row.node.description}`}
         value={row.node.description}
         ariaLabel="Description"
@@ -88,43 +87,3 @@ export const timeChartsColumns: ColumnDef<TimeChartsColumnCtx, TimeChartListRow>
     ),
   },
 ];
-
-function ChartTextCell({
-  value,
-  ariaLabel,
-  placeholder,
-  onChange,
-}: {
-  value: string;
-  ariaLabel: string;
-  placeholder?: string;
-  onChange: (next: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-
-  return (
-    <input
-      value={draft}
-      onClick={(event) => event.stopPropagation()}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        const next = draft.trim();
-        if (next !== value) onChange(next);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          if (isComposingKey(event.nativeEvent)) return;
-          event.preventDefault();
-          event.currentTarget.blur();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          setDraft(value);
-          event.currentTarget.blur();
-        }
-      }}
-      aria-label={ariaLabel}
-      placeholder={placeholder}
-      className="w-full truncate border-none bg-transparent text-[0.8125rem] text-ink outline-none placeholder:text-ink-faint/60"
-    />
-  );
-}
