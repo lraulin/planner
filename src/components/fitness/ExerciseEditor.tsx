@@ -230,44 +230,22 @@ function ExerciseForm({
           <legend className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
             Equipment
           </legend>
-          <div className="flex flex-wrap gap-2">
-            {EQUIPMENT_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => patch({ equipment: opt.value })}
-                className={`rounded border px-3 py-1.5 text-[0.8125rem] ${
-                  draft.equipment === opt.value
-                    ? "border-ink bg-ink text-surface"
-                    : "border-rule text-ink-muted hover:text-ink"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <ChoiceButtons
+            options={EQUIPMENT_OPTIONS}
+            value={draft.equipment}
+            onChange={(equipment) => patch({ equipment })}
+          />
         </fieldset>
 
         <fieldset className="space-y-2">
           <legend className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
             Measured in
           </legend>
-          <div className="flex flex-wrap gap-2">
-            {MEASURE_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => patch({ measure: opt.value })}
-                className={`rounded border px-3 py-1.5 text-[0.8125rem] ${
-                  draft.measure === opt.value
-                    ? "border-ink bg-ink text-surface"
-                    : "border-rule text-ink-muted hover:text-ink"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <ChoiceButtons
+            options={MEASURE_OPTIONS}
+            value={draft.measure}
+            onChange={(measure) => patch({ measure })}
+          />
           <p className="text-[0.75rem] text-ink-faint">
             {draft.measure === "time"
               ? "A hold or a carry — the set records how long, not how many."
@@ -342,6 +320,36 @@ function ExerciseForm({
           />
         </label>
       </div>
+    </div>
+  );
+}
+
+/** One choice from a short fixed list, as a row of buttons; the chosen one is filled. */
+function ChoiceButtons<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className={`rounded border px-3 py-1.5 text-[0.8125rem] ${
+            value === opt.value
+              ? "border-ink bg-ink text-surface"
+              : "border-rule text-ink-muted hover:text-ink"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
     </div>
   );
 }
