@@ -183,6 +183,43 @@ function periodCell(cents: number | null, live: boolean) {
   );
 }
 
+/**
+ * Biweekly / Monthly / Yearly: one period's cost. An item row sorts and shows its own; a
+ * group header shows its total but does not sort. `compactSuffix`, when given, puts the
+ * figure on the compact row's meta line — `/mo` names the period there, where no header does.
+ */
+function periodColumn(
+  id: string,
+  label: string,
+  width: string,
+  period: "biweeklyCents" | "monthlyCents" | "yearlyCents",
+  compactSuffix?: string,
+): ColumnDef<SuppliesColumnCtx, SupplyGridRow> {
+  return {
+    id,
+    label,
+    width,
+    align: "right",
+    sortValue: (row) =>
+      row.node.kind === "item" ? (row.node.totals?.[period] ?? null) : null,
+    render: (row) =>
+      periodCell(
+        row.node.kind === "item"
+          ? (row.node.totals?.[period] ?? null)
+          : row.node.totals[period],
+        row.node.kind === "item",
+      ),
+    ...(compactSuffix === undefined
+      ? {}
+      : {
+          compactText: (row: NodeGridRow<SupplyGridRow>) =>
+            row.node.kind === "item" && row.node.totals
+              ? `${formatUsd(row.node.totals[period])}${compactSuffix}`
+              : null,
+        }),
+  };
+}
+
 /** Lasts / Packs/mo. Same live-vs-greyed split as the period columns. */
 function restockCell(value: number | null, live: boolean) {
   if (value === null) return <span className="text-ink-faint">—</span>;
@@ -484,59 +521,9 @@ export function suppliesColumns(): ColumnDef<SuppliesColumnCtx, SupplyGridRow>[]
           </span>
         ) : null,
     },
-    {
-      id: "biweekly",
-      label: "Biweekly",
-      width: "6.5rem",
-      align: "right",
-      sortValue: (row) =>
-        row.node.kind === "item" ? (row.node.totals?.biweeklyCents ?? null) : null,
-      render: (row) =>
-        periodCell(
-          row.node.kind === "item"
-            ? (row.node.totals?.biweeklyCents ?? null)
-            : row.node.totals.biweeklyCents,
-          row.node.kind === "item",
-        ),
-      compactText: (row) =>
-        row.node.kind === "item" && row.node.totals
-          ? formatUsd(row.node.totals.biweeklyCents)
-          : null,
-    },
-    {
-      id: "monthly",
-      label: "Monthly",
-      width: "6.5rem",
-      align: "right",
-      sortValue: (row) =>
-        row.node.kind === "item" ? (row.node.totals?.monthlyCents ?? null) : null,
-      render: (row) =>
-        periodCell(
-          row.node.kind === "item"
-            ? (row.node.totals?.monthlyCents ?? null)
-            : row.node.totals.monthlyCents,
-          row.node.kind === "item",
-        ),
-      compactText: (row) =>
-        row.node.kind === "item" && row.node.totals
-          ? `${formatUsd(row.node.totals.monthlyCents)}/mo`
-          : null,
-    },
-    {
-      id: "yearly",
-      label: "Yearly",
-      width: "7rem",
-      align: "right",
-      sortValue: (row) =>
-        row.node.kind === "item" ? (row.node.totals?.yearlyCents ?? null) : null,
-      render: (row) =>
-        periodCell(
-          row.node.kind === "item"
-            ? (row.node.totals?.yearlyCents ?? null)
-            : row.node.totals.yearlyCents,
-          row.node.kind === "item",
-        ),
-    },
+    periodColumn("biweekly", "Biweekly", "6.5rem", "biweeklyCents", ""),
+    periodColumn("monthly", "Monthly", "6.5rem", "monthlyCents", "/mo"),
+    periodColumn("yearly", "Yearly", "7rem", "yearlyCents"),
     {
       id: "delta",
       label: "Δ vs in use",
