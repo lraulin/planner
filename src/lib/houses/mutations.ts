@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import {
@@ -7,7 +7,7 @@ import {
   type HouseStatus,
   type PriorityLetter,
 } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { letterRankEngine } from "@/lib/priority/letterRank";
 import { between } from "@/lib/tree/sortKey";
 import { DRIVE_DESTINATION } from "./destination";
@@ -146,17 +146,7 @@ export async function createHouseOnce(
 ): Promise<{ id: string; created: boolean }> {
   const result = await db.transaction(async (tx) => {
     if (input.external) {
-      const [existing] = await tx
-        .select({ id: houses.id })
-        .from(houses)
-        .where(
-          and(
-            eq(houses.userId, userId),
-            eq(houses.externalSource, input.external.source),
-            eq(houses.externalId, input.external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(tx, houses, userId, input.external);
       if (existing) return { id: existing.id, created: false };
     }
 
@@ -199,17 +189,7 @@ export async function createHouseOnce(
       return { id: row.id, created: true };
     }
     if (!input.external) throw new Error("House could not be created.");
-    const [existing] = await tx
-      .select({ id: houses.id })
-      .from(houses)
-      .where(
-        and(
-          eq(houses.userId, userId),
-          eq(houses.externalSource, input.external.source),
-          eq(houses.externalId, input.external.id),
-        ),
-      )
-      .limit(1);
+    const existing = await findByExternalRef(tx, houses, userId, input.external);
     if (!existing) throw new Error("House could not be created.");
     return { id: existing.id, created: false };
   });

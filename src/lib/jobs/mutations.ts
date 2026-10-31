@@ -1,8 +1,7 @@
-import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { jobs, type ExternalRef } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import {
   dateKeyOrNull,
   moneyOrNull,
@@ -59,17 +58,7 @@ export async function createJobOnce(
 
   return db.transaction(async (tx) => {
     if (external) {
-      const [existing] = await tx
-        .select({ id: jobs.id })
-        .from(jobs)
-        .where(
-          and(
-            eq(jobs.userId, userId),
-            eq(jobs.externalSource, external.source),
-            eq(jobs.externalId, external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(tx, jobs, userId, external);
       if (existing) return { id: existing.id, created: false };
     }
 
@@ -91,17 +80,7 @@ export async function createJobOnce(
 
     if (row) return { id: row.id, created: true };
     if (!external) throw new Error("Job could not be created.");
-    const [existing] = await tx
-      .select({ id: jobs.id })
-      .from(jobs)
-      .where(
-        and(
-          eq(jobs.userId, userId),
-          eq(jobs.externalSource, external.source),
-          eq(jobs.externalId, external.id),
-        ),
-      )
-      .limit(1);
+    const existing = await findByExternalRef(tx, jobs, userId, external);
     if (!existing) throw new Error("Job could not be created.");
     return { id: existing.id, created: false };
   });

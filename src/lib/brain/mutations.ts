@@ -8,7 +8,7 @@ import {
   brainThoughtTypes,
   brainThoughts,
 } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { canonicalLink, planLink, type LinkRelation } from "./links";
 
 /** Brain is standalone per-user data. Every write scopes by `userId`. */
@@ -121,17 +121,12 @@ export async function createThought(
   const name = cleanName(input.name, "Thought name");
   return db.transaction(async (tx) => {
     if (input.external) {
-      const [existing] = await tx
-        .select({ id: brainThoughts.id })
-        .from(brainThoughts)
-        .where(
-          and(
-            eq(brainThoughts.userId, userId),
-            eq(brainThoughts.externalSource, input.external.source),
-            eq(brainThoughts.externalId, input.external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(
+        tx,
+        brainThoughts,
+        userId,
+        input.external,
+      );
       if (existing) return { id: existing.id, created: false };
     }
     if (input.linkTo) await requireThought(tx, userId, input.linkTo.thoughtId);

@@ -1,7 +1,6 @@
-import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { lifeEvents, type ExternalRef } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { patchText, requireDateKey } from "@/lib/history/fields";
 import type { LifeEventInput } from "./types";
 
@@ -33,17 +32,7 @@ export async function createLifeEventOnce(
 
   return db.transaction(async (tx) => {
     if (external) {
-      const [existing] = await tx
-        .select({ id: lifeEvents.id })
-        .from(lifeEvents)
-        .where(
-          and(
-            eq(lifeEvents.userId, userId),
-            eq(lifeEvents.externalSource, external.source),
-            eq(lifeEvents.externalId, external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(tx, lifeEvents, userId, external);
       if (existing) return { id: existing.id, created: false };
     }
 
@@ -61,17 +50,7 @@ export async function createLifeEventOnce(
 
     if (row) return { id: row.id, created: true };
     if (!external) throw new Error("Event could not be created.");
-    const [existing] = await tx
-      .select({ id: lifeEvents.id })
-      .from(lifeEvents)
-      .where(
-        and(
-          eq(lifeEvents.userId, userId),
-          eq(lifeEvents.externalSource, external.source),
-          eq(lifeEvents.externalId, external.id),
-        ),
-      )
-      .limit(1);
+    const existing = await findByExternalRef(tx, lifeEvents, userId, external);
     if (!existing) throw new Error("Event could not be created.");
     return { id: existing.id, created: false };
   });

@@ -3,7 +3,7 @@ import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { notes, type NewNote, type NoteFlag } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import {
   indentParentId,
   keyAtPosition,
@@ -147,17 +147,7 @@ export async function createNoteOnce(params: {
 
   return db.transaction(async (tx) => {
     if (external) {
-      const [existing] = await tx
-        .select({ id: notes.id })
-        .from(notes)
-        .where(
-          and(
-            eq(notes.userId, userId),
-            eq(notes.externalSource, external.source),
-            eq(notes.externalId, external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(tx, notes, userId, external);
       if (existing) return { id: existing.id, created: false };
     }
 
@@ -199,17 +189,7 @@ export async function createNoteOnce(params: {
       return { id: created.id, created: true };
     }
     if (!external) throw new Error("Note could not be created.");
-    const [existing] = await tx
-      .select({ id: notes.id })
-      .from(notes)
-      .where(
-        and(
-          eq(notes.userId, userId),
-          eq(notes.externalSource, external.source),
-          eq(notes.externalId, external.id),
-        ),
-      )
-      .limit(1);
+    const existing = await findByExternalRef(tx, notes, userId, external);
     if (!existing) throw new Error("Note could not be created.");
     return { id: existing.id, created: false };
   });

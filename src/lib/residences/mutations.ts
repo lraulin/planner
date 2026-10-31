@@ -1,8 +1,7 @@
-import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { residences, type ExternalRef } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import {
   dateKeyOrNull,
   moneyOrNull,
@@ -57,17 +56,7 @@ export async function createResidenceOnce(
 
   return db.transaction(async (tx) => {
     if (external) {
-      const [existing] = await tx
-        .select({ id: residences.id })
-        .from(residences)
-        .where(
-          and(
-            eq(residences.userId, userId),
-            eq(residences.externalSource, external.source),
-            eq(residences.externalId, external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(tx, residences, userId, external);
       if (existing) return { id: existing.id, created: false };
     }
 
@@ -87,17 +76,7 @@ export async function createResidenceOnce(
 
     if (row) return { id: row.id, created: true };
     if (!external) throw new Error("Residence could not be created.");
-    const [existing] = await tx
-      .select({ id: residences.id })
-      .from(residences)
-      .where(
-        and(
-          eq(residences.userId, userId),
-          eq(residences.externalSource, external.source),
-          eq(residences.externalId, external.id),
-        ),
-      )
-      .limit(1);
+    const existing = await findByExternalRef(tx, residences, userId, external);
     if (!existing) throw new Error("Residence could not be created.");
     return { id: existing.id, created: false };
   });

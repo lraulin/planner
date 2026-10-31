@@ -8,7 +8,7 @@ import {
   taskCompletions,
   taskDetails,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { findByExternalRef, ownedRow } from "@/lib/db/owned";
 import type { ExternalRef, NodeType } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { asCalendarDay } from "@/lib/schedule/geometry";
@@ -95,17 +95,7 @@ export async function createNodeOnce(
   // Network title fetch must not run inside the insert transaction.
   const result = await db.transaction(async (tx): Promise<CreateOnceResult> => {
     if (external) {
-      const [existing] = await tx
-        .select({ id: nodes.id })
-        .from(nodes)
-        .where(
-          and(
-            eq(nodes.userId, userId),
-            eq(nodes.externalSource, external.source),
-            eq(nodes.externalId, external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(tx, nodes, userId, external);
       if (existing) return { id: existing.id, created: false };
     }
 
@@ -133,17 +123,7 @@ export async function createNodeOnce(
 
     if (!created) {
       if (!external) throw new Error("Node could not be created.");
-      const [existing] = await tx
-        .select({ id: nodes.id })
-        .from(nodes)
-        .where(
-          and(
-            eq(nodes.userId, userId),
-            eq(nodes.externalSource, external.source),
-            eq(nodes.externalId, external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(tx, nodes, userId, external);
       if (!existing) throw new Error("Node could not be created.");
       return { id: existing.id, created: false };
     }

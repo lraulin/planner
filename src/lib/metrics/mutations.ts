@@ -2,7 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { metricEntries, metrics, nodes } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import type { PriorityLetter } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
 import { isMetricType } from "./derive";
@@ -79,17 +79,7 @@ export async function createMetricOnce(
 ): Promise<{ id: string; created: boolean }> {
   return db.transaction(async (tx) => {
     if (input.external) {
-      const [existing] = await tx
-        .select({ id: metrics.id })
-        .from(metrics)
-        .where(
-          and(
-            eq(metrics.userId, userId),
-            eq(metrics.externalSource, input.external.source),
-            eq(metrics.externalId, input.external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(tx, metrics, userId, input.external);
       if (existing) return { id: existing.id, created: false };
     }
     await assertOwnerOk(tx, userId, input.ownerNodeId ?? null);
@@ -122,17 +112,7 @@ export async function createMetricOnce(
 
     if (row) return { id: row.id, created: true };
     if (!input.external) throw new Error("Metric could not be created.");
-    const [existing] = await tx
-      .select({ id: metrics.id })
-      .from(metrics)
-      .where(
-        and(
-          eq(metrics.userId, userId),
-          eq(metrics.externalSource, input.external.source),
-          eq(metrics.externalId, input.external.id),
-        ),
-      )
-      .limit(1);
+    const existing = await findByExternalRef(tx, metrics, userId, input.external);
     if (!existing) throw new Error("Metric could not be created.");
     return { id: existing.id, created: false };
   });
@@ -209,17 +189,12 @@ export async function createMetricEntryOnce(
 ): Promise<{ id: string; created: boolean }> {
   return db.transaction(async (tx) => {
     if (input.external) {
-      const [existing] = await tx
-        .select({ id: metricEntries.id })
-        .from(metricEntries)
-        .where(
-          and(
-            eq(metricEntries.userId, userId),
-            eq(metricEntries.externalSource, input.external.source),
-            eq(metricEntries.externalId, input.external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(
+        tx,
+        metricEntries,
+        userId,
+        input.external,
+      );
       if (existing) return { id: existing.id, created: false };
     }
     await requireMetric(tx, userId, metricId);
@@ -247,17 +222,12 @@ export async function createMetricEntryOnce(
 
     if (!row) {
       if (!input.external) throw new Error("Metric entry could not be created.");
-      const [existing] = await tx
-        .select({ id: metricEntries.id })
-        .from(metricEntries)
-        .where(
-          and(
-            eq(metricEntries.userId, userId),
-            eq(metricEntries.externalSource, input.external.source),
-            eq(metricEntries.externalId, input.external.id),
-          ),
-        )
-        .limit(1);
+      const existing = await findByExternalRef(
+        tx,
+        metricEntries,
+        userId,
+        input.external,
+      );
       if (!existing) throw new Error("Metric entry could not be created.");
       return { id: existing.id, created: false };
     }

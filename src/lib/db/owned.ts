@@ -64,3 +64,33 @@ export async function requireOwnedRow<T extends OwnedTable>(
   if (!row) throw new Error(notFound);
   return row;
 }
+
+type ImportedTable = OwnedTable & {
+  externalSource: AnyPgColumn;
+  externalId: AnyPgColumn;
+};
+
+/**
+ * The caller's row that an import created from `external`, or null. What a create-once
+ * write looks up before inserting, and again after an insert that lost the race to a
+ * concurrent import of the same record.
+ */
+export async function findByExternalRef(
+  executor: DbExecutor,
+  table: ImportedTable,
+  userId: string,
+  external: { source: string; id: string },
+): Promise<{ id: string } | null> {
+  const source: PgTable = table;
+  const [row] = await executor
+    .select({ id: table.id })
+    .from(source)
+    .where(
+      sql`(${eq(table.userId, userId)} and ${eq(table.externalSource, external.source)} and ${eq(table.externalId, external.id)})`,
+    )
+    .limit(1);
+  if (!row) return null;
+  if (typeof row.id !== "string")
+    throw new Error("An imported row's id is not a string.");
+  return { id: row.id };
+}
