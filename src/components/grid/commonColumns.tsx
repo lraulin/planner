@@ -328,10 +328,16 @@ export function focusColumn(): ColumnDef<OutlineColumnCtx> {
   };
 }
 
-function calendarDateColumn(
+/**
+ * A read-only date column. `dayKey` decides which day a value falls on and `sortKey` how
+ * values order — the one thing that differs between a calendar date and an instant.
+ */
+function dateColumn(
   id: string,
   label: string,
   value: (node: OutlineNode) => Date | null,
+  dayKey: (date: Date) => string,
+  sortKey: (date: Date) => string | number,
 ): ColumnDef<OutlineColumnCtx> {
   return {
     id,
@@ -341,18 +347,18 @@ function calendarDateColumn(
     filterKind: "date",
     filterValue: (row) => {
       const date = value(row.node);
-      return date ? toDateKey(date) : null;
+      return date ? dayKey(date) : null;
     },
     sortValue: (row) => {
       const date = value(row.node);
-      return date ? toDateKey(date) : null;
+      return date ? sortKey(date) : null;
     },
     compact: "hidden",
     render: (row) => {
       const date = value(row.node);
       return (
         <DateText
-          dateKey={date ? toDateKey(date) : null}
+          dateKey={date ? dayKey(date) : null}
           className="text-right text-[0.75rem] text-ink-muted"
         />
       );
@@ -360,33 +366,22 @@ function calendarDateColumn(
   };
 }
 
+/** A date with no time of day — Start, End, Defer to, Actual start — read as the day it names. */
+function calendarDateColumn(
+  id: string,
+  label: string,
+  value: (node: OutlineNode) => Date | null,
+): ColumnDef<OutlineColumnCtx> {
+  return dateColumn(id, label, value, toDateKey, toDateKey);
+}
+
+/** A moment — Created, Modified — shown as the local day it happened on. */
 function instantDateColumn(
   id: string,
   label: string,
   value: (node: OutlineNode) => Date | null,
 ): ColumnDef<OutlineColumnCtx> {
-  return {
-    id,
-    label,
-    width: "7.5rem",
-    align: "right",
-    filterKind: "date",
-    filterValue: (row) => {
-      const date = value(row.node);
-      return date ? localDateKey(date) : null;
-    },
-    sortValue: (row) => value(row.node)?.getTime() ?? null,
-    compact: "hidden",
-    render: (row) => {
-      const date = value(row.node);
-      return (
-        <DateText
-          dateKey={date ? localDateKey(date) : null}
-          className="text-right text-[0.75rem] text-ink-muted"
-        />
-      );
-    },
-  };
+  return dateColumn(id, label, value, localDateKey, (date) => date.getTime());
 }
 
 export function actualStartColumn(): ColumnDef<OutlineColumnCtx> {
