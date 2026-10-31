@@ -66,24 +66,7 @@ export async function loadNote(
 
   const childCount = Number(raw.child_count);
   return {
-    id: raw.id as string,
-    parentId: (raw.parent_id as string | null) ?? null,
-    sortKey: raw.sort_key as string,
-    title: raw.title as string,
-    subject: raw.subject as string,
-    body: raw.body as string,
-    noteDate: raw.note_date ? new Date(raw.note_date as string) : null,
-    flag: oneOf(noteFlagEnum.enumValues, raw.flag, "notes.flag"),
-    contexts: (raw.contexts as string[] | null) ?? [],
-    collapsed: Boolean(raw.collapsed),
-    depth: 0,
-    nodeId: (raw.node_id as string | null) ?? null,
-    contactId: (raw.contact_id as string | null) ?? null,
-    contactName: null,
-    nodeName: (raw.node_name as string | null) ?? null,
-    nodeType: oneOfOrNull(nodeTypeEnum.enumValues, raw.node_type, "nodes.type"),
-    createdAt: new Date(raw.created_at as string),
-    updatedAt: new Date(raw.updated_at as string),
+    ...mapTreeRow({ ...raw, depth: 0 }),
     childCount,
     hasChildren: childCount > 0,
     // Detail load is for the drawer; collapse-hiding is a list concern.
