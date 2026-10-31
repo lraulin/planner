@@ -72,7 +72,7 @@ import { readerTodayKey } from "@/lib/schedule/readerZone";
 import type { InsightsAxis } from "@/lib/settings/finances";
 import type { FinanceFlowKind } from "@/db/schema";
 import { AgentError } from "./errors";
-import { optionalNumber, optionalString } from "./parse";
+import { optionalNumber, optionalOneOf, optionalString } from "./parse";
 import { pageBounds, paginate } from "./pagination";
 
 /** The tools run on Vercel (UTC), where the process clock's day ends at 8 PM Eastern. */
@@ -999,17 +999,7 @@ export async function saveSubscriptionTool(
     ...(id !== undefined ? { id } : {}),
     name,
     payeeIds: asStringList(args.payeeIds),
-    cadence: cadenceFromArgs(args),
-    expectedCents:
-      args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
-    anchorDate: args.anchorDate === null ? null : optionalString(args, "anchorDate"),
-    status: optionalString(args, "status") as
-      "active" | "paused" | "cancelled" | undefined,
-    url: optionalString(args, "url"),
-    scheduled: args.scheduled === undefined ? undefined : args.scheduled === true,
-    dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),
-    leadDays: optionalNumber(args, "leadDays"),
-    notes: optionalString(args, "notes"),
+    ...billTermsFromArgs(args),
     ...(args.cancelledOn !== undefined
       ? {
           cancelledOn:
@@ -1093,6 +1083,26 @@ function cadenceFromArgs(args: Record<string, unknown>): Cadence | undefined {
   return undefined;
 }
 
+/**
+ * A bill's terms from tool arguments, shared by upsert_bill and the legacy
+ * upsert_subscription: cadence, amount, schedule, status and notes. An explicit null
+ * clears a field; an absent one leaves it.
+ */
+function billTermsFromArgs(args: Record<string, unknown>) {
+  return {
+    cadence: cadenceFromArgs(args),
+    expectedCents:
+      args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
+    anchorDate: args.anchorDate === null ? null : optionalString(args, "anchorDate"),
+    status: optionalOneOf(args, "status", ["active", "paused", "cancelled"]),
+    url: optionalString(args, "url"),
+    scheduled: args.scheduled === undefined ? undefined : args.scheduled === true,
+    dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),
+    leadDays: optionalNumber(args, "leadDays"),
+    notes: optionalString(args, "notes"),
+  };
+}
+
 export async function upsertSubscriptionTool(
   userId: string,
   args: Record<string, unknown>,
@@ -1107,17 +1117,7 @@ export async function upsertSubscriptionTool(
     upsertBillEnvelope(userId, {
       name,
       payeeIds,
-      cadence: cadenceFromArgs(args),
-      expectedCents:
-        args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
-      anchorDate: args.anchorDate === null ? null : optionalString(args, "anchorDate"),
-      status: optionalString(args, "status") as
-        "active" | "paused" | "cancelled" | undefined,
-      url: optionalString(args, "url"),
-      scheduled: args.scheduled === undefined ? undefined : args.scheduled === true,
-      dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),
-      leadDays: optionalNumber(args, "leadDays"),
-      notes: optionalString(args, "notes"),
+      ...billTermsFromArgs(args),
     }),
   );
   const [row] = (await loadRecurringBills(userId)).filter(

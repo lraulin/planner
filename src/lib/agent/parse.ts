@@ -300,3 +300,17 @@ export function requireSomeField(input: Record<string, unknown>): void {
     throw new AgentError("validation", "Provide at least one field to update");
   }
 }
+
+/** A string argument that must be one of `allowed`, or undefined when absent. */
+export function optionalOneOf<const T extends string>(
+  args: Record<string, unknown>,
+  key: string,
+  allowed: readonly T[],
+): T | undefined {
+  const value = optionalString(args, key);
+  if (value === undefined) return undefined;
+  if (!(allowed as readonly string[]).includes(value)) {
+    throw new AgentError("validation", `${key} must be one of: ${allowed.join(", ")}`);
+  }
+  return value as T;
+}

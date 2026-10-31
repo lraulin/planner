@@ -34,6 +34,7 @@ import {
   parseNodeType,
   requireString,
   optionalExternalRef,
+  optionalOneOf,
 } from "./parse";
 import { filterOutlinePage, type SearchNodesFilter } from "./search";
 import { buildPathMap, iso, nodeDetailForAgent, nodeSummary } from "./serialize";
@@ -128,19 +129,6 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
       : null,
     weekAppointmentCount: schedule.occurrences.length,
   };
-}
-
-function optionalOneOf<const T extends string>(
-  args: Record<string, unknown>,
-  key: string,
-  allowed: readonly T[],
-): T | undefined {
-  const value = optionalString(args, key);
-  if (value === undefined) return undefined;
-  if (!(allowed as readonly string[]).includes(value)) {
-    throw new AgentError("validation", `${key} must be one of: ${allowed.join(", ")}`);
-  }
-  return value as T;
 }
 
 export async function searchNodes(userId: string, args: Record<string, unknown>) {
