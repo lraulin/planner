@@ -116,21 +116,30 @@ export function coverOverspending(params: {
   const coverable = Math.min(owed, source.balanceCents);
   if (coverable <= 0) return NO_EDIT;
 
+  return moveAssignment(
+    month.month,
+    { id: from.id, assignedCents: source.assignedCents },
+    { id: to.id, assignedCents: target.assignedCents },
+    coverable,
+    `Covered ${formatUsd(coverable)} of ${to.name} from ${from.name} ${onDay(todayKey)}`,
+  );
+}
+
+/** The edit that moves `cents` of assignment from one envelope to another within `month`. */
+function moveAssignment(
+  month: MonthKey,
+  from: { id: string; assignedCents: number },
+  to: { id: string; assignedCents: number },
+  cents: number,
+  note: string,
+): BudgetEdit {
   return {
     allocations: [
-      {
-        month: month.month,
-        categoryId: from.id,
-        amountCents: source.assignedCents - coverable,
-      },
-      {
-        month: month.month,
-        categoryId: to.id,
-        amountCents: target.assignedCents + coverable,
-      },
+      { month, categoryId: from.id, amountCents: from.assignedCents - cents },
+      { month, categoryId: to.id, amountCents: to.assignedCents + cents },
     ],
     buffered: null,
-    note: `Covered ${formatUsd(coverable)} of ${to.name} from ${from.name} ${onDay(todayKey)}`,
+    note,
   };
 }
 
@@ -159,22 +168,13 @@ export function transferBetweenCategories(params: {
   );
   if (moved <= 0) return NO_EDIT;
 
-  return {
-    allocations: [
-      {
-        month: month.month,
-        categoryId: from.id,
-        amountCents: source.assignedCents - moved,
-      },
-      {
-        month: month.month,
-        categoryId: to.id,
-        amountCents: target.assignedCents + moved,
-      },
-    ],
-    buffered: null,
-    note: `Reassigned ${formatUsd(moved)} from ${from.name} → ${to.name} ${onDay(todayKey)}`,
-  };
+  return moveAssignment(
+    month.month,
+    { id: from.id, assignedCents: source.assignedCents },
+    { id: to.id, assignedCents: target.assignedCents },
+    moved,
+    `Reassigned ${formatUsd(moved)} from ${from.name} → ${to.name} ${onDay(todayKey)}`,
+  );
 }
 
 /**

@@ -157,6 +157,27 @@ function linkValue(node: ScenarioGridNode): string {
   return "";
 }
 
+/** A line's monthly amount restated per pay period or per year: muted, a what-if. */
+function periodColumn(
+  id: string,
+  label: string,
+  width: string,
+  period: "payPeriodCents" | "yearlyCents",
+): ColumnDef<ScenariosColumnCtx, ScenarioGridNode> {
+  const cents = (node: ScenarioGridNode) => {
+    const monthly = monthlyOf(node);
+    return monthly === null ? null : periodAmounts(monthly)[period];
+  };
+  return {
+    id,
+    label,
+    width,
+    align: "right",
+    sortValue: (row) => cents(row.node),
+    render: (row) => money(cents(row.node), true),
+  };
+}
+
 export function scenarioColumns(): ColumnDef<ScenariosColumnCtx, ScenarioGridNode>[] {
   return [
     {
@@ -423,33 +444,7 @@ export function scenarioColumns(): ColumnDef<ScenariosColumnCtx, ScenarioGridNod
         );
       },
     },
-    {
-      id: "payPeriod",
-      label: "Pay period",
-      width: "7.5rem",
-      align: "right",
-      sortValue: (row) => {
-        const cents = monthlyOf(row.node);
-        return cents === null ? null : periodAmounts(cents).payPeriodCents;
-      },
-      render: (row) => {
-        const cents = monthlyOf(row.node);
-        return money(cents === null ? null : periodAmounts(cents).payPeriodCents, true);
-      },
-    },
-    {
-      id: "yearly",
-      label: "Year",
-      width: "8rem",
-      align: "right",
-      sortValue: (row) => {
-        const cents = monthlyOf(row.node);
-        return cents === null ? null : periodAmounts(cents).yearlyCents;
-      },
-      render: (row) => {
-        const cents = monthlyOf(row.node);
-        return money(cents === null ? null : periodAmounts(cents).yearlyCents, true);
-      },
-    },
+    periodColumn("payPeriod", "Pay period", "7.5rem", "payPeriodCents"),
+    periodColumn("yearly", "Year", "8rem", "yearlyCents"),
   ];
 }
