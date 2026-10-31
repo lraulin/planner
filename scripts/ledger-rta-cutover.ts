@@ -10,9 +10,6 @@
  * that may write. Before `--apply` on production, take a verified backup (`npm run backup:run`).
  */
 
-import { eq } from "drizzle-orm";
-import { db } from "../src/db";
-import { users } from "../src/db/schema";
 import { describeDatabaseUrl } from "../src/lib/db/target";
 import {
   applyLedgerOpeningCutover,
@@ -20,23 +17,8 @@ import {
 } from "../src/lib/finances/budget/openingCutover";
 import { openingSeedLabel } from "../src/lib/finances/budget/openingSeed";
 import type { LedgerSnapshot } from "../src/lib/finances/budget/membership";
-
-function argValue(flag: string): string | null {
-  const at = process.argv.indexOf(flag);
-  return at === -1 ? null : (process.argv[at + 1] ?? null);
-}
-
-function usd(cents: number): string {
-  return (cents / 100).toFixed(2);
-}
-
-async function userIdByEmail(email: string): Promise<string | null> {
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, email));
-  return user?.id ?? null;
-}
+import { runMain, usd } from "./cli";
+import { userFromArgs } from "./userArg";
 
 function sourceOf(account: OpeningCutoverAccount): string {
   if (!account.seed) return "already recorded, kept";
@@ -79,12 +61,7 @@ function printSnapshot(label: string, snap: LedgerSnapshot): void {
 
 async function main(): Promise<number> {
   console.log(`Database: ${describeDatabaseUrl(process.env.DATABASE_URL ?? "")}`);
-  const userArg = argValue("--user");
-  const userId = userArg?.includes("@") ? await userIdByEmail(userArg) : userArg;
-  if (userArg && !userId) {
-    console.error(`No user ${userArg} in this database.`);
-    return 2;
-  }
+  const userId = await userFromArgs();
   if (!userId) {
     console.error(
       "Usage: tsx scripts/ledger-rta-cutover.ts --user <uuid|email> [--apply]",
@@ -162,10 +139,4 @@ async function main(): Promise<number> {
   return 0;
 }
 
-main().then(
-  (code) => process.exit(code),
-  (error: unknown) => {
-    console.error(error);
-    process.exit(1);
-  },
-);
+runMain(main);

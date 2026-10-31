@@ -22,18 +22,11 @@
 
 import { and, eq } from "drizzle-orm";
 import { db } from "../src/db";
-import { bankAccountLinks, financeAccounts, users } from "../src/db/schema";
+import { bankAccountLinks, financeAccounts } from "../src/db/schema";
 import { describeDatabaseUrl } from "../src/lib/db/target";
 import { applyHistorySourceCutover } from "../src/lib/finances/historySourceCutover";
-
-function argValue(flag: string): string | null {
-  const at = process.argv.indexOf(flag);
-  return at === -1 ? null : (process.argv[at + 1] ?? null);
-}
-
-function usd(cents: number): string {
-  return (cents / 100).toFixed(2);
-}
+import { argValue, runMain, usd } from "./cli";
+import { userFromArgs } from "./userArg";
 
 async function listAccounts(userId: string): Promise<void> {
   const accounts = await db
@@ -60,22 +53,9 @@ async function listAccounts(userId: string): Promise<void> {
   }
 }
 
-async function userIdByEmail(email: string): Promise<string | null> {
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, email));
-  return user?.id ?? null;
-}
-
 async function main(): Promise<number> {
   console.log(`Database: ${describeDatabaseUrl(process.env.DATABASE_URL ?? "")}`);
-  const userArg = argValue("--user");
-  const userId = userArg?.includes("@") ? await userIdByEmail(userArg) : userArg;
-  if (userArg && !userId) {
-    console.error(`No user ${userArg} in this database.`);
-    return 2;
-  }
+  const userId = await userFromArgs();
   if (!userId) {
     console.error(
       "Usage: tsx scripts/history-source-cutover.ts --user <uuid|email> [--account <uuid> --to bank_page|simplefin] [--insert-missed] [--apply]",
@@ -136,10 +116,4 @@ async function main(): Promise<number> {
   return 0;
 }
 
-main().then(
-  (code) => process.exit(code),
-  (error: unknown) => {
-    console.error(error);
-    process.exit(1);
-  },
-);
+runMain(main);

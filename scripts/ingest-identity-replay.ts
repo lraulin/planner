@@ -32,6 +32,7 @@ import {
 import { DATE_TOLERANCE_DAYS } from "../src/lib/finances/liveFeedMatch";
 import { centsToNumericString, numericStringToCents } from "../src/lib/finances/money";
 import { shiftDateKey } from "../src/lib/schedule/geometry";
+import { runMain } from "./cli";
 
 const WINDOW_START = new Date("2026-09-10T00:00:00Z");
 const WINDOW_END = new Date("2026-09-14T00:00:00Z");
@@ -563,10 +564,4 @@ async function main(): Promise<number> {
   }
 }
 
-main().then(
-  (code) => process.exit(code),
-  (error: unknown) => {
-    console.error(error);
-    process.exit(1);
-  },
-);
+runMain(main);

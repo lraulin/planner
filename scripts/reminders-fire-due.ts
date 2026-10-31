@@ -14,6 +14,7 @@
 
 import { fireDue } from "../src/lib/reminders/arm";
 import { runDailySweep } from "../src/lib/reminders/sweep";
+import { runMain } from "./cli";
 
 function assertLocalDatabase(): void {
   const url = process.env.DATABASE_URL ?? "";
@@ -51,10 +52,4 @@ async function main(): Promise<number> {
   }
 }
 
-main().then(
-  (code) => process.exit(code),
-  (error: unknown) => {
-    console.error(error);
-    process.exit(1);
-  },
-);
+runMain(main);

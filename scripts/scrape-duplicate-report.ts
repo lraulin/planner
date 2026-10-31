@@ -13,15 +13,10 @@ import {
   scrapeDuplicateReport,
   formatScrapeDuplicateReport,
 } from "../src/lib/finances/scrapeDuplicateReport";
-
-function userIdFromArgv(argv: readonly string[]): string | null {
-  const at = argv.indexOf("--user");
-  if (at === -1) return null;
-  return argv[at + 1] ?? null;
-}
+import { argValue, runMain } from "./cli";
 
 async function main(): Promise<number> {
-  const userId = userIdFromArgv(process.argv);
+  const userId = argValue("--user");
   if (!userId) {
     console.error("Usage: tsx scripts/scrape-duplicate-report.ts --user <uuid>");
     return 2;
@@ -31,10 +26,4 @@ async function main(): Promise<number> {
   return 0;
 }
 
-main().then(
-  (code) => process.exit(code),
-  (error: unknown) => {
-    console.error(error);
-    process.exit(1);
-  },
-);
+runMain(main);

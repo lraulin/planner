@@ -30,6 +30,7 @@ import {
 import { redactSecrets } from "../src/lib/backup/redaction";
 import { restoreTest } from "../src/lib/backup/restore";
 import { retentionDryRun, runBackup } from "../src/lib/backup/run";
+import { argValue } from "./cli";
 
 async function main(): Promise<number> {
   const command = process.argv[2];
@@ -228,7 +229,7 @@ async function status(): Promise<number> {
 async function testRestore(args: string[]): Promise<number> {
   rejectUnknownArgsWithValue(args, "--file");
   const paths = macBackupPaths();
-  const selected = argValue(args, "--file");
+  const selected = argValue("--file", args);
   const generation = selected
     ? await readSelectedGeneration(path.resolve(selected))
     : (await discoverVerifiedGenerations(paths.destination))[0];
@@ -268,11 +269,6 @@ function rejectUnknownArgsWithValue(args: string[], valueFlag: string): void {
     if (!args[index + 1]) throw new Error(`${valueFlag} requires a path.`);
     index += 1;
   }
-}
-
-function argValue(args: string[], flag: string): string | null {
-  const index = args.indexOf(flag);
-  return index === -1 ? null : (args[index + 1] ?? null);
 }
 
 async function readStdin(): Promise<string> {

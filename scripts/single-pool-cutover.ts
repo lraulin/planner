@@ -8,15 +8,7 @@
  */
 
 import { applySinglePoolCutover } from "../src/lib/finances/budget/membership";
-
-function argValue(flag: string): string | null {
-  const at = process.argv.indexOf(flag);
-  return at === -1 ? null : (process.argv[at + 1] ?? null);
-}
-
-function usd(cents: number): string {
-  return (cents / 100).toFixed(2);
-}
+import { argValue, runMain, usd } from "./cli";
 
 async function main(): Promise<number> {
   const userId = argValue("--user");
@@ -57,10 +49,4 @@ async function main(): Promise<number> {
   return 0;
 }
 
-main().then(
-  (code) => process.exit(code),
-  (error: unknown) => {
-    console.error(error);
-    process.exit(1);
-  },
-);
+runMain(main);
