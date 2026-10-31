@@ -17,6 +17,7 @@ import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnAlign, ColumnDef } from "@/components/grid/columns";
 import { useRowSelected } from "@/components/grid/rowSelectedContext";
 import { FlagCell } from "./flags";
+import { TreeExpander } from "@/components/grid/TreeExpander";
 
 /**
  * Callbacks and rendering context the notes columns close over. Same shape as
@@ -271,26 +272,12 @@ function TitleCell({
 
   return (
     <div className="flex min-w-0 items-stretch self-stretch">
-      {Array.from({ length: depth }, (_, level) => (
-        <span key={level} aria-hidden className="spine" />
-      ))}
-
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleCollapsed();
-        }}
-        title={note.collapsed ? "Expand" : "Collapse"}
-        aria-label={note.collapsed ? "Expand" : "Collapse"}
-        tabIndex={-1}
-        className={[
-          "mr-1 ml-0.5 flex w-4 flex-none items-center justify-center text-[0.625rem] text-ink-faint",
-          showHierarchy && note.hasChildren ? "hover:text-ink" : "invisible",
-        ].join(" ")}
-      >
-        {note.collapsed ? "▶" : "▼"}
-      </button>
+      <TreeExpander
+        depth={depth}
+        collapsed={note.collapsed}
+        expandable={showHierarchy && note.hasChildren}
+        onToggle={onToggleCollapsed}
+      />
 
       {editing ? (
         <TitleEditor
