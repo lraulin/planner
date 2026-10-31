@@ -1,6 +1,11 @@
 import type { FinanceAccountKind } from "@/db/schema";
 import { dateKeyFromParts } from "@/lib/schedule/geometry";
-import { normalizeCsvHeader, parseCsvRowsWithLines } from "@/lib/csv/text";
+import {
+  normalizeCsvHeader,
+  parseCsvRowsWithLines,
+  csvCell,
+  csvHeaderIndex,
+} from "@/lib/csv/text";
 import { parseAmountCents } from "./money";
 import type {
   FinanceFeed,
@@ -112,19 +117,6 @@ export function parseCsvDate(raw: string): string | null {
 }
 
 /** Index every header cell by its normalised name. */
-function headerIndex(headerCells: readonly string[]): Map<string, number> {
-  const index = new Map<string, number>();
-  headerCells.forEach((cell, i) => {
-    const key = normalizeCsvHeader(cell);
-    if (!index.has(key)) index.set(key, i);
-  });
-  return index;
-}
-
-function cell(cells: readonly string[], index: number | undefined): string {
-  if (index === undefined) return "";
-  return (cells[index] ?? "").trim();
-}
 
 /**
  * Chase writes no account number anywhere in the file — the only identifier is the `9910` in
@@ -172,18 +164,18 @@ type RowParser = (
   | { ok: false; message: string };
 
 const parseChaseRow: RowParser = (cells, index) => {
-  const transactionDate = parseCsvDate(cell(cells, index.get("transactiondate")));
+  const transactionDate = parseCsvDate(csvCell(cells, index.get("transactiondate")));
   if (!transactionDate) {
     return {
       ok: false,
-      message: `Unreadable transaction date "${cell(cells, index.get("transactiondate"))}".`,
+      message: `Unreadable transaction date "${csvCell(cells, index.get("transactiondate"))}".`,
     };
   }
-  const amountCents = parseAmountCents(cell(cells, index.get("amount")));
+  const amountCents = parseAmountCents(csvCell(cells, index.get("amount")));
   if (amountCents === null) {
     return {
       ok: false,
-      message: `Unreadable amount "${cell(cells, index.get("amount"))}".`,
+      message: `Unreadable amount "${csvCell(cells, index.get("amount"))}".`,
     };
   }
 
@@ -193,28 +185,28 @@ const parseChaseRow: RowParser = (cells, index) => {
     accountKey: null,
     transaction: {
       transactionDate,
-      postedDate: parseCsvDate(cell(cells, index.get("postdate"))),
-      description: cell(cells, index.get("description")),
+      postedDate: parseCsvDate(csvCell(cells, index.get("postdate"))),
+      description: csvCell(cells, index.get("description")),
       // Chase's Amount is already signed the way we want: negative for a purchase.
       amountCents,
-      sourceCategory: cell(cells, index.get("category")),
-      memo: cell(cells, index.get("memo")),
+      sourceCategory: csvCell(cells, index.get("category")),
+      memo: csvCell(cells, index.get("memo")),
       balanceAfterCents: null,
     },
   };
 };
 
 const parseCapitalOneCardRow: RowParser = (cells, index) => {
-  const transactionDate = parseCsvDate(cell(cells, index.get("transactiondate")));
+  const transactionDate = parseCsvDate(csvCell(cells, index.get("transactiondate")));
   if (!transactionDate) {
     return {
       ok: false,
-      message: `Unreadable transaction date "${cell(cells, index.get("transactiondate"))}".`,
+      message: `Unreadable transaction date "${csvCell(cells, index.get("transactiondate"))}".`,
     };
   }
 
-  const debit = parseAmountCents(cell(cells, index.get("debit")));
-  const credit = parseAmountCents(cell(cells, index.get("credit")));
+  const debit = parseAmountCents(csvCell(cells, index.get("debit")));
+  const credit = parseAmountCents(csvCell(cells, index.get("credit")));
   if (debit === null && credit === null) {
     return { ok: false, message: "Row has neither a Debit nor a Credit amount." };
   }
@@ -227,13 +219,13 @@ const parseCapitalOneCardRow: RowParser = (cells, index) => {
 
   return {
     ok: true,
-    accountKey: cell(cells, index.get("cardno")) || null,
+    accountKey: csvCell(cells, index.get("cardno")) || null,
     transaction: {
       transactionDate,
-      postedDate: parseCsvDate(cell(cells, index.get("posteddate"))),
-      description: cell(cells, index.get("description")),
+      postedDate: parseCsvDate(csvCell(cells, index.get("posteddate"))),
+      description: csvCell(cells, index.get("description")),
       amountCents,
-      sourceCategory: cell(cells, index.get("category")),
+      sourceCategory: csvCell(cells, index.get("category")),
       memo: "",
       balanceAfterCents: null,
     },
@@ -241,23 +233,23 @@ const parseCapitalOneCardRow: RowParser = (cells, index) => {
 };
 
 const parseCapitalOneBankRow: RowParser = (cells, index) => {
-  const transactionDate = parseCsvDate(cell(cells, index.get("transactiondate")));
+  const transactionDate = parseCsvDate(csvCell(cells, index.get("transactiondate")));
   if (!transactionDate) {
     return {
       ok: false,
-      message: `Unreadable transaction date "${cell(cells, index.get("transactiondate"))}".`,
+      message: `Unreadable transaction date "${csvCell(cells, index.get("transactiondate"))}".`,
     };
   }
 
-  const magnitude = parseAmountCents(cell(cells, index.get("transactionamount")));
+  const magnitude = parseAmountCents(csvCell(cells, index.get("transactionamount")));
   if (magnitude === null) {
     return {
       ok: false,
-      message: `Unreadable amount "${cell(cells, index.get("transactionamount"))}".`,
+      message: `Unreadable amount "${csvCell(cells, index.get("transactionamount"))}".`,
     };
   }
 
-  const type = cell(cells, index.get("transactiontype")).toLowerCase();
+  const type = csvCell(cells, index.get("transactiontype")).toLowerCase();
   if (type !== "debit" && type !== "credit") {
     return { ok: false, message: `Unknown transaction type "${type || "(empty)"}".` };
   }
@@ -267,17 +259,17 @@ const parseCapitalOneBankRow: RowParser = (cells, index) => {
 
   return {
     ok: true,
-    accountKey: cell(cells, index.get("accountnumber")) || null,
+    accountKey: csvCell(cells, index.get("accountnumber")) || null,
     transaction: {
       transactionDate,
       // This feed reports one date only.
       postedDate: null,
-      description: cell(cells, index.get("transactiondescription")),
+      description: csvCell(cells, index.get("transactiondescription")),
       amountCents,
       // This feed has no category column at all.
       sourceCategory: "",
       memo: "",
-      balanceAfterCents: parseAmountCents(cell(cells, index.get("balance"))),
+      balanceAfterCents: parseAmountCents(csvCell(cells, index.get("balance"))),
     },
   };
 };
@@ -354,7 +346,7 @@ export function parseFinanceCsv(
     };
   }
 
-  const index = headerIndex(rows[0].cells);
+  const index = csvHeaderIndex(rows[0].cells);
   const parseRow = ROW_PARSERS[feed];
   const errors: RowError[] = [];
   const grouped = new Map<string, ParsedTransaction[]>();

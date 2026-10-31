@@ -219,3 +219,22 @@ export function parseCsvRowsWithLines(text: string): CsvLine[] {
 
   return rows;
 }
+
+/**
+ * Column positions by normalised header name, so a parser reads `amount` wherever the bank
+ * put it. A repeated header keeps its first position.
+ */
+export function csvHeaderIndex(headerCells: readonly string[]): Map<string, number> {
+  const index = new Map<string, number>();
+  headerCells.forEach((cell, i) => {
+    const key = normalizeCsvHeader(cell);
+    if (!index.has(key)) index.set(key, i);
+  });
+  return index;
+}
+
+/** The trimmed cell at `index`, or empty when the column is absent from this file. */
+export function csvCell(cells: readonly string[], index: number | undefined): string {
+  if (index === undefined) return "";
+  return (cells[index] ?? "").trim();
+}

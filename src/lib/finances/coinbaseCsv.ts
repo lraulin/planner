@@ -2,6 +2,8 @@ import {
   normalizeCsvHeader,
   parseCsvRows,
   parseCsvRowsWithLines,
+  csvCell,
+  csvHeaderIndex,
 } from "@/lib/csv/text";
 import { parseAmountCents } from "./money";
 import type {
@@ -47,20 +49,6 @@ export function looksLikeCoinbaseCsv(text: string): boolean {
     const present = new Set(row.map(normalizeCsvHeader));
     return HEADER_MARKERS.every((marker) => present.has(marker));
   });
-}
-
-function headerIndex(cells: readonly string[]): Map<string, number> {
-  const index = new Map<string, number>();
-  cells.forEach((cell, i) => {
-    const key = normalizeCsvHeader(cell);
-    if (!index.has(key)) index.set(key, i);
-  });
-  return index;
-}
-
-function cell(cells: readonly string[], index: number | undefined): string {
-  if (index === undefined) return "";
-  return (cells[index] ?? "").trim();
 }
 
 /** `2026-02-03 18:47:29 UTC` → `2026-02-03`. The calendar day Coinbase wrote, not local. */
@@ -145,7 +133,7 @@ export function parseCoinbaseCsv(
   const userRow = rows.find(({ cells }) => cells[0]?.trim() === "User");
   const externalKey = userRow?.cells[2]?.trim() || "coinbase";
 
-  const index = headerIndex(rows[headerAt].cells);
+  const index = csvHeaderIndex(rows[headerAt].cells);
   const errors: RowError[] = [];
   const drafts: Draft[] = [];
 
@@ -153,7 +141,7 @@ export function parseCoinbaseCsv(
     const cells = rows[i].cells;
     if (cells.every((value) => value.trim() === "")) continue;
     const rowNumber = rows[i].line;
-    const timestamp = cell(cells, index.get("timestamp"));
+    const timestamp = csvCell(cells, index.get("timestamp"));
     const transactionDate = dateFromTimestamp(timestamp);
     if (!transactionDate) {
       errors.push({
@@ -162,11 +150,11 @@ export function parseCoinbaseCsv(
       });
       continue;
     }
-    const type = cell(cells, index.get("transactiontype"));
-    const asset = cell(cells, index.get("asset"));
-    const quantity = cell(cells, index.get("quantitytransacted"));
-    const notes = cell(cells, index.get("notes"));
-    const id = cell(cells, index.get("id"));
+    const type = csvCell(cells, index.get("transactiontype"));
+    const asset = csvCell(cells, index.get("asset"));
+    const quantity = csvCell(cells, index.get("quantitytransacted"));
+    const notes = csvCell(cells, index.get("notes"));
+    const id = csvCell(cells, index.get("id"));
     if (!id) {
       errors.push({ row: rowNumber, message: "Row has no Coinbase id." });
       continue;
@@ -174,11 +162,11 @@ export function parseCoinbaseCsv(
 
     let amountCents = 0;
     if (/^withdrawal$/i.test(type)) {
-      const subtotal = parseAmountCents(cell(cells, index.get("subtotal")));
+      const subtotal = parseAmountCents(csvCell(cells, index.get("subtotal")));
       if (subtotal === null) {
         errors.push({
           row: rowNumber,
-          message: `Unreadable Subtotal "${cell(cells, index.get("subtotal"))}".`,
+          message: `Unreadable Subtotal "${csvCell(cells, index.get("subtotal"))}".`,
         });
         continue;
       }
