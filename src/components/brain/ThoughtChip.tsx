@@ -134,3 +134,43 @@ export function ThoughtChip({
     </div>
   );
 }
+
+/**
+ * One thought in a search listbox — the brain search and the add-link box: its type's
+ * colour, its name and, for a text match, the snippet that matched. Picks on mouse-down so
+ * the input keeps focus.
+ */
+export function ThoughtOption({
+  thought,
+  active,
+  onPick,
+}: {
+  thought: { name: string; color: number | null; snippet?: string };
+  active: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <li
+      role="option"
+      aria-selected={active}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        onPick();
+      }}
+      className={`flex min-h-tap cursor-pointer items-center gap-2 px-3 py-1.5 text-[0.875rem] ${
+        active ? "bg-select" : "hover:bg-surface-raised"
+      }`}
+    >
+      <span
+        className="size-2.5 flex-none rounded-full"
+        style={{ background: typeColor(thought.color) }}
+      />
+      <span className="truncate text-ink">{thought.name}</span>
+      {thought.snippet && (
+        <span className="truncate text-[0.75rem] text-ink-muted">
+          {thought.snippet}
+        </span>
+      )}
+    </li>
+  );
+}

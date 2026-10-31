@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { searchThoughtsAction } from "@/app/(shell)/library/brain/actions";
 import { BRAIN_SEARCH_ID } from "@/lib/brain/commands";
 import type { ThoughtRef, ThoughtSearchHit } from "@/lib/brain/types";
-import { typeColor } from "./ThoughtChip";
+import { ThoughtOption } from "./ThoughtChip";
 
 const DEBOUNCE_MS = 150;
 
@@ -108,29 +108,12 @@ export function ThoughtSearch({
             </li>
           )}
           {rows.map((hit, index) => (
-            <li
+            <ThoughtOption
               key={hit.id}
-              role="option"
-              aria-selected={index === current}
-              onMouseDown={(event) => {
-                event.preventDefault();
-                choose(index);
-              }}
-              className={`flex min-h-tap cursor-pointer items-center gap-2 px-3 py-1.5 text-[0.875rem] ${
-                index === current ? "bg-select" : "hover:bg-surface-raised"
-              }`}
-            >
-              <span
-                className="size-2.5 flex-none rounded-full"
-                style={{ background: typeColor(hit.color) }}
-              />
-              <span className="truncate text-ink">{hit.name}</span>
-              {hit.snippet && (
-                <span className="truncate text-[0.75rem] text-ink-muted">
-                  {hit.snippet}
-                </span>
-              )}
-            </li>
+              thought={hit}
+              active={index === current}
+              onPick={() => choose(index)}
+            />
           ))}
         </ul>
       )}

@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { searchThoughtsAction } from "@/app/(shell)/library/brain/actions";
 import type { LinkRelation } from "@/lib/brain/links";
 import type { ThoughtSearchHit } from "@/lib/brain/types";
-import { typeColor } from "./ThoughtChip";
+import { ThoughtOption } from "./ThoughtChip";
 
 const LABELS: Record<LinkRelation, string> = {
   child: "child",
@@ -121,29 +121,12 @@ export function AddLinkInput({
           className="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded border border-rule-strong bg-surface shadow-lg"
         >
           {shown.map((hit, index) => (
-            <li
+            <ThoughtOption
               key={hit.id}
-              role="option"
-              aria-selected={index === row}
-              onMouseDown={(event) => {
-                event.preventDefault();
-                commit(index);
-              }}
-              className={`flex min-h-tap cursor-pointer items-center gap-2 px-3 py-1.5 text-[0.875rem] ${
-                index === row ? "bg-select" : "hover:bg-surface-raised"
-              }`}
-            >
-              <span
-                className="size-2.5 flex-none rounded-full"
-                style={{ background: typeColor(hit.color) }}
-              />
-              <span className="truncate text-ink">{hit.name}</span>
-              {hit.snippet && (
-                <span className="truncate text-[0.75rem] text-ink-muted">
-                  {hit.snippet}
-                </span>
-              )}
-            </li>
+              thought={hit}
+              active={index === row}
+              onPick={() => commit(index)}
+            />
           ))}
           <li
             role="option"
