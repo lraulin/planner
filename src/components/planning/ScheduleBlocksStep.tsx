@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Draggable } from "@fullcalendar/interaction";
-import type { Appointment, WeeklyPlan } from "@/db/schema";
+import type { WeeklyPlan } from "@/db/schema";
 import type { SchedulePayload } from "@/lib/schedule/queries";
-import type { Occurrence } from "@/lib/schedule/recurrence";
 import type { WeeklyPlanPatch } from "@/lib/planning/mutations";
 import {
   findFreeSlot,
@@ -13,24 +12,16 @@ import {
   scheduledMinutesForProject,
 } from "@/lib/planning/blocks";
 import { selectProjectsForCommitment } from "@/lib/planning/review";
-import { atMinutes, fromDateKey, parseFloatingDateTime } from "@/lib/schedule/geometry";
+import { atMinutes } from "@/lib/schedule/geometry";
 import { draftFromCalendarSelect } from "@/lib/schedule/allDay";
-import { weekRange } from "@/lib/schedule/range";
 import { formatEffort } from "@/lib/tree/format";
 import { asyncHandler } from "@/lib/eventHandler";
-import {
-  createAppointmentAction,
-  deleteAppointmentAction,
-  rescheduleAppointmentAction,
-  setAppointmentCheckStateAction,
-  duplicateAppointmentAction,
-} from "@/app/(shell)/schedule/actions";
-import type { AppointmentCheck } from "@/db/schema";
+import { createAppointmentAction } from "@/app/(shell)/schedule/actions";
 import { WeekCalendar } from "@/components/schedule/WeekCalendar";
 import { AppointmentDrawer } from "@/components/schedule/AppointmentDrawer";
 import { TypeIcon } from "@/components/icons/TypeIcon";
-import type { DraftAppointment } from "@/components/schedule/ScheduleView";
 import type { StepContext } from "./types";
+import { useStepCalendar } from "./useStepCalendar";
 
 const BLOCK_SIZES = [30, 45, 60, 90, 120, 180];
 
@@ -43,30 +34,6 @@ type Props = {
   onScheduleChange: () => void;
   onError: (message: string) => void;
 };
-
-function hydrate(schedule: SchedulePayload) {
-  return {
-    charts: schedule.charts,
-    backgroundEvents: schedule.backgroundEvents.map((e) => ({
-      ...e,
-      start: parseFloatingDateTime(e.start),
-      end: parseFloatingDateTime(e.end),
-    })),
-    occurrences: schedule.occurrences.map((o) => ({
-      ...o,
-      startAt: new Date(o.startAt),
-      endAt: new Date(o.endAt),
-    })),
-    masters: schedule.appointments.map((a) => ({
-      ...a,
-      startAt: new Date(a.startAt),
-      endAt: new Date(a.endAt),
-      recurrenceUntil: a.recurrenceUntil ? new Date(a.recurrenceUntil) : null,
-      createdAt: new Date(a.createdAt),
-      updatedAt: new Date(a.updatedAt),
-    })),
-  };
-}
 
 /**
  * Step 5 — drag committed projects onto the week until remaining time hits zero.
@@ -81,23 +48,19 @@ export function ScheduleBlocksStep({
   onScheduleChange,
   onError,
 }: Props) {
-  // The wizard is always about one whole week, whatever width the calendar tab is on.
-  const week = weekRange(fromDateKey(weekKey));
-  const hydrated = hydrate(schedule);
-  const [occurrences, setOccurrences] = useState(hydrated.occurrences);
-  const [masters, setMasters] = useState(hydrated.masters);
-  const [backgroundEvents] = useState(hydrated.backgroundEvents);
-  const [editing, setEditing] = useState<Appointment | DraftAppointment | null>(null);
+  const {
+    week,
+    occurrences,
+    backgroundEvents,
+    editing,
+    setEditing,
+    handleCycleCheck,
+    handleEventDrop,
+    openOccurrence,
+    handleDelete,
+  } = useStepCalendar({ schedule, weekKey, onScheduleChange, onError });
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-
-  const [prevSchedule, setPrevSchedule] = useState(schedule);
-  if (schedule !== prevSchedule) {
-    setPrevSchedule(schedule);
-    const next = hydrate(schedule);
-    setOccurrences(next.occurrences);
-    setMasters(next.masters);
-  }
 
   const committedProjects = useMemo(() => {
     const leaf = selectProjectsForCommitment(ctx.nodes, { today: ctx.today });
@@ -226,77 +189,6 @@ export function ScheduleBlocksStep({
         Math.round((end.getTime() - start.getTime()) / 60_000) || duration,
       ),
     );
-  }
-
-  const handleCycleCheck = useCallback(
-    async (id: string, next: AppointmentCheck) => {
-      setOccurrences((prev) =>
-        prev.map((o) => (o.id === id ? { ...o, checkState: next } : o)),
-      );
-      const result = await setAppointmentCheckStateAction(id, next);
-      if (!result.ok) {
-        onError(result.error);
-        onScheduleChange();
-        return;
-      }
-      onScheduleChange();
-    },
-    [onError, onScheduleChange],
-  );
-
-  async function handleEventDrop(
-    id: string,
-    start: Date,
-    end: Date,
-    opts: { duplicate: boolean },
-  ) {
-    if (opts.duplicate) {
-      const result = await duplicateAppointmentAction(
-        id,
-        start.toISOString(),
-        end.toISOString(),
-      );
-      if (!result.ok) {
-        onError(result.error);
-        return;
-      }
-    } else {
-      const result = await rescheduleAppointmentAction(
-        id,
-        start.toISOString(),
-        end.toISOString(),
-        true,
-      );
-      if (!result.ok) {
-        onError(result.error);
-        return;
-      }
-    }
-    onScheduleChange();
-  }
-
-  function openOccurrence(occ: Occurrence) {
-    const master = masters.find((m) => m.id === occ.id);
-    if (master) setEditing(master);
-    else {
-      setEditing({
-        id: occ.id,
-        subject: occ.subject,
-        startAt: occ.startAt,
-        endAt: occ.endAt,
-        projectId: occ.projectId,
-      });
-    }
-  }
-
-  async function handleDelete(id: string) {
-    const result = await deleteAppointmentAction(id);
-    if (!result.ok) {
-      onError(result.error);
-      return;
-    }
-    setEditing(null);
-    onScheduleChange();
   }
 
   const selectedRemaining = selectedProjectId

@@ -15,11 +15,7 @@ import type { ScheduleWire } from "@/lib/tree/wireSlices";
 import { useOutline } from "@/components/grid/useOutline";
 import type { SchedulePayload, ScheduleOccurrence } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
-import {
-  fromDateKey,
-  localDateKey,
-  parseFloatingDateTime,
-} from "@/lib/schedule/geometry";
+import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { draftFromCalendarSelect } from "@/lib/schedule/allDay";
 import { isDateKey } from "@/lib/metrics/parse";
 import {
@@ -34,11 +30,10 @@ import {
   createAppointmentAction,
   createTimeChartAction,
   deleteAppointmentAction,
-  duplicateAppointmentAction,
-  rescheduleAppointmentAction,
   setAppointmentCheckStateAction,
   syncGoogleAction,
 } from "@/app/(shell)/schedule/actions";
+import { dropAppointment, hydrateSchedule } from "./schedulePayload";
 import { WeekCalendar } from "./WeekCalendar";
 import { AgendaGrid } from "./AgendaGrid";
 import { ProjectsRail } from "./ProjectsRail";
@@ -122,28 +117,9 @@ function hydrateDay(value: string): Date {
 /** Revive Date fields that RSC may have serialized as ISO strings. */
 function hydratePayload(initial: SchedulePayload) {
   return {
-    charts: initial.charts,
-    selectedChartId: initial.selectedChartId,
+    ...hydrateSchedule(initial),
     days: initial.days.map(hydrateDay),
     rangeEnd: hydrateDay(initial.rangeEnd),
-    backgroundEvents: initial.backgroundEvents.map((e) => ({
-      ...e,
-      start: parseFloatingDateTime(e.start),
-      end: parseFloatingDateTime(e.end),
-    })),
-    occurrences: initial.occurrences.map((o) => ({
-      ...o,
-      startAt: new Date(o.startAt),
-      endAt: new Date(o.endAt),
-    })),
-    masters: initial.appointments.map((a) => ({
-      ...a,
-      startAt: new Date(a.startAt),
-      endAt: new Date(a.endAt),
-      recurrenceUntil: a.recurrenceUntil ? new Date(a.recurrenceUntil) : null,
-      createdAt: new Date(a.createdAt),
-      updatedAt: new Date(a.updatedAt),
-    })),
   };
 }
 
@@ -447,27 +423,10 @@ export function ScheduleView({
     end: Date,
     opts: { duplicate: boolean },
   ) {
-    if (opts.duplicate) {
-      const result = await duplicateAppointmentAction(
-        id,
-        start.toISOString(),
-        end.toISOString(),
-      );
-      if (!result.ok) {
-        reportError(result.error);
-        return;
-      }
-    } else {
-      const result = await rescheduleAppointmentAction(
-        id,
-        start.toISOString(),
-        end.toISOString(),
-        true,
-      );
-      if (!result.ok) {
-        reportError(result.error);
-        return;
-      }
+    const result = await dropAppointment(id, start, end, opts);
+    if (!result.ok) {
+      reportError(result.error);
+      return;
     }
     refresh();
   }
