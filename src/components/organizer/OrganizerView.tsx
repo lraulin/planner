@@ -24,7 +24,12 @@ import {
 import { formatBindings, matchBindings } from "@/lib/commands/bindings";
 import { COMMIT_FORM } from "@/lib/commands/chords";
 import type { OrganizerOutcome } from "@/lib/organizer/types";
-import { fromDateKey, shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
+import {
+  fromDateKey,
+  shiftDateKey,
+  toDateKey,
+  localDateTimeValue,
+} from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { OutlineWire } from "@/lib/tree/wire";
 import { useOutline } from "@/components/grid/useOutline";
@@ -677,10 +682,5 @@ function defaultAppointmentTimes(now: Date): { start: string; end: string } {
   start.setHours(start.getHours() + 1);
   const end = new Date(start);
   end.setHours(end.getHours() + 1);
-  return { start: toLocalInputValue(start), end: toLocalInputValue(end) };
-}
-
-function toLocalInputValue(date: Date): string {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return { start: localDateTimeValue(start), end: localDateTimeValue(end) };
 }

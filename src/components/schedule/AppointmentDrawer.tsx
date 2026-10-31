@@ -26,7 +26,12 @@ import {
 } from "@/app/(shell)/schedule/actions";
 import { GOOGLE_EVENT_COLORS } from "@/lib/google/eventColors";
 import { googleCalendarEventUrl } from "@/lib/google/eventUrl";
-import { fromDateKey, toDateKey, WEEKDAY_LABELS } from "@/lib/schedule/geometry";
+import {
+  fromDateKey,
+  toDateKey,
+  WEEKDAY_LABELS,
+  localDateTimeValue,
+} from "@/lib/schedule/geometry";
 import { appointmentRecurrenceSummary } from "@/lib/schedule/recurrence";
 import {
   checkStateLabel,
@@ -47,11 +52,6 @@ type Props = {
   onSaved: () => void;
   onDelete: (id: string) => void;
 };
-
-function toLocalInputValue(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 function isFullAppointment(v: Appointment | DraftAppointment): v is Appointment {
   return "location" in v && "showAs" in v && "checkState" in v;
@@ -112,9 +112,9 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
   const [subject, setSubject] = useState(value.subject ?? "");
   const [location, setLocation] = useState(full ? value.location : "");
   const [startLocal, setStartLocal] = useState(
-    toLocalInputValue(new Date(value.startAt)),
+    localDateTimeValue(new Date(value.startAt)),
   );
-  const [endLocal, setEndLocal] = useState(toLocalInputValue(new Date(value.endAt)));
+  const [endLocal, setEndLocal] = useState(localDateTimeValue(new Date(value.endAt)));
   const [allDay, setAllDay] = useState(value.allDay ?? false);
   const [checkState, setCheckState] = useState<AppointmentCheck>(
     full ? value.checkState : "open",

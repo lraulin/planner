@@ -104,6 +104,15 @@ export function localDateKey(date: Date): string {
 }
 
 /**
+ * Local wall-clock minute of an **instant**, as a `datetime-local` input wants it:
+ * `2026-10-31T14:05`.
+ */
+export function localDateTimeValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${localDateKey(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/**
  * Calendar day of an **instant** in a named IANA zone.
  *
  * For server code with no reader to ask (agent tools): `localDateKey` there reads the process

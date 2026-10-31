@@ -11,6 +11,7 @@ import type {
   SessionInput,
   WorkoutSetView,
 } from "./types";
+import { localDateTimeValue } from "@/lib/schedule/geometry";
 
 /**
  * Client draft shapes for the session editor. Pure conversion lives here so
@@ -336,19 +337,13 @@ export function emptyDraftBlock(): DraftExercise {
   };
 }
 
-export function toLocalDateTimeInput(date: Date): string {
-  const d = new Date(date);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 /** Reopen an existing session: keep stored completion flags. */
 export function draftFromDetail(
   detail: SessionDetail,
   catalog: ExerciseSummary[],
 ): SessionDraft {
   return {
-    performedAt: toLocalDateTimeInput(detail.performedAt),
+    performedAt: localDateTimeValue(new Date(detail.performedAt)),
     title: detail.title,
     notes: detail.notes,
     durationMinutes:
@@ -397,7 +392,7 @@ export function planDraftFromDetail(detail: SessionDetail): SessionDraft {
   const groupIds = new Map(detail.groups.map((g) => [g.id, crypto.randomUUID()]));
   const source = draftFromDetail(detail, []);
   return {
-    performedAt: toLocalDateTimeInput(new Date()),
+    performedAt: localDateTimeValue(new Date()),
     title: source.title,
     notes: "",
     durationMinutes: "",

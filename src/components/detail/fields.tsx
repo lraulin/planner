@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { PriorityLetter } from "@/db/schema";
-import { toDateKey, fromDateKey } from "@/lib/schedule/geometry";
+import { toDateKey, fromDateKey, localDateTimeValue } from "@/lib/schedule/geometry";
 import {
   formatEffort,
   formatPriority,
@@ -527,11 +527,6 @@ export function DateField({
 }
 
 /** `YYYY-MM-DDTHH:mm` on the reader's own clock — what a `datetime-local` input speaks. */
-function toLocalDateTimeText(value: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
-}
-
 /**
  * An **instant** — a reminder — edited as a date and time on the reader's clock.
  *
@@ -557,7 +552,7 @@ export function DateTimeField({
   className?: string;
 }) {
   const id = useId();
-  const external = value ? toLocalDateTimeText(new Date(value)) : "";
+  const external = value ? localDateTimeValue(new Date(value)) : "";
   const [text, setText] = useState(external);
   // A new value from outside — the draft re-seeded after a save that auto-set the reminder —
   // replaces whatever was in the box.

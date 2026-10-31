@@ -42,7 +42,6 @@ import {
   planDraftFromDetail,
   setFromPrevious,
   setsFromHistory,
-  toLocalDateTimeInput,
   type DraftExercise,
   type DraftGroup,
   type DraftSet,
@@ -64,6 +63,7 @@ import { ExercisePicker } from "./ExercisePicker";
 import { RestTimer } from "./RestTimer";
 import { SetHeader, SetRow } from "./SetRow";
 import { TitlePicker } from "./TitlePicker";
+import { localDateTimeValue } from "@/lib/schedule/geometry";
 
 /**
  * Strength session drawer. Select catalog exercises (configure elsewhere);
@@ -118,7 +118,7 @@ export function SessionEditor({
       ? catalogProp.find((e) => e.id === seedExerciseId)
       : null;
     return {
-      performedAt: toLocalDateTimeInput(new Date()),
+      performedAt: localDateTimeValue(new Date()),
       title: "",
       notes: "",
       durationMinutes: "",
