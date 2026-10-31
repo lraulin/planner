@@ -1,16 +1,15 @@
 "use client";
 
 import type { ColumnDef } from "@/components/grid/columns";
-import { DateText } from "@/components/date/DateText";
 import { UrlLink } from "@/components/url/UrlLink";
 import { formatUsd } from "@/lib/finances/money";
 import { HOUSE_STATUS_LABELS, type HouseListRow } from "@/lib/houses/types";
 import { formatDriveTime, formatMiles } from "@/lib/houses/route";
 import { priorityOrderValue } from "@/lib/priority/order";
-import { localDateKey } from "@/lib/schedule/geometry";
 import { formatPriority } from "@/lib/tree/format";
 import { formatPostalAddress } from "@/lib/address";
 import { PlainTextCell, plainTextField } from "@/components/grid/PlainTextCell";
+import { updatedColumn } from "@/components/grid/updatedColumn";
 
 export type HousesColumnCtx = Record<string, never>;
 
@@ -356,19 +355,5 @@ export const housesColumns: ColumnDef<HousesColumnCtx, HouseListRow>[] = [
     compact: "hidden",
     ...plainTextField((node) => node.notes),
   },
-  {
-    id: "updated",
-    label: "Updated",
-    width: "7rem",
-    compact: "hidden",
-    filterKind: "date",
-    filterValue: (row) => localDateKey(row.node.updatedAt),
-    sortValue: (row) => row.node.updatedAt.getTime(),
-    render: (row) => (
-      <DateText
-        dateKey={localDateKey(row.node.updatedAt)}
-        className="tabular text-[0.8125rem] text-ink-muted"
-      />
-    ),
-  },
+  updatedColumn("hidden"),
 ];

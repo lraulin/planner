@@ -1,11 +1,10 @@
 "use client";
 
 import type { ColumnDef } from "@/components/grid/columns";
-import { DateText } from "@/components/date/DateText";
-import { localDateKey } from "@/lib/schedule/geometry";
 import { formatEffort } from "@/lib/tree/format";
 import type { ResourceListRow } from "@/lib/resources/types";
 import { PlainTextCell, plainTextField } from "@/components/grid/PlainTextCell";
+import { updatedColumn } from "@/components/grid/updatedColumn";
 
 export type ResourcesColumnCtx = Record<string, never>;
 
@@ -118,19 +117,5 @@ export const resourcesColumns: ColumnDef<ResourcesColumnCtx, ResourceListRow>[] 
     compact: "hidden",
     ...plainTextField((node) => node.description),
   },
-  {
-    id: "updated",
-    label: "Updated",
-    width: "7rem",
-    filterKind: "date",
-    filterValue: (row) => localDateKey(row.node.updatedAt),
-    sortValue: (row) => row.node.updatedAt.getTime(),
-    compact: "hidden",
-    render: (row) => (
-      <DateText
-        dateKey={localDateKey(row.node.updatedAt)}
-        className="tabular text-[0.8125rem] text-ink-muted"
-      />
-    ),
-  },
+  updatedColumn("hidden"),
 ];

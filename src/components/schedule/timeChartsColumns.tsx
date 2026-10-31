@@ -2,9 +2,8 @@
 
 import { TextCell } from "@/components/grid/cells";
 import type { ColumnDef } from "@/components/grid/columns";
-import { DateText } from "@/components/date/DateText";
-import { localDateKey } from "@/lib/schedule/geometry";
 import type { TimeChartListRow } from "@/lib/schedule/queries";
+import { updatedColumn } from "@/components/grid/updatedColumn";
 
 /**
  * Callbacks the Time Charts columns close over. Same shape as the Wish List columns: the
@@ -72,18 +71,5 @@ export const timeChartsColumns: ColumnDef<TimeChartsColumnCtx, TimeChartListRow>
       </span>
     ),
   },
-  {
-    id: "updated",
-    label: "Updated",
-    width: "7rem",
-    filterKind: "date",
-    filterValue: (row) => localDateKey(row.node.updatedAt),
-    sortValue: (row) => row.node.updatedAt.getTime(),
-    render: (row) => (
-      <DateText
-        dateKey={localDateKey(row.node.updatedAt)}
-        className="tabular text-[0.8125rem] text-ink-muted"
-      />
-    ),
-  },
+  updatedColumn(),
 ];

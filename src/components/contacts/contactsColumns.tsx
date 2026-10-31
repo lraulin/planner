@@ -2,9 +2,8 @@
 
 import type { ColumnDef } from "@/components/grid/columns";
 import type { ContactListRow } from "@/lib/contacts/types";
-import { DateText } from "@/components/date/DateText";
-import { localDateKey } from "@/lib/schedule/geometry";
 import { PlainTextCell, plainTextField } from "@/components/grid/PlainTextCell";
+import { updatedColumn } from "@/components/grid/updatedColumn";
 
 /**
  * The Contacts grid's columns. Read-only, unlike the other list grids: a contact's fields
@@ -140,19 +139,5 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
         </span>
       ) : null,
   },
-  {
-    id: "updated",
-    label: "Updated",
-    width: "7rem",
-    filterKind: "date",
-    filterValue: (row) => localDateKey(row.node.updatedAt),
-    sortValue: (row) => row.node.updatedAt.getTime(),
-    compact: "hidden",
-    render: (row) => (
-      <DateText
-        dateKey={localDateKey(row.node.updatedAt)}
-        className="tabular text-[0.8125rem] text-ink-muted"
-      />
-    ),
-  },
+  updatedColumn("hidden"),
 ];
