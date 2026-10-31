@@ -47,28 +47,9 @@ export function parseAchXml(xml: string): AchDocument {
   if (dbVer) databaseVersion = Number(dbVer[1]);
 
   let i = 0;
-  while (i < body.length) {
-    const open = body.indexOf("<", i);
-    if (open < 0) break;
-    if (body.startsWith("</", open)) {
-      i = open + 2;
-      continue;
-    }
-    if (body.startsWith("<?", open) || body.startsWith("<!", open)) {
-      const endDecl = body.indexOf(">", open);
-      i = endDecl < 0 ? body.length : endDecl + 1;
-      continue;
-    }
-
-    const tagMatch = /^<([A-Za-z_][\w.]*)\b([^>]*)>/.exec(body.slice(open));
-    if (!tagMatch) {
-      i = open + 1;
-      continue;
-    }
-
-    const tag = tagMatch[1];
-    const fullOpen = tagMatch[0];
-    const selfClosing = /\/>$/.test(fullOpen) || /\/\s*>$/.test(tagMatch[2] ?? "");
+  for (let next = nextOpenTag(body, i); next; next = nextOpenTag(body, i)) {
+    const { at: open, name: tag, tag: fullOpen, attrs } = next;
+    const selfClosing = /\/>$/.test(fullOpen) || /\/\s*>$/.test(attrs);
 
     if (SKIP_TAGS.has(tag) || tag.includes(":")) {
       // Skip namespaced leftovers.
@@ -105,6 +86,39 @@ export function parseAchXml(xml: string): AchDocument {
   return { majorDatabaseVersion, databaseVersion, tables };
 }
 
+/**
+ * The next element's opening tag at or after `from`, or null when there is none. Closing
+ * tags, `<?…?>` declarations and `<!…>` comments are stepped over, as is a `<` that does
+ * not start a well-formed tag.
+ */
+function nextOpenTag(
+  text: string,
+  from: number,
+): { at: number; name: string; tag: string; attrs: string } | null {
+  let i = from;
+  while (i < text.length) {
+    const open = text.indexOf("<", i);
+    if (open < 0) return null;
+    if (text.startsWith("</", open)) {
+      i = open + 2;
+      continue;
+    }
+    if (text.startsWith("<?", open) || text.startsWith("<!", open)) {
+      const endDecl = text.indexOf(">", open);
+      if (endDecl < 0) return null;
+      i = endDecl + 1;
+      continue;
+    }
+    const match = /^<([A-Za-z_][\w.]*)\b([^>]*)>/.exec(text.slice(open));
+    if (!match) {
+      i = open + 1;
+      continue;
+    }
+    return { at: open, name: match[1], tag: match[0], attrs: match[2] ?? "" };
+  }
+  return null;
+}
+
 /** Find `</tag>` that matches this open, allowing nested same-named elements. */
 function findMatchingClose(body: string, from: number, tag: string): number {
   const openPat = new RegExp(`<${tag}\\b`, "g");
@@ -139,26 +153,8 @@ function findMatchingClose(body: string, from: number, tag: string): number {
 function parseRow(inner: string): AchRow {
   const row: AchRow = {};
   let i = 0;
-  while (i < inner.length) {
-    const open = inner.indexOf("<", i);
-    if (open < 0) break;
-    if (inner.startsWith("</", open)) {
-      i = open + 2;
-      continue;
-    }
-    if (inner.startsWith("<?", open) || inner.startsWith("<!", open)) {
-      const endDecl = inner.indexOf(">", open);
-      i = endDecl < 0 ? inner.length : endDecl + 1;
-      continue;
-    }
-
-    const tagMatch = /^<([A-Za-z_][\w.]*)\b([^>]*)>/.exec(inner.slice(open));
-    if (!tagMatch) {
-      i = open + 1;
-      continue;
-    }
-    const field = tagMatch[1];
-    const fullOpen = tagMatch[0];
+  for (let next = nextOpenTag(inner, i); next; next = nextOpenTag(inner, i)) {
+    const { at: open, name: field, tag: fullOpen } = next;
     if (/\/>$/.test(fullOpen)) {
       row[field] = "";
       i = open + fullOpen.length;
