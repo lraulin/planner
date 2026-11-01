@@ -6,7 +6,7 @@
  * (`agent-os/specs/2026-08-24-1522-category-by-kind-and-history/` D3).
  */
 
-import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financePayees, financeTransactions } from "@/db/schema";
 import { categoryForNewTransaction } from "./autoCategory";
@@ -17,6 +17,67 @@ import type { FinanceExecutor } from "../dbExecutor";
 import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
 import { writeFinanceAuditEvent } from "../audit/writes";
 import { monthKeyOf } from "../budget/envelope";
+
+/**
+ * The rows a payee claim may file, over the payee and account joins: the caller's on-budget
+ * rows that are not internal transfers, whose payee claims an envelope they are not in yet.
+ */
+function claimableConditions(userId: string): SQL[] {
+  return [
+    eq(financeTransactions.userId, userId),
+    eq(financePayees.userId, userId),
+    eq(financeAccounts.userId, userId),
+    eq(financeAccounts.offBudget, false),
+    sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
+    sql`${financePayees.claimedBudgetCategoryId} is not null`,
+    sql`${financeTransactions.budgetCategoryId} is distinct from ${financePayees.claimedBudgetCategoryId}`,
+  ];
+}
+
+/** File each row into its envelope, one update per envelope; how many rows were filed. */
+async function fileRows(
+  executor: FinanceExecutor,
+  userId: string,
+  filings: readonly { id: string; categoryId: string }[],
+): Promise<number> {
+  const byCategory = new Map<string, string[]>();
+  for (const { id, categoryId } of filings) {
+    byCategory.set(categoryId, [...(byCategory.get(categoryId) ?? []), id]);
+  }
+  for (const [categoryId, ids] of byCategory) {
+    await executor
+      .update(financeTransactions)
+      .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          inArray(financeTransactions.id, ids),
+        ),
+      );
+  }
+  return filings.length;
+}
+
+/** Each row's envelope as it stands — the "after" an audit event records. */
+async function envelopesOf(
+  executor: FinanceExecutor,
+  userId: string,
+  ids: readonly string[],
+): Promise<{ id: string; budgetCategoryId: string | null }[]> {
+  if (ids.length === 0) return [];
+  return executor
+    .select({
+      id: financeTransactions.id,
+      budgetCategoryId: financeTransactions.budgetCategoryId,
+    })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        inArray(financeTransactions.id, [...ids]),
+      ),
+    );
+}
 
 /**
  * File claimed payees' on-budget charges into the envelope that claims them.
@@ -53,13 +114,7 @@ export async function applyPayeeClaims(
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
     .where(
       and(
-        eq(financeTransactions.userId, userId),
-        eq(financePayees.userId, userId),
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.offBudget, false),
-        sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
-        sql`${financePayees.claimedBudgetCategoryId} is not null`,
-        sql`${financeTransactions.budgetCategoryId} is distinct from ${financePayees.claimedBudgetCategoryId}`,
+        ...claimableConditions(userId),
         ...(options.uncategorizedOnly
           ? [isNull(financeTransactions.budgetCategoryId)]
           : []),
@@ -90,28 +145,15 @@ export async function applyPayeeClaims(
     ),
   );
 
-  const byCategory = new Map<string, string[]>();
-  for (const row of rows) {
-    if (!row.categoryId || refused.has(row.id)) continue;
-    const bucket = byCategory.get(row.categoryId) ?? [];
-    bucket.push(row.id);
-    byCategory.set(row.categoryId, bucket);
-  }
-
-  let moved = 0;
-  for (const [categoryId, ids] of byCategory) {
-    await executor
-      .update(financeTransactions)
-      .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          inArray(financeTransactions.id, ids),
-        ),
-      );
-    moved += ids.length;
-  }
-
+  const moved = await fileRows(
+    executor,
+    userId,
+    rows.flatMap((row) =>
+      row.categoryId && !refused.has(row.id)
+        ? [{ id: row.id, categoryId: row.categoryId }]
+        : [],
+    ),
+  );
   return { moved };
 }
 
@@ -137,16 +179,7 @@ export async function applyClaimedPayees(
       .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
       .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
       .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          eq(financePayees.userId, userId),
-          eq(financeAccounts.userId, userId),
-          eq(financeAccounts.offBudget, false),
-          sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
-          sql`${financePayees.claimedBudgetCategoryId} is not null`,
-          sql`${financeTransactions.budgetCategoryId} is distinct from ${financePayees.claimedBudgetCategoryId}`,
-          inArray(financePayees.id, [...payeeIds]),
-        ),
+        and(...claimableConditions(userId), inArray(financePayees.id, [...payeeIds])),
       );
     if (candidates.length === 0) return;
 
@@ -166,21 +199,11 @@ export async function applyClaimedPayees(
     };
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await applyPayeeClaims(userId, { payeeIds }, tx);
-    const afterRows = await tx
-      .select({
-        id: financeTransactions.id,
-        budgetCategoryId: financeTransactions.budgetCategoryId,
-      })
-      .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          inArray(
-            financeTransactions.id,
-            candidates.map((row) => row.id),
-          ),
-        ),
-      );
+    const afterRows = await envelopesOf(
+      tx,
+      userId,
+      candidates.map((row) => row.id),
+    );
     const beforeById = new Map(candidates.map((row) => [row.id, row]));
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await writeFinanceAuditEvent(tx, userId, {
@@ -282,7 +305,7 @@ export async function applyPayeeAutoCategories(
       .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
       .where(autoCategoryScope(userId, options));
 
-    const byCategory = new Map<string, string[]>();
+    const filings: { id: string; categoryId: string }[] = [];
     for (const row of rows) {
       // Anything still uncategorised here has already been offered to its claim by the call
       // above, so a claim that survives to this point is one a bill refused: the row falls
@@ -295,43 +318,15 @@ export async function applyPayeeAutoCategories(
         },
         { claimApplies: false },
       );
-      if (!categoryId) continue;
-      const bucket = byCategory.get(categoryId) ?? [];
-      bucket.push(row.id);
-      byCategory.set(categoryId, bucket);
+      if (categoryId) filings.push({ id: row.id, categoryId });
     }
 
-    let filled = claimed.moved;
-    for (const [categoryId, ids] of byCategory) {
-      await tx
-        .update(financeTransactions)
-        .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            inArray(financeTransactions.id, ids),
-          ),
-        );
-      filled += ids.length;
-    }
-    const afterRows =
-      candidates.length === 0
-        ? []
-        : await tx
-            .select({
-              id: financeTransactions.id,
-              budgetCategoryId: financeTransactions.budgetCategoryId,
-            })
-            .from(financeTransactions)
-            .where(
-              and(
-                eq(financeTransactions.userId, userId),
-                inArray(
-                  financeTransactions.id,
-                  candidates.map((row) => row.id),
-                ),
-              ),
-            );
+    const filled = claimed.moved + (await fileRows(tx, userId, filings));
+    const afterRows = await envelopesOf(
+      tx,
+      userId,
+      candidates.map((row) => row.id),
+    );
     const changed = afterRows.filter((row) => row.budgetCategoryId !== null);
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await writeFinanceAuditEvent(tx, userId, {
