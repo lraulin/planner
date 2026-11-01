@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
 import type { LineAmountSource } from "@/lib/finances/scenarios/amount";
 
@@ -26,16 +26,8 @@ export function AddFromSuppliesDialog({
   const matches = (text: string) =>
     needle === "" || text.toLocaleLowerCase().includes(needle);
 
-  const shownGroups = useMemo(
-    () => groups.filter((group) => matches(group.name)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [groups, needle],
-  );
-  const shownItems = useMemo(
-    () => items.filter((item) => matches(item.name)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, needle],
-  );
+  const shownGroups = groups.filter((group) => matches(group.name));
+  const shownItems = items.filter((item) => matches(item.name));
 
   const row =
     "flex min-h-tap w-full items-center justify-between gap-3 border-b border-rule px-3 py-2 text-left last:border-b-0 hover:bg-surface-raised md:min-h-0";

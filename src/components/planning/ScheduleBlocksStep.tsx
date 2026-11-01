@@ -48,6 +48,8 @@ export function ScheduleBlocksStep({
   onScheduleChange,
   onError,
 }: Props) {
+  // A useCallback over the plan's entries, so its identity changes exactly when they do.
+  const { entryFor } = ctx;
   const {
     week,
     occurrences,
@@ -65,16 +67,15 @@ export function ScheduleBlocksStep({
   const committedProjects = useMemo(() => {
     const leaf = selectProjectsForCommitment(ctx.nodes, { today: ctx.today });
     return leaf.filter((p) => {
-      const committed = ctx.entryFor(p.id).committedMinutes;
+      const committed = entryFor(p.id).committedMinutes;
       return committed != null && committed > 0;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.nodes, ctx.entries, ctx.today]);
+  }, [ctx.nodes, entryFor, ctx.today]);
 
   const remainingById = useMemo(() => {
     const map = new Map<string, number | null>();
     for (const p of committedProjects) {
-      const committed = ctx.entryFor(p.id).committedMinutes;
+      const committed = entryFor(p.id).committedMinutes;
       const scheduled = scheduledMinutesForProject(
         occurrences.map((o) => ({
           projectId: o.projectId,
@@ -86,8 +87,7 @@ export function ScheduleBlocksStep({
       map.set(p.id, remainingMinutesForProject(committed, scheduled));
     }
     return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [committedProjects, occurrences, ctx.entries]);
+  }, [committedProjects, occurrences, entryFor]);
 
   // External drag source for FullCalendar (same pattern as ProjectsRail).
   useEffect(() => {

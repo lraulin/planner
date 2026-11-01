@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { isComposingKey } from "@/lib/keyboard";
 
 const INPUT_CLASS =
@@ -85,20 +85,24 @@ export function TypeaheadSelect<T extends { id: string }>({
       ?.scrollIntoView({ block: "nearest" });
   }, [active, open]);
 
+  // Reads the latest query, items and props, so the listener need not re-subscribe on
+  // every keystroke.
+  const commitAndClose = useEffectEvent(() => {
+    commitOrRevert();
+    closeList();
+  });
+
   useEffect(() => {
     if (!open) return;
 
     function onPointerDown(event: PointerEvent) {
       if (rootRef.current?.contains(event.target as Node)) return;
-      commitOrRevert();
-      closeList();
+      commitAndClose();
     }
 
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-    // commitOrRevert reads the latest query and items through its closure.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, query, items, committedLabel, allowEmpty, value]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

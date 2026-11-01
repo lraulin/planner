@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef } from "react";
 import {
   useAllSettings,
   useCopyScope,
@@ -202,10 +202,7 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
   const dirty = hasViewOverrides(moduleSettings) || extrasDirty || scopeDirty;
 
   const adopted = useRef(false);
-  useEffect(() => {
-    if (adopted.current) return;
-    adopted.current = true;
-
+  const adoptLeftoverView = useEffectEvent(() => {
     const perViewScope = gridScope(`${moduleId}.${viewId}`);
     const workingScope = gridScope(moduleId);
     if (perViewScope !== workingScope) {
@@ -231,8 +228,12 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
         if (readScope(from) !== undefined) copyScope(from, scope);
       });
     }
-    // First paint only: later Reset must not re-adopt a leftover per-view row.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount adoption
+  });
+  // First paint only: later Reset must not re-adopt a leftover per-view row.
+  useEffect(() => {
+    if (adopted.current) return;
+    adopted.current = true;
+    adoptLeftoverView();
   }, []);
 
   const viewSnapshot = () =>

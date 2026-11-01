@@ -29,6 +29,8 @@ export function TimeBudgetStep({
   resources,
   onAvailableChange,
 }: Props) {
+  // A useCallback over the plan's entries, so its identity changes exactly when they do.
+  const { entryFor } = ctx;
   const projects = useMemo(
     () => selectProjectsForCommitment(ctx.nodes, { today: ctx.today }),
     [ctx.nodes, ctx.today],
@@ -39,11 +41,9 @@ export function TimeBudgetStep({
       projects.map((p) => ({
         nodeId: p.id,
         effortLeftMinutes: p.effortLeftRollupMinutes,
-        committedMinutes: ctx.entryFor(p.id).committedMinutes,
+        committedMinutes: entryFor(p.id).committedMinutes,
       })),
-    // entryFor is stable via entries identity for render purposes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [projects, ctx.entries],
+    [projects, entryFor],
   );
 
   const summary = useMemo(
@@ -166,7 +166,7 @@ export function TimeBudgetStep({
                   name={p.name || "Untitled"}
                   priority={p.priorityLetter}
                   effortLeft={p.effortLeftRollupMinutes}
-                  committed={ctx.entryFor(p.id).committedMinutes}
+                  committed={entryFor(p.id).committedMinutes}
                   available={availableMinutes}
                   onCommit={(minutes) =>
                     ctx.patchEntry(p.id, { committedMinutes: minutes, reviewed: true })

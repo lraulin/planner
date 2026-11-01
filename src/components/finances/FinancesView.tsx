@@ -5,6 +5,7 @@ import { NavLink } from "@/components/shell/NavLink";
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useId,
   useMemo,
   useState,
@@ -329,23 +330,27 @@ export function FinancesView({
     defaultsFor,
   });
   const gridState = views.grid;
-  useEffect(() => {
+  // Deep links are task entry points: they must open on their exact row set rather than
+  // inheriting an unrelated Register search from the previous visit.
+  const resetForDeepLink = useEffectEvent(() => {
     if (reportActive || views.base === "uncategorized" || views.base === "activity") {
       gridState.clearViewState();
     }
-    // Deep links are task entry points: they must open on their exact row set rather than
-    // inheriting an unrelated Register search from the previous visit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deep-link mount reset
-  }, []);
+  });
   useEffect(() => {
-    if (views.base !== "all") return;
+    resetForDeepLink();
+  }, []);
+  // Entering All Transactions reseeds Date. Skip when This Month is already in force
+  // (including the view default) so we do not materialise a blob and show Unsaved changes.
+  // Changing the band during the visit still works because this runs on entering "all",
+  // not on every filter change.
+  const reseedDate = useEffectEvent(() => {
     if (isThisMonthDateFilter(gridState.filters.date)) return;
     gridState.setFilter("date", THIS_MONTH_DATE_FILTER);
-    // Entering All Transactions reseeds Date. Skip when This Month is already
-    // in force (including the view default) so we do not materialise a blob and
-    // show Unsaved changes. Changing the band during the visit still works
-    // because this effect does not re-run while base stays "all".
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reseed on enter, not on setFilter identity
+  });
+  useEffect(() => {
+    if (views.base !== "all") return;
+    reseedDate();
   }, [views.base]);
   useEffect(() => {
     // Activity is URL-only. A valid activity URL must keep its params; leftover

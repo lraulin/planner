@@ -111,7 +111,8 @@ export function SessionEditor({
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [catalogProp, catalogOverlay]);
 
-  const initial = useMemo(() => {
+  // Seeds state on mount only; the drawer is remounted per open.
+  const [initial] = useState((): SessionDraft => {
     if (existing) return draftFromDetail(existing, catalogProp);
     if (copyFrom) return planDraftFromDetail(copyFrom);
     const seed = seedExerciseId
@@ -124,9 +125,8 @@ export function SessionEditor({
       durationMinutes: "",
       groups: [],
       exercises: [seed ? draftBlockFromCatalog(seed) : emptyDraftBlock()],
-    } satisfies SessionDraft;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [existing?.id, copyFrom?.id, seedExerciseId, open]);
+    };
+  });
 
   const [performedAt, setPerformedAt] = useState(initial.performedAt);
   const [title, setTitle] = useState(initial.title);
