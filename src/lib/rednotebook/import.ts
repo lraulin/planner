@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { notes } from "@/db/schema";
@@ -9,6 +9,7 @@ import { mapRedNotebookFiles } from "./map";
 import { normalizeBody } from "./markup";
 
 import { REDNOTEBOOK_SUBJECT } from "./types";
+import { lastRootNoteSortKey } from "@/lib/notes/mutations";
 
 export { REDNOTEBOOK_SUBJECT } from "./types";
 
@@ -124,17 +125,10 @@ export async function importRedNotebookFiles(params: {
         continue;
       }
 
-      const [last] = await tx
-        .select({ sortKey: notes.sortKey })
-        .from(notes)
-        .where(and(eq(notes.userId, userId), isNull(notes.parentId)))
-        .orderBy(sql`${notes.sortKey} desc`)
-        .limit(1);
-
       await tx.insert(notes).values({
         userId,
         parentId: null,
-        sortKey: between(last?.sortKey ?? null, null),
+        sortKey: between(await lastRootNoteSortKey(tx, userId), null),
         title: day.dateKey,
         subject: REDNOTEBOOK_SUBJECT,
         body: incoming,

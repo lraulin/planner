@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
@@ -28,6 +28,23 @@ import type { NotePosition } from "./types";
 
 function parentMatches(parentId: string | null) {
   return parentId === null ? isNull(notes.parentId) : eq(notes.parentId, parentId);
+}
+
+/**
+ * The sort key of the user's last top-level note, or null when there is none — what an
+ * importer appends after. One row, not the whole level `sortKeyFor` reads.
+ */
+export async function lastRootNoteSortKey(
+  tx: DbExecutor,
+  userId: string,
+): Promise<string | null> {
+  const [last] = await tx
+    .select({ sortKey: notes.sortKey })
+    .from(notes)
+    .where(and(eq(notes.userId, userId), isNull(notes.parentId)))
+    .orderBy(sql`${notes.sortKey} desc`)
+    .limit(1);
+  return last?.sortKey ?? null;
 }
 
 async function requireNote(tx: DbExecutor, userId: string, noteId: string) {

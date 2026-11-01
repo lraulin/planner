@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbTransaction } from "@/db/executor";
 import { notes } from "@/db/schema";
@@ -6,6 +6,7 @@ import { ownedRow } from "@/lib/db/owned";
 import { between } from "@/lib/tree/sortKey";
 import { mapTomboyFiles } from "./map";
 import type { ParsedTomboyNote, TomboyFile } from "./parse";
+import { lastRootNoteSortKey } from "@/lib/notes/mutations";
 
 export const TOMBOY_SUBJECT = "Tomboy";
 export const TOMBOY_SOURCE = "tomboy";
@@ -91,13 +92,7 @@ export async function importTomboyFiles(params: {
     let skipped = 0;
     const warnings = [...mapped.warnings];
 
-    const [lastRoot] = await tx
-      .select({ sortKey: notes.sortKey })
-      .from(notes)
-      .where(and(eq(notes.userId, userId), isNull(notes.parentId)))
-      .orderBy(sql`${notes.sortKey} desc`)
-      .limit(1);
-    let lastRootSortKey = lastRoot?.sortKey ?? null;
+    let lastRootSortKey = await lastRootNoteSortKey(tx, userId);
 
     for (const incoming of mapped.notes) {
       const existing = await findImportedNote(tx, userId, incoming.sourceId);

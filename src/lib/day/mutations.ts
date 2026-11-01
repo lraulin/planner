@@ -26,6 +26,7 @@ import { assertPlannableOn, effectiveShelfOf, endOfDay, setDayPlan } from "./syn
 import { shelfHolds } from "@/lib/tree/shelving";
 import { JOURNAL_SUBJECT } from "./types";
 import type { DayAssignment } from "./priority";
+import { lastRootNoteSortKey } from "@/lib/notes/mutations";
 
 /**
  * Writes for the daily task list.
@@ -474,19 +475,12 @@ export async function saveJournal(
     // An empty box is not an entry. Whitespace-only must not mint a day.
     if (body.trim() === "") return null;
 
-    const [last] = await tx
-      .select({ sortKey: notes.sortKey })
-      .from(notes)
-      .where(and(eq(notes.userId, userId), isNull(notes.parentId)))
-      .orderBy(sql`${notes.sortKey} desc`)
-      .limit(1);
-
     const [created] = await tx
       .insert(notes)
       .values({
         userId,
         parentId: null,
-        sortKey: between(last?.sortKey ?? null, null),
+        sortKey: between(await lastRootNoteSortKey(tx, userId), null),
         title: day,
         subject: JOURNAL_SUBJECT,
         body,
