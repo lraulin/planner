@@ -151,24 +151,28 @@ export function parseCalendarDate(
 const NODE_TYPES: readonly NodeType[] = nodeTypeEnum.enumValues;
 const NODE_STATES: readonly NodeState[] = nodeStateEnum.enumValues;
 
+/**
+ * `value` as one member of a closed set, or a validation error naming `field` and the
+ * choices — found by comparison, so the result is the set's own member and needs no cast.
+ */
+export function parseOneOf<const T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  field: string,
+  expected = `one of: ${allowed.join(", ")}`,
+): T {
+  const found = allowed.find((member) => member === value);
+  if (found === undefined)
+    throw new AgentError("validation", `${field} must be ${expected}`);
+  return found;
+}
+
 export function parseNodeType(value: unknown, field = "type"): NodeType {
-  if (typeof value !== "string" || !NODE_TYPES.includes(value as NodeType)) {
-    throw new AgentError(
-      "validation",
-      `${field} must be one of: ${NODE_TYPES.join(", ")}`,
-    );
-  }
-  return value as NodeType;
+  return parseOneOf(value, NODE_TYPES, field);
 }
 
 export function parseNodeState(value: unknown, field = "state"): NodeState {
-  if (typeof value !== "string" || !NODE_STATES.includes(value as NodeState)) {
-    throw new AgentError(
-      "validation",
-      `${field} must be one of: ${NODE_STATES.join(", ")}`,
-    );
-  }
-  return value as NodeState;
+  return parseOneOf(value, NODE_STATES, field);
 }
 
 export function parsePriorityLetter(
@@ -176,13 +180,7 @@ export function parsePriorityLetter(
   field = "priorityLetter",
 ): PriorityLetter | null {
   if (value === null) return null;
-  if (
-    typeof value !== "string" ||
-    !PRIORITY_LETTERS.includes(value as PriorityLetter)
-  ) {
-    throw new AgentError("validation", `${field} must be A, B, C, D, or null`);
-  }
-  return value as PriorityLetter;
+  return parseOneOf(value, PRIORITY_LETTERS, field, "A, B, C, D, or null");
 }
 
 export function optionalStringArray(
@@ -309,8 +307,5 @@ export function optionalOneOf<const T extends string>(
 ): T | undefined {
   const value = optionalString(args, key);
   if (value === undefined) return undefined;
-  if (!(allowed as readonly string[]).includes(value)) {
-    throw new AgentError("validation", `${key} must be one of: ${allowed.join(", ")}`);
-  }
-  return value as T;
+  return parseOneOf(value, allowed, key);
 }
