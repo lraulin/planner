@@ -492,7 +492,7 @@ function applyDesired(
     freed += envelope.assignedCents - desired;
   }
 
-  let available = Math.max(0, rta) + freed;
+  const available = Math.max(0, rta) + freed;
   const increases = participants
     .flatMap((envelope) => {
       const desired = desiredOf.get(envelope.id);
@@ -504,18 +504,31 @@ function applyDesired(
       compareUnderfunded(left.envelope, right.envelope, month, indexOf),
     );
 
-  const increaseLines: AssignLine[] = [];
-  for (const { envelope, desired } of increases) {
-    const want = desired - envelope.assignedCents;
-    const given = Math.min(want, available);
-    available -= given;
-    const status: AssignLineStatus =
-      given === want ? "full" : given > 0 ? "partial" : "skipped";
-    increaseLines.push(line(envelope, envelope.assignedCents + given, status));
-  }
+  const increaseLines = fundInOrder(
+    increases.map(({ envelope, desired }) => ({
+      envelope,
+      want: desired - envelope.assignedCents,
+    })),
+    available,
+  );
 
   const lines = [...reductions, ...increaseLines];
   return finish(option, lines, rta, listAmountCents, errors, todayKey);
+}
+
+/** Fund each ask in order from `available` until it runs out: full, partial, then skipped. */
+function fundInOrder(
+  asks: readonly { envelope: AssignEnvelope; want: number }[],
+  available: number,
+): AssignLine[] {
+  let left = available;
+  return asks.map(({ envelope, want }) => {
+    const given = Math.min(want, left);
+    left -= given;
+    const status: AssignLineStatus =
+      given === want ? "full" : given > 0 ? "partial" : "skipped";
+    return line(envelope, envelope.assignedCents + given, status);
+  });
 }
 
 function planUnderfunded(
@@ -552,17 +565,13 @@ function planUnderfunded(
     0,
   );
 
-  let available = Math.max(0, readyToAssignCents);
-  const lines: AssignLine[] = [];
-  for (const envelope of demandEnvelopes) {
-    const needed = neededById.get(envelope.id) ?? 0;
-    const want = gapOf(envelope, needed);
-    const given = Math.min(want, available);
-    available -= given;
-    const status: AssignLineStatus =
-      given === want ? "full" : given > 0 ? "partial" : "skipped";
-    lines.push(line(envelope, envelope.assignedCents + given, status));
-  }
+  const lines = fundInOrder(
+    demandEnvelopes.map((envelope) => ({
+      envelope,
+      want: gapOf(envelope, neededById.get(envelope.id) ?? 0),
+    })),
+    Math.max(0, readyToAssignCents),
+  );
 
   return finish(
     "underfunded",
