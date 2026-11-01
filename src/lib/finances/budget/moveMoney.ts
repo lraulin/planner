@@ -199,16 +199,21 @@ export type BudgetOperationOptions = {
   exact?: boolean;
 };
 
+/** The budget and one of its months, for an edit: refused before setup and outside the range. */
+async function loadEditableMonth(userId: string, monthKey: MonthKey) {
+  const data = await loadBudget(userId, monthKey);
+  if (!data.configured) throw new Error("Set the budget up first.");
+  const month = findMonth(data.months, monthKey);
+  if (!month) throw new Error("That month is outside the budget.");
+  return { data, month };
+}
+
 export async function performBudgetOperation(
   userId: string,
   operation: BudgetOperation,
   options: BudgetOperationOptions = {},
 ): Promise<{ applied: boolean; note: string }> {
-  const data = await loadBudget(userId, operation.month);
-  if (!data.configured) throw new Error("Set the budget up first.");
-
-  const month = findMonth(data.months, operation.month);
-  if (!month) throw new Error("That month is outside the budget.");
+  const { data, month } = await loadEditableMonth(userId, operation.month);
 
   const expenses = expenseRefs(data.categories);
 
@@ -427,10 +432,7 @@ export async function applyBudgetTemplates(
     categoryIds?: readonly string[];
   },
 ): Promise<{ applied: number; errors: string[] }> {
-  const data = await loadBudget(userId, params.month);
-  if (!data.configured) throw new Error("Set the budget up first.");
-  const month = findMonth(data.months, params.month);
-  if (!month) throw new Error("That month is outside the budget.");
+  const { data, month } = await loadEditableMonth(userId, params.month);
 
   const previous = findMonth(data.months, prevMonthKey(month.month));
   const envelopes = data.categories.map((category) => {
@@ -481,10 +483,7 @@ export async function assignBudget(
     categoryIds?: readonly string[];
   },
 ): Promise<{ applied: number; errors: string[] }> {
-  const data = await loadBudget(userId, params.month);
-  if (!data.configured) throw new Error("Set the budget up first.");
-  const month = findMonth(data.months, params.month);
-  if (!month) throw new Error("That month is outside the budget.");
+  const { data, month } = await loadEditableMonth(userId, params.month);
 
   const previous = findMonth(data.months, prevMonthKey(month.month));
   const snapshots = await loadBillSnapshots(userId, data.categories, data.todayKey);
