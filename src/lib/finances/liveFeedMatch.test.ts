@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  closestPairs,
   descriptionsOverlap,
   sharesBrandWord,
   selectNewAgainstMixed,
@@ -552,5 +553,35 @@ describe("sharesBrandWord", () => {
   it("needs a real word: short stamps and digits are not a brand", () => {
     expect(sharesBrandWord("SQ *ABC", "ABC STORE")).toBe(false);
     expect(sharesBrandWord("1234", "1234")).toBe(false);
+  });
+});
+
+describe("closestPairs", () => {
+  const a = { id: "a" };
+  const b = { id: "b" };
+  const x = { id: "x" };
+  const y = { id: "y" };
+
+  it("takes the nearest pair first and uses each row once", () => {
+    const pairs = closestPairs([
+      { left: a, right: x, distance: 2 },
+      { left: a, right: y, distance: 0 },
+      { left: b, right: y, distance: 1 },
+      { left: b, right: x, distance: 3 },
+    ]);
+    expect(pairs.map((p) => `${p.left.id}${p.right.id}`)).toEqual(["ay", "bx"]);
+  });
+
+  it("breaks a distance tie by id, whatever order the candidates came in", () => {
+    const forward = closestPairs([
+      { left: b, right: x, distance: 1 },
+      { left: a, right: x, distance: 1 },
+    ]);
+    const reversed = closestPairs([
+      { left: a, right: x, distance: 1 },
+      { left: b, right: x, distance: 1 },
+    ]);
+    expect(forward.map((p) => p.left.id)).toEqual(["a"]);
+    expect(reversed.map((p) => p.left.id)).toEqual(["a"]);
   });
 });

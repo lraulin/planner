@@ -182,6 +182,29 @@ function daysApart(a: string, b: string): number {
 export type DatedRow = { transactionDate: string; postedDate?: string | null };
 
 /**
+ * One-to-one pairs from candidate matches between two sets of rows: nearest dates first, ties
+ * broken by the two ids so the answer does not depend on input order, and each row on either
+ * side used at most once.
+ */
+export function closestPairs<L extends { id: string }, R extends { id: string }>(
+  candidates: { left: L; right: R; distance: number }[],
+): { left: L; right: R }[] {
+  candidates.sort(
+    (a, b) =>
+      a.distance - b.distance ||
+      `${a.left.id}:${a.right.id}`.localeCompare(`${b.left.id}:${b.right.id}`),
+  );
+  const usedLeft = new Set<string>();
+  const usedRight = new Set<string>();
+  return candidates.filter(({ left, right }) => {
+    if (usedLeft.has(left.id) || usedRight.has(right.id)) return false;
+    usedLeft.add(left.id);
+    usedRight.add(right.id);
+    return true;
+  });
+}
+
+/**
  * How far apart two records of one event are dated, across both axes each side stores.
  *
  * The minimum over every non-null pairing of `{transactionDate, postedDate}`: a bank page's

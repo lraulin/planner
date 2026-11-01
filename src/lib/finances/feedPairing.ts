@@ -24,6 +24,7 @@
  */
 
 import {
+  closestPairs,
   dateDistance,
   descriptionsOverlap,
   DATE_TOLERANCE_DAYS,
@@ -81,8 +82,7 @@ export function pairRows(
   descriptionsMatch: (a: string, b: string) => boolean = descriptionsOverlap,
   successorsOnly = false,
 ): RowPairing[] {
-  const candidates: { browser: PairableRow; feed: PairableRow; distance: number }[] =
-    [];
+  const candidates: { left: PairableRow; right: PairableRow; distance: number }[] = [];
 
   for (const browser of browserRows) {
     for (const feed of feedRows) {
@@ -91,31 +91,14 @@ export function pairRows(
       const distance = dateDistance(browser, feed);
       if (distance > DATE_TOLERANCE_DAYS) continue;
       if (!descriptionsMatch(browser.description, feed.description)) continue;
-      candidates.push({ browser, feed, distance });
+      candidates.push({ left: browser, right: feed, distance });
     }
   }
 
-  candidates.sort(
-    (left, right) =>
-      left.distance - right.distance ||
-      `${left.browser.id}:${left.feed.id}`.localeCompare(
-        `${right.browser.id}:${right.feed.id}`,
-      ),
-  );
-
-  const usedBrowser = new Set<string>();
-  const usedFeed = new Set<string>();
-  const pairings: RowPairing[] = [];
-
-  for (const candidate of candidates) {
-    if (usedBrowser.has(candidate.browser.id) || usedFeed.has(candidate.feed.id))
-      continue;
-    usedBrowser.add(candidate.browser.id);
-    usedFeed.add(candidate.feed.id);
-    pairings.push({ browserId: candidate.browser.id, feedId: candidate.feed.id });
-  }
-
-  return pairings;
+  return closestPairs(candidates).map(({ left, right }) => ({
+    browserId: left.id,
+    feedId: right.id,
+  }));
 }
 
 /**

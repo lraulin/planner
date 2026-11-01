@@ -18,7 +18,12 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { bankAccountLinks, financeAccounts, financeTransactions } from "@/db/schema";
-import { dateDistance, DATE_TOLERANCE_DAYS, type DatedRow } from "./liveFeedMatch";
+import {
+  closestPairs,
+  dateDistance,
+  DATE_TOLERANCE_DAYS,
+  type DatedRow,
+} from "./liveFeedMatch";
 import { formatUsd, numericStringToCents } from "./money";
 
 export type DuplicateCandidateRow = DatedRow & {
@@ -68,8 +73,8 @@ export function findScrapeDuplicates(
     );
 
     const candidates: {
-      scrape: DuplicateCandidateRow;
-      feed: DuplicateCandidateRow;
+      left: DuplicateCandidateRow;
+      right: DuplicateCandidateRow;
       distance: number;
     }[] = [];
     for (const scrape of scrapeRows) {
@@ -77,34 +82,20 @@ export function findScrapeDuplicates(
         if (scrape.amountCents !== feed.amountCents) continue;
         const distance = dateDistance(scrape, feed);
         if (distance > DATE_TOLERANCE_DAYS) continue;
-        candidates.push({ scrape, feed, distance });
+        candidates.push({ left: scrape, right: feed, distance });
       }
     }
 
-    candidates.sort(
-      (left, right) =>
-        left.distance - right.distance ||
-        `${left.scrape.id}:${left.feed.id}`.localeCompare(
-          `${right.scrape.id}:${right.feed.id}`,
-        ),
-    );
-
-    const usedScrape = new Set<string>();
-    const usedFeed = new Set<string>();
-    for (const candidate of candidates) {
-      if (usedScrape.has(candidate.scrape.id) || usedFeed.has(candidate.feed.id))
-        continue;
-      usedScrape.add(candidate.scrape.id);
-      usedFeed.add(candidate.feed.id);
+    for (const { left: scrape, right: feed } of closestPairs(candidates)) {
       matches.push({
-        accountId: candidate.scrape.accountId,
-        scrapeId: candidate.scrape.id,
-        scrapeDescription: candidate.scrape.description,
-        scrapeSource: candidate.scrape.externalSource ?? "",
-        feedId: candidate.feed.id,
-        feedDescription: candidate.feed.description,
-        amountCents: candidate.scrape.amountCents,
-        transactionDate: candidate.scrape.transactionDate,
+        accountId: scrape.accountId,
+        scrapeId: scrape.id,
+        scrapeDescription: scrape.description,
+        scrapeSource: scrape.externalSource ?? "",
+        feedId: feed.id,
+        feedDescription: feed.description,
+        amountCents: scrape.amountCents,
+        transactionDate: scrape.transactionDate,
       });
     }
   }
