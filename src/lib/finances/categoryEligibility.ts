@@ -1,4 +1,5 @@
 import { effectiveFlow, type FlowFields } from "./analytics";
+import { numericStringToCents } from "./money";
 
 export type CategoryEligibilityRow = {
   id: string;
@@ -24,6 +25,34 @@ export function categoryEligibilityRow(row: EligibilitySource): CategoryEligibil
     transferGroupId: row.transferGroupId ?? null,
     effectiveFlow: effectiveFlow(row),
   };
+}
+
+/** A ledger row as SQL returns it: the amount still the column's numeric text. */
+type LedgerEligibilitySource = Omit<EligibilitySource, "amountCents"> & {
+  amount: string;
+};
+
+/** {@link categoryEligibilityRow} for a row read straight from `finance_transactions`. */
+export function ledgerEligibilityRow(
+  row: LedgerEligibilitySource,
+): CategoryEligibilityRow {
+  return categoryEligibilityRow({
+    ...row,
+    amountCents: numericStringToCents(row.amount) ?? 0,
+  });
+}
+
+/**
+ * {@link categoryAssignableIds} over ledger rows that each carry their account's off-budget
+ * flag, so the caller need not build the off-budget set from the same rows.
+ */
+export function assignableLedgerIds(
+  rows: readonly (LedgerEligibilitySource & { accountOffBudget: boolean })[],
+): Set<string> {
+  return categoryAssignableIds(
+    rows.map(ledgerEligibilityRow),
+    new Set(rows.flatMap((row) => (row.accountOffBudget ? [row.accountId] : []))),
+  );
 }
 
 /**

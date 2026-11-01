@@ -6,9 +6,6 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financePayees, financeTransactions } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
-import { effectiveFlow } from "../analytics";
-import { categoryAssignableIds } from "../categoryEligibility";
-import { numericStringToCents } from "../money";
 import {
   inferredDefault,
   nextLearnedDefault,
@@ -16,6 +13,7 @@ import {
   type AutoCategoryMode,
   type CategoryChoice,
 } from "./autoCategory";
+import { assignableLedgerIds } from "@/lib/finances/categoryEligibility";
 
 async function latestEligibleChoices(
   userId: string,
@@ -49,20 +47,7 @@ async function latestEligibleChoices(
       desc(financeTransactions.id),
     );
 
-  const assignable = categoryAssignableIds(
-    rows.map((row) => ({
-      id: row.id,
-      accountId: row.accountId,
-      transactionDate: row.transactionDate,
-      transferGroupId: row.transferGroupId,
-      effectiveFlow: effectiveFlow({
-        derivedFlow: row.derivedFlow,
-        flowOverride: row.flowOverride,
-        amountCents: numericStringToCents(row.amount) ?? 0,
-      }),
-    })),
-    new Set(rows.flatMap((row) => (row.accountOffBudget ? [row.accountId] : []))),
-  );
+  const assignable = assignableLedgerIds(rows);
 
   return rows
     .filter((row) => assignable.has(row.id))

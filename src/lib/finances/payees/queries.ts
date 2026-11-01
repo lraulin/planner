@@ -14,8 +14,6 @@ import {
   financePayees,
   financeTransactions,
 } from "@/db/schema";
-import { effectiveFlow } from "../analytics";
-import { categoryAssignableIds } from "../categoryEligibility";
 import { numericStringToCents } from "../money";
 import {
   payeeEvidenceRows,
@@ -26,6 +24,7 @@ import type { AliasRow } from "./resolve";
 import { mergeClaimDecision } from "./merge";
 import type { AutoCategoryMode } from "./autoCategory";
 import { bankRows, moneyRows } from "../splitRows";
+import { assignableLedgerIds } from "@/lib/finances/categoryEligibility";
 
 /** Which envelope claims a payee, if any. At most one column, so at most one claim. */
 export type PayeeClaim = { id: string; name: string };
@@ -330,20 +329,7 @@ export async function payeeEvidenceForCategory(
       .where(eq(financeBudgetCategories.userId, userId)),
   ]);
 
-  const assignable = categoryAssignableIds(
-    charges.map((row) => ({
-      id: row.id,
-      accountId: row.accountId,
-      transactionDate: row.transactionDate,
-      transferGroupId: row.transferGroupId,
-      effectiveFlow: effectiveFlow({
-        derivedFlow: row.derivedFlow,
-        flowOverride: row.flowOverride,
-        amountCents: numericStringToCents(row.amount) ?? 0,
-      }),
-    })),
-    new Set(charges.flatMap((row) => (row.accountOffBudget ? [row.accountId] : []))),
-  );
+  const assignable = assignableLedgerIds(charges);
 
   const chargesByPayee = new Map<string, EvidenceCharge[]>();
   for (const row of charges) {

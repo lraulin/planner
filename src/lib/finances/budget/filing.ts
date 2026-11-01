@@ -2,18 +2,14 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financePayees, financeTransactions } from "@/db/schema";
 import { requireOwnedRow } from "@/lib/db/owned";
-import { effectiveFlow } from "../analytics";
-import {
-  categoryAssignableIds,
-  partitionCategoryTargets,
-} from "../categoryEligibility";
-import { numericStringToCents } from "../money";
+import { partitionCategoryTargets } from "../categoryEligibility";
 import { learnFromCategoryEdit } from "../payees/learn";
 import { moneyRows } from "../splitRows";
 import { monthKeyOf } from "./envelope";
 import { requireCategory } from "./structureRows";
 import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
 import { writeFinanceAuditEvent } from "../audit/writes";
+import { assignableLedgerIds } from "@/lib/finances/categoryEligibility";
 
 /**
  * Filing transactions into envelopes. Every write takes `userId` first and scopes on it, so a
@@ -95,24 +91,7 @@ export async function setTransactionBudgetCategories(
   const byId = new Map<string, (typeof rows)[number]>();
   for (const row of [...mates, ...rows]) byId.set(row.id, row);
   const assignmentRows = [...byId.values()];
-  const assignableSet = categoryAssignableIds(
-    assignmentRows.map((entry) => ({
-      id: entry.id,
-      accountId: entry.accountId,
-      transactionDate: entry.transactionDate,
-      transferGroupId: entry.transferGroupId,
-      effectiveFlow: effectiveFlow({
-        derivedFlow: entry.derivedFlow,
-        flowOverride: entry.flowOverride,
-        amountCents: numericStringToCents(entry.amount) ?? 0,
-      }),
-    })),
-    new Set(
-      assignmentRows.flatMap((entry) =>
-        entry.accountOffBudget ? [entry.accountId] : [],
-      ),
-    ),
-  );
+  const assignableSet = assignableLedgerIds(assignmentRows);
 
   const loadedIds = new Set(rows.map((row) => row.id));
   const { assignable, skipped } =

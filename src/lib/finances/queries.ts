@@ -25,7 +25,6 @@ import {
 } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import type { FinanceExecutor } from "./dbExecutor";
-import { effectiveFlow } from "./analytics";
 import { collapsedYearGroupIds } from "./grouping";
 import { THIS_MONTH_DATE_FILTER } from "./registerFields";
 import { numericStringToCents } from "./money";
@@ -55,6 +54,7 @@ import {
   type RegisterQueryContext,
   type RegisterRowBlock,
 } from "./registerQuery";
+import { ledgerEligibilityRow } from "@/lib/finances/categoryEligibility";
 
 /**
  * Reads for the register. Every one takes `userId` and scopes on it.
@@ -499,17 +499,7 @@ async function readAssignabilitySubset(
       desc(financeTransactions.createdAt),
       asc(financeTransactions.id),
     );
-  return rows.map((row) => ({
-    id: row.id,
-    accountId: row.accountId,
-    transactionDate: row.transactionDate,
-    transferGroupId: row.transferGroupId,
-    effectiveFlow: effectiveFlow({
-      flowOverride: row.flowOverride,
-      derivedFlow: row.derivedFlow,
-      amountCents: numericStringToCents(row.amount) ?? 0,
-    }),
-  }));
+  return rows.map(ledgerEligibilityRow);
 }
 
 function rowSetFor(query: RegisterQuery): { rowSet: "money" } | undefined {
