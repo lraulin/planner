@@ -261,8 +261,8 @@ export async function createJobTool(userId: string, args: Record<string, unknown
     jobInputFromArgs(args),
     optionalExternalRef(args),
   );
-  const payload = (await getJobTool(userId, { id: result.id })) as { job: unknown };
-  return { job: payload.job, created: result.created };
+  const { job } = await getJobTool(userId, { id: result.id });
+  return { job, created: result.created };
 }
 
 export async function updateJobTool(userId: string, args: Record<string, unknown>) {
@@ -304,10 +304,8 @@ export async function createResidenceTool(
     residenceInputFromArgs(args),
     optionalExternalRef(args),
   );
-  const payload = (await getResidenceTool(userId, { id: result.id })) as {
-    residence: unknown;
-  };
-  return { residence: payload.residence, created: result.created };
+  const { residence } = await getResidenceTool(userId, { id: result.id });
+  return { residence, created: result.created };
 }
 
 export async function updateResidenceTool(
@@ -363,10 +361,8 @@ export async function createLifeEventTool(
     { ...input, eventDate },
     optionalExternalRef(args),
   );
-  const payload = (await getLifeEventTool(userId, { id: result.id })) as {
-    event: unknown;
-  };
-  return { event: payload.event, created: result.created };
+  const { event } = await getLifeEventTool(userId, { id: result.id });
+  return { event, created: result.created };
 }
 
 export async function updateLifeEventTool(

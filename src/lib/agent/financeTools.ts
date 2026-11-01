@@ -11,6 +11,7 @@ import {
   rowsRange,
   type AnalyticsRow,
   type DateRange,
+  type CashFlowPoint,
 } from "@/lib/finances/analytics";
 import {
   loadBillCharges,
@@ -154,21 +155,7 @@ async function loadAnalyzed(userId: string, args: Record<string, unknown>) {
   return { rows, parsed, analysis };
 }
 
-function flattenFlowPoint(point: {
-  bucket: { key: string; label: string; startKey: string; endKey: string };
-  incomeCents: number;
-  spendCents: number;
-  fixedCents: number;
-  variableCents: number;
-  netCents: number;
-  externalTransferCents: number;
-  trailingSpendCents: number | null;
-  trailingIncomeCents: number | null;
-  trailingNetCents: number | null;
-  statementPositionCents?: number | null;
-  statementNetCents?: number | null;
-  residualCents?: number | null;
-}) {
+function flattenFlowPoint(point: CashFlowPoint) {
   return {
     key: point.bucket.key,
     label: point.bucket.label,

@@ -162,10 +162,7 @@ export async function createMetricTool(userId: string, args: Record<string, unkn
   };
 
   const result = await createMetricOnce(userId, input);
-  const payload = (await getMetricTool(userId, {
-    id: result.id,
-    entryLimit: 5,
-  })) as Record<string, unknown>;
+  const payload = await getMetricTool(userId, { id: result.id, entryLimit: 5 });
   return { ...payload, created: result.created };
 }
 

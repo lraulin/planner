@@ -147,8 +147,8 @@ export async function createHouseTool(userId: string, args: Record<string, unkno
   const input = houseInputFromArgs(args);
   input.external = optionalExternalRef(args);
   const result = await createHouseOnce(userId, input);
-  const payload = (await getHouseTool(userId, { id: result.id })) as { house: unknown };
-  return { house: payload.house, created: result.created };
+  const { house } = await getHouseTool(userId, { id: result.id });
+  return { house, created: result.created };
 }
 
 export async function updateHouseTool(userId: string, args: Record<string, unknown>) {

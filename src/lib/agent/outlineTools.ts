@@ -243,7 +243,7 @@ export async function createNodeTool(userId: string, args: Record<string, unknow
     await saveNodeDetail(userId, result.id, patch);
   }
 
-  const payload = (await getNode(userId, { id: result.id })) as Record<string, unknown>;
+  const payload = await getNode(userId, { id: result.id });
   return { ...payload, created: result.created };
 }
 
