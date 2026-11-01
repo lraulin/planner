@@ -19,16 +19,41 @@ import { writeFinanceAuditEvent } from "../audit/writes";
 import { monthKeyOf } from "../budget/envelope";
 
 /**
- * The rows a payee claim may file, over the payee and account joins: the caller's on-budget
- * rows that are not internal transfers, whose payee claims an envelope they are not in yet.
+ * The rows any automatic filing may touch, over the payee and account joins: the caller's
+ * on-budget rows that are not internal transfers.
  */
-function claimableConditions(userId: string): SQL[] {
+function fileableConditions(userId: string): SQL[] {
   return [
     eq(financeTransactions.userId, userId),
     eq(financePayees.userId, userId),
     eq(financeAccounts.userId, userId),
     eq(financeAccounts.offBudget, false),
     sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
+  ];
+}
+
+/** New rows only, or some payees' rows only, when the caller asks for that. */
+function narrowingConditions(options: {
+  createdSince?: Date;
+  payeeIds?: readonly string[];
+}): SQL[] {
+  return [
+    ...(options.createdSince
+      ? [gte(financeTransactions.createdAt, options.createdSince)]
+      : []),
+    ...(options.payeeIds && options.payeeIds.length > 0
+      ? [inArray(financePayees.id, [...options.payeeIds])]
+      : []),
+  ];
+}
+
+/**
+ * The rows a payee claim may file, over the payee and account joins: the caller's on-budget
+ * rows that are not internal transfers, whose payee claims an envelope they are not in yet.
+ */
+function claimableConditions(userId: string): SQL[] {
+  return [
+    ...fileableConditions(userId),
     sql`${financePayees.claimedBudgetCategoryId} is not null`,
     sql`${financeTransactions.budgetCategoryId} is distinct from ${financePayees.claimedBudgetCategoryId}`,
   ];
@@ -118,12 +143,7 @@ export async function applyPayeeClaims(
         ...(options.uncategorizedOnly
           ? [isNull(financeTransactions.budgetCategoryId)]
           : []),
-        ...(options.createdSince
-          ? [gte(financeTransactions.createdAt, options.createdSince)]
-          : []),
-        ...(options.payeeIds && options.payeeIds.length > 0
-          ? [inArray(financePayees.id, [...options.payeeIds])]
-          : []),
+        ...narrowingConditions(options),
       ),
     );
   if (rows.length === 0) return { moved: 0 };
@@ -236,18 +256,9 @@ function autoCategoryScope(
   options: { createdSince?: Date; payeeIds?: readonly string[] },
 ) {
   return and(
-    eq(financeTransactions.userId, userId),
-    eq(financePayees.userId, userId),
-    eq(financeAccounts.userId, userId),
-    eq(financeAccounts.offBudget, false),
+    ...fileableConditions(userId),
     isNull(financeTransactions.budgetCategoryId),
-    sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
-    ...(options.createdSince
-      ? [gte(financeTransactions.createdAt, options.createdSince)]
-      : []),
-    ...(options.payeeIds && options.payeeIds.length > 0
-      ? [inArray(financePayees.id, [...options.payeeIds])]
-      : []),
+    ...narrowingConditions(options),
   );
 }
 
