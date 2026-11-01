@@ -7,7 +7,12 @@ import {
   type HouseStatus,
   type PriorityLetter,
 } from "@/db/schema";
-import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import {
+  deleteOwnedRow,
+  findByExternalRef,
+  ownedRow,
+  requireOwnedRow,
+} from "@/lib/db/owned";
 import { letterRankEngine } from "@/lib/priority/letterRank";
 import { between } from "@/lib/tree/sortKey";
 import { DRIVE_DESTINATION } from "./destination";
@@ -251,11 +256,7 @@ export async function updateHouse(
 }
 
 export async function deleteHouse(userId: string, houseId: string): Promise<void> {
-  const deleted = await db
-    .delete(houses)
-    .where(ownedRow(houses, houseId, userId))
-    .returning({ id: houses.id });
-  if (deleted.length === 0) throw new Error("House not found.");
+  await deleteOwnedRow(db, houses, houseId, userId, "House not found.");
 }
 
 /**

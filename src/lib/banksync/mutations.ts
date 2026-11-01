@@ -19,7 +19,7 @@ import {
   financeAccounts,
   financeTransactions,
 } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { deleteOwnedRow, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { captureFinanceMoneyCheckpoint } from "@/lib/finances/audit/checkpoints";
 import type { FinanceAuditChange } from "@/lib/finances/audit/types";
@@ -165,11 +165,7 @@ export async function linkAccount(
 
 /** Drop a link. The register account and its rows stay; only the live feed stops. */
 export async function unlinkAccount(userId: string, linkId: string): Promise<void> {
-  const deleted = await db
-    .delete(bankAccountLinks)
-    .where(ownedRow(bankAccountLinks, linkId, userId))
-    .returning({ id: bankAccountLinks.id });
-  if (deleted.length === 0) throw new Error("Link not found.");
+  await deleteOwnedRow(db, bankAccountLinks, linkId, userId, "Link not found.");
 }
 
 /** Remove a connection. Cascades to its links; imported transactions are untouched. */
@@ -177,11 +173,13 @@ export async function deleteConnection(
   userId: string,
   connectionId: string,
 ): Promise<void> {
-  const deleted = await db
-    .delete(bankConnections)
-    .where(ownedRow(bankConnections, connectionId, userId))
-    .returning({ id: bankConnections.id });
-  if (deleted.length === 0) throw new Error("Bank connection not found.");
+  await deleteOwnedRow(
+    db,
+    bankConnections,
+    connectionId,
+    userId,
+    "Bank connection not found.",
+  );
 }
 
 /** Flag a connection as needing re-setup, or clear the flag. */

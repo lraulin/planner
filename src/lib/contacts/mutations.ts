@@ -2,7 +2,7 @@ import { and, asc, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { contactItems, contacts } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { deleteOwnedRow, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import type { ContactItemKind, PriorityLetter } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
 import { ensureInbox } from "@/lib/capture/mutations";
@@ -125,11 +125,7 @@ export async function deleteContact(userId: string, contactId: string): Promise<
       "Google-synced contacts are read-only here. Delete this contact in Google Contacts.",
     );
   }
-  const deleted = await db
-    .delete(contacts)
-    .where(ownedRow(contacts, contactId, userId))
-    .returning({ id: contacts.id });
-  if (deleted.length === 0) throw new Error("Contact not found.");
+  await deleteOwnedRow(db, contacts, contactId, userId, "Contact not found.");
 }
 
 /** The columns of one repeating sub-record a caller may write. */
@@ -262,11 +258,7 @@ export async function setPrimaryContactItem(
 }
 
 export async function deleteContactItem(userId: string, itemId: string): Promise<void> {
-  const deleted = await db
-    .delete(contactItems)
-    .where(ownedRow(contactItems, itemId, userId))
-    .returning({ id: contactItems.id });
-  if (deleted.length === 0) throw new Error("Contact detail not found.");
+  await deleteOwnedRow(db, contactItems, itemId, userId, "Contact detail not found.");
 }
 
 /** Swap an item with its neighbour of the same kind. */

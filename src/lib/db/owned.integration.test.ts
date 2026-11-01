@@ -3,7 +3,12 @@ import { db } from "@/db";
 import { jobs, masterContexts } from "@/db/schema";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
-import { findByExternalRef, findOwnedRow, requireOwnedRow } from "./owned";
+import {
+  deleteOwnedRow,
+  findByExternalRef,
+  findOwnedRow,
+  requireOwnedRow,
+} from "./owned";
 
 const describeDb = await describeWithDatabase("owned row lookups");
 const makeUser = testUsers("owned-row");
@@ -93,5 +98,27 @@ describeDb("findByExternalRef", () => {
     expect(
       await findByExternalRef(db, jobs, owner, { source: "other", id: external.id }),
     ).toBeNull();
+  });
+});
+
+describeDb("deleteOwnedRow", () => {
+  it("refuses another user's id and leaves the row, then deletes it for the owner", async () => {
+    const owner = await makeUser("Deleter");
+    const intruder = await makeUser("Other deleter");
+    const [row] = await db
+      .insert(masterContexts)
+      .values({ userId: owner, name: "@Errands", normalizedName: "errands" })
+      .returning({ id: masterContexts.id });
+
+    await expect(
+      deleteOwnedRow(db, masterContexts, row.id, intruder, "Context not found."),
+    ).rejects.toThrow("Context not found.");
+    expect(await findOwnedRow(db, masterContexts, row.id, owner)).not.toBeNull();
+
+    await deleteOwnedRow(db, masterContexts, row.id, owner, "Context not found.");
+    expect(await findOwnedRow(db, masterContexts, row.id, owner)).toBeNull();
+    await expect(
+      deleteOwnedRow(db, masterContexts, row.id, owner, "Context not found."),
+    ).rejects.toThrow("Context not found.");
   });
 });

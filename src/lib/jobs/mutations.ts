@@ -1,7 +1,12 @@
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { jobs, type ExternalRef } from "@/db/schema";
-import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import {
+  deleteOwnedRow,
+  findByExternalRef,
+  ownedRow,
+  requireOwnedRow,
+} from "@/lib/db/owned";
 import {
   dateKeyOrNull,
   moneyOrNull,
@@ -128,9 +133,5 @@ export async function updateJob(
 }
 
 export async function deleteJob(userId: string, jobId: string): Promise<void> {
-  const deleted = await db
-    .delete(jobs)
-    .where(ownedRow(jobs, jobId, userId))
-    .returning({ id: jobs.id });
-  if (deleted.length === 0) throw new Error("Job not found.");
+  await deleteOwnedRow(db, jobs, jobId, userId, "Job not found.");
 }

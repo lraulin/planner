@@ -6,7 +6,7 @@ import {
   reminderOccurrences,
   type ReminderOccurrence,
 } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { deleteOwnedRow, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { READER_TIME_ZONE } from "@/lib/schedule/readerZone";
 import { setAppointmentCheckState } from "@/lib/schedule/mutations";
 import {
@@ -196,11 +196,7 @@ export async function removePushSubscription(
   userId: string,
   id: string,
 ): Promise<void> {
-  const removed = await db
-    .delete(pushSubscriptions)
-    .where(ownedRow(pushSubscriptions, id, userId))
-    .returning({ id: pushSubscriptions.id });
-  if (removed.length === 0) throw new Error("Device not found.");
+  await deleteOwnedRow(db, pushSubscriptions, id, userId, "Device not found.");
 }
 
 /** Remove by endpoint — what the browser knows about itself when it turns notifications off. */

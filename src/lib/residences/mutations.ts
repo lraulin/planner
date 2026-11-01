@@ -1,7 +1,12 @@
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { residences, type ExternalRef } from "@/db/schema";
-import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import {
+  deleteOwnedRow,
+  findByExternalRef,
+  ownedRow,
+  requireOwnedRow,
+} from "@/lib/db/owned";
 import {
   dateKeyOrNull,
   moneyOrNull,
@@ -120,9 +125,5 @@ export async function deleteResidence(
   userId: string,
   residenceId: string,
 ): Promise<void> {
-  const deleted = await db
-    .delete(residences)
-    .where(ownedRow(residences, residenceId, userId))
-    .returning({ id: residences.id });
-  if (deleted.length === 0) throw new Error("Residence not found.");
+  await deleteOwnedRow(db, residences, residenceId, userId, "Residence not found.");
 }

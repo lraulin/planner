@@ -8,7 +8,12 @@ import {
   brainThoughtTypes,
   brainThoughts,
 } from "@/db/schema";
-import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import {
+  deleteOwnedRow,
+  findByExternalRef,
+  ownedRow,
+  requireOwnedRow,
+} from "@/lib/db/owned";
 import { canonicalLink, planLink, type LinkRelation } from "./links";
 
 /** Brain is standalone per-user data. Every write scopes by `userId`. */
@@ -212,11 +217,7 @@ export async function markThoughtVisited(userId: string, thoughtId: string) {
 }
 
 export async function deleteThought(userId: string, thoughtId: string) {
-  const rows = await db
-    .delete(brainThoughts)
-    .where(ownedRow(brainThoughts, thoughtId, userId))
-    .returning({ id: brainThoughts.id });
-  if (rows.length === 0) throw new Error("Thought not found.");
+  await deleteOwnedRow(db, brainThoughts, thoughtId, userId, "Thought not found.");
 }
 
 async function tagsIn(

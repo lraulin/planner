@@ -2,7 +2,12 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { metricEntries, metrics, nodes } from "@/db/schema";
-import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import {
+  deleteOwnedRow,
+  findByExternalRef,
+  ownedRow,
+  requireOwnedRow,
+} from "@/lib/db/owned";
 import type { PriorityLetter } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
 import { isMetricType } from "./derive";
@@ -167,11 +172,7 @@ export async function updateMetric(
 }
 
 export async function deleteMetric(userId: string, metricId: string): Promise<void> {
-  const result = await db
-    .delete(metrics)
-    .where(ownedRow(metrics, metricId, userId))
-    .returning({ id: metrics.id });
-  if (result.length === 0) throw new Error("Metric not found.");
+  await deleteOwnedRow(db, metrics, metricId, userId, "Metric not found.");
 }
 
 export async function createMetricEntry(

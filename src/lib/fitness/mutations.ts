@@ -8,7 +8,7 @@ import {
   workoutSessions,
   workoutSets,
 } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { deleteOwnedRow, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { between } from "@/lib/tree/sortKey";
 import { DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
 import { parseDurationSeconds } from "./duration";
@@ -389,10 +389,5 @@ export async function replaceSession(
 }
 
 export async function deleteSession(userId: string, sessionId: string): Promise<void> {
-  const result = await db
-    .delete(workoutSessions)
-    .where(ownedRow(workoutSessions, sessionId, userId))
-    .returning({ id: workoutSessions.id });
-
-  if (result.length === 0) throw new Error("Session not found.");
+  await deleteOwnedRow(db, workoutSessions, sessionId, userId, "Session not found.");
 }

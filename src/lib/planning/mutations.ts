@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { nodes, timeCharts, weeklyPlanEntries, weeklyPlans } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { deleteOwnedRow, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { startOfWeek } from "@/lib/schedule/geometry";
 
 /**
@@ -136,11 +136,7 @@ export async function setWeeklyPlanCompleted(
 }
 
 export async function deleteWeeklyPlan(userId: string, id: string) {
-  const deleted = await db
-    .delete(weeklyPlans)
-    .where(ownedRow(weeklyPlans, id, userId))
-    .returning({ id: weeklyPlans.id });
-  if (deleted.length === 0) throw new Error("Weekly plan not found.");
+  await deleteOwnedRow(db, weeklyPlans, id, userId, "Weekly plan not found.");
 }
 
 export type PlanEntryPatch = {

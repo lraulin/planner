@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { resources } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { deleteOwnedRow, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { assertContactOwned } from "@/lib/contacts/ownership";
 import { RESOURCE_MINUTE_FIELDS, type ResourceMinuteField } from "./capacity";
 import type { ResourceInput } from "./types";
@@ -108,9 +108,5 @@ export async function deleteResource(
   userId: string,
   resourceId: string,
 ): Promise<void> {
-  const deleted = await db
-    .delete(resources)
-    .where(ownedRow(resources, resourceId, userId))
-    .returning({ id: resources.id });
-  if (deleted.length === 0) throw new Error("Resource not found.");
+  await deleteOwnedRow(db, resources, resourceId, userId, "Resource not found.");
 }

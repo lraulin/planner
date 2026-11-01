@@ -94,3 +94,22 @@ export async function findByExternalRef(
     throw new Error("An imported row's id is not a string.");
   return { id: row.id };
 }
+
+/**
+ * Delete the caller's row with this id, or throw `notFound` — for another user's id as for
+ * one that never existed, so a delete cannot be used to learn which ids are real.
+ */
+export async function deleteOwnedRow(
+  executor: DbExecutor,
+  table: OwnedTable,
+  id: string,
+  userId: string,
+  notFound: string,
+): Promise<void> {
+  const source: PgTable = table;
+  const deleted = await executor
+    .delete(source)
+    .where(ownedRow(table, id, userId))
+    .returning({ id: table.id });
+  if (deleted.length === 0) throw new Error(notFound);
+}

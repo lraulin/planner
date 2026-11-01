@@ -12,7 +12,7 @@ import {
   type RecurrenceFrequency,
   type ShowAs,
 } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { deleteOwnedRow, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { syncWindow } from "@/lib/google/sync";
 import {
   pushCreate,
@@ -102,11 +102,7 @@ export async function renameTimeChart(userId: string, id: string, name: string) 
 }
 
 export async function deleteTimeChart(userId: string, id: string) {
-  const deleted = await db
-    .delete(timeCharts)
-    .where(ownedRow(timeCharts, id, userId))
-    .returning({ id: timeCharts.id });
-  if (deleted.length === 0) throw new Error("Time Chart not found.");
+  await deleteOwnedRow(db, timeCharts, id, userId, "Time Chart not found.");
 }
 
 export type TimeChartAreaInput = {
@@ -177,11 +173,7 @@ export async function updateTimeChartArea(
 }
 
 export async function deleteTimeChartArea(userId: string, id: string) {
-  const deleted = await db
-    .delete(timeChartAreas)
-    .where(ownedRow(timeChartAreas, id, userId))
-    .returning({ id: timeChartAreas.id });
-  if (deleted.length === 0) throw new Error("Time Chart area not found.");
+  await deleteOwnedRow(db, timeChartAreas, id, userId, "Time Chart area not found.");
 }
 
 export type AppointmentInput = {
@@ -502,11 +494,7 @@ export async function deleteAppointment(userId: string, id: string) {
   // locally first would strand an event in Google with nothing left here naming it.
   await pushDelete(userId, existing);
 
-  const deleted = await db
-    .delete(appointments)
-    .where(ownedRow(appointments, id, userId))
-    .returning({ id: appointments.id });
-  if (deleted.length === 0) throw new Error("Appointment not found.");
+  await deleteOwnedRow(db, appointments, id, userId, "Appointment not found.");
   await rearmReminders(userId, [{ kind: "appointment", id }]);
 }
 

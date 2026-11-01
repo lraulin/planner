@@ -3,7 +3,12 @@ import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { notes, type NewNote, type NoteFlag } from "@/db/schema";
-import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import {
+  deleteOwnedRow,
+  findByExternalRef,
+  ownedRow,
+  requireOwnedRow,
+} from "@/lib/db/owned";
 import {
   indentParentId,
   keyAtPosition,
@@ -230,12 +235,7 @@ export async function updateNote(
 
 /** Deletes a note. Its descendants cascade. */
 export async function deleteNote(userId: string, noteId: string): Promise<void> {
-  const deleted = await db
-    .delete(notes)
-    .where(ownedRow(notes, noteId, userId))
-    .returning({ id: notes.id });
-
-  if (deleted.length === 0) throw new Error("Note not found.");
+  await deleteOwnedRow(db, notes, noteId, userId, "Note not found.");
 }
 
 export async function setNoteCollapsed(

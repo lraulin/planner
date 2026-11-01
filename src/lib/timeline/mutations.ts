@@ -1,6 +1,11 @@
 import { db } from "@/db";
 import { lifeEvents, type ExternalRef } from "@/db/schema";
-import { findByExternalRef, ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import {
+  deleteOwnedRow,
+  findByExternalRef,
+  ownedRow,
+  requireOwnedRow,
+} from "@/lib/db/owned";
 import { patchText, requireDateKey } from "@/lib/history/fields";
 import type { LifeEventInput } from "./types";
 
@@ -78,9 +83,5 @@ export async function updateLifeEvent(
 }
 
 export async function deleteLifeEvent(userId: string, eventId: string): Promise<void> {
-  const deleted = await db
-    .delete(lifeEvents)
-    .where(ownedRow(lifeEvents, eventId, userId))
-    .returning({ id: lifeEvents.id });
-  if (deleted.length === 0) throw new Error("Event not found.");
+  await deleteOwnedRow(db, lifeEvents, eventId, userId, "Event not found.");
 }
