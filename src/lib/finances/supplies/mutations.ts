@@ -7,7 +7,7 @@ import {
   financeSupplyOptions,
   type SupplyRateBasis,
 } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { deleteOwnedRow, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { after, first } from "@/lib/tree/sortKey";
 import { parsePackCount } from "./packSize";
 import { listAmazonRepeatPurchases, listSupplyItems } from "./queries";
@@ -228,10 +228,13 @@ export async function deleteSupplyGroup(
   userId: string,
   groupId: string,
 ): Promise<void> {
-  await requireGroup(userId, groupId);
-  await db
-    .delete(financeSupplyGroups)
-    .where(ownedRow(financeSupplyGroups, groupId, userId));
+  await deleteOwnedRow(
+    db,
+    financeSupplyGroups,
+    groupId,
+    userId,
+    "That supply group does not exist.",
+  );
 }
 
 /** What typing in the Group cell does: blank ungroups, anything else picks or creates. */
@@ -291,10 +294,13 @@ export async function updateSupplyItem(
 
 /** Cascades to its options — an offer for a thing you no longer buy prices nothing. */
 export async function deleteSupplyItem(userId: string, itemId: string): Promise<void> {
-  await requireSupplyItem(userId, itemId);
-  await db
-    .delete(financeSupplyItems)
-    .where(ownedRow(financeSupplyItems, itemId, userId));
+  await deleteOwnedRow(
+    db,
+    financeSupplyItems,
+    itemId,
+    userId,
+    "That supply item does not exist.",
+  );
 }
 
 /**
@@ -374,10 +380,13 @@ export async function deleteSupplyOption(
   userId: string,
   optionId: string,
 ): Promise<void> {
-  await requireSupplyOption(userId, optionId);
-  await db
-    .delete(financeSupplyOptions)
-    .where(ownedRow(financeSupplyOptions, optionId, userId));
+  await deleteOwnedRow(
+    db,
+    financeSupplyOptions,
+    optionId,
+    userId,
+    "That supply option does not exist.",
+  );
 }
 
 /**

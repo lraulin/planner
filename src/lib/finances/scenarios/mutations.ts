@@ -12,7 +12,12 @@ import {
   SCENARIO_LINE_KINDS,
   type ScenarioLineKind,
 } from "@/db/schema";
-import { ownedParentOf, ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import {
+  deleteOwnedRow,
+  ownedParentOf,
+  ownedRow,
+  requireOwnedRow,
+} from "@/lib/db/owned";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { between, after, compare, first } from "@/lib/tree/sortKey";
 import {
@@ -226,10 +231,7 @@ export async function deleteScenario(
   userId: string,
   scenarioId: string,
 ): Promise<void> {
-  await requireScenario(userId, scenarioId);
-  await db
-    .delete(financeScenarios)
-    .where(ownedRow(financeScenarios, scenarioId, userId));
+  await deleteOwnedRow(db, financeScenarios, scenarioId, userId, NOT_YOURS.scenario);
 }
 
 /**
@@ -535,10 +537,7 @@ export async function updateLine(
 
 /** Cascades to its sub-lines. */
 export async function deleteLine(userId: string, lineId: string): Promise<void> {
-  await requireLine(userId, lineId);
-  await db
-    .delete(financeScenarioLines)
-    .where(ownedRow(financeScenarioLines, lineId, userId));
+  await deleteOwnedRow(db, financeScenarioLines, lineId, userId, NOT_YOURS.line);
 }
 
 /** Whether `candidateId` is `lineId` or sits beneath it — a line cannot move into itself. */

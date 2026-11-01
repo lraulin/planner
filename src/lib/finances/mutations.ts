@@ -11,7 +11,7 @@ import {
   type FinanceAccountKind,
   type FinanceFlowKind,
 } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { deleteOwnedRow, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import * as sortKey from "@/lib/tree/sortKey";
 import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
@@ -426,10 +426,13 @@ export async function deletePaymentResolution(
   userId: string,
   resolutionId: string,
 ): Promise<void> {
-  await requirePaymentResolution(userId, resolutionId);
-  await db
-    .delete(financePaymentResolutions)
-    .where(ownedRow(financePaymentResolutions, resolutionId, userId));
+  await deleteOwnedRow(
+    db,
+    financePaymentResolutions,
+    resolutionId,
+    userId,
+    "Payment resolution not found.",
+  );
 }
 
 export type AccountEdit = {
