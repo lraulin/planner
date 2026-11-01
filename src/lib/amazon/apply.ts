@@ -230,12 +230,12 @@ export type AmazonChargeCandidate = {
   dateMismatch: boolean;
 };
 
-export async function listAmazonChargeCandidates(
-  userId: string,
-  chargeId: string,
-): Promise<AmazonChargeCandidate[]> {
-  const charge = await requireOwnedCharge(userId, chargeId);
-  const rows = await db
+/**
+ * The register rows a card charge could be: every top-level transaction — a split's
+ * children are matched through their parent — with what matching reads.
+ */
+function loadChargeCandidateRows(userId: string) {
+  return db
     .select({
       id: financeTransactions.id,
       accountId: financeTransactions.accountId,
@@ -250,6 +250,14 @@ export async function listAmazonChargeCandidates(
     .where(
       and(eq(financeTransactions.userId, userId), isNull(financeTransactions.parentId)),
     );
+}
+
+export async function listAmazonChargeCandidates(
+  userId: string,
+  chargeId: string,
+): Promise<AmazonChargeCandidate[]> {
+  const charge = await requireOwnedCharge(userId, chargeId);
+  const rows = await loadChargeCandidateRows(userId);
   const chargeView = {
     paymentId: charge.amazonPaymentId,
     date: charge.paymentDate ?? "",
@@ -566,24 +574,7 @@ async function loadPreviewState(
         })
         .from(financeAccounts)
         .where(eq(financeAccounts.userId, userId)),
-      db
-        .select({
-          id: financeTransactions.id,
-          accountId: financeTransactions.accountId,
-          transactionDate: financeTransactions.transactionDate,
-          amount: financeTransactions.amount,
-          pending: financeTransactions.pending,
-          isParent: financeTransactions.isParent,
-          description: financeTransactions.description,
-          budgetCategoryId: financeTransactions.budgetCategoryId,
-        })
-        .from(financeTransactions)
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            isNull(financeTransactions.parentId),
-          ),
-        ),
+      loadChargeCandidateRows(userId),
       loadMatches(userId, paymentIds),
       db
         .select({
