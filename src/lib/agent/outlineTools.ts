@@ -167,18 +167,10 @@ export async function searchNodes(userId: string, args: Record<string, unknown>)
   }
 
   if (args.type !== undefined) {
-    if (Array.isArray(args.type)) {
-      filter.type = args.type.map((t) => parseNodeType(t, "type"));
-    } else {
-      filter.type = parseNodeType(args.type, "type");
-    }
+    filter.type = oneOrMany(args.type, (t) => parseNodeType(t, "type"));
   }
   if (args.state !== undefined) {
-    if (Array.isArray(args.state)) {
-      filter.state = args.state.map((s) => parseNodeState(s, "state"));
-    } else {
-      filter.state = parseNodeState(args.state, "state");
-    }
+    filter.state = oneOrMany(args.state, (s) => parseNodeState(s, "state"));
   }
 
   return filterOutlinePage(outline, filter);
@@ -350,4 +342,9 @@ export async function moveNodeTool(userId: string, args: Record<string, unknown>
     throw error;
   }
   return getNode(userId, { id });
+}
+
+/** A filter argument that takes one value or a list of them, each parsed by `parse`. */
+function oneOrMany<T>(value: unknown, parse: (one: unknown) => T): T | T[] {
+  return Array.isArray(value) ? value.map(parse) : parse(value);
 }
