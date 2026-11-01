@@ -26,12 +26,7 @@ import {
 } from "@/app/(shell)/schedule/actions";
 import { GOOGLE_EVENT_COLORS } from "@/lib/google/eventColors";
 import { googleCalendarEventUrl } from "@/lib/google/eventUrl";
-import {
-  fromDateKey,
-  toDateKey,
-  WEEKDAY_LABELS,
-  localDateTimeValue,
-} from "@/lib/schedule/geometry";
+import { fromDateKey, toDateKey, localDateTimeValue } from "@/lib/schedule/geometry";
 import { appointmentRecurrenceSummary } from "@/lib/schedule/recurrence";
 import {
   checkStateLabel,
@@ -39,6 +34,7 @@ import {
   nextCheckState,
 } from "@/lib/schedule/checkState";
 import type { DraftAppointment } from "./ScheduleView";
+import { WeekdayChecks } from "./WeekdayChecks";
 
 type Props = {
   open: boolean;
@@ -246,15 +242,6 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
     // open by default (`drawer-pattern.md`).
     onSaved();
     if (options?.close) onClose();
-  }
-
-  function toggleWeekday(d: number) {
-    markDirty();
-    setRecurrenceByWeekday((prev) =>
-      prev.includes(d)
-        ? prev.filter((x) => x !== d)
-        : [...prev, d].sort((a, b) => a - b),
-    );
   }
 
   return (
@@ -549,20 +536,14 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                   </FieldGrid>
 
                   {recurrenceFrequency === "weekly" && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {WEEKDAY_LABELS.map((label, d) => (
-                        <label
-                          key={label}
-                          className="flex items-center gap-1 text-[0.8125rem] font-normal normal-case tracking-normal text-ink"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={recurrenceByWeekday.includes(d)}
-                            onChange={() => toggleWeekday(d)}
-                          />
-                          {label}
-                        </label>
-                      ))}
+                    <div className="mt-2">
+                      <WeekdayChecks
+                        days={recurrenceByWeekday}
+                        onChange={(next) => {
+                          setRecurrenceByWeekday(next);
+                          markDirty();
+                        }}
+                      />
                     </div>
                   )}
 

@@ -2,7 +2,8 @@
 
 import type { TimeChartArea } from "@/db/schema";
 import type { TimeChartResultAreaNode } from "@/lib/tree/wireSlices";
-import { WEEKDAY_LABELS, WEEKDAYS, WEEKDAYS_ONLY } from "@/lib/schedule/geometry";
+import { WEEKDAYS, WEEKDAYS_ONLY } from "@/lib/schedule/geometry";
+import { WeekdayChecks } from "./WeekdayChecks";
 
 const PRESET_COLORS = [
   "#c8e0f0",
@@ -48,14 +49,6 @@ export function TimeChartAreaPanel({
 
   const days = area.daysOfWeek;
 
-  function toggleDay(d: number) {
-    const next = days.includes(d)
-      ? days.filter((x) => x !== d)
-      : [...days, d].sort((a, b) => a - b);
-    if (next.length === 0) return;
-    onChange({ daysOfWeek: next });
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-rule px-3 py-2 text-[0.8125rem] font-semibold text-ink">
@@ -93,21 +86,13 @@ export function TimeChartAreaPanel({
               Weekdays
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {WEEKDAY_LABELS.map((label, d) => (
-              <label
-                key={label}
-                className="flex items-center gap-1 text-[0.8125rem] text-ink"
-              >
-                <input
-                  type="checkbox"
-                  checked={days.includes(d)}
-                  onChange={() => toggleDay(d)}
-                />
-                {label}
-              </label>
-            ))}
-          </div>
+          <WeekdayChecks
+            days={days}
+            onChange={(next) => {
+              // An area has to fall on some day; unticking the last one does nothing.
+              if (next.length > 0) onChange({ daysOfWeek: next });
+            }}
+          />
           <p className="mt-1 text-[0.75rem] text-ink-faint">
             Same time range on every selected day — no need to Ctrl+drag copies.
           </p>
