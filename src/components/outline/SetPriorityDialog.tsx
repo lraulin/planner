@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import type { PriorityLetter } from "@/db/schema";
 import { parsePriority } from "@/lib/tree/format";
 import { ModalShell } from "@/components/detail/ModalShell";
+import { DialogActions } from "@/components/detail/DialogActions";
 
 /**
  * Give one priority to every selected row.
@@ -99,22 +100,11 @@ export function SetPriorityDialog({
           </p>
         )}
 
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink hover:bg-surface-raised"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={apply}
-            className="rounded bg-select-edge px-3 py-1.5 text-[0.8125rem] text-white hover:brightness-95"
-          >
-            Set priority
-          </button>
-        </div>
+        <DialogActions
+          confirmLabel="Set priority"
+          onConfirm={apply}
+          onCancel={onCancel}
+        />
       </div>
     </ModalShell>
   );

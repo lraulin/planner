@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
 import type { OutlineNode } from "@/lib/tree/types";
 import { ProjectPicker, type ProjectPickerValue } from "./ProjectPicker";
+import { DialogActions } from "@/components/detail/DialogActions";
 
 export function ProjectPickerDialog({
   open,
@@ -102,23 +103,14 @@ function OpenProjectPickerDialog({
             excludedIds={excludedIds}
           />
         </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0 md:py-1.5"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => valid && onConfirm(draft)}
-            disabled={!valid}
-            className="min-h-tap rounded bg-select-edge px-3 text-[0.8125rem] text-white hover:brightness-95 disabled:opacity-40 md:min-h-0 md:py-1.5"
-          >
-            Choose project
-          </button>
-        </div>
+        <DialogActions
+          confirmLabel="Choose project"
+          onConfirm={() => {
+            if (valid) onConfirm(draft);
+          }}
+          onCancel={onCancel}
+          disabled={!valid}
+        />
       </div>
     </ModalShell>
   );

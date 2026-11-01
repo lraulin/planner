@@ -6,6 +6,7 @@ import type { OutlineNode } from "@/lib/tree/types";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { resolvePickerSelection } from "@/lib/grid/pickerSelection";
+import { DialogActions } from "@/components/detail/DialogActions";
 
 /** How many rows the zoom picker renders at once before asking you to narrow the search. */
 const PICKER_LIMIT = 200;
@@ -98,23 +99,14 @@ export function OutlineZoomDialog({
           </p>
         )}
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink hover:bg-surface-raised"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => selectedId && onConfirm(selectedId)}
-            disabled={!selectedId}
-            className="rounded bg-select-edge px-3 py-1.5 text-[0.8125rem] text-white hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Zoom in
-          </button>
-        </div>
+        <DialogActions
+          confirmLabel="Zoom in"
+          onConfirm={() => {
+            if (selectedId) onConfirm(selectedId);
+          }}
+          onCancel={onCancel}
+          disabled={!selectedId}
+        />
       </div>
     </ModalShell>
   );
@@ -159,22 +151,11 @@ export function ExpandLevelDialog({
             </option>
           ))}
         </select>
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink hover:bg-surface-raised"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onConfirm(level)}
-            className="rounded bg-select-edge px-3 py-1.5 text-[0.8125rem] text-white hover:brightness-95"
-          >
-            Expand
-          </button>
-        </div>
+        <DialogActions
+          confirmLabel="Expand"
+          onConfirm={() => onConfirm(level)}
+          onCancel={onCancel}
+        />
       </div>
     </ModalShell>
   );

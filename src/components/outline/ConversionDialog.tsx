@@ -5,6 +5,7 @@ import { KIND_LABELS, type NodeKind } from "@/lib/tree/hierarchy";
 import type { ConversionPlan } from "@/lib/tree/conversion";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { TypeIcon } from "@/components/icons/TypeIcon";
+import { DialogActions } from "@/components/detail/DialogActions";
 
 export function ConversionDialog({
   nodeName,
@@ -84,23 +85,12 @@ export function ConversionDialog({
           </>
         )}
 
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink hover:bg-surface-raised"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={blocked}
-            className="rounded bg-select-edge px-3 py-1.5 text-[0.8125rem] text-white hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Convert
-          </button>
-        </div>
+        <DialogActions
+          confirmLabel="Convert"
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+          disabled={blocked}
+        />
       </div>
     </ModalShell>
   );
