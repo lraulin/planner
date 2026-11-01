@@ -12,7 +12,7 @@ import {
   SCENARIO_LINE_KINDS,
   type ScenarioLineKind,
 } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { ownedParentOf, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { between, after, compare, first } from "@/lib/tree/sortKey";
 import {
@@ -548,14 +548,11 @@ async function isSelfOrDescendant(
   candidateId: string,
   executor: DbExecutor,
 ): Promise<boolean> {
-  return isSelfOrDescendantVia(lineId, candidateId, async (id) => {
-    const [row] = await executor
-      .select({ parentId: financeScenarioLines.parentId })
-      .from(financeScenarioLines)
-      .where(ownedRow(financeScenarioLines, id, userId))
-      .limit(1);
-    return row?.parentId;
-  });
+  return isSelfOrDescendantVia(
+    lineId,
+    candidateId,
+    ownedParentOf(executor, financeScenarioLines, userId),
+  );
 }
 
 /**

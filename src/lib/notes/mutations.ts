@@ -6,6 +6,7 @@ import { notes, type NewNote, type NoteFlag } from "@/db/schema";
 import {
   deleteOwnedRow,
   findByExternalRef,
+  ownedParentOf,
   ownedRow,
   requireOwnedRow,
 } from "@/lib/db/owned";
@@ -103,14 +104,7 @@ async function isSelfOrDescendant(
   noteId: string,
   candidateId: string | null,
 ): Promise<boolean> {
-  return isSelfOrDescendantVia(noteId, candidateId, async (id) => {
-    const [row] = await tx
-      .select({ parentId: notes.parentId })
-      .from(notes)
-      .where(ownedRow(notes, id, userId))
-      .limit(1);
-    return row?.parentId;
-  });
+  return isSelfOrDescendantVia(noteId, candidateId, ownedParentOf(tx, notes, userId));
 }
 
 export type NoteInput = {

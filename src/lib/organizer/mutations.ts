@@ -18,13 +18,13 @@ import {
 } from "@/lib/day/sync";
 import { createAppointment } from "@/lib/schedule/mutations";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
-import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
 import { assertCanNest } from "@/lib/tree/hierarchy";
 import { applyStateTransition } from "@/lib/tree/stateTransitions";
 import { assignPriorityAmongSiblings } from "@/lib/tree/priorityWrites";
 import { between } from "@/lib/tree/sortKey";
 import type { NodeType } from "@/db/schema";
 import { organizerOutcomeError, type OrganizerOutcome } from "./types";
+import { isSelfOrDescendant } from "@/lib/tree/nodeRows";
 
 type InboxItem = {
   id: string;
@@ -73,22 +73,6 @@ async function requireInboxItem(
     .where(and(eq(nodes.userId, userId), eq(nodes.parentId, itemId)));
 
   return { ...item, hasChildren: childCount > 0 };
-}
-
-async function isSelfOrDescendant(
-  tx: DbExecutor,
-  userId: string,
-  itemId: string,
-  candidateId: string,
-): Promise<boolean> {
-  return isSelfOrDescendantVia(itemId, candidateId, async (id) => {
-    const [current] = await tx
-      .select({ parentId: nodes.parentId })
-      .from(nodes)
-      .where(ownedRow(nodes, id, userId))
-      .limit(1);
-    return current?.parentId;
-  });
 }
 
 /**

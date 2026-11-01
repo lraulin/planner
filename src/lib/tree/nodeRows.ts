@@ -1,6 +1,6 @@
 import type { DbExecutor } from "@/db/executor";
 import { nodes, resultAreaDetails } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { ownedParentOf, ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { keyAtPosition } from "./siblingOrder";
 import type { Position } from "./types";
@@ -76,14 +76,7 @@ export async function isSelfOrDescendant(
   nodeId: string,
   candidateId: string | null,
 ): Promise<boolean> {
-  return isSelfOrDescendantVia(nodeId, candidateId, async (id) => {
-    const [row] = await tx
-      .select({ parentId: nodes.parentId })
-      .from(nodes)
-      .where(ownedRow(nodes, id, userId))
-      .limit(1);
-    return row?.parentId;
-  });
+  return isSelfOrDescendantVia(nodeId, candidateId, ownedParentOf(tx, nodes, userId));
 }
 
 /**

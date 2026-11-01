@@ -1,12 +1,13 @@
 import { beforeAll, expect, it } from "vitest";
 import { db } from "@/db";
-import { jobs, masterContexts } from "@/db/schema";
+import { jobs, masterContexts, notes } from "@/db/schema";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
   deleteOwnedRow,
   findByExternalRef,
   findOwnedRow,
+  ownedParentOf,
   requireOwnedRow,
 } from "./owned";
 
@@ -120,5 +121,25 @@ describeDb("deleteOwnedRow", () => {
     await expect(
       deleteOwnedRow(db, masterContexts, row.id, owner, "Context not found."),
     ).rejects.toThrow("Context not found.");
+  });
+});
+
+describeDb("ownedParentOf", () => {
+  it("reads the owner's parent link and nothing of another user's tree", async () => {
+    const owner = await makeUser("Tree owner");
+    const intruder = await makeUser("Tree intruder");
+    const [root] = await db
+      .insert(notes)
+      .values({ userId: owner, sortKey: "a0" })
+      .returning({ id: notes.id });
+    const [child] = await db
+      .insert(notes)
+      .values({ userId: owner, parentId: root.id, sortKey: "a0" })
+      .returning({ id: notes.id });
+
+    const ownerParentOf = ownedParentOf(db, notes, owner);
+    expect(await ownerParentOf(child.id)).toBe(root.id);
+    expect(await ownerParentOf(root.id)).toBeNull();
+    expect(await ownedParentOf(db, notes, intruder)(child.id)).toBeUndefined();
   });
 });

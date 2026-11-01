@@ -113,3 +113,26 @@ export async function deleteOwnedRow(
     .returning({ id: table.id });
   if (deleted.length === 0) throw new Error(notFound);
 }
+
+/**
+ * The `parentOf` lookup `isSelfOrDescendantVia` walks, over one of the user's tree tables:
+ * a row's parent id, or `undefined` when the caller owns no row with that id.
+ */
+export function ownedParentOf(
+  executor: DbExecutor,
+  table: OwnedTable & { parentId: AnyPgColumn },
+  userId: string,
+): (id: string) => Promise<string | null | undefined> {
+  const source: PgTable = table;
+  return async (id) => {
+    const [row] = await executor
+      .select({ parentId: table.parentId })
+      .from(source)
+      .where(ownedRow(table, id, userId))
+      .limit(1);
+    if (!row) return undefined;
+    const parentId: unknown = row.parentId;
+    if (parentId === null || typeof parentId === "string") return parentId;
+    throw new Error("A tree row's parent id is not a string.");
+  };
+}
