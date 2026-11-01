@@ -16,8 +16,7 @@ import {
   type Cadence,
 } from "@/lib/finances/recurringBills";
 import { declaresSchedule } from "@/lib/finances/billSchedule";
-import { billSnapshotFromRow } from "./assign/fromBudget";
-import type { AssignEnvelope } from "./assign/types";
+import { billSnapshotFromRow, assignEnvelopeWithCarryIn } from "./assign/fromBudget";
 import type { MonthKey } from "./envelope";
 import {
   targetProgress,
@@ -43,28 +42,6 @@ export type TargetPaneView = {
   fill01: number | null;
 };
 
-/** The AssignEnvelope the Target pane reads, using the inspector's already-folded carry-in. */
-export function inspectorAssignEnvelope(
-  row: BudgetRow,
-  carryInCents: number,
-): AssignEnvelope {
-  return {
-    id: row.id,
-    name: row.name,
-    kind: row.kind,
-    hidden: row.hidden,
-    status: row.bill?.status ?? "active",
-    target: row.target,
-    assignedCents: row.assignedCents,
-    activityCents: row.activityCents,
-    balanceCents: row.balanceCents,
-    carryInCents,
-    snoozed: row.snoozed,
-    contributedBeforeCents: row.contributedBeforeCents,
-    nextDueKey: row.nextDueKey,
-  };
-}
-
 export function inspectorBills(row: BudgetRow): ReadonlyMap<string, BillSnapshot> {
   const snapshot = billSnapshotFromRow(row);
   return snapshot ? new Map([[snapshot.id, snapshot]]) : new Map();
@@ -80,7 +57,8 @@ export function targetPaneView(
   month: MonthKey,
   indicator: EnvelopeIndicator,
 ): TargetPaneView {
-  const envelope = inspectorAssignEnvelope(row, carryInCents);
+  // The inspector's carry-in is already folded, so the Target pane reads it as given.
+  const envelope = assignEnvelopeWithCarryIn(row, carryInCents);
   return {
     showAssignCallout: !row.isIncome && indicator.moreNeededCents > 0,
     assignThisMonthCents: indicator.moreNeededCents,

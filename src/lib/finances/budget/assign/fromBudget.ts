@@ -32,11 +32,11 @@ export type ActivityPoint = {
   amountCents: number;
 };
 
-export function assignEnvelopeFromRow(
+/** A Budget row as the Assign engine reads it, with its carry-in already worked out. */
+export function assignEnvelopeWithCarryIn(
   row: BudgetRow,
-  previous: BudgetMonth | null,
+  carryInCents: number,
 ): AssignEnvelope {
-  const prior = previous ? categoryMonth(previous, row.id) : null;
   return {
     id: row.id,
     name: row.name,
@@ -47,11 +47,19 @@ export function assignEnvelopeFromRow(
     assignedCents: row.assignedCents,
     activityCents: row.activityCents,
     balanceCents: row.balanceCents,
-    carryInCents: templateCarryIn(prior),
+    carryInCents,
     snoozed: row.snoozed,
     contributedBeforeCents: row.contributedBeforeCents,
     nextDueKey: row.nextDueKey,
   };
+}
+
+export function assignEnvelopeFromRow(
+  row: BudgetRow,
+  previous: BudgetMonth | null,
+): AssignEnvelope {
+  const prior = previous ? categoryMonth(previous, row.id) : null;
+  return assignEnvelopeWithCarryIn(row, templateCarryIn(prior));
 }
 
 export function billSnapshotFromRow(row: BudgetRow): BillSnapshot | null {
