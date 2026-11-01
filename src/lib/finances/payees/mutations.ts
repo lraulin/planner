@@ -107,6 +107,24 @@ export async function createPayee(
   });
 }
 
+/** The caller's payee with this name, matched without regard to case, or undefined. */
+async function findPayeeByName(
+  userId: string,
+  name: string,
+): Promise<{ id: string } | undefined> {
+  const [named] = await db
+    .select({ id: financePayees.id })
+    .from(financePayees)
+    .where(
+      and(
+        eq(financePayees.userId, userId),
+        sql`lower(${financePayees.name}) = ${name.toLowerCase()}`,
+      ),
+    )
+    .limit(1);
+  return named;
+}
+
 /**
  * Point this transaction at a payee, minting one from the merchant if needed.
  *
@@ -141,16 +159,7 @@ export async function ensurePayeeForTransaction(
   let payeeId = existingAlias?.payeeId ?? null;
   if (payeeId === null) {
     const name = suggestCommitmentName(alias);
-    const [named] = await db
-      .select({ id: financePayees.id })
-      .from(financePayees)
-      .where(
-        and(
-          eq(financePayees.userId, userId),
-          sql`lower(${financePayees.name}) = ${name.toLowerCase()}`,
-        ),
-      )
-      .limit(1);
+    const named = await findPayeeByName(userId, name);
     if (named) {
       payeeId = named.id;
       try {
@@ -209,16 +218,7 @@ export async function isolatePayeeForBill(
     return payeeId;
   }
 
-  const [named] = await db
-    .select({ id: financePayees.id })
-    .from(financePayees)
-    .where(
-      and(
-        eq(financePayees.userId, userId),
-        sql`lower(${financePayees.name}) = ${name.toLowerCase()}`,
-      ),
-    )
-    .limit(1);
+  const named = await findPayeeByName(userId, name);
   const dedicated = named?.id ?? (await createPayee(userId, { name, aliases: [] }));
   await db.transaction(async (tx) => {
     await tx
