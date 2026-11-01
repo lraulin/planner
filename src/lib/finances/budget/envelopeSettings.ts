@@ -9,6 +9,7 @@ import { parseTarget, parseTargetOrThrow } from "./targets/types";
 import { requireCategory } from "./structureRows";
 import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
 import { writeFinanceAuditEvent } from "../audit/writes";
+import type { DbExecutor } from "@/db/executor";
 
 /**
  * Writes for what an envelope asks of its month: carryover, a snoozed target, the target
@@ -50,23 +51,9 @@ export async function setCarryover(
     const scope = { budgetMonths, envelopeIds: [params.categoryId] };
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
 
-    await tx
-      .insert(financeBudgetAllocations)
-      .values({
-        userId,
-        month: params.month,
-        categoryId: params.categoryId,
-        amountCents: 0,
-        carryover: params.carryover,
-      })
-      .onConflictDoUpdate({
-        target: [
-          financeBudgetAllocations.userId,
-          financeBudgetAllocations.month,
-          financeBudgetAllocations.categoryId,
-        ],
-        set: { carryover: params.carryover, updatedAt: new Date() },
-      });
+    await setAllocationFlag(tx, userId, params.month, params.categoryId, {
+      carryover: params.carryover,
+    });
 
     await tx
       .update(financeBudgetAllocations)
@@ -138,22 +125,29 @@ export async function setTargetSnooze(
   );
   if (reason) throw new Error(reason);
 
-  await db
+  await setAllocationFlag(db, userId, params.month, params.categoryId, {
+    snoozed: params.snoozed,
+  });
+}
+
+/** Set one flag on an envelope's month, creating that month's allocation at $0 if it has none. */
+async function setAllocationFlag(
+  executor: DbExecutor,
+  userId: string,
+  month: MonthKey,
+  categoryId: string,
+  flag: { carryover: boolean } | { snoozed: boolean },
+): Promise<void> {
+  await executor
     .insert(financeBudgetAllocations)
-    .values({
-      userId,
-      month: params.month,
-      categoryId: params.categoryId,
-      amountCents: 0,
-      snoozed: params.snoozed,
-    })
+    .values({ userId, month, categoryId, amountCents: 0, ...flag })
     .onConflictDoUpdate({
       target: [
         financeBudgetAllocations.userId,
         financeBudgetAllocations.month,
         financeBudgetAllocations.categoryId,
       ],
-      set: { snoozed: params.snoozed, updatedAt: new Date() },
+      set: { ...flag, updatedAt: new Date() },
     });
 }
 
