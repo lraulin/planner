@@ -1,37 +1,17 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbTransaction } from "@/db/executor";
 import { contactItems, contacts, googleContactSyncs } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
-import { between } from "@/lib/tree/sortKey";
 import type { RemoteContactItem, RemoteGoogleContact } from "./mapping";
 import { planContactItems, planContactMirror } from "./mirror";
+import { nextContactItemSortKey } from "@/lib/contacts/mutations";
 
 export type AppliedContactSync = {
   inserted: number;
   updated: number;
   deleted: number;
 };
-
-async function nextItemSortKey(
-  tx: DbTransaction,
-  userId: string,
-  contactId: string,
-  kind: RemoteContactItem["kind"],
-): Promise<string> {
-  const rows = await tx
-    .select({ sortKey: contactItems.sortKey })
-    .from(contactItems)
-    .where(
-      and(
-        eq(contactItems.userId, userId),
-        eq(contactItems.contactId, contactId),
-        eq(contactItems.kind, kind),
-      ),
-    )
-    .orderBy(asc(contactItems.sortKey));
-  return between(rows.at(-1)?.sortKey ?? null, null);
-}
 
 async function syncContactItems(
   tx: DbTransaction,
@@ -84,7 +64,7 @@ async function syncContactItems(
   }
 
   for (const fields of plan.toInsert) {
-    const sortKey = await nextItemSortKey(tx, userId, contactId, fields.kind);
+    const sortKey = await nextContactItemSortKey(tx, userId, contactId, fields.kind);
     await tx.insert(contactItems).values({
       userId,
       contactId,

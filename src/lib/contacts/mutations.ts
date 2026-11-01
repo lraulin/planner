@@ -25,7 +25,8 @@ async function requireItem(tx: DbExecutor, userId: string, itemId: string) {
   return requireOwnedRow(tx, contactItems, itemId, userId, "Contact detail not found.");
 }
 
-async function nextSortKey(
+/** The sort key that puts a new item last among the contact's items of this kind. */
+export async function nextContactItemSortKey(
   tx: DbExecutor,
   userId: string,
   contactId: string,
@@ -188,7 +189,7 @@ export async function createContactItem(
 ): Promise<string> {
   return db.transaction(async (tx) => {
     await requireContact(tx, userId, contactId);
-    const sortKey = await nextSortKey(tx, userId, contactId, kind);
+    const sortKey = await nextContactItemSortKey(tx, userId, contactId, kind);
 
     // First of its kind is primary by default — a contact with one phone has a primary
     // phone, and making the user click a radio to say so is busywork.
