@@ -9,6 +9,7 @@ import {
 import { tableRows } from "./parseXml";
 import { rtfToPlainText } from "./rtf";
 import type { AchDocument, AchPriority } from "./types";
+import { localDateKey } from "@/lib/schedule/geometry";
 
 /** Tables handled by the extras pass (not outline nodes). */
 export const EXTRAS_TABLES = new Set([
@@ -447,10 +448,7 @@ function parseEntryDateKey(text: string | null | undefined): string | null {
   if (m?.[1]) return m[1];
   const d = decodeDateTime(text);
   if (!d) return null;
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${mo}-${day}`;
+  return localDateKey(d);
 }
 
 /**
