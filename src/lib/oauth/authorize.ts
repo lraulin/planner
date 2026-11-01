@@ -83,20 +83,27 @@ export async function parseAuthorizeRequest(
   return { ok: true, query, client, resource };
 }
 
+/** The client's redirect URI carrying one response parameter, and `state` echoed back. */
+function redirectWith(
+  redirectUri: string,
+  key: "code" | "error",
+  value: string,
+  state: string,
+) {
+  const url = new URL(redirectUri);
+  url.searchParams.set(key, value);
+  if (state) url.searchParams.set("state", state);
+  return url.toString();
+}
+
 export function denyRedirect(
   redirectUri: string,
   state: string,
   error: string,
 ): string {
-  const url = new URL(redirectUri);
-  url.searchParams.set("error", error);
-  if (state) url.searchParams.set("state", state);
-  return url.toString();
+  return redirectWith(redirectUri, "error", error, state);
 }
 
 export function codeRedirect(redirectUri: string, code: string, state: string): string {
-  const url = new URL(redirectUri);
-  url.searchParams.set("code", code);
-  if (state) url.searchParams.set("state", state);
-  return url.toString();
+  return redirectWith(redirectUri, "code", code, state);
 }
