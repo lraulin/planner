@@ -49,8 +49,7 @@ function uniqueDateKeys(paydays: readonly Payday[]): string[] {
 }
 
 function byDate(paydays: readonly Payday[]): Map<string, Payday[]> {
-  const grouped = groupBy(paydays, (payday) => payday.dateKey);
-  return grouped;
+  return groupBy(paydays, (payday) => payday.dateKey);
 }
 
 function stillNextPaycheck(fromKey: string, toKey: string): boolean {

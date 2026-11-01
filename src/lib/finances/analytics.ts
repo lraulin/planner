@@ -54,6 +54,7 @@ import {
   spanDays,
   type StoredBill,
 } from "./recurringBills";
+import { chronological } from "./chronological";
 
 /** One classified transaction, as every panel reads it. */
 export type AnalyticsRow = {
@@ -663,11 +664,7 @@ function chargesForBill<Row extends RecurringChargeRow>(
       rows.push(row);
     }
   }
-  rows.sort(
-    (left, right) =>
-      left.transactionDate.localeCompare(right.transactionDate) ||
-      left.id.localeCompare(right.id),
-  );
+  rows.sort(chronological);
   return rows;
 }
 

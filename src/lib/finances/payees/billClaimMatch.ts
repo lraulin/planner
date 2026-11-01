@@ -22,6 +22,7 @@
 import { amountMatches, medianCents } from "../amountMatch";
 import { cadenceDaysApprox, cadenceOf, type Cadence } from "../recurringBills";
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
+import { chronological } from "../chronological";
 
 /** The bill facet, as `finance_budget_categories` holds it. */
 export type BillClaimFacet = {
@@ -92,11 +93,7 @@ export function billClaimAccepts(
   const filed = history.map((row) => row.transactionDate);
   const accepted = new Set<string>();
 
-  for (const candidate of [...candidates].sort(
-    (left, right) =>
-      left.transactionDate.localeCompare(right.transactionDate) ||
-      left.id.localeCompare(right.id),
-  )) {
+  for (const candidate of [...candidates].sort(chronological)) {
     if (!amountMatches(candidate.amountCents, expected)) continue;
     if (
       filed.some(

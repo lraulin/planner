@@ -34,6 +34,7 @@
  */
 
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
+import { chronological } from "../chronological";
 
 /** How far apart the two legs of one movement may post. Cards take a few days to credit a
  * payment; five covers every pair in this history without reaching far enough to marry two
@@ -154,11 +155,7 @@ export function matchTransfers(
     accounts.map((account) => [account.externalKey, account.id]),
   );
 
-  const ordered = [...rows].sort(
-    (left, right) =>
-      left.transactionDate.localeCompare(right.transactionDate) ||
-      left.id.localeCompare(right.id),
-  );
+  const ordered = [...rows].sort(chronological);
 
   const flows = new Map<string, TransferKind>();
   const intents = new Map<

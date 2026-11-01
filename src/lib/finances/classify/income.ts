@@ -25,6 +25,7 @@
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
 import { median, medianRounded } from "@/lib/statistics";
 import { normalizeMerchant } from "./merchant";
+import { chronological } from "../chronological";
 
 /** Typical gap between biweekly paydays. Holiday posting drifts a few days either side. */
 export const BIWEEKLY_DAYS = 14;
@@ -88,11 +89,7 @@ function isBiweekly(gaps: readonly number[]): boolean {
 
 function paydaysOf(rows: readonly IncomeRow[], employer: string): Payday[] {
   const byDate = new Map<string, IncomeRow[]>();
-  const ordered = [...rows].sort(
-    (left, right) =>
-      left.transactionDate.localeCompare(right.transactionDate) ||
-      left.id.localeCompare(right.id),
-  );
+  const ordered = [...rows].sort(chronological);
   for (const row of ordered) {
     const bucket = byDate.get(row.transactionDate);
     if (bucket) bucket.push(row);
