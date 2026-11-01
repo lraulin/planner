@@ -51,19 +51,6 @@ export const DATE_PARAM = "date";
  */
 export const Q_PARAM = "q";
 
-export type ViewStatePatch = {
-  /** `null` clears the param; `undefined` leaves it alone. */
-  detail?: string | null;
-  select?: string | null;
-  view?: string | null;
-  note?: string | null;
-  mode?: string | null;
-  zoom?: string | null;
-  scope?: string | null;
-  date?: string | null;
-  q?: string | null;
-};
-
 export type ViewState = {
   detail: string | null;
   select: string | null;
@@ -75,6 +62,9 @@ export type ViewState = {
   date: string | null;
   q: string | null;
 };
+
+/** A change to the view state: `null` clears a param; `undefined` leaves it alone. */
+export type ViewStatePatch = Partial<ViewState>;
 
 /**
  * Opaque record ids (node, note). Reject empty, whitespace-only, and strings that would
