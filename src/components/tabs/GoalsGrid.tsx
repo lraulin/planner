@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { OutlineWire } from "@/lib/tree/wire";
 import { asGroupBy, treeGridRows, type GroupBy } from "@/lib/tree/slice";
-import { formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
 import type { ColumnDef } from "@/components/grid/columns";
 import { useIncludeDeferred, type GridDefaults } from "@/components/grid/useGridState";
@@ -16,6 +15,7 @@ import {
   dateCompletedColumn,
   purposeColumn,
   stateColumn,
+  priorityColumn,
 } from "@/components/grid/commonColumns";
 import { DeadlineCell, NameCell, TextCell } from "@/components/grid/cells";
 import { setGoalFieldAction } from "@/app/(shell)/plan/outline/detail-actions";
@@ -23,7 +23,6 @@ import { ResultAreaScopePicker, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import { NodeTabGrid, useNodeTabCommands } from "./NodeTabGrid";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
-import { LetterRankCell } from "@/components/grid/LetterRankCell";
 
 type ViewId = "all" | "active" | "completed";
 
@@ -60,25 +59,7 @@ function buildColumns(today: string | null): ColumnDef<GoalsCtx>[] {
   return [
     categoryColumn(),
     typeColumn(),
-    {
-      id: "priority",
-      label: "Pri",
-      width: "3rem",
-      align: "center",
-      filterKind: "priority",
-      filterValue: (row) =>
-        formatPriority(row.node.priorityLetter, row.node.priorityRank) || null,
-      sortValue: (row) =>
-        formatPriority(row.node.priorityLetter, row.node.priorityRank),
-      render: (row, ctx) => (
-        <LetterRankCell
-          letter={row.node.priorityLetter}
-          rank={row.node.priorityRank}
-          onAssign={(letter, rank) => ctx.onPriorityChange(row.node, letter, rank)}
-          ariaLabel="Priority — A, B, C or D with a rank"
-        />
-      ),
-    },
+    priorityColumn(),
     {
       id: "name",
       label: "Title",

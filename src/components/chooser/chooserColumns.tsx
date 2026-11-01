@@ -17,6 +17,7 @@ import {
   lapColumn,
 } from "@/components/grid/commonColumns";
 import { editableEffortColumn } from "@/components/grid/editableEffortColumn";
+import { priorityOrderValue } from "@/lib/priority/order";
 
 /**
  * Columns for the Task Chooser, matching Achieve's own set (State / Pri / Name / Effort
@@ -101,8 +102,9 @@ export function buildChooserColumns(
       filterKind: "priority",
       filterValue: (row) =>
         formatPriority(row.node.tcPriorityLetter, row.node.tcPriorityRank) || null,
+      // A1 < A2 < A10 < B1, and blank sorts last — see `lib/priority/order`.
       sortValue: (row) =>
-        formatPriority(row.node.tcPriorityLetter, row.node.tcPriorityRank),
+        priorityOrderValue(row.node.tcPriorityLetter, row.node.tcPriorityRank),
       render: (row, ctx) => (
         <TcPriorityCell
           key={`tc:${formatPriority(row.node.tcPriorityLetter, row.node.tcPriorityRank)}`}
