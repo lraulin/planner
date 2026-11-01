@@ -99,17 +99,12 @@ export function coverOverspending(params: {
   if (!from) {
     const coverable = Math.min(owed, Math.max(0, month.readyToAssignCents));
     if (coverable <= 0) return NO_EDIT;
-    return {
-      allocations: [
-        {
-          month: month.month,
-          categoryId: to.id,
-          amountCents: target.assignedCents + coverable,
-        },
-      ],
-      buffered: null,
-      note: `Covered ${formatUsd(coverable)} of ${to.name} from Ready to Assign ${onDay(todayKey)}`,
-    };
+    return assignFromReady(
+      month.month,
+      { id: to.id, assignedCents: target.assignedCents },
+      coverable,
+      `Covered ${formatUsd(coverable)} of ${to.name} from Ready to Assign ${onDay(todayKey)}`,
+    );
   }
 
   const source = categoryMonth(month, from.id);
@@ -123,6 +118,20 @@ export function coverOverspending(params: {
     coverable,
     `Covered ${formatUsd(coverable)} of ${to.name} from ${from.name} ${onDay(todayKey)}`,
   );
+}
+
+/** The edit that assigns `cents` from Ready to Assign to one envelope within `month`. */
+function assignFromReady(
+  month: MonthKey,
+  to: { id: string; assignedCents: number },
+  cents: number,
+  note: string,
+): BudgetEdit {
+  return {
+    allocations: [{ month, categoryId: to.id, amountCents: to.assignedCents + cents }],
+    buffered: null,
+    note,
+  };
 }
 
 /** The edit that moves `cents` of assignment from one envelope to another within `month`. */
@@ -247,17 +256,12 @@ export function assignFromReadyToAssign(params: {
   if (assigned <= 0) return NO_EDIT;
 
   const target = categoryMonth(month, to.id);
-  return {
-    allocations: [
-      {
-        month: month.month,
-        categoryId: to.id,
-        amountCents: target.assignedCents + assigned,
-      },
-    ],
-    buffered: null,
-    note: `Assigned ${formatUsd(assigned)} to ${to.name} ${onDay(todayKey)}`,
-  };
+  return assignFromReady(
+    month.month,
+    { id: to.id, assignedCents: target.assignedCents },
+    assigned,
+    `Assigned ${formatUsd(assigned)} to ${to.name} ${onDay(todayKey)}`,
+  );
 }
 
 /** Set one envelope's assignment outright — the inline edit in the grid. */
