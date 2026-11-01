@@ -308,31 +308,11 @@ export type TransactionFilter = {
   to?: string;
 };
 
-/** One stored statement snapshot, for tests and a later UI. */
-export type StatementListRow = {
+/** One stored statement snapshot: the parsed statement, filed under its account. */
+export type StatementListRow = Omit<ParsedStatement, "externalKey"> & {
   id: string;
   accountId: string;
   accountName: string;
-  periodStart: string;
-  periodEnd: string;
-  statementDate: string | null;
-  openingBalanceCents: number;
-  closingBalanceCents: number;
-  paymentDueDate: string | null;
-  minimumPaymentCents: number | null;
-  pastDueAmountCents: number | null;
-  creditLimitCents: number | null;
-  availableCreditCents: number | null;
-  paymentsCreditsCents: number | null;
-  purchasesCents: number | null;
-  cashAdvancesCents: number | null;
-  balanceTransfersCents: number | null;
-  feesChargedCents: number | null;
-  interestChargedCents: number | null;
-  ytdFeesCents: number | null;
-  ytdInterestCents: number | null;
-  rewardsPoints: number | null;
-  rates: ParsedStatementRate[];
 };
 
 /** One stored statement plus the register check for that period. */
