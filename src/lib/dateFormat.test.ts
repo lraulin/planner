@@ -3,6 +3,7 @@ import {
   DATE_FORMAT_OPTIONS,
   DEFAULT_DATE_FORMAT,
   formatDateKey,
+  relativeDaysLabel,
   formatFullDateKey,
 } from "./dateFormat";
 
@@ -100,5 +101,17 @@ describe("formatDateKey", () => {
         day: "numeric",
       }),
     ).toBe("Jul 25");
+  });
+});
+
+describe("relativeDaysLabel", () => {
+  it.each([
+    [0, "Today"],
+    [1, "Tomorrow"],
+    [-1, "Yesterday"],
+    [3, "In 3 days"],
+    [-2, "2 days ago"],
+  ])("labels %i as %s", (days, label) => {
+    expect(relativeDaysLabel(days)).toBe(label);
   });
 });

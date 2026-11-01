@@ -6,6 +6,7 @@ import type { AgendaRow } from "@/lib/schedule/agenda";
 import { checkStateLabel, checkStateMark } from "@/lib/schedule/checkState";
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
+import { DaysLeftCell } from "@/components/grid/DaysLeftCell";
 
 export type AgendaColumnCtx = {
   /**
@@ -40,14 +41,6 @@ function timeLabel(date: Date): string {
  */
 export function daysLeftOf(row: AgendaRow, todayKey: string | null): number | null {
   return todayKey ? daysBetweenKeys(todayKey, row.dayKey) : null;
-}
-
-/** "today" / "tomorrow" / "in 3 days" / "2 days ago" — the number's meaning, on hover. */
-function daysLeftTitle(days: number): string {
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  if (days === -1) return "Yesterday";
-  return days > 0 ? `In ${days} days` : `${Math.abs(days)} days ago`;
 }
 
 export const agendaColumns: ColumnDef<AgendaColumnCtx, AgendaRow>[] = [
@@ -156,16 +149,7 @@ export const agendaColumns: ColumnDef<AgendaColumnCtx, AgendaRow>[] = [
     render: (row, ctx) => {
       const days = daysLeftOf(row.node, ctx.todayKey);
       if (days === null) return null;
-      return (
-        <span
-          title={daysLeftTitle(days)}
-          className={`tabular block text-right text-[0.8125rem] ${
-            days < 0 ? "text-ink-faint" : days === 0 ? "text-ink" : "text-ink-muted"
-          }`}
-        >
-          {days}
-        </span>
-      );
+      return <DaysLeftCell days={days} textSize="text-[0.8125rem]" />;
     },
   },
 ];

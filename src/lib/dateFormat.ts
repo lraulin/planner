@@ -268,3 +268,11 @@ export function formatDateKey(
 export function formatFullDateKey(dateKey: string | null | undefined): string {
   return formatDateKey(dateKey, "DDDD, MMMM D, YYYY");
 }
+
+/** What a signed day count means, for a hover: "Today", "Tomorrow", "In 3 days", "2 days ago". */
+export function relativeDaysLabel(days: number): string {
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days === -1) return "Yesterday";
+  return days > 0 ? `In ${days} days` : `${Math.abs(days)} days ago`;
+}

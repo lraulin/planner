@@ -16,6 +16,7 @@ import type { BudgetBillRow } from "@/lib/finances/budget/rows";
 import type { BillPatch } from "../budget/budgetColumns";
 import type { BudgetCategoryEdit } from "@/lib/finances/budget/mutations";
 import type { EnvelopeStatus } from "@/db/schema";
+import { DaysLeftCell } from "@/components/grid/DaysLeftCell";
 
 export type BillGridRow = BudgetBillRow & {
   groupName: string;
@@ -37,14 +38,6 @@ export type BillColumnCtx = {
   /** Escape. */
   onCancelRename: () => void;
 };
-
-/** Hover prose for the integer — Agenda's display, kept here so the helpers stay apart. */
-function daysRemainingTitle(days: number): string {
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  if (days === -1) return "Yesterday";
-  return days > 0 ? `In ${days} days` : `${Math.abs(days)} days ago`;
-}
 
 /**
  * The name cell while it is being renamed.
@@ -206,16 +199,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     render: (row) => {
       const days = row.node.daysRemaining;
       if (days === null) return <span className="text-xs text-ink-muted">—</span>;
-      return (
-        <span
-          title={daysRemainingTitle(days)}
-          className={`tabular block text-right text-xs ${
-            days < 0 ? "text-ink-faint" : days === 0 ? "text-ink" : "text-ink-muted"
-          }`}
-        >
-          {days}
-        </span>
-      );
+      return <DaysLeftCell days={days} textSize="text-xs" />;
     },
   },
   {
