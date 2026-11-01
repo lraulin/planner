@@ -19,6 +19,7 @@ import {
   type SupplyMergeIdentity,
 } from "./merge";
 import { supplySuggestions } from "./suggestions";
+import type { DbExecutor } from "@/db/executor";
 
 /**
  * Writes for the Supplies worksheet.
@@ -517,17 +518,7 @@ export async function mergeSupplyItems(
   await Promise.all(sources.map((id) => requireSupplyItem(userId, id)));
 
   return db.transaction(async (tx) => {
-    const [targetInUse] = await tx
-      .select({ id: financeSupplyOptions.id })
-      .from(financeSupplyOptions)
-      .where(
-        and(
-          eq(financeSupplyOptions.userId, userId),
-          eq(financeSupplyOptions.itemId, targetId),
-          eq(financeSupplyOptions.inUse, true),
-        ),
-      )
-      .limit(1);
+    const targetInUse = await hasOptionInUse(tx, userId, targetId);
 
     const namedItems = await tx
       .select({
@@ -682,6 +673,26 @@ export async function addSupplyItemFromAmazon(
   });
 }
 
+/** Whether one of the item's options is already marked in use. */
+async function hasOptionInUse(
+  executor: DbExecutor,
+  userId: string,
+  itemId: string,
+): Promise<boolean> {
+  const [row] = await executor
+    .select({ id: financeSupplyOptions.id })
+    .from(financeSupplyOptions)
+    .where(
+      and(
+        eq(financeSupplyOptions.userId, userId),
+        eq(financeSupplyOptions.itemId, itemId),
+        eq(financeSupplyOptions.inUse, true),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
 /**
  * Attach an Amazon product as an offer on an existing item.
  *
@@ -696,20 +707,10 @@ export async function addSupplyOptionFromAmazon(
 ): Promise<string> {
   await requireSupplyItem(userId, itemId);
   const prefill = await amazonSupplyPrefill(userId, asin);
-  const [inUse] = await db
-    .select({ id: financeSupplyOptions.id })
-    .from(financeSupplyOptions)
-    .where(
-      and(
-        eq(financeSupplyOptions.userId, userId),
-        eq(financeSupplyOptions.itemId, itemId),
-        eq(financeSupplyOptions.inUse, true),
-      ),
-    )
-    .limit(1);
+  const inUse = await hasOptionInUse(db, userId, itemId);
   return createSupplyOption(userId, {
     ...prefill.option,
     itemId,
-    inUse: inUse === undefined,
+    inUse: !inUse,
   });
 }
