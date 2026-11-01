@@ -44,9 +44,6 @@ import { catalogCapabilities } from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
 import { looksLikeBankBrowserSnapshot } from "@/lib/finances/bankSnapshot";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
@@ -58,6 +55,7 @@ import {
   accountColumns,
   type AccountColumnCtx,
 } from "./accountColumns";
+import { useGridSelection } from "@/components/grid/useFlatGrid";
 
 const ACCOUNT_VIEWS = [
   { id: "open", label: "Open accounts" },
@@ -187,17 +185,10 @@ export function AccountsView({
     () => groupAccounts(accounts, gridState.groupBy),
     [accounts, gridState.groupBy],
   );
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        accountColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
+  const { distinctValues, onIdsChange, multi } = useGridSelection(
+    gridRows,
+    accountColumns,
   );
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const { order, onIdsChange } = useNavigableIds(rowIds);
-  const multi = useMultiSelect(order, null);
   const {
     selectedId,
     selectedIds,

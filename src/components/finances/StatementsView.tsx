@@ -17,11 +17,9 @@ import { FinanceImportPanel } from "./FinanceImportPanel";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import { statementColumns, type StatementColumnCtx } from "./statementColumns";
 import { useStatementPeriod } from "./useStatementPeriod";
+import { useGridSelection } from "@/components/grid/useFlatGrid";
 
 const STATEMENT_VIEWS = [{ id: "all", label: "All Statements" }] as const;
 
@@ -61,18 +59,11 @@ export function StatementsView({
     () => groupStatements(rows, gridState.groupBy),
     [rows, gridState.groupBy],
   );
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        statementColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
+  const { distinctValues, onIdsChange, multi } = useGridSelection(
+    gridRows,
+    statementColumns,
   );
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const { order, onIdsChange } = useNavigableIds(rowIds);
-  const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } =
-    useMultiSelect(order, null);
+  const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } = multi;
 
   useArrowKeySelection(move);
 

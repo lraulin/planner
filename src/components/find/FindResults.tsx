@@ -8,15 +8,13 @@ import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import type { useModuleViews } from "@/components/grid/useModuleViews";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { OPEN_RECORD } from "@/lib/commands/chords";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import { resultTarget } from "@/lib/find/targets";
 import type { FindResult } from "@/lib/find/types";
 import type { GridRow } from "@/lib/tree/slice";
 import { findColumns, type FindColumn, type FindColumnCtx } from "./findColumns";
+import { useGridSelection } from "@/components/grid/useFlatGrid";
 
 /**
  * The results half of Advanced Find.
@@ -59,19 +57,11 @@ export function FindResults({
       })),
     [results],
   );
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        findColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
+  const { distinctValues, onIdsChange, multi } = useGridSelection(
+    gridRows,
+    findColumns,
   );
-
-  const rowIds = useMemo(() => results.map((result) => result.id), [results]);
-  const { order, onIdsChange } = useNavigableIds(rowIds);
-  const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } =
-    useMultiSelect(order, null);
+  const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } = multi;
 
   const byId = useMemo(
     () => new Map(results.map((result) => [result.id, result])),

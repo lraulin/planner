@@ -20,15 +20,13 @@ import { catalogCapabilities } from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
-import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { useNavigableIds } from "@/components/grid/useNavigableIds";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { PayeeDrawer } from "./PayeeDrawer";
 import { PayeeMergeDialog } from "./PayeeMergeDialog";
 import { PayeeMergePickerDialog } from "./PayeeMergePickerDialog";
 import { PAYEE_COLUMN_IDS, payeeColumns, type PayeeColumnCtx } from "./payeeColumns";
+import { useGridSelection } from "@/components/grid/useFlatGrid";
 
 const PAYEE_VIEWS = [{ id: "all", label: "All Payees" }] as const;
 const NO_PAYEES_SELECTED: ReadonlySet<string> = new Set();
@@ -87,17 +85,10 @@ export function PayeesView({
     () => rows.map((node) => ({ kind: "node" as const, id: node.id, node, depth: 0 })),
     [rows],
   );
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        payeeColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
+  const { distinctValues, onIdsChange, multi } = useGridSelection(
+    gridRows,
+    payeeColumns,
   );
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const { order, onIdsChange } = useNavigableIds(rowIds);
-  const multi = useMultiSelect(order, null);
   const {
     selectedId,
     selectedIds,
