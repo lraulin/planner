@@ -87,25 +87,13 @@ export function FindScope({
    * into a state it cannot describe is worse than one without it.
    */
   function toggleSource(id: FindSourceId) {
-    const on = settings.sources.includes(id);
-    if (on && settings.sources.length === 1) return;
-    onChange({
-      ...settings,
-      sources: on
-        ? settings.sources.filter((entry) => entry !== id)
-        : [...settings.sources, id],
-    });
+    const sources = toggledKeepingOne(settings.sources, id);
+    if (sources) onChange({ ...settings, sources });
   }
 
   function toggleFieldClass(id: FindFieldClass) {
-    const on = settings.fieldClasses.includes(id);
-    if (on && settings.fieldClasses.length === 1) return;
-    onChange({
-      ...settings,
-      fieldClasses: on
-        ? settings.fieldClasses.filter((entry) => entry !== id)
-        : [...settings.fieldClasses, id],
-    });
+    const fieldClasses = toggledKeepingOne(settings.fieldClasses, id);
+    if (fieldClasses) onChange({ ...settings, fieldClasses });
   }
 
   function toggleMatch(key: keyof FindMatchOptions) {
@@ -223,4 +211,14 @@ export function FindScope({
       </Group>
     </div>
   );
+}
+
+/**
+ * `list` with `id` switched on or off — or null when turning it off would leave nothing,
+ * since a search across no sources finds nothing.
+ */
+function toggledKeepingOne<T>(list: readonly T[], id: T): T[] | null {
+  if (!list.includes(id)) return [...list, id];
+  if (list.length === 1) return null;
+  return list.filter((entry) => entry !== id);
 }

@@ -24,6 +24,28 @@ function effort(value: number): string {
 }
 
 /** Resources are read-only in the grid; their structured capacity belongs in the drawer. */
+/** A whole-number percentage of the resource's week, shown and filtered as `40%`. */
+function percentColumn(
+  id: string,
+  label: string,
+  width: string,
+  percent: (resource: ResourceListRow) => number,
+): ColumnDef<ResourcesColumnCtx, ResourceListRow> {
+  return {
+    id,
+    label,
+    width,
+    align: "right",
+    filterValue: (row) => `${percent(row.node)}%`,
+    sortValue: (row) => percent(row.node),
+    render: (row) => (
+      <span className="tabular text-[0.8125rem] text-ink-muted">
+        {percent(row.node)}%
+      </span>
+    ),
+  };
+}
+
 export const resourcesColumns: ColumnDef<ResourcesColumnCtx, ResourceListRow>[] = [
   {
     id: "name",
@@ -65,32 +87,18 @@ export const resourcesColumns: ColumnDef<ResourcesColumnCtx, ResourceListRow>[] 
       </span>
     ),
   },
-  {
-    id: "overhead",
-    label: "Overhead",
-    width: "5.5rem",
-    align: "right",
-    filterValue: (row) => `${row.node.overheadPercent}%`,
-    sortValue: (row) => row.node.overheadPercent,
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {row.node.overheadPercent}%
-      </span>
-    ),
-  },
-  {
-    id: "effectiveness",
-    label: "Effective",
-    width: "5.75rem",
-    align: "right",
-    filterValue: (row) => `${row.node.effectivenessPercent}%`,
-    sortValue: (row) => row.node.effectivenessPercent,
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {row.node.effectivenessPercent}%
-      </span>
-    ),
-  },
+  percentColumn(
+    "overhead",
+    "Overhead",
+    "5.5rem",
+    (resource) => resource.overheadPercent,
+  ),
+  percentColumn(
+    "effectiveness",
+    "Effective",
+    "5.75rem",
+    (resource) => resource.effectivenessPercent,
+  ),
   {
     id: "capacity",
     label: "Available",

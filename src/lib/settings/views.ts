@@ -265,7 +265,7 @@ export function viewSnapshotEquals(
 ): boolean {
   return (
     sameList(a.order, b.order) &&
-    sameNumberMap(a.widths, b.widths) &&
+    sameMap(a.widths, b.widths) &&
     stableEqual(a.filters, b.filters) &&
     stableEqual(a.advancedFilter, b.advancedFilter) &&
     a.search === b.search &&
@@ -273,7 +273,7 @@ export function viewSnapshotEquals(
     sameList(a.groupBy, b.groupBy) &&
     sameSet(a.collapsedGroups, b.collapsedGroups) &&
     a.density === b.density &&
-    sameBoolMap(a.switches, b.switches) &&
+    sameMap(a.switches, b.switches) &&
     sameScope(a.scope, b.scope)
   );
 }
@@ -320,19 +320,7 @@ function sameSet(left: readonly string[], right: readonly string[]): boolean {
   return left.every((value) => other.has(value));
 }
 
-function sameNumberMap(
-  left: Record<string, number>,
-  right: Record<string, number>,
-): boolean {
-  const keys = Object.keys(left);
-  if (keys.length !== Object.keys(right).length) return false;
-  return keys.every((key) => right[key] === left[key]);
-}
-
-function sameBoolMap(
-  left: Record<string, boolean>,
-  right: Record<string, boolean>,
-): boolean {
+function sameMap<T>(left: Record<string, T>, right: Record<string, T>): boolean {
   const keys = Object.keys(left);
   if (keys.length !== Object.keys(right).length) return false;
   return keys.every((key) => right[key] === left[key]);

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
+import { type ColumnDef, fieldAccessors } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
 import { effectiveFlow, effectiveMerchant } from "@/lib/finances/analytics";
 import { flowLabel } from "@/lib/finances/flowLabels";
@@ -41,16 +41,7 @@ function isSplitChild(row: RegisterTransactionRow): boolean {
 export const FINANCE_COLUMN_IDS = REGISTER_VISIBLE_COLUMN_IDS;
 
 function accessors(id: RegisterFieldId) {
-  const { filterKind, filterValue, sortValue } = registerFields[id];
-  return {
-    filterKind,
-    filterValue: filterValue
-      ? (row: NodeGridRow<RegisterTransactionRow>) => filterValue(row.node)
-      : undefined,
-    sortValue: sortValue
-      ? (row: NodeGridRow<RegisterTransactionRow>) => sortValue(row.node)
-      : undefined,
-  };
+  return fieldAccessors(registerFields[id]);
 }
 
 /**

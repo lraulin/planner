@@ -1,6 +1,6 @@
 "use client";
 
-import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
+import { type ColumnDef, fieldAccessors } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
 import { formatUsd } from "@/lib/finances/money";
 import {
@@ -18,16 +18,7 @@ export type AmazonColumnCtx = {
 export const AMAZON_COLUMN_IDS = AMAZON_VISIBLE_COLUMN_IDS;
 
 function accessors(id: AmazonFieldId) {
-  const { filterKind, filterValue, sortValue } = amazonFields[id];
-  return {
-    filterKind,
-    filterValue: filterValue
-      ? (row: NodeGridRow<AmazonItemListRow>) => filterValue(row.node)
-      : undefined,
-    sortValue: sortValue
-      ? (row: NodeGridRow<AmazonItemListRow>) => sortValue(row.node)
-      : undefined,
-  };
+  return fieldAccessors(amazonFields[id]);
 }
 
 function Amount({ cents }: { cents: number | null }) {

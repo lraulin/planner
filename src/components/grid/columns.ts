@@ -138,3 +138,22 @@ export function alignClass(align: ColumnAlign | undefined): string {
       return "text-left justify-start";
   }
 }
+
+/**
+ * A server-paged grid's field (Register, Amazon Orders) as a column reads it: its filter
+ * kind, and its filter and sort values taken off the grid row's record.
+ */
+export function fieldAccessors<TRow>(field: {
+  filterKind: FilterKind;
+  filterValue?: (row: TRow) => string | null;
+  sortValue?: (row: TRow) => string | number | null | undefined;
+}) {
+  const { filterKind, filterValue, sortValue } = field;
+  return {
+    filterKind,
+    filterValue: filterValue
+      ? (row: NodeGridRow<TRow>) => filterValue(row.node)
+      : undefined,
+    sortValue: sortValue ? (row: NodeGridRow<TRow>) => sortValue(row.node) : undefined,
+  };
+}
