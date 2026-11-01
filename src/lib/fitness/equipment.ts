@@ -1,4 +1,4 @@
-import { BAR_PRESETS, DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
+import { barPresetId, DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
 import type { ExerciseEquipment } from "./types";
 
 export const EQUIPMENT_OPTIONS: Array<{
@@ -87,24 +87,23 @@ function formatSimpleEquipment(
   return style === "short" ? `${base} L/R` : `${base} · L/R`;
 }
 
-function formatBarbellShort(barWeightLb: number): string {
-  const bar = parseBarWeight(barWeightLb);
-  const preset = BAR_PRESETS.find((p) => p.weight === bar && p.id !== "none");
-  if (preset?.id === "ez") return "Barbell · EZ 15";
-  if (preset?.id === "training") return "Barbell · Training 35";
-  if (preset?.id === "olympic" || bar === DEFAULT_BAR_WEIGHT_LB) {
-    return "Barbell";
-  }
-  return `Barbell · ${bar} lb`;
-}
+const BAR_TAGS = {
+  olympic: "Olympic 45",
+  ez: "EZ 15",
+  training: "Training 35",
+} as const;
 
-function formatBarbellBadge(barWeightLb: number): string {
+/**
+ * A barbell with its bar: "Barbell · EZ 15", or the weight for a bar that is no preset. The
+ * short form drops the standard Olympic bar, which goes without saying in the picker.
+ */
+function formatBarbell(barWeightLb: number, style: "short" | "badge"): string {
   const bar = parseBarWeight(barWeightLb);
-  const preset = BAR_PRESETS.find((p) => p.weight === bar && p.id !== "none");
-  if (preset?.id === "olympic") return "Barbell · Olympic 45";
-  if (preset?.id === "ez") return "Barbell · EZ 15";
-  if (preset?.id === "training") return "Barbell · Training 35";
-  if (bar === DEFAULT_BAR_WEIGHT_LB) return "Barbell · Olympic 45";
+  const preset = barPresetId(bar);
+  if (preset === "olympic" && style === "short") return "Barbell";
+  if (preset === "olympic" || preset === "ez" || preset === "training") {
+    return `Barbell · ${BAR_TAGS[preset]}`;
+  }
   return `Barbell · ${bar} lb`;
 }
 
@@ -114,7 +113,7 @@ export function formatEquipmentShort(
   barWeightLb: number,
   unilateral: boolean,
 ): string {
-  if (equipment === "barbell") return formatBarbellShort(barWeightLb);
+  if (equipment === "barbell") return formatBarbell(barWeightLb, "short");
   return formatSimpleEquipment(equipment, unilateral, "short");
 }
 
@@ -127,7 +126,7 @@ export function formatEquipmentBadge(
   barWeightLb: number,
   unilateral: boolean,
 ): string {
-  if (equipment === "barbell") return formatBarbellBadge(barWeightLb);
+  if (equipment === "barbell") return formatBarbell(barWeightLb, "badge");
   return formatSimpleEquipment(equipment, unilateral, "badge");
 }
 
