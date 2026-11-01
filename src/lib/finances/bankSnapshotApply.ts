@@ -1,13 +1,11 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
   financeCaptureCoverage,
   financeStatements,
-  financePayees,
   financeTransactions,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import type { FinanceAuditChange, FinanceMoneyCheckpoint } from "./audit/types";
@@ -28,11 +26,7 @@ import { recordSourceState } from "./sourceStateWrite";
 import type { FinanceExecutor } from "./dbExecutor";
 import { loadAndPlanReclassify, writeReclassified } from "./reclassifyPlan";
 import { centsToNumericString, numericStringToCents } from "./money";
-import {
-  categoryForNewTransaction,
-  type AutoCategoryMode,
-} from "./payees/autoCategory";
-import { refusedBillClaims } from "./payees/billClaimGate";
+import { autoFileNewRows } from "./payees/claims";
 
 export type BankSnapshotApplyResult = {
   accountId: string;
@@ -230,68 +224,6 @@ export async function reclassifyInsideTransaction(
 ): Promise<void> {
   const { changed } = await loadAndPlanReclassify(executor, userId);
   await writeReclassified(executor, userId, changed);
-}
-
-export async function autoFileNewRows(
-  executor: FinanceExecutor,
-  userId: string,
-  transactionIds: readonly string[],
-): Promise<void> {
-  if (transactionIds.length === 0) return;
-  const rows = await executor
-    .select({
-      id: financeTransactions.id,
-      transactionDate: financeTransactions.transactionDate,
-      amount: financeTransactions.amount,
-      claimedBudgetCategoryId: financePayees.claimedBudgetCategoryId,
-      defaultBudgetCategoryId: financePayees.defaultBudgetCategoryId,
-      autoCategoryMode: financePayees.autoCategoryMode,
-    })
-    .from(financeTransactions)
-    .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        eq(financePayees.userId, userId),
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.offBudget, false),
-        isNull(financeTransactions.budgetCategoryId),
-        sql`${financeTransactions.derivedFlow} is distinct from 'internal_transfer'`,
-        inArray(financeTransactions.id, [...transactionIds]),
-      ),
-    );
-  const refused = await refusedBillClaims(
-    executor,
-    userId,
-    rows.flatMap((row) =>
-      row.claimedBudgetCategoryId
-        ? [
-            {
-              id: row.id,
-              transactionDate: row.transactionDate,
-              amountCents: numericStringToCents(row.amount) ?? 0,
-              claimedBudgetCategoryId: row.claimedBudgetCategoryId,
-            },
-          ]
-        : [],
-    ),
-  );
-  for (const row of rows) {
-    const categoryId = categoryForNewTransaction(
-      {
-        claimedBudgetCategoryId: row.claimedBudgetCategoryId,
-        defaultBudgetCategoryId: row.defaultBudgetCategoryId,
-        autoCategoryMode: row.autoCategoryMode as AutoCategoryMode,
-      },
-      { claimApplies: !refused.has(row.id) },
-    );
-    if (!categoryId) continue;
-    await executor
-      .update(financeTransactions)
-      .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
-      .where(ownedRow(financeTransactions, row.id, userId));
-  }
 }
 
 async function loadNormalizedTransactionState(

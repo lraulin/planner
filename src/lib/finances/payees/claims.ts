@@ -104,6 +104,83 @@ async function envelopesOf(
     );
 }
 
+/** The ids among `rows` whose payee's claim a bill refuses (`billClaimGate.ts`). */
+async function refusedClaims(
+  executor: FinanceExecutor,
+  userId: string,
+  rows: readonly {
+    id: string;
+    transactionDate: string;
+    amount: string;
+    claimedBudgetCategoryId: string | null;
+  }[],
+): Promise<Set<string>> {
+  return refusedBillClaims(
+    executor,
+    userId,
+    rows.flatMap((row) =>
+      row.claimedBudgetCategoryId
+        ? [
+            {
+              id: row.id,
+              transactionDate: row.transactionDate,
+              amountCents: numericStringToCents(row.amount) ?? 0,
+              claimedBudgetCategoryId: row.claimedBudgetCategoryId,
+            },
+          ]
+        : [],
+    ),
+  );
+}
+
+/**
+ * File just-ingested rows the way a new transaction is filed: into the payee's claim unless a
+ * bill refuses it, else the payee's learned or fixed default. Rows already in an envelope, on
+ * off-budget accounts or internal transfers are left alone.
+ */
+export async function autoFileNewRows(
+  executor: FinanceExecutor,
+  userId: string,
+  transactionIds: readonly string[],
+): Promise<void> {
+  if (transactionIds.length === 0) return;
+  const rows = await executor
+    .select({
+      id: financeTransactions.id,
+      transactionDate: financeTransactions.transactionDate,
+      amount: financeTransactions.amount,
+      claimedBudgetCategoryId: financePayees.claimedBudgetCategoryId,
+      defaultBudgetCategoryId: financePayees.defaultBudgetCategoryId,
+      autoCategoryMode: financePayees.autoCategoryMode,
+    })
+    .from(financeTransactions)
+    .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .where(
+      and(
+        ...fileableConditions(userId),
+        isNull(financeTransactions.budgetCategoryId),
+        inArray(financeTransactions.id, [...transactionIds]),
+      ),
+    );
+  const refused = await refusedClaims(executor, userId, rows);
+  await fileRows(
+    executor,
+    userId,
+    rows.flatMap((row) => {
+      const categoryId = categoryForNewTransaction(
+        {
+          claimedBudgetCategoryId: row.claimedBudgetCategoryId,
+          defaultBudgetCategoryId: row.defaultBudgetCategoryId,
+          autoCategoryMode: row.autoCategoryMode as AutoCategoryMode,
+        },
+        { claimApplies: !refused.has(row.id) },
+      );
+      return categoryId ? [{ id: row.id, categoryId }] : [];
+    }),
+  );
+}
+
 /**
  * File claimed payees' on-budget charges into the envelope that claims them.
  *
@@ -130,7 +207,7 @@ export async function applyPayeeClaims(
   const rows = await executor
     .select({
       id: financeTransactions.id,
-      categoryId: financePayees.claimedBudgetCategoryId,
+      claimedBudgetCategoryId: financePayees.claimedBudgetCategoryId,
       transactionDate: financeTransactions.transactionDate,
       amount: financeTransactions.amount,
     })
@@ -148,29 +225,14 @@ export async function applyPayeeClaims(
     );
   if (rows.length === 0) return { moved: 0 };
 
-  const refused = await refusedBillClaims(
-    executor,
-    userId,
-    rows.flatMap((row) =>
-      row.categoryId
-        ? [
-            {
-              id: row.id,
-              transactionDate: row.transactionDate,
-              amountCents: numericStringToCents(row.amount) ?? 0,
-              claimedBudgetCategoryId: row.categoryId,
-            },
-          ]
-        : [],
-    ),
-  );
+  const refused = await refusedClaims(executor, userId, rows);
 
   const moved = await fileRows(
     executor,
     userId,
     rows.flatMap((row) =>
-      row.categoryId && !refused.has(row.id)
-        ? [{ id: row.id, categoryId: row.categoryId }]
+      row.claimedBudgetCategoryId && !refused.has(row.id)
+        ? [{ id: row.id, categoryId: row.claimedBudgetCategoryId }]
         : [],
     ),
   );

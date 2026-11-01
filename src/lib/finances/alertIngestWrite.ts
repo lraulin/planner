@@ -15,7 +15,8 @@ import { parseAlertEmail } from "./alertEmail";
 import { retireAlertHolds } from "./alertHolds";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import { writeFinanceAuditEvent } from "./audit/writes";
-import { autoFileNewRows, reclassifyInsideTransaction } from "./bankSnapshotApply";
+import { reclassifyInsideTransaction } from "./bankSnapshotApply";
+import { autoFileNewRows } from "./payees/claims";
 import { centsToNumericString } from "./money";
 
 export type AlertPush = {
