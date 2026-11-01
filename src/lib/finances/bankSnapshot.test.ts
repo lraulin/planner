@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   parseBankBrowserSnapshot,
-  parseBankDate,
   PLANNER_BANK_SNAPSHOT_HEADER,
   type BankBrowserSnapshotV1,
 } from "./bankSnapshot";
@@ -294,17 +293,5 @@ describe("closed-statement evidence (recentPosted)", () => {
         text({ ...withRecent, recentStatementClosedOn: "last Tuesday" }),
       ).ok,
     ).toBe(false);
-  });
-});
-
-describe("parseBankDate", () => {
-  it.each([
-    ["2026-08-29", "2026-08-29"],
-    ["Sat, Aug 29, 2026", "2026-08-29"],
-    ["Aug 29, 2026", "2026-08-29"],
-    ["08/29/2026", "2026-08-29"],
-    ["Feb 30, 2026", null],
-  ])("parses %s without turning a bank day into an instant", (raw, expected) => {
-    expect(parseBankDate(raw)).toBe(expected);
   });
 });

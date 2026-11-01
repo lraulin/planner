@@ -1,5 +1,5 @@
 import { parseCsvRowsWithLines } from "@/lib/csv/text";
-import { dateKeyFromParts, isRealCalendarDate } from "@/lib/schedule/geometry";
+import { parseCalendarDayText } from "@/lib/calendarDayText";
 import { parseAmountCents } from "@/lib/finances/money";
 import { toDateKey } from "@/lib/schedule/geometry";
 
@@ -17,33 +17,6 @@ export function amazonAmountCents(raw: string | undefined): number | null {
   if (!value) return null;
   return parseAmountCents(value);
 }
-
-const MONTHS: Record<string, string> = {
-  jan: "01",
-  january: "01",
-  feb: "02",
-  february: "02",
-  mar: "03",
-  march: "03",
-  apr: "04",
-  april: "04",
-  may: "05",
-  jun: "06",
-  june: "06",
-  jul: "07",
-  july: "07",
-  aug: "08",
-  august: "08",
-  sep: "09",
-  sept: "09",
-  september: "09",
-  oct: "10",
-  october: "10",
-  nov: "11",
-  november: "11",
-  dec: "12",
-  december: "12",
-};
 
 /**
  * Amazon instants (`2018-12-27T11:10:19Z`) become a calendar day via UTC components.
@@ -65,39 +38,13 @@ export function amazonDateKey(raw: string | undefined): string {
 export function amazonCalendarDay(raw: string | undefined): string {
   const value = amazonBlank(raw);
   if (!value) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return isRealCalendarDate(
-      Number(value.slice(0, 4)),
-      Number(value.slice(5, 7)),
-      Number(value.slice(8, 10)),
-    )
-      ? value
-      : "";
-  }
-
-  const weekday = /^[A-Za-z]{3,9},?\s+([A-Za-z]{3,9})\s+(\d{1,2}),\s+(\d{4})$/.exec(
-    value,
-  );
-  if (weekday) return fromMonthDayYear(weekday[1], weekday[2], weekday[3]);
-
-  const monthDay = /^([A-Za-z]{3,9})\s+(\d{1,2}),\s+(\d{4})$/.exec(value);
-  if (monthDay) return fromMonthDayYear(monthDay[1], monthDay[2], monthDay[3]);
-
-  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
-  if (slash) {
-    return dateKeyFromParts(Number(slash[3]), Number(slash[1]), Number(slash[2])) ?? "";
-  }
+  const day = parseCalendarDayText(value);
+  if (day) return day;
 
   if (/^\d{4}-\d{2}-\d{2}T/.test(value) || /Z$/i.test(value)) {
     return amazonDateKey(value);
   }
   return "";
-}
-
-function fromMonthDayYear(monthRaw: string, dayRaw: string, yearRaw: string): string {
-  const month = MONTHS[monthRaw.toLowerCase()];
-  if (!month) return "";
-  return dateKeyFromParts(Number(yearRaw), Number(month), Number(dayRaw)) ?? "";
 }
 
 /** Last four from `Visa - 9910` or `Gift Certificate/Card and Visa - 4903`. */

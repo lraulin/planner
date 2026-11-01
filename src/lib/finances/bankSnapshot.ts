@@ -1,5 +1,5 @@
 import { parseAmountCents } from "./money";
-import { dateKeyFromParts, isRealCalendarDate } from "@/lib/schedule/geometry";
+import { parseCalendarDayText } from "@/lib/calendarDayText";
 import type { FinanceFeed } from "./types";
 
 export const PLANNER_BANK_SNAPSHOT_HEADER = "# planner-bank-snapshot v1";
@@ -90,21 +90,6 @@ export type ParsedBankBrowserSnapshot = {
 export type ParseBankBrowserSnapshotResult =
   { ok: true; snapshot: ParsedBankBrowserSnapshot } | { ok: false; error: string };
 
-const MONTHS: Record<string, string> = {
-  jan: "01",
-  feb: "02",
-  mar: "03",
-  apr: "04",
-  may: "05",
-  jun: "06",
-  jul: "07",
-  aug: "08",
-  sep: "09",
-  oct: "10",
-  nov: "11",
-  dec: "12",
-};
-
 const TOP_LEVEL_KEYS = new Set([
   "version",
   "source",
@@ -145,43 +130,6 @@ export function looksLikeBankBrowserSnapshot(text: string): boolean {
 
 export function looksLikeLegacyPlannerPending(text: string): boolean {
   return firstMeaningfulLine(text) === LEGACY_PLANNER_PENDING_HEADER;
-}
-
-/**
- * Parse bank calendar text by components. A bank date is a day label, never an instant;
- * `new Date(raw)` would let the process timezone change it.
- */
-export function parseBankDate(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    const [year, month, day] = trimmed.split("-").map(Number);
-    return isRealCalendarDate(year, month, day) ? trimmed : null;
-  }
-
-  const weekday = /^[A-Za-z]{3}, ([A-Za-z]{3}) (\d{1,2}), (\d{4})$/.exec(trimmed);
-  if (weekday) return fromMonthDayYear(weekday[1], weekday[2], weekday[3]);
-
-  const monthDay = /^([A-Za-z]{3}) (\d{1,2}), (\d{4})$/.exec(trimmed);
-  if (monthDay) return fromMonthDayYear(monthDay[1], monthDay[2], monthDay[3]);
-
-  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
-  if (!slash) return null;
-  const month = Number(slash[1]);
-  const day = Number(slash[2]);
-  const year = Number(slash[3]);
-  return dateKeyFromParts(year, month, day);
-}
-
-function fromMonthDayYear(
-  monthRaw: string,
-  dayRaw: string,
-  yearRaw: string,
-): string | null {
-  const month = MONTHS[monthRaw.toLowerCase()];
-  if (!month) return null;
-  const year = Number(yearRaw);
-  const day = Number(dayRaw);
-  return dateKeyFromParts(year, Number(month), day);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -257,14 +205,15 @@ function parseRows(
         error: `The ${label} row ${index + 1} is missing its description.`,
       };
     }
-    const transactionDate = parseBankDate(transactionDateRaw);
+    const transactionDate = parseCalendarDayText(transactionDateRaw);
     if (transactionDate === null) {
       return {
         ok: false,
         error: `Could not read the date for ${cleanDescription}.`,
       };
     }
-    const postedDate = postedDateRaw === null ? null : parseBankDate(postedDateRaw);
+    const postedDate =
+      postedDateRaw === null ? null : parseCalendarDayText(postedDateRaw);
     if (
       (!pending && postedDate === null) ||
       (postedDateRaw !== null && postedDate === null)
@@ -420,7 +369,7 @@ export function parseBankBrowserSnapshot(text: string): ParseBankBrowserSnapshot
     if (typeof unknown.recentStatementClosedOn !== "string") {
       return { ok: false, error: "The closed statement has no close date." };
     }
-    recentStatementClosedOn = parseBankDate(unknown.recentStatementClosedOn);
+    recentStatementClosedOn = parseCalendarDayText(unknown.recentStatementClosedOn);
     if (recentStatementClosedOn === null) {
       return { ok: false, error: "Could not read the closed statement's date." };
     }
