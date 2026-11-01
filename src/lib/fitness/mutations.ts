@@ -60,12 +60,13 @@ export async function createExercise(
   userId: string,
   name: string,
   prefs?: ExercisePrefs,
+  executor: DbExecutor = db,
 ): Promise<string> {
   const trimmed = (prefs?.name ?? name).trim();
   if (!trimmed) throw new Error("Exercise name is required.");
 
   const cols = prefsToColumns(prefs);
-  const [row] = await db
+  const [row] = await executor
     .insert(exercises)
     .values({
       userId,
@@ -146,27 +147,8 @@ async function resolveExerciseId(
     return block.exerciseId;
   }
   if (block.exerciseName) {
-    const name = block.exerciseName.trim();
-    if (!name) throw new Error("Exercise name is required.");
-    const [existing] = await tx
-      .select({ id: exercises.id })
-      .from(exercises)
-      .where(and(eq(exercises.userId, userId), eq(exercises.name, name)))
-      .limit(1);
-    if (existing) return existing.id;
-
-    // Last-resort create with defaults — prefer catalog New exercise UI.
-    const [created] = await tx
-      .insert(exercises)
-      .values({
-        userId,
-        name,
-        equipment: "barbell",
-        barWeight: String(DEFAULT_BAR_WEIGHT_LB),
-        unilateral: false,
-      })
-      .returning({ id: exercises.id });
-    return created.id;
+    // Last resort: an unknown name gets default barbell prefs — prefer catalog New exercise UI.
+    return findOrCreateExercise(userId, block.exerciseName, tx);
   }
   throw new Error("Each exercise needs an id or a name.");
 }
@@ -177,18 +159,19 @@ async function resolveExerciseId(
 export async function findOrCreateExercise(
   userId: string,
   name: string,
+  executor: DbExecutor = db,
 ): Promise<string> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Exercise name is required.");
 
-  const [existing] = await db
+  const [existing] = await executor
     .select({ id: exercises.id })
     .from(exercises)
     .where(and(eq(exercises.userId, userId), eq(exercises.name, trimmed)))
     .limit(1);
   if (existing) return existing.id;
 
-  return createExercise(userId, trimmed);
+  return createExercise(userId, trimmed, undefined, executor);
 }
 
 /**
