@@ -1,10 +1,9 @@
 import type { DbExecutor } from "@/db/executor";
 import { nodes, resultAreaDetails } from "@/db/schema";
-import { ownedParentOf, ownedRow, requireOwnedRow } from "@/lib/db/owned";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import { keyAtPosition } from "./siblingOrder";
-import type { Position } from "./types";
-import { isSelfOrDescendantVia, subtreeIdsVia } from "./ancestry";
+import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
+import { and, eq, inArray } from "drizzle-orm";
+import { subtreeIdsVia } from "./ancestry";
+import { treeTableRows } from "./treeTableRows";
 
 /**
  * The reads every outline write starts from: a node proven to be the caller's, its siblings
@@ -12,71 +11,16 @@ import { isSelfOrDescendantVia, subtreeIdsVia } from "./ancestry";
  * scopes on `userId`, so a guessed id from another user's outline is simply not found.
  */
 
-export function parentMatches(parentId: string | null) {
-  return parentId === null ? isNull(nodes.parentId) : eq(nodes.parentId, parentId);
-}
+export const {
+  parentMatches,
+  expandParent,
+  siblingKeys,
+  sortKeyFor,
+  isSelfOrDescendant,
+} = treeTableRows(nodes);
 
 export async function requireNode(tx: DbExecutor, userId: string, nodeId: string) {
   return requireOwnedRow(tx, nodes, nodeId, userId, `Node not found: ${nodeId}`);
-}
-
-/**
- * Open a parent so a newly nested child is actually on screen. Collapse is stored on the
- * row, and Collapse All stamps the flag onto leaves too, so a first child under a
- * previously-empty row would otherwise appear and immediately hide.
- *
- * No-op when `parentId` is null or the parent is already expanded — the `collapsed = true`
- * predicate keeps `updatedAt` still when there is nothing to change.
- */
-export async function expandParent(
-  tx: DbExecutor,
-  userId: string,
-  parentId: string | null,
-): Promise<void> {
-  if (parentId === null) return;
-  await tx
-    .update(nodes)
-    .set({ collapsed: false, updatedAt: new Date() })
-    .where(
-      and(eq(nodes.id, parentId), eq(nodes.userId, userId), eq(nodes.collapsed, true)),
-    );
-}
-
-/** Sibling sort keys under `parentId`, in order. */
-export async function siblingKeys(
-  tx: DbExecutor,
-  userId: string,
-  parentId: string | null,
-): Promise<{ id: string; sortKey: string }[]> {
-  return tx
-    .select({ id: nodes.id, sortKey: nodes.sortKey })
-    .from(nodes)
-    .where(and(eq(nodes.userId, userId), parentMatches(parentId)))
-    .orderBy(asc(nodes.sortKey));
-}
-
-/**
- * Resolves a `Position` into a sort key, ignoring `excludeId` so that a node being moved
- * within its current parent does not treat itself as a neighbour.
- */
-export async function sortKeyFor(
-  tx: DbExecutor,
-  userId: string,
-  parentId: string | null,
-  position: Position,
-  excludeId?: string,
-): Promise<string> {
-  return keyAtPosition(await siblingKeys(tx, userId, parentId), position, excludeId);
-}
-
-/** True when `candidateId` is `nodeId` itself or sits somewhere beneath it. */
-export async function isSelfOrDescendant(
-  tx: DbExecutor,
-  userId: string,
-  nodeId: string,
-  candidateId: string | null,
-): Promise<boolean> {
-  return isSelfOrDescendantVia(nodeId, candidateId, ownedParentOf(tx, nodes, userId));
 }
 
 /**

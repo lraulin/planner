@@ -1,34 +1,25 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import { isSelfOrDescendantVia } from "@/lib/tree/ancestry";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { DbExecutor } from "@/db/executor";
 import { notes, type NewNote, type NoteFlag } from "@/db/schema";
 import {
   deleteOwnedRow,
   findByExternalRef,
-  ownedParentOf,
   ownedRow,
   requireOwnedRow,
 } from "@/lib/db/owned";
-import {
-  indentParentId,
-  keyAtPosition,
-  verticalPosition,
-} from "@/lib/tree/siblingOrder";
+import { indentParentId, verticalPosition } from "@/lib/tree/siblingOrder";
 import { assertContactOwned } from "@/lib/contacts/ownership";
 import { assertNodeOwned } from "@/lib/tree/ownership";
 import type { ExternalRef } from "@/db/schema";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import type { NotePosition } from "./types";
+import { treeTableRows } from "@/lib/tree/treeTableRows";
 
 /**
  * Every mutation takes a `userId` and scopes on it, so a caller cannot reach another user's
  * notes even by guessing an id. Same contract as `src/lib/tree/mutations.ts`.
  */
-
-function parentMatches(parentId: string | null) {
-  return parentId === null ? isNull(notes.parentId) : eq(notes.parentId, parentId);
-}
 
 /**
  * The sort key of the user's last top-level note, or null when there is none — what an
@@ -46,6 +37,9 @@ export async function lastRootNoteSortKey(
     .limit(1);
   return last?.sortKey ?? null;
 }
+
+const { expandParent, siblingKeys, sortKeyFor, isSelfOrDescendant } =
+  treeTableRows(notes);
 
 async function requireNote(tx: DbExecutor, userId: string, noteId: string) {
   return requireOwnedRow(tx, notes, noteId, userId, "Note not found.");
@@ -66,62 +60,6 @@ async function assertLinksOwned(
 ): Promise<void> {
   await assertNodeOwned(tx, userId, links.nodeId, "Linked record");
   await assertContactOwned(tx, userId, links.contactId);
-}
-
-/**
- * Open a parent so a newly nested child is actually on screen. Same rule as outline
- * `expandParent`: Collapse All stamps the flag onto leaves, so a first child would
- * otherwise hide under a parent that had no expander when it was collapsed.
- */
-async function expandParent(
-  tx: DbExecutor,
-  userId: string,
-  parentId: string | null,
-): Promise<void> {
-  if (parentId === null) return;
-  await tx
-    .update(notes)
-    .set({ collapsed: false, updatedAt: new Date() })
-    .where(
-      and(eq(notes.id, parentId), eq(notes.userId, userId), eq(notes.collapsed, true)),
-    );
-}
-
-/** Sibling sort keys under `parentId`, in order. */
-async function siblingKeys(
-  tx: DbExecutor,
-  userId: string,
-  parentId: string | null,
-): Promise<{ id: string; sortKey: string }[]> {
-  return tx
-    .select({ id: notes.id, sortKey: notes.sortKey })
-    .from(notes)
-    .where(and(eq(notes.userId, userId), parentMatches(parentId)))
-    .orderBy(asc(notes.sortKey));
-}
-
-/**
- * Resolves a `NotePosition` into a sort key, ignoring `excludeId` so a note being moved
- * within its current parent does not treat itself as a neighbour.
- */
-async function sortKeyFor(
-  tx: DbExecutor,
-  userId: string,
-  parentId: string | null,
-  position: NotePosition,
-  excludeId?: string,
-): Promise<string> {
-  return keyAtPosition(await siblingKeys(tx, userId, parentId), position, excludeId);
-}
-
-/** True when `candidateId` is `noteId` itself or sits somewhere beneath it. */
-async function isSelfOrDescendant(
-  tx: DbExecutor,
-  userId: string,
-  noteId: string,
-  candidateId: string | null,
-): Promise<boolean> {
-  return isSelfOrDescendantVia(noteId, candidateId, ownedParentOf(tx, notes, userId));
 }
 
 export type NoteInput = {
