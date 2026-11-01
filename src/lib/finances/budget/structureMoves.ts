@@ -9,7 +9,11 @@ import {
   type BudgetDropZone,
   type BudgetStructureRef,
 } from "./hierarchy";
-import { lastBudgetChildSortKey, requireCategory, requireGroup } from "./structureRows";
+import {
+  endOfBudgetGroupSortKey,
+  requireCategory,
+  requireGroup,
+} from "./structureRows";
 
 /**
  * Reordering and reparenting the budget's groups and envelopes. Every write takes `userId`
@@ -124,9 +128,7 @@ export async function moveBudgetStructureItemIntoGroup(
     );
     return;
   }
-  const nextSortKey = await lastBudgetChildSortKey(userId, null);
-  const sortKeyValue =
-    nextSortKey === null ? sortKey.first() : sortKey.after(nextSortKey);
+  const sortKeyValue = await endOfBudgetGroupSortKey(userId, null);
   if (moving.kind === "category") {
     await requireCategory(userId, moving.id);
     await db

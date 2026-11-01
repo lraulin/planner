@@ -20,7 +20,12 @@ import { applyPayeeClaims } from "../payees/claims";
 import { monthKeyOf, type MonthKey } from "./envelope";
 import { PRESET_GROUPS, type BudgetPreset } from "./presets";
 import { openingPositionFor } from "./queries";
-import { lastBudgetChildSortKey, requireCategory, requireGroup } from "./structureRows";
+import {
+  endOfBudgetGroupSortKey,
+  requireCategory,
+  requireGroup,
+  requireGroupForKind,
+} from "./structureRows";
 import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
 import { writeFinanceAuditEvent } from "../audit/writes";
 
@@ -179,7 +184,6 @@ export async function createCategoryGroup(
       throw new Error(`A group inside ${parent.name} has to be ${parent.kind}.`);
     }
   }
-  const last = await lastBudgetChildSortKey(userId, parentGroupId);
 
   const [row] = await db
     .insert(financeCategoryGroups)
@@ -188,7 +192,7 @@ export async function createCategoryGroup(
       parentGroupId,
       name,
       kind: params.kind,
-      sortKey: last === null ? sortKey.first() : sortKey.after(last),
+      sortKey: await endOfBudgetGroupSortKey(userId, parentGroupId),
     })
     .returning({ id: financeCategoryGroups.id });
   if (!row) throw new Error("Could not create the group.");
@@ -221,13 +225,7 @@ export async function createBudgetCategory(
   if (name === "") throw new Error("An envelope needs a name.");
   const kind = params.kind ?? "spending";
   const groupId = params.groupId ?? null;
-  if (groupId !== null) {
-    const group = await requireGroup(userId, groupId);
-    if (group.kind !== kind) {
-      throw new Error(`${group.name} holds ${group.kind} envelopes, not ${kind}.`);
-    }
-  }
-  const last = await lastBudgetChildSortKey(userId, groupId);
+  if (groupId !== null) await requireGroupForKind(userId, groupId, kind);
 
   const [row] = await db
     .insert(financeBudgetCategories)
@@ -237,7 +235,7 @@ export async function createBudgetCategory(
       name,
       kind,
       ...(kind === "bill" ? DEFAULT_BILL_FACET : {}),
-      sortKey: last === null ? sortKey.first() : sortKey.after(last),
+      sortKey: await endOfBudgetGroupSortKey(userId, groupId),
     })
     .returning({ id: financeBudgetCategories.id });
   if (!row) throw new Error("Could not create the envelope.");
@@ -315,16 +313,8 @@ async function writeBudgetCategory(
 
   let movedSortKey: string | undefined;
   if (groupId !== undefined && groupId !== category.groupId) {
-    if (groupId !== null) {
-      const group = await requireGroup(userId, groupId);
-      if (group.kind !== nextKind) {
-        throw new Error(
-          `${group.name} holds ${group.kind} envelopes, not ${nextKind}.`,
-        );
-      }
-    }
-    const last = await lastBudgetChildSortKey(userId, groupId);
-    movedSortKey = last === null ? sortKey.first() : sortKey.after(last);
+    if (groupId !== null) await requireGroupForKind(userId, groupId, nextKind);
+    movedSortKey = await endOfBudgetGroupSortKey(userId, groupId);
   }
 
   const name = edit.name?.trim();

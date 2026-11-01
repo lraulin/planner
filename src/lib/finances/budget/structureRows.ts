@@ -1,6 +1,10 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { financeBudgetCategories, financeCategoryGroups } from "@/db/schema";
+import {
+  financeBudgetCategories,
+  financeCategoryGroups,
+  type EnvelopeKind,
+} from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
 import * as sortKey from "@/lib/tree/sortKey";
 
@@ -42,10 +46,14 @@ export async function requireGroup(userId: string, groupId: string) {
   return row;
 }
 
-export async function lastBudgetChildSortKey(
+/**
+ * The sort key that puts a new child last in `parentGroupId` (or at the top level for null),
+ * after both the subgroups and the envelopes already there — they share one order.
+ */
+export async function endOfBudgetGroupSortKey(
   userId: string,
   parentGroupId: string | null,
-): Promise<string | null> {
+): Promise<string> {
   const [childGroups, envelopes] = await Promise.all([
     db
       .select({ sortKey: financeCategoryGroups.sortKey })
@@ -70,9 +78,20 @@ export async function lastBudgetChildSortKey(
         ),
       ),
   ]);
-  return (
-    [...childGroups, ...envelopes]
-      .map((row) => row.sortKey)
-      .sort((left, right) => sortKey.compare(right, left))[0] ?? null
-  );
+  const [last] = [...childGroups, ...envelopes]
+    .map((row) => row.sortKey)
+    .sort((left, right) => sortKey.compare(right, left));
+  return last === undefined ? sortKey.first() : sortKey.after(last);
+}
+
+/** The group, refusing one that holds envelopes of another kind than `kind`. */
+export async function requireGroupForKind(
+  userId: string,
+  groupId: string,
+  kind: EnvelopeKind,
+): Promise<void> {
+  const group = await requireGroup(userId, groupId);
+  if (group.kind !== kind) {
+    throw new Error(`${group.name} holds ${group.kind} envelopes, not ${kind}.`);
+  }
 }
