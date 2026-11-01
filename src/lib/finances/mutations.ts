@@ -114,6 +114,16 @@ type TransactionAuditRow = {
   ]: (typeof financeTransactions.$inferSelect)[K];
 };
 
+/** The audit columns of the caller's transaction, or undefined when there is none. */
+async function auditRow(tx: DbExecutor, userId: string, id: string) {
+  const [row] = await tx
+    .select(TRANSACTION_AUDIT_COLUMNS)
+    .from(financeTransactions)
+    .where(ownedRow(financeTransactions, id, userId))
+    .limit(1);
+  return row;
+}
+
 /** The audit columns of these transactions and of every split child under them. */
 async function familyAuditRows(tx: DbExecutor, userId: string, ids: readonly string[]) {
   return tx
@@ -182,11 +192,7 @@ export async function updateTransaction(
   if (edit.flowOverride !== undefined) values.flowOverride = edit.flowOverride;
 
   await db.transaction(async (tx) => {
-    const [before] = await tx
-      .select(TRANSACTION_AUDIT_COLUMNS)
-      .from(financeTransactions)
-      .where(ownedRow(financeTransactions, transactionId, userId))
-      .limit(1);
+    const before = await auditRow(tx, userId, transactionId);
     if (!before) throw new Error("Transaction not found.");
 
     const flowOverrideAfter =
@@ -1491,11 +1497,7 @@ export async function unsplitTransaction(
       .update(financeTransactions)
       .set({ isParent: false, updatedAt: now })
       .where(ownedRow(financeTransactions, transactionId, userId));
-    const [afterParent] = await tx
-      .select(TRANSACTION_AUDIT_COLUMNS)
-      .from(financeTransactions)
-      .where(ownedRow(financeTransactions, transactionId, userId))
-      .limit(1);
+    const afterParent = await auditRow(tx, userId, transactionId);
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await writeFinanceAuditEvent(tx, userId, {
       kind: "transaction_split",
