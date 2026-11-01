@@ -13,12 +13,12 @@ import {
 } from "@/lib/day/sync";
 import { cascadeStateChange, type CascadeNode } from "./completionCascade";
 import { rearmReminders } from "@/lib/reminders/arm";
-import { between } from "./sortKey";
 import { assertSupportsLifecycleState } from "./lifecycle";
 import type { DbExecutor } from "@/db/executor";
 import { subtreeIds } from "./nodeRows";
 import { moveDates, nextAnchor, recurrenceOf, seriesEnds } from "./recurrenceCycle";
 import { applySettlePriorityClear } from "./priorityWrites";
+import { endOfDay } from "@/lib/day/sync";
 
 /**
  * Writes for a node's state: completion and cancellation, the day lines that record them,
@@ -328,20 +328,13 @@ async function addDayLine(
     priorityLetter?: PriorityLetter | null;
   },
 ): Promise<void> {
-  const [last] = await tx
-    .select({ sortKey: dailyItems.sortKey })
-    .from(dailyItems)
-    .where(and(eq(dailyItems.userId, userId), eq(dailyItems.day, day)))
-    .orderBy(sql`${dailyItems.sortKey} desc`)
-    .limit(1);
-
   await tx
     .insert(dailyItems)
     .values({
       userId,
       nodeId,
       day,
-      sortKey: between(last?.sortKey ?? null, null),
+      sortKey: await endOfDay(tx, userId, day),
       ...values,
     })
     .onConflictDoNothing();
