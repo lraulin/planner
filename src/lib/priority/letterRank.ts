@@ -167,11 +167,7 @@ export function letterRankEngine<T extends { id: string }>(
     if (dragIds.length === 0) return [];
     if (dragIds.includes(targetId)) return [];
 
-    const dragSet = new Set(dragIds);
-    const dragged = dragIds
-      .map((id) => items.find((item) => item.id === id))
-      .filter((item): item is T => item != null);
-    if (dragged.length !== dragIds.length) return [];
+    if (!resolveAll(items, dragIds)) return [];
 
     const target = items.find((item) => item.id === targetId);
     if (!target) return [];
@@ -179,19 +175,12 @@ export function letterRankEngine<T extends { id: string }>(
     const destination = read(target).letter;
     if (destination === null) return planClear(items, dragIds);
 
-    const members = items
-      .filter((item) => read(item).letter === destination && !dragSet.has(item.id))
-      .sort(byRank);
-    const targetIndex = members.findIndex((item) => item.id === targetId);
-    if (targetIndex === -1) return [];
-
-    const insertAt = zone === "before" ? targetIndex : targetIndex + 1;
-    members.splice(insertAt, 0, ...dragged);
-
-    return [
-      ...renumber(members, destination),
-      ...compactSources(items, dragged, destination, dragSet),
-    ];
+    return placeBlock(items, dragIds, destination, (members) => {
+      const targetIndex = members.findIndex((item) => item.id === targetId);
+      if (targetIndex === -1)
+        throw new Error("The drop target is missing from its letter.");
+      return zone === "before" ? targetIndex : targetIndex + 1;
+    });
   }
 
   /**
@@ -209,7 +198,8 @@ export function letterRankEngine<T extends { id: string }>(
 
   /**
    * Put the items `ids` names into `letter` as a contiguous block, in the order given, at
-   * the 0-based slot `slotFor` picks among the letter's other members; renumber that letter
+   * the 0-based slot `slotFor` picks among the letter's other members (in rank order);
+   * renumber that letter
    * and close the gaps the block left behind. An id that names no item cancels the whole
    * placement.
    */
@@ -217,26 +207,32 @@ export function letterRankEngine<T extends { id: string }>(
     items: T[],
     ids: readonly string[],
     letter: PriorityLetter,
-    slotFor: (memberCount: number) => number,
+    slotFor: (members: readonly T[]) => number,
   ): LetterAssignment[] {
     if (ids.length === 0) return [];
     const idSet = new Set(ids);
-    const block = ids
-      .map((entry) => items.find((item) => item.id === entry))
-      .filter((item): item is T => item != null);
-    if (block.length !== ids.length) return [];
+    const block = resolveAll(items, ids);
+    if (!block) return [];
 
     // Everything already in the letter *except* what is being placed — a row moving within
     // its own letter vacates its old slot rather than counting twice.
     const members = items
       .filter((item) => read(item).letter === letter && !idSet.has(item.id))
       .sort(byRank);
-    members.splice(slotFor(members.length), 0, ...block);
+    members.splice(slotFor(members), 0, ...block);
 
     return [
       ...renumber(members, letter),
       ...compactSources(items, block, letter, idSet),
     ];
+  }
+
+  /** The items `ids` names, in that order — or null when any id names no item. */
+  function resolveAll(items: T[], ids: readonly string[]): T[] | null {
+    const found = ids
+      .map((entry) => items.find((item) => item.id === entry))
+      .filter((item): item is T => item != null);
+    return found.length === ids.length ? found : null;
   }
 
   /**
@@ -290,10 +286,10 @@ export function letterRankEngine<T extends { id: string }>(
     if (ids.length === 0) return [];
     if (letter === null) return planClear(items, ids);
 
-    return placeBlock(items, ids, letter, (memberCount) => {
+    return placeBlock(items, ids, letter, (members) => {
       // A bare letter means "somewhere in this letter" — the end is the honest answer.
-      const requested = rank === null ? memberCount + 1 : rank;
-      return Math.min(Math.max(requested, 1), memberCount + 1) - 1;
+      const requested = rank === null ? members.length + 1 : rank;
+      return Math.min(Math.max(requested, 1), members.length + 1) - 1;
     });
   }
 
