@@ -721,18 +721,12 @@ export function cashFlow(
   const spanFor = cadenceSpans(rows, bills);
   const grouped = bucketRows(rows, buckets);
 
-  const income = buckets.map((bucket) =>
-    (grouped.get(bucket.key) ?? []).reduce(
-      (total, row) => total + incomeCentsOf(row),
-      0,
-    ),
-  );
-  const external = buckets.map((bucket) =>
-    (grouped.get(bucket.key) ?? []).reduce(
-      (total, row) => total + externalTransferCentsOf(row),
-      0,
-    ),
-  );
+  const perBucket = (centsOf: (row: AnalyticsRow) => number) =>
+    buckets.map((bucket) =>
+      (grouped.get(bucket.key) ?? []).reduce((total, row) => total + centsOf(row), 0),
+    );
+  const income = perBucket(incomeCentsOf);
+  const external = perBucket(externalTransferCentsOf);
   const fixed = new Array<number>(buckets.length).fill(0);
   const variable = new Array<number>(buckets.length).fill(0);
 
