@@ -39,6 +39,7 @@ import { reclassifyInsideTransaction } from "./bankSnapshotApply";
 import { loadAndPlanReclassify, writeReclassified } from "./reclassifyPlan";
 import { writeFinanceAuditEvent } from "./audit/writes";
 import { monthKeyOf } from "./budget/envelope";
+import type { DbExecutor } from "@/db/executor";
 
 /**
  * Writes for the register.
@@ -112,6 +113,22 @@ type TransactionAuditRow = {
     K in keyof typeof TRANSACTION_AUDIT_COLUMNS
   ]: (typeof financeTransactions.$inferSelect)[K];
 };
+
+/** The audit columns of these transactions and of every split child under them. */
+async function familyAuditRows(tx: DbExecutor, userId: string, ids: readonly string[]) {
+  return tx
+    .select(TRANSACTION_AUDIT_COLUMNS)
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        or(
+          inArray(financeTransactions.id, [...ids]),
+          inArray(financeTransactions.parentId, [...ids]),
+        ),
+      ),
+    );
+}
 
 function transactionAuditFields(row: TransactionAuditRow) {
   return {
@@ -311,18 +328,7 @@ export async function deleteTransactions(
   if (unique.length === 0) return empty;
   try {
     return await db.transaction(async (tx) => {
-      const rows = await tx
-        .select(TRANSACTION_AUDIT_COLUMNS)
-        .from(financeTransactions)
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            or(
-              inArray(financeTransactions.id, unique),
-              inArray(financeTransactions.parentId, unique),
-            ),
-          ),
-        );
+      const rows = await familyAuditRows(tx, userId, unique);
       const selected = rows.filter((row) => unique.includes(row.id));
       if (options.requireAll) {
         const found = new Set(selected.map((row) => row.id));
@@ -1304,18 +1310,7 @@ async function writeSplitChildren(
 ): Promise<void> {
   const now = new Date();
   await db.transaction(async (tx) => {
-    const beforeRows = await tx
-      .select(TRANSACTION_AUDIT_COLUMNS)
-      .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          or(
-            eq(financeTransactions.id, parent.id),
-            eq(financeTransactions.parentId, parent.id),
-          ),
-        ),
-      );
+    const beforeRows = await familyAuditRows(tx, userId, [parent.id]);
     const scope = transactionAuditScope(beforeRows);
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     const existingIds = new Set(
@@ -1380,18 +1375,7 @@ async function writeSplitChildren(
       .set({ isParent: true, budgetCategoryId: null, updatedAt: now })
       .where(ownedRow(financeTransactions, parent.id, userId));
 
-    const afterRows = await tx
-      .select(TRANSACTION_AUDIT_COLUMNS)
-      .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          or(
-            eq(financeTransactions.id, parent.id),
-            eq(financeTransactions.parentId, parent.id),
-          ),
-        ),
-      );
+    const afterRows = await familyAuditRows(tx, userId, [parent.id]);
     const beforeById = new Map(beforeRows.map((row) => [row.id, row]));
     const afterById = new Map(afterRows.map((row) => [row.id, row]));
     const ids = [...new Set([...beforeById.keys(), ...afterById.keys()])];
@@ -1499,18 +1483,7 @@ export async function unsplitTransaction(
 
   const now = new Date();
   await db.transaction(async (tx) => {
-    const beforeRows = await tx
-      .select(TRANSACTION_AUDIT_COLUMNS)
-      .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          or(
-            eq(financeTransactions.id, transactionId),
-            eq(financeTransactions.parentId, transactionId),
-          ),
-        ),
-      );
+    const beforeRows = await familyAuditRows(tx, userId, [transactionId]);
     const scope = transactionAuditScope(beforeRows);
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await tx
