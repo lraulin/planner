@@ -280,57 +280,49 @@ function parseSubscriptions(
   raw: unknown,
   issues: SnapshotIssue[],
 ): AmazonSnapshotSubscription[] {
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw)) {
-    issues.push({ path: "subscriptions", message: "Subscriptions must be an array." });
-    return [];
-  }
   const seen = new Set<string>();
   const rows: AmazonSnapshotSubscription[] = [];
-  raw.forEach((entry, index) => {
-    const path = `subscriptions[${index}]`;
-    if (!isRecord(entry)) {
-      issues.push({ path, message: "Subscription is not an object." });
-      return;
-    }
-    const subscriptionId = identifier(entry.subscriptionId, "subscription");
-    if (!subscriptionId) {
-      issues.push({ path, message: "Missing or malformed subscription id." });
-      return;
-    }
-    if (seen.has(subscriptionId)) {
-      issues.push({
-        path,
-        message: `Duplicate subscription id ${subscriptionId} was ignored.`,
-      });
-      return;
-    }
-    seen.add(subscriptionId);
-    const asin = asinOf(entry.asin);
-    if (entry.asin !== undefined && asString(entry.asin) !== "" && asin === "") {
-      issues.push({ path: `${path}.asin`, message: "Malformed ASIN." });
-    }
-    const cadence = cadenceOf(
-      entry.cadence,
-      entry.cadenceLabel,
-      `${path}.cadence`,
-      issues,
-    );
-    rows.push({
-      subscriptionId,
-      asin,
-      productName: asString(entry.productName),
-      quantity: amazonQuantity(asString(entry.quantity) || "1"),
-      cadence,
-      cadenceLabel: asString(entry.cadenceLabel),
-      nextDeliveryDate: dateField(
-        entry.nextDeliveryDate,
-        `${path}.nextDeliveryDate`,
+  recordsOf(raw, "subscriptions", "Subscriptions", "Subscription", issues).forEach(
+    ({ entry, path }) => {
+      const subscriptionId = identifier(entry.subscriptionId, "subscription");
+      if (!subscriptionId) {
+        issues.push({ path, message: "Missing or malformed subscription id." });
+        return;
+      }
+      if (seen.has(subscriptionId)) {
+        issues.push({
+          path,
+          message: `Duplicate subscription id ${subscriptionId} was ignored.`,
+        });
+        return;
+      }
+      seen.add(subscriptionId);
+      const asin = asinOf(entry.asin);
+      if (entry.asin !== undefined && asString(entry.asin) !== "" && asin === "") {
+        issues.push({ path: `${path}.asin`, message: "Malformed ASIN." });
+      }
+      const cadence = cadenceOf(
+        entry.cadence,
+        entry.cadenceLabel,
+        `${path}.cadence`,
         issues,
-      ),
-      status: enumOf(entry.status, AMAZON_SUBSCRIPTION_STATUSES, "unknown"),
-    });
-  });
+      );
+      rows.push({
+        subscriptionId,
+        asin,
+        productName: asString(entry.productName),
+        quantity: amazonQuantity(asString(entry.quantity) || "1"),
+        cadence,
+        cadenceLabel: asString(entry.cadenceLabel),
+        nextDeliveryDate: dateField(
+          entry.nextDeliveryDate,
+          `${path}.nextDeliveryDate`,
+          issues,
+        ),
+        status: enumOf(entry.status, AMAZON_SUBSCRIPTION_STATUSES, "unknown"),
+      });
+    },
+  );
   return rows;
 }
 
@@ -349,12 +341,6 @@ function parseSubscriptions(
  * ordinal count is the largest multiplicity any single source reported.
  */
 function parsePayments(raw: unknown, issues: SnapshotIssue[]): AmazonSnapshotPayment[] {
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw)) {
-    issues.push({ path: "payments", message: "Payments must be an array." });
-    return [];
-  }
-
   type Candidate = {
     date: string;
     amountCents: number | null;
@@ -367,77 +353,74 @@ function parsePayments(raw: unknown, issues: SnapshotIssue[]): AmazonSnapshotPay
   const candidates: Candidate[] = [];
   const keyed = new Map<string, AmazonSnapshotPayment>();
 
-  raw.forEach((entry, index) => {
-    const path = `payments[${index}]`;
-    if (!isRecord(entry)) {
-      issues.push({ path, message: "Payment is not an object." });
-      return;
-    }
-    const status = enumOf(entry.status, AMAZON_PAYMENT_STATUSES, "unknown");
-    const instrumentKind = enumOf(entry.instrumentKind, AMAZON_INSTRUMENTS, "other");
-    const amountCents = moneyField(
-      entry.amountCents ?? entry.amount,
-      `${path}.amount`,
-      issues,
-    );
-    const cardLast4 = last4Of(entry.cardLast4 ?? entry.last4);
-    if (
-      entry.cardLast4 !== undefined &&
-      asString(entry.cardLast4) !== "" &&
-      !cardLast4
-    ) {
-      issues.push({ path: `${path}.cardLast4`, message: "Malformed card suffix." });
-    }
-    const amazonOrderIds = orderIdsOf(
-      entry.amazonOrderIds,
-      `${path}.amazonOrderIds`,
-      issues,
-    );
-    const sourceOrderId = orderIdOf(entry.sourceOrderId) ?? "";
-    const mintedId = asString(entry.paymentId);
-    if (isAmazonChargeKey(mintedId)) {
-      // Already carries a v2 identity — a re-parse of our own snapshot, or of stored
-      // evidence. Minting again would renumber an ordinal we already settled.
-      keyed.set(mintedId, {
-        paymentId: mintedId,
+  recordsOf(raw, "payments", "Payments", "Payment", issues).forEach(
+    ({ entry, path }) => {
+      const status = enumOf(entry.status, AMAZON_PAYMENT_STATUSES, "unknown");
+      const instrumentKind = enumOf(entry.instrumentKind, AMAZON_INSTRUMENTS, "other");
+      const amountCents = moneyField(
+        entry.amountCents ?? entry.amount,
+        `${path}.amount`,
+        issues,
+      );
+      const cardLast4 = last4Of(entry.cardLast4 ?? entry.last4);
+      if (
+        entry.cardLast4 !== undefined &&
+        asString(entry.cardLast4) !== "" &&
+        !cardLast4
+      ) {
+        issues.push({ path: `${path}.cardLast4`, message: "Malformed card suffix." });
+      }
+      const amazonOrderIds = orderIdsOf(
+        entry.amazonOrderIds,
+        `${path}.amazonOrderIds`,
+        issues,
+      );
+      const sourceOrderId = orderIdOf(entry.sourceOrderId) ?? "";
+      const mintedId = asString(entry.paymentId);
+      if (isAmazonChargeKey(mintedId)) {
+        // Already carries a v2 identity — a re-parse of our own snapshot, or of stored
+        // evidence. Minting again would renumber an ordinal we already settled.
+        keyed.set(mintedId, {
+          paymentId: mintedId,
+          date: dateField(entry.date, `${path}.date`, issues),
+          amountCents: signPaymentAmount(amountCents, status, instrumentKind),
+          status,
+          cardLast4,
+          instrumentKind,
+          amazonOrderIds,
+        });
+        return;
+      }
+      if (amazonOrderIds.length === 0 && sourceOrderId === "") {
+        issues.push({
+          path,
+          message: "Charge names no order, so it cannot be identified; it was ignored.",
+        });
+        return;
+      }
+      if (amountCents === null) {
+        issues.push({
+          path,
+          message: "Charge has no readable amount; it was ignored.",
+        });
+        return;
+      }
+      candidates.push({
         date: dateField(entry.date, `${path}.date`, issues),
         amountCents: signPaymentAmount(amountCents, status, instrumentKind),
         status,
         cardLast4,
         instrumentKind,
-        amazonOrderIds,
+        amazonOrderIds:
+          amazonOrderIds.length > 0
+            ? amazonOrderIds
+            : sourceOrderId
+              ? [sourceOrderId]
+              : [],
+        sourceOrderId,
       });
-      return;
-    }
-    if (amazonOrderIds.length === 0 && sourceOrderId === "") {
-      issues.push({
-        path,
-        message: "Charge names no order, so it cannot be identified; it was ignored.",
-      });
-      return;
-    }
-    if (amountCents === null) {
-      issues.push({
-        path,
-        message: "Charge has no readable amount; it was ignored.",
-      });
-      return;
-    }
-    candidates.push({
-      date: dateField(entry.date, `${path}.date`, issues),
-      amountCents: signPaymentAmount(amountCents, status, instrumentKind),
-      status,
-      cardLast4,
-      instrumentKind,
-      amazonOrderIds:
-        amazonOrderIds.length > 0
-          ? amazonOrderIds
-          : sourceOrderId
-            ? [sourceOrderId]
-            : [],
-      sourceOrderId,
-    });
-  });
+    },
+  );
 
   type Group = {
     charge: Candidate;
@@ -496,19 +479,9 @@ export function isAmazonChargeKey(paymentId: string): boolean {
 }
 
 function parseOrders(raw: unknown, issues: SnapshotIssue[]): AmazonSnapshotOrder[] {
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw)) {
-    issues.push({ path: "orders", message: "Orders must be an array." });
-    return [];
-  }
   const seen = new Set<string>();
   const rows: AmazonSnapshotOrder[] = [];
-  raw.forEach((entry, index) => {
-    const path = `orders[${index}]`;
-    if (!isRecord(entry)) {
-      issues.push({ path, message: "Order is not an object." });
-      return;
-    }
+  recordsOf(raw, "orders", "Orders", "Order", issues).forEach(({ entry, path }) => {
     const amazonOrderId = orderIdOf(entry.amazonOrderId);
     if (!amazonOrderId) {
       issues.push({ path, message: "Missing or malformed order id." });
@@ -593,20 +566,10 @@ function orderSummaryOf(
 }
 
 function parseItems(raw: unknown, issues: SnapshotIssue[]): AmazonSnapshotItem[] {
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw)) {
-    issues.push({ path: "items", message: "Items must be an array." });
-    return [];
-  }
   const ordinals = new Map<string, number>();
   const seenLine = new Set<string>();
   const rows: AmazonSnapshotItem[] = [];
-  raw.forEach((entry, index) => {
-    const path = `items[${index}]`;
-    if (!isRecord(entry)) {
-      issues.push({ path, message: "Item is not an object." });
-      return;
-    }
+  recordsOf(raw, "items", "Items", "Item", issues).forEach(({ entry, path }) => {
     const amazonOrderId = orderIdOf(entry.amazonOrderId);
     if (!amazonOrderId) {
       issues.push({ path, message: "Missing or malformed order id." });
@@ -841,6 +804,30 @@ function enumOf<T extends string>(raw: unknown, allowed: readonly T[], fallback:
 function asString(raw: unknown): string {
   if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
   return amazonBlank(typeof raw === "string" ? raw : "");
+}
+
+/**
+ * The entries of one snapshot array, each with its path (`orders[3]`). A missing array has
+ * none; a non-array, and an entry that is not an object, is reported and skipped.
+ */
+function recordsOf(
+  raw: unknown,
+  key: string,
+  label: string,
+  noun: string,
+  issues: SnapshotIssue[],
+): { entry: Record<string, unknown>; path: string }[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    issues.push({ path: key, message: `${label} must be an array.` });
+    return [];
+  }
+  return raw.flatMap((entry: unknown, index) => {
+    const path = `${key}[${index}]`;
+    if (isRecord(entry)) return [{ entry, path }];
+    issues.push({ path, message: `${noun} is not an object.` });
+    return [];
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
