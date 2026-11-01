@@ -21,6 +21,7 @@
 
 import { amountMatches, medianCents } from "../amountMatch";
 import { cadenceDaysApprox, cadenceOf, type Cadence } from "../recurringBills";
+import { daysBetweenKeys } from "@/lib/schedule/geometry";
 
 /** The bill facet, as `finance_budget_categories` holds it. */
 export type BillClaimFacet = {
@@ -48,12 +49,6 @@ export type BillClaimCandidate = {
  * 12% `recurringBills.ts` uses to recognise a cadence from observed gaps.
  */
 export const CADENCE_GAP_TOLERANCE = 0.12;
-
-function daysApart(a: string, b: string): number {
-  return (
-    Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000
-  );
-}
 
 /**
  * What one charge of this bill costs: the declared amount, or the median of the charges on
@@ -103,7 +98,12 @@ export function billClaimAccepts(
       left.id.localeCompare(right.id),
   )) {
     if (!amountMatches(candidate.amountCents, expected)) continue;
-    if (filed.some((date) => daysApart(date, candidate.transactionDate) < minimumGap)) {
+    if (
+      filed.some(
+        (date) =>
+          Math.abs(daysBetweenKeys(date, candidate.transactionDate)) < minimumGap,
+      )
+    ) {
       continue;
     }
     accepted.add(candidate.id);

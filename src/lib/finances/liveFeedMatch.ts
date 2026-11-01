@@ -65,6 +65,7 @@
  */
 
 import { descriptionsMatch } from "./matchExisting";
+import { daysBetweenKeys } from "@/lib/schedule/geometry";
 
 /** How far apart two records of one event may be dated. */
 export const DATE_TOLERANCE_DAYS = 2;
@@ -172,12 +173,6 @@ function alnum(folded: string): string {
   return folded.replace(/[^A-Z0-9]/g, "");
 }
 
-function daysApart(a: string, b: string): number {
-  return (
-    Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000
-  );
-}
-
 /** Anything carrying the two date axes a bank row can be dated on. */
 export type DatedRow = { transactionDate: string; postedDate?: string | null };
 
@@ -219,7 +214,7 @@ export function dateDistance(existing: DatedRow, incoming: DatedRow): number {
     if (!a) continue;
     for (const b of right) {
       if (!b) continue;
-      const distance = daysApart(a, b);
+      const distance = Math.abs(daysBetweenKeys(a, b));
       if (distance < best) best = distance;
     }
   }

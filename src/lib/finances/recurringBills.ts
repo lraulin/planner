@@ -20,6 +20,7 @@
 
 import { daysInMonth } from "@/lib/dateMath";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
+import { median } from "@/lib/statistics";
 
 /** A declared bill, as the analytics and UI layers need it. Mirrors the table's columns. */
 export type DeclaredBill = {
@@ -359,7 +360,7 @@ export function detectCadence(chargeDates: readonly string[]): Cadence | null {
   for (let index = 1; index < ordered.length; index++) {
     gaps.push(daysBetweenKeys(ordered[index - 1], ordered[index]));
   }
-  const typicalGap = medianOf(gaps);
+  const typicalGap = median(gaps);
   if (typicalGap <= 0) return null;
 
   if (
@@ -394,13 +395,4 @@ function calendarAnchored(ordered: readonly string[]): boolean {
 
 function spread(values: readonly number[]): number {
   return Math.max(...values) - Math.min(...values);
-}
-
-function medianOf(values: readonly number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
 }

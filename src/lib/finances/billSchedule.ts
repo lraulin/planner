@@ -29,6 +29,7 @@
 
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { cadenceOf, shiftDateKeyMonths, type Cadence } from "./recurringBills";
+import { medianRounded } from "@/lib/statistics";
 
 /** What `declaresSchedule` needs to answer, and what a series is built from. */
 export type SchedulableBill = {
@@ -239,12 +240,5 @@ export function suggestLeadDays(
     return daysBetweenKeys(chargeKey, nearestDue);
   });
 
-  const sorted = [...offsets].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  const median =
-    sorted.length % 2 === 0
-      ? (sorted[middle - 1] + sorted[middle]) / 2
-      : sorted[middle];
-
-  return Math.max(0, Math.min(60, Math.round(median)));
+  return Math.max(0, Math.min(60, medianRounded(offsets)));
 }
