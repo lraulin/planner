@@ -24,7 +24,6 @@ import {
 } from "@/lib/tree/outlinePriority";
 import {
   createNodeAction,
-  convertNodeAction,
   expandThroughDepthAction,
   deleteNodeAction,
   indentNodeAction,
@@ -73,7 +72,7 @@ import type { ProjectPickerValue } from "@/components/projects/ProjectPicker";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { HintBar } from "./HintBar";
 import { NewChildDialog } from "./NewChildDialog";
-import { ConversionDialog } from "./ConversionDialog";
+import { useNodeConversion } from "./useNodeConversion";
 import { SetPriorityDialog } from "./SetPriorityDialog";
 import { ExpandLevelDialog, OutlineZoomDialog } from "./OutlineCommandDialogs";
 import {
@@ -93,7 +92,6 @@ import type { RowSwipe } from "@/components/grid/CompactRow";
 import { pasteMoves } from "@/lib/grid/rowClipboard";
 import { useRowClipboard } from "@/components/grid/RowClipboardProvider";
 import { useAttachFromClipboard } from "@/components/grid/useAttachFromClipboard";
-import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import { depthForOutlineLevel } from "@/lib/tree/outlineLevel";
 import { clipboardCapability, nodeSelection } from "@/lib/grid/nodeCapabilities";
 
@@ -178,10 +176,6 @@ export function OutlineGrid({ wire }: { wire: OutlineWire }) {
   const [virginInsertId, setVirginInsertId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<readonly OutlineNode[]>([]);
   const [priorityPromptOpen, setPriorityPromptOpen] = useState(false);
-  const [pendingConversion, setPendingConversion] = useState<{
-    nodeId: string;
-    targetKind: NodeKind;
-  } | null>(null);
   const [zoomPickerOpen, setZoomPickerOpen] = useState(false);
   const [movePickerOpen, setMovePickerOpen] = useState(false);
   const [pendingMove, setPendingMove] = useState<{
@@ -366,17 +360,11 @@ export function OutlineGrid({ wire }: { wire: OutlineWire }) {
     settledSelectId.current = selectId;
   }, [selectId, orderedIds, selectedId, selectOne]);
 
-  const conversionPlan = useMemo<ConversionPlan | null>(() => {
-    if (!pendingConversion) return null;
-    const source = byId.get(pendingConversion.nodeId);
-    if (!source) return null;
-    return planNodeConversion({
-      nodeId: source.id,
-      sourceKind: kindOfNode(source),
-      targetKind: pendingConversion.targetKind,
-      nodes,
-    });
-  }, [pendingConversion, byId, nodes]);
+  const { request: requestConversion, dialog: conversionDialog } = useNodeConversion({
+    nodes,
+    byId,
+    apply,
+  });
 
   const startNaming = useCallback(
     (id?: string) => {
@@ -621,9 +609,7 @@ export function OutlineGrid({ wire }: { wire: OutlineWire }) {
             apply(() => expandThroughDepthAction(depthForOutlineLevel(level))),
           onChooseExpandThroughLevel: () => setExpandLevelPickerOpen(true),
           onSetPriority: () => setPriorityPromptOpen(true),
-          onConvert: (nodeId, kind) => {
-            setPendingConversion({ nodeId, targetKind: kind });
-          },
+          onConvert: requestConversion,
           // Same three navigations `useNodeCommandDeck` gives the list tabs, and the same
           // `useStateChange` bridge the State cell in this grid already uses.
           onSetState: (nodeIds, state) => {
@@ -677,6 +663,7 @@ export function OutlineGrid({ wire }: { wire: OutlineWire }) {
       };
     },
     [
+      requestConversion,
       nodes,
       byId,
       selectedIds,
@@ -1147,20 +1134,7 @@ export function OutlineGrid({ wire }: { wire: OutlineWire }) {
         />
       )}
 
-      {pendingConversion && (
-        <ConversionDialog
-          open
-          nodeName={byId.get(pendingConversion.nodeId)?.name ?? ""}
-          targetKind={pendingConversion.targetKind}
-          plan={conversionPlan}
-          onConfirm={() => {
-            const target = pendingConversion;
-            setPendingConversion(null);
-            apply(() => convertNodeAction(target.nodeId, target.targetKind));
-          }}
-          onCancel={() => setPendingConversion(null)}
-        />
-      )}
+      {conversionDialog}
 
       {zoomPickerOpen && (
         <OutlineZoomDialog

@@ -3,22 +3,20 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
-  convertNodeAction,
   createNodeAction,
   deleteNodeAction,
   moveNodeAction,
   setPriorityForNodesAction,
 } from "@/app/(shell)/plan/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
-import { ConversionDialog } from "@/components/outline/ConversionDialog";
+import { useNodeConversion } from "@/components/outline/useNodeConversion";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
-import { NODE_KINDS, kindOfNode, type NodeKind } from "@/lib/tree/hierarchy";
+import { NODE_KINDS, type NodeKind } from "@/lib/tree/hierarchy";
 import { outlineSelectPath } from "@/lib/url/viewState";
 import { selectionMoveRoots } from "@/lib/grid/selection";
 import { pasteMoves } from "@/lib/grid/rowClipboard";
 import { useRowClipboard } from "./RowClipboardProvider";
 import type { NodeState } from "@/db/schema";
-import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import type { ActionResult } from "./useOptimisticNodes";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { CreateMode, GridCommandCapabilities } from "@/lib/grid/commandDeck";
@@ -102,19 +100,18 @@ export function useNodeCommandDeck({
   dialogs: ReactNode;
 } {
   const [priorityPromptOpen, setPriorityPromptOpen] = useState(false);
-  const [pendingConversion, setPendingConversion] = useState<{
-    nodeId: string;
-    targetKind: NodeKind;
-  } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<readonly OutlineNode[]>([]);
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const router = useRouter();
   const { clipboard, pickUp, clear: clearClipboard } = useRowClipboard();
   const { attachFromClipboard } = useAttachFromClipboard(apply);
 
-  const onConvert = useCallback((id: string, targetKind: NodeKind) => {
-    setPendingConversion({ nodeId: id, targetKind });
-  }, []);
+  const { request: requestConversion, dialog: conversionDialog } = useNodeConversion({
+    nodes,
+    byId,
+    apply,
+  });
+  const onConvert = requestConversion;
 
   /*
    * Read as fields rather than kept as one object, because everything downstream keys off
@@ -325,18 +322,6 @@ export function useNodeCommandDeck({
     [capabilitiesFor],
   );
 
-  const conversionPlan = useMemo<ConversionPlan | null>(() => {
-    if (!pendingConversion) return null;
-    const source = byId.get(pendingConversion.nodeId);
-    if (!source) return null;
-    return planNodeConversion({
-      nodeId: source.id,
-      sourceKind: kindOfNode(source),
-      targetKind: pendingConversion.targetKind,
-      nodes,
-    });
-  }, [byId, nodes, pendingConversion]);
-
   const deleteDialog = (
     <ConfirmDialog
       open={pendingDelete.length > 0}
@@ -362,21 +347,6 @@ export function useNodeCommandDeck({
         apply(() => setPriorityForNodesAction(priorityTargets, letter, rank));
       }}
       onCancel={() => setPriorityPromptOpen(false)}
-    />
-  ) : null;
-
-  const conversionDialog = pendingConversion ? (
-    <ConversionDialog
-      open
-      nodeName={byId.get(pendingConversion.nodeId)?.name ?? ""}
-      targetKind={pendingConversion.targetKind}
-      plan={conversionPlan}
-      onConfirm={() => {
-        const target = pendingConversion;
-        setPendingConversion(null);
-        apply(() => convertNodeAction(target.nodeId, target.targetKind));
-      }}
-      onCancel={() => setPendingConversion(null)}
     />
   ) : null;
 
