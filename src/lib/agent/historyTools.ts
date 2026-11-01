@@ -211,9 +211,9 @@ function lifeEventInputFromArgs(args: Record<string, unknown>): LifeEventInput {
 }
 
 /**
- * One page of a catalog of spans — jobs, residences — filtered the way both list tools
- * take it: `currentOnly` keeps the ones with no end, `from`/`to` bound the start, and
- * `query` matches the row's text.
+ * One page of a catalog of spans — jobs, residences, one-day life events — filtered the way
+ * the list tools take it: `currentOnly` keeps the ones with no end, `from`/`to` bound the
+ * start, and `query` matches the row's text.
  */
 function pageOfSpans<T>(
   rows: readonly T[],
@@ -324,21 +324,14 @@ export async function listLifeEventsTool(
   userId: string,
   args: Record<string, unknown>,
 ) {
-  const bounds = pageBounds(
-    optionalNumber(args, "offset"),
-    optionalNumber(args, "limit"),
+  // A life event is a span of one day, so it is never "current" and `currentOnly` is not
+  // in its schema.
+  const page = pageOfSpans(
+    await listLifeEvents(userId),
+    args,
+    (row) => ({ start: row.eventDate, end: row.eventDate }),
+    (row) => `${row.title} ${row.category} ${row.notes}`,
   );
-  const query = optionalString(args, "query")?.trim().toLowerCase();
-  const from = optionalDateKey(args, "from") ?? undefined;
-  const to = optionalDateKey(args, "to") ?? undefined;
-
-  let rows = await listLifeEvents(userId);
-  rows = rows.filter((row) => inDateWindow(row.eventDate, from, to));
-  rows = rows.filter((row) =>
-    matchesQuery(`${row.title} ${row.category} ${row.notes}`, query),
-  );
-
-  const page = paginate(rows, bounds);
   return { events: page.items.map(lifeEventSummary), pageInfo: page.pageInfo };
 }
 
