@@ -95,6 +95,27 @@ import {
 /** Postgres caps a statement's bind parameters; these rows have 13 columns each. */
 const INSERT_CHUNK_ROWS = 500;
 
+/** The account an earlier import of this source created for `externalKey`, if any. */
+async function findImportedAccount(
+  tx: DbExecutor,
+  userId: string,
+  externalSource: string,
+  externalKey: string,
+): Promise<{ id: string; name: string } | undefined> {
+  const [row] = await tx
+    .select({ id: financeAccounts.id, name: financeAccounts.name })
+    .from(financeAccounts)
+    .where(
+      and(
+        eq(financeAccounts.userId, userId),
+        eq(financeAccounts.externalSource, externalSource),
+        eq(financeAccounts.externalKey, externalKey),
+      ),
+    )
+    .limit(1);
+  return row;
+}
+
 /**
  * Find the account this feed's key refers to, creating it the first time it is seen.
  *
@@ -114,17 +135,12 @@ async function resolveAccount(
   created: boolean;
   kind: (typeof account)["kind"];
 }> {
-  const [existing] = await tx
-    .select({ id: financeAccounts.id, name: financeAccounts.name })
-    .from(financeAccounts)
-    .where(
-      and(
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.externalSource, externalSource),
-        eq(financeAccounts.externalKey, account.externalKey),
-      ),
-    )
-    .limit(1);
+  const existing = await findImportedAccount(
+    tx,
+    userId,
+    externalSource,
+    account.externalKey,
+  );
   if (existing) {
     return { id: existing.id, name: existing.name, created: false, kind: account.kind };
   }
@@ -148,17 +164,12 @@ async function resolveAccount(
     return { id: row.id, name: account.name, created: true, kind: account.kind };
   }
 
-  const [raced] = await tx
-    .select({ id: financeAccounts.id, name: financeAccounts.name })
-    .from(financeAccounts)
-    .where(
-      and(
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.externalSource, externalSource),
-        eq(financeAccounts.externalKey, account.externalKey),
-      ),
-    )
-    .limit(1);
+  const raced = await findImportedAccount(
+    tx,
+    userId,
+    externalSource,
+    account.externalKey,
+  );
   if (!raced) throw new Error("Could not create the account for this import.");
   return { id: raced.id, name: raced.name, created: false, kind: account.kind };
 }
