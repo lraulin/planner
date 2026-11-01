@@ -109,13 +109,6 @@ export function isLegalPairing(behavior: TargetBehavior, unit: CadenceUnit): boo
   return LEGAL[behavior]?.includes(unit) ?? false;
 }
 
-export function assertCents(value: number, what: string): number {
-  if (!Number.isInteger(value)) {
-    throw new Error(`${what} must be integer cents, got ${value}`);
-  }
-  return value;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

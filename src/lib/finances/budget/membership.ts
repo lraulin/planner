@@ -28,6 +28,7 @@ import { loadBudget, openingPositionFor } from "./queries";
 import type { FinanceExecutor } from "../dbExecutor";
 import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
 import { writeFinanceAuditEvent } from "../audit/writes";
+import { assertCents } from "../money";
 
 export type LedgerSnapshot = {
   openingCents: number;
@@ -58,13 +59,6 @@ class DryRunRollback extends Error {
   constructor(public receipt: MembershipReceipt) {
     super("dry run");
   }
-}
-
-function assertIntegerCents(value: number, what: string): number {
-  if (!Number.isInteger(value)) {
-    throw new Error(`${what} must be integer cents, got ${value}`);
-  }
-  return value;
 }
 
 /**
@@ -235,7 +229,7 @@ export async function rebaseAccountMembership(
         tx,
       );
       const positionCents = startMonth
-        ? assertIntegerCents(
+        ? assertCents(
             await openingPositionFor(userId, startMonth, [accountId], tx),
             "account position",
           )
@@ -244,7 +238,7 @@ export async function rebaseAccountMembership(
       const delta = offBudgetAfter ? -positionCents : positionCents;
       // The legacy total's own delta arithmetic, kept correct independent of `before.openingCents`
       // (now the *effective* opening — the sum once every account is seeded).
-      const nextOpeningCents = assertIntegerCents(
+      const nextOpeningCents = assertCents(
         beforeData.settings.openingCents + delta,
         "opening position",
       );
@@ -333,13 +327,13 @@ export async function includeNewOnBudgetAccount(
       const receipt = { transitions: [], before, after: before };
       return receipt;
     }
-    const positionCents = assertIntegerCents(
+    const positionCents = assertCents(
       await openingPositionFor(userId, startMonth, [accountId], tx),
       "account position",
     );
     // The legacy total's own delta arithmetic, kept correct independent of `before.openingCents`
     // (now the *effective* opening — the sum once every account is seeded).
-    const nextOpeningCents = assertIntegerCents(
+    const nextOpeningCents = assertCents(
       beforeData.settings.openingCents + positionCents,
       "opening position",
     );
@@ -436,7 +430,7 @@ export async function applySinglePoolCutover(
       let delta = 0;
       for (const account of targets) {
         const positionCents = startMonth
-          ? assertIntegerCents(
+          ? assertCents(
               await openingPositionFor(userId, startMonth, [account.id], tx),
               "account position",
             )
@@ -454,7 +448,7 @@ export async function applySinglePoolCutover(
 
       // The legacy total's own delta arithmetic, kept correct independent of `before.openingCents`
       // (now the *effective* opening — the sum once every account is seeded).
-      const nextOpeningCents = assertIntegerCents(
+      const nextOpeningCents = assertCents(
         beforeData.settings.openingCents + delta,
         "opening position",
       );

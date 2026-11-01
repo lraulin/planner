@@ -146,3 +146,11 @@ export function formatUsdCompact(cents: number | null): string {
 export function sumCents(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
+
+/** `value` unchanged, or throw: a money amount here is whole cents, and `what` names it. */
+export function assertCents(value: number, what: string): number {
+  if (!Number.isInteger(value)) {
+    throw new Error(`${what} must be integer cents, got ${value}`);
+  }
+  return value;
+}

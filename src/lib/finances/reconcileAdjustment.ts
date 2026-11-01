@@ -1,3 +1,5 @@
+import { assertCents } from "./money";
+
 /**
  * The one deliberate way a bank disagreement moves Ready to Assign.
  *
@@ -14,13 +16,6 @@
  * Finding that difference is `loadBudgetMismatch`'s job (`budget/queries.ts`, D3's own
  * formula); writing the row and its audit trail is `reconcileAccount` (`budget/reconcileAccount.ts`).
  */
-
-function cents(value: number, what: string): number {
-  if (!Number.isInteger(value)) {
-    throw new Error(`${what} must be integer cents, got ${value}`);
-  }
-  return value;
-}
 
 export type ReconcileAdjustmentRow = {
   accountId: string;
@@ -49,7 +44,7 @@ export function reconcileAdjustment(
   differenceCents: number,
   todayKey: string,
 ): ReconcileAdjustmentRow | null {
-  cents(differenceCents, "reconcile difference");
+  assertCents(differenceCents, "reconcile difference");
   if (differenceCents === 0) return null;
   return {
     accountId,

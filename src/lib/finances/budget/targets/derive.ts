@@ -19,7 +19,8 @@
 
 import type { EnvelopeKind } from "@/db/schema";
 import type { ScheduleBill } from "./cadence";
-import { assertCents, type Target } from "./types";
+import type { Target } from "./types";
+import { assertCents } from "../../money";
 
 export type BillSnapshot = ScheduleBill & {
   id: string;

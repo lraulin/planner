@@ -1,3 +1,4 @@
+import { assertCents } from "./money";
 /**
  * Closing the gap between a split parent's amount and the sum of its children.
  *
@@ -17,14 +18,6 @@
  * number that looks entirely plausible and fails `reconcile.ts` a month later.
  */
 
-/** Every money value in this module is a whole number of cents, and proves it. */
-function cents(value: number, what: string): number {
-  if (!Number.isInteger(value)) {
-    throw new Error(`${what} must be integer cents, got ${value}`);
-  }
-  return value;
-}
-
 /**
  * How a remainder is spread across children.
  *
@@ -40,8 +33,8 @@ export function splitRemainderCents(
   parentCents: number,
   childCents: readonly number[],
 ): number {
-  cents(parentCents, "parent amount");
-  childCents.forEach((value, i) => cents(value, `child ${i} amount`));
+  assertCents(parentCents, "parent amount");
+  childCents.forEach((value, i) => assertCents(value, `child ${i} amount`));
   return parentCents - childCents.reduce((sum, value) => sum + value, 0);
 }
 

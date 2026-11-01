@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  assertCents,
   isLegalPairing,
   parseNullableTargetOrThrow,
   parseTarget,
@@ -9,6 +8,7 @@ import {
   summarize,
   type Target,
 } from "./types";
+import { assertCents } from "../../money";
 
 /** D2's table, one row per legal sentence. Nothing outside it may parse. */
 const LEGAL: Array<[string, Target]> = [

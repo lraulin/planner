@@ -1,3 +1,5 @@
+import { assertCents } from "../money";
+
 /**
  * One account's stored opening (`finance_accounts.budget_opening_cents`): statement-first,
  * today's live position as the fallback.
@@ -9,13 +11,6 @@
  *
  * Spec: `agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D2.
  */
-
-function cents(value: number, what: string): number {
-  if (!Number.isInteger(value)) {
-    throw new Error(`${what} must be integer cents, got ${value}`);
-  }
-  return value;
-}
 
 /**
  * A closed statement, as the seed needs it. `closingCents` is the bank's **posted** balance
@@ -124,7 +119,7 @@ export function seedAccountOpening(
 ): OpeningSeed {
   if (!anchor) {
     return {
-      openingCents: cents(headlinePositionCents, "opening seed"),
+      openingCents: assertCents(headlinePositionCents, "opening seed"),
       source: "bank-headline",
     };
   }
@@ -132,12 +127,14 @@ export function seedAccountOpening(
   const crossingCents = anchor.rows.reduce(
     (sum, row) =>
       sum +
-      crossingSign(row, closeKey, dayKey) * cents(row.amountCents, "register row"),
+      crossingSign(row, closeKey, dayKey) *
+        assertCents(row.amountCents, "register row"),
     0,
   );
   return {
-    openingCents: cents(
-      cents(anchor.statement.closingCents, "statement closing balance") + crossingCents,
+    openingCents: assertCents(
+      assertCents(anchor.statement.closingCents, "statement closing balance") +
+        crossingCents,
       "opening seed",
     ),
     source: "statement",

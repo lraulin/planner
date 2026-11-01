@@ -14,13 +14,13 @@
  */
 
 import type { EnvelopeKind } from "@/db/schema";
-import { formatUsd } from "@/lib/finances/money";
+import { assertCents, formatUsd } from "@/lib/finances/money";
 import { monthName, prevMonthKey, type MonthKey } from "../envelope";
 import { pageSectionOf } from "../rows";
 import { monthsLeft } from "../targets/cadence";
 import { targetDemand } from "../targets/demand";
 import type { BillSnapshot } from "../targets/derive";
-import { assertCents, type Target } from "../targets/types";
+import type { Target } from "../targets/types";
 import {
   ASSIGN_AVERAGE_MONTHS,
   ASSIGN_OPTION_LABELS,

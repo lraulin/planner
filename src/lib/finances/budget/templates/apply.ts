@@ -12,11 +12,11 @@
  */
 
 import type { EnvelopeKind } from "@/db/schema";
-import { formatUsd } from "@/lib/finances/money";
+import { assertCents, formatUsd } from "@/lib/finances/money";
 import { monthName, type MonthKey } from "../envelope";
 import { targetDemand } from "../targets/demand";
 import { hasTargetAsk, type BillSnapshot } from "../targets/derive";
-import { assertCents, type Target } from "../targets/types";
+import type { Target } from "../targets/types";
 
 export type EnvelopeApplyInput = {
   id: string;

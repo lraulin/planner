@@ -17,6 +17,7 @@
  */
 
 import { daysInMonth } from "@/lib/dateMath";
+import { assertCents } from "../money";
 
 /**
  * A month, keyed by its first calendar day (`2026-08-01`).
@@ -51,14 +52,6 @@ const MONTH_NAMES = [
  * is a century, which is longer than any budget and shorter than a hang.
  */
 const MAX_MONTHS = 1200;
-
-/** Every finite money value in this module is a whole number of cents, and proves it. */
-function cents(value: number, what: string): number {
-  if (!Number.isInteger(value)) {
-    throw new Error(`${what} must be integer cents, got ${value}`);
-  }
-  return value;
-}
 
 /** The calendar month a `YYYY-MM-DD` day belongs to. */
 export function monthKeyOf(dateKey: string): MonthKey {
@@ -345,23 +338,23 @@ function key(month: MonthKey, categoryId: string): string {
 export function buildBudget(input: BudgetInput): BudgetMonth[] {
   const allocations = new Map<string, AllocationInput>();
   for (const row of input.allocations) {
-    cents(row.amountCents, "allocation");
+    assertCents(row.amountCents, "allocation");
     allocations.set(key(row.month, row.categoryId), row);
   }
 
   const activity = new Map<string, number>();
   for (const row of input.activity) {
-    cents(row.amountCents, "activity");
+    assertCents(row.amountCents, "activity");
     const at = key(row.month, row.categoryId);
     activity.set(at, (activity.get(at) ?? 0) + row.amountCents);
   }
 
   const buffered = new Map<MonthKey, number>();
   for (const row of input.buffered) {
-    buffered.set(row.month, cents(row.bufferedCents, "buffered"));
+    buffered.set(row.month, assertCents(row.bufferedCents, "buffered"));
   }
 
-  cents(input.openingCents, "opening position");
+  assertCents(input.openingCents, "opening position");
 
   const expenses = input.categories.filter((category) => !category.isIncome);
   const incomes = input.categories.filter((category) => category.isIncome);
@@ -455,7 +448,7 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
 
     const current = input.current?.month === month ? input.current : null;
     const uncategorizedActivityCents = current
-      ? cents(current.uncategorizedActivityCents, "uncategorized activity")
+      ? assertCents(current.uncategorizedActivityCents, "uncategorized activity")
       : 0;
     const readyToAssignCents = baseRtaCents + uncategorizedActivityCents;
 
@@ -555,7 +548,10 @@ export function categoryMonth(month: BudgetMonth, categoryId: string): CategoryM
 export function unmatchedTransferCents(
   rows: readonly { amountCents: number }[],
 ): number {
-  return rows.reduce((sum, row) => sum + cents(row.amountCents, "transfer flow"), 0);
+  return rows.reduce(
+    (sum, row) => sum + assertCents(row.amountCents, "transfer flow"),
+    0,
+  );
 }
 
 /**
@@ -598,9 +594,9 @@ export type LedgerIdentityInput = {
  */
 export function ledgerIdentity(input: LedgerIdentityInput): void {
   const ledgerPoolCents =
-    cents(input.openingCents, "opening position") +
-    cents(input.categorizedActivityCents, "categorized activity") +
-    cents(input.uncategorizedActivityCents, "uncategorized activity");
+    assertCents(input.openingCents, "opening position") +
+    assertCents(input.categorizedActivityCents, "categorized activity") +
+    assertCents(input.uncategorizedActivityCents, "uncategorized activity");
   const rhs =
     input.readyToAssignCents +
     input.totalEnvelopeBalanceCents +

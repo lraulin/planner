@@ -59,7 +59,8 @@ import {
   type ScheduleBill,
 } from "./cadence";
 import { resolveTarget, type BillSnapshot, type TargetHolder } from "./derive";
-import { assertCents, type Target } from "./types";
+import type { Target } from "./types";
+import { assertCents } from "../../money";
 
 export type DemandEnvelope = TargetHolder & {
   name: string;
