@@ -94,13 +94,18 @@ export const ACCESS_TTL_SEC = 60 * 60;
 export const REFRESH_TTL_SEC = 60 * 60 * 24 * 30;
 export const CODE_TTL_SEC = 5 * 60;
 
+/** `iat` and `exp` for a token issued at `now` (ms) that lives `ttlSec` seconds. */
+function lifetime(now: number, ttlSec: number): { iat: number; exp: number } {
+  const iat = Math.floor(now / 1000);
+  return { iat, exp: iat + ttlSec };
+}
+
 export function issueAccessToken(sub: string, aud: string, now = Date.now()): string {
   return signClaims({
     typ: "at",
     sub,
     aud,
-    iat: Math.floor(now / 1000),
-    exp: Math.floor(now / 1000) + ACCESS_TTL_SEC,
+    ...lifetime(now, ACCESS_TTL_SEC),
   });
 }
 
@@ -109,8 +114,7 @@ export function issueRefreshToken(sub: string, aud: string, now = Date.now()): s
     typ: "rt",
     sub,
     aud,
-    iat: Math.floor(now / 1000),
-    exp: Math.floor(now / 1000) + REFRESH_TTL_SEC,
+    ...lifetime(now, REFRESH_TTL_SEC),
   });
 }
 
@@ -121,7 +125,6 @@ export function issueAuthCode(
   return signClaims({
     ...claims,
     typ: "code",
-    iat: Math.floor(now / 1000),
-    exp: Math.floor(now / 1000) + CODE_TTL_SEC,
+    ...lifetime(now, CODE_TTL_SEC),
   });
 }
