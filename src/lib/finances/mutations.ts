@@ -1308,6 +1308,11 @@ async function writeSplitChildren(
   children: readonly SplitChildInput[],
   origin = "Register",
 ): Promise<void> {
+  requireBalanced(numericStringToCents(parent.amount) ?? 0, children);
+  await requireCategoriesOwned(
+    userId,
+    children.map((child) => child.budgetCategoryId),
+  );
   const now = new Date();
   await db.transaction(async (tx) => {
     const beforeRows = await familyAuditRows(tx, userId, [parent.id]);
@@ -1428,12 +1433,6 @@ export async function splitTransaction(
       ? { ...child, budgetCategoryId: parent.budgetCategoryId }
       : { ...child, id: undefined },
   );
-  requireBalanced(numericStringToCents(parent.amount) ?? 0, inherited);
-  await requireCategoriesOwned(
-    userId,
-    inherited.map((child) => child.budgetCategoryId),
-  );
-
   await writeSplitChildren(userId, parent, inherited, options.auditOrigin);
 }
 
@@ -1455,12 +1454,6 @@ export async function updateSplitChildren(
     await unsplitTransaction(userId, transactionId, options);
     return;
   }
-
-  requireBalanced(numericStringToCents(parent.amount) ?? 0, children);
-  await requireCategoriesOwned(
-    userId,
-    children.map((child) => child.budgetCategoryId),
-  );
 
   await writeSplitChildren(userId, parent, children, options.auditOrigin);
   await markAmazonMatchSplitProtected(userId, transactionId);
