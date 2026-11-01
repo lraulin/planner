@@ -1,5 +1,6 @@
 import { isSettled } from "./completionCascade";
 import type { OutlineNode } from "./types";
+import { groupBy } from "@/lib/groupBy";
 
 /**
  * The Projects grid's "Tasks" column: open tasks over all tasks under a project
@@ -16,12 +17,7 @@ import type { OutlineNode } from "./types";
 export function taskRatio(projectId: string, nodes: readonly OutlineNode[]): string {
   let total = 0;
   let active = 0;
-  const byParent = new Map<string | null, OutlineNode[]>();
-  for (const node of nodes) {
-    const list = byParent.get(node.parentId) ?? [];
-    list.push(node);
-    byParent.set(node.parentId, list);
-  }
+  const byParent = groupBy(nodes, (node) => node.parentId);
   // Cycle insurance, the same the rest of the tree walks carry (`walkUp`, `derive`'s rollup
   // pass): `moveNode` refuses to build a parent cycle but a corrupt import can, and a project
   // inside one is reachable here — `taskRatio` is called with that project's own id, so the

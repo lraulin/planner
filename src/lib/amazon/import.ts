@@ -12,12 +12,8 @@ import { ownedRow } from "@/lib/db/owned";
 import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
 import { deriveAmazonOrderSummary, type AmazonOrderSummary } from "./orderSummary";
 import { parseSlimJson } from "./slim";
-import {
-  AMAZON_FEEDS,
-  type AmazonImportResult,
-  type SlimAmazonOrders,
-  type SlimItem,
-} from "./types";
+import { AMAZON_FEEDS, type AmazonImportResult, type SlimAmazonOrders } from "./types";
+import { groupBy } from "@/lib/groupBy";
 
 const INSERT_CHUNK = 400;
 
@@ -66,12 +62,7 @@ export async function importAmazonSlim(
  * exact item-sum total this spec exists to replace.
  */
 function withDerivedSummaries(document: SlimAmazonOrders): SlimAmazonOrders {
-  const itemsByOrder = new Map<string, SlimItem[]>();
-  for (const item of document.items) {
-    const list = itemsByOrder.get(item.amazonOrderId) ?? [];
-    list.push(item);
-    itemsByOrder.set(item.amazonOrderId, list);
-  }
+  const itemsByOrder = groupBy(document.items, (item) => item.amazonOrderId);
   return {
     ...document,
     orders: document.orders.map((order) => {

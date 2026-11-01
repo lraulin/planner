@@ -12,6 +12,7 @@
 
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import type { FinanceFlowKind } from "@/db/schema";
+import { groupBy } from "@/lib/groupBy";
 
 export type ReconcileTransaction = {
   id: string;
@@ -124,19 +125,9 @@ export function reconcileAccounts(
   for (const row of statements) accountIds.add(row.accountId);
   for (const row of transactions) accountIds.add(row.accountId);
 
-  const byAccountTxs = new Map<string, ReconcileTransaction[]>();
-  for (const row of transactions) {
-    const list = byAccountTxs.get(row.accountId) ?? [];
-    list.push(row);
-    byAccountTxs.set(row.accountId, list);
-  }
+  const byAccountTxs = groupBy(transactions, (row) => row.accountId);
 
-  const byAccountStatements = new Map<string, ReconcileStatement[]>();
-  for (const row of statements) {
-    const list = byAccountStatements.get(row.accountId) ?? [];
-    list.push(row);
-    byAccountStatements.set(row.accountId, list);
-  }
+  const byAccountStatements = groupBy(statements, (row) => row.accountId);
 
   const statementRows: StatementReconcile[] = [];
   const holes: CoverageHole[] = [];

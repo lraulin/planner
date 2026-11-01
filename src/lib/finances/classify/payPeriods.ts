@@ -17,6 +17,7 @@
 
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { BIWEEKLY_DAYS, type Payday } from "./income";
+import { groupBy } from "@/lib/groupBy";
 
 /**
  * How far past 14 days a gap may stretch and still be "the next paycheck" rather than a
@@ -48,12 +49,7 @@ function uniqueDateKeys(paydays: readonly Payday[]): string[] {
 }
 
 function byDate(paydays: readonly Payday[]): Map<string, Payday[]> {
-  const grouped = new Map<string, Payday[]>();
-  for (const payday of paydays) {
-    const bucket = grouped.get(payday.dateKey);
-    if (bucket) bucket.push(payday);
-    else grouped.set(payday.dateKey, [payday]);
-  }
+  const grouped = groupBy(paydays, (payday) => payday.dateKey);
   return grouped;
 }
 

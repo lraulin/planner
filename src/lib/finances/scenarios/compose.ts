@@ -7,6 +7,7 @@ import {
   type PeriodAmounts,
   type SupplyAmounts,
 } from "./amount";
+import { groupBy } from "@/lib/groupBy";
 
 /**
  * Everything a scenario shows, as one value: the live bills and Regular income with the
@@ -146,12 +147,7 @@ function lineTree(
   lines: readonly ScenarioLineInput[],
   input: ComposeInput,
 ): ScenarioLineNode[] {
-  const byParent = new Map<string | null, ScenarioLineInput[]>();
-  for (const line of lines) {
-    const list = byParent.get(line.parentId) ?? [];
-    list.push(line);
-    byParent.set(line.parentId, list);
-  }
+  const byParent = groupBy(lines, (line) => line.parentId);
 
   function build(line: ScenarioLineInput, depth: number): ScenarioLineNode {
     const children = (byParent.get(line.id) ?? [])

@@ -9,6 +9,7 @@ import {
   encodeStatus,
 } from "./encodings";
 import type { AchPriority } from "./types";
+import { groupBy } from "@/lib/groupBy";
 
 /**
  * Minimal outline row for export. Matches what `loadOutline` already returns plus a few
@@ -153,12 +154,7 @@ export function buildAchieveXml(
 
   // Sibling ordinal among the same export parent.
   const ordinalById = new Map<string, number>();
-  const byExportParent = new Map<string | null, Exported[]>();
-  for (const item of exported) {
-    const list = byExportParent.get(item.exportParentId) ?? [];
-    list.push(item);
-    byExportParent.set(item.exportParentId, list);
-  }
+  const byExportParent = groupBy(exported, (item) => item.exportParentId);
   for (const [, list] of byExportParent) {
     list.sort((a, b) => compare(a.row.sortKey, b.row.sortKey));
     list.forEach((item, i) => ordinalById.set(item.row.id, i));

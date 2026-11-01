@@ -6,6 +6,7 @@ import type {
   ScenarioLineNode,
 } from "./compose";
 import { naturalOrderFolded } from "@/lib/text/collate";
+import { groupBy } from "@/lib/groupBy";
 
 /**
  * A scenario as the flat row list `DataGrid` renders: three sections, bills grouped under
@@ -96,12 +97,7 @@ export function scenarioGridRows(
     depth: 0,
     collapsed: false,
   });
-  const byGroup = new Map<string, ScenarioBillRow[]>();
-  for (const bill of composition.billRows) {
-    const list = byGroup.get(bill.groupLabel) ?? [];
-    list.push(bill);
-    byGroup.set(bill.groupLabel, list);
-  }
+  const byGroup = groupBy(composition.billRows, (bill) => bill.groupLabel);
   const labels = [...byGroup.keys()].sort((a, b) => {
     if (a === "Ungrouped") return 1;
     if (b === "Ungrouped") return -1;

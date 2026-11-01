@@ -25,6 +25,7 @@ import {
   type DatedRow,
 } from "./liveFeedMatch";
 import { formatUsd, numericStringToCents } from "./money";
+import { groupBy } from "@/lib/groupBy";
 
 export type DuplicateCandidateRow = DatedRow & {
   id: string;
@@ -58,12 +59,7 @@ function isScrapeSource(source: string | null): boolean {
 export function findScrapeDuplicates(
   rows: readonly DuplicateCandidateRow[],
 ): ScrapeDuplicateMatch[] {
-  const byAccount = new Map<string, DuplicateCandidateRow[]>();
-  for (const row of rows) {
-    const list = byAccount.get(row.accountId);
-    if (list) list.push(row);
-    else byAccount.set(row.accountId, [row]);
-  }
+  const byAccount = groupBy(rows, (row) => row.accountId);
 
   const matches: ScrapeDuplicateMatch[] = [];
   for (const accountRows of byAccount.values()) {
