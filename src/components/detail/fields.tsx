@@ -640,6 +640,52 @@ export function DateKeyField({
 }
 
 /**
+ * The draft of a text field that commits on blur. `parse` turns the draft into a value, or
+ * `undefined` for junk — which reverts the draft to `stored` and flags the field until the
+ * next keystroke. `format`, when given, rewrites the draft as the committed value reads.
+ */
+function useBlurCommit<T>(
+  stored: string,
+  parse: (text: string) => T | undefined,
+  onCommit: (value: T) => void,
+  format?: (value: T) => string,
+) {
+  const [text, setText] = useState(stored);
+  const [invalid, setInvalid] = useState(false);
+  return {
+    invalid,
+    inputProps: {
+      value: text,
+      onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+        setInvalid(false);
+        setText(event.target.value);
+      },
+      onBlur: () => {
+        const parsed = parse(text);
+        if (parsed === undefined) {
+          setInvalid(true);
+          setText(stored);
+          return;
+        }
+        setInvalid(false);
+        if (format) setText(format(parsed));
+        onCommit(parsed);
+      },
+      "aria-invalid": invalid,
+    },
+  };
+}
+
+/** A non-negative decimal with at most `decimals` places, as typed; blank is null. */
+function decimalText(text: string, decimals: number): string | null | undefined {
+  const trimmed = text.trim();
+  if (trimmed === "") return null;
+  return new RegExp(`^\\d+(\\.\\d{1,${decimals}})?$`).test(trimmed)
+    ? trimmed
+    : undefined;
+}
+
+/**
  * A whole number within a range — Importance (0–100), Severity, Probability, % complete.
  * Out-of-range or non-numeric input reverts and flags, like every other field here.
  */
@@ -663,29 +709,18 @@ export function NumberField({
   className?: string;
 }) {
   const id = useId();
-  const stored = value === null ? "" : String(value);
-  const [text, setText] = useState(stored);
-  const [invalid, setInvalid] = useState(false);
-
-  function commit() {
-    const trimmed = text.trim();
-
-    if (trimmed === "") {
-      setInvalid(false);
-      onChange(null);
-      return;
-    }
-
-    const parsed = Number(trimmed);
-    if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
-      setInvalid(true);
-      setText(stored);
-      return;
-    }
-
-    setInvalid(false);
-    onChange(parsed);
-  }
+  const { invalid, inputProps } = useBlurCommit(
+    value === null ? "" : String(value),
+    (text) => {
+      const trimmed = text.trim();
+      if (trimmed === "") return null;
+      const parsed = Number(trimmed);
+      return Number.isInteger(parsed) && parsed >= min && parsed <= max
+        ? parsed
+        : undefined;
+    },
+    onChange,
+  );
 
   return (
     <Field
@@ -697,14 +732,8 @@ export function NumberField({
       <div className="flex items-center gap-1.5">
         <input
           id={id}
-          value={text}
-          onChange={(event) => {
-            setInvalid(false);
-            setText(event.target.value);
-          }}
-          onBlur={commit}
+          {...inputProps}
           inputMode="numeric"
-          aria-invalid={invalid}
           className={`tabular ${INPUT_CLASS} ${invalid ? INVALID_CLASS : ""}`}
         />
         {suffix && <span className="text-[0.8125rem] text-ink-muted">{suffix}</span>}
@@ -729,28 +758,11 @@ export function MoneyField({
   className?: string;
 }) {
   const id = useId();
-  const stored = value ?? "";
-  const [text, setText] = useState(stored);
-  const [invalid, setInvalid] = useState(false);
-
-  function commit() {
-    const trimmed = text.trim().replace(/[$,]/g, "");
-
-    if (trimmed === "") {
-      setInvalid(false);
-      onChange(null);
-      return;
-    }
-
-    if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) {
-      setInvalid(true);
-      setText(stored);
-      return;
-    }
-
-    setInvalid(false);
-    onChange(trimmed);
-  }
+  const { invalid, inputProps } = useBlurCommit(
+    value ?? "",
+    (text) => decimalText(text.replace(/[$,]/g, ""), 2),
+    onChange,
+  );
 
   return (
     <Field
@@ -761,15 +773,9 @@ export function MoneyField({
     >
       <input
         id={id}
-        value={text}
-        onChange={(event) => {
-          setInvalid(false);
-          setText(event.target.value);
-        }}
-        onBlur={commit}
+        {...inputProps}
         inputMode="decimal"
         placeholder="0.00"
-        aria-invalid={invalid}
         className={`tabular ${INPUT_CLASS} ${invalid ? INVALID_CLASS : ""}`}
       />
     </Field>
@@ -798,29 +804,11 @@ export function DecimalField({
   className?: string;
 }) {
   const id = useId();
-  const stored = value ?? "";
-  const [text, setText] = useState(stored);
-  const [invalid, setInvalid] = useState(false);
-  const pattern = new RegExp(`^\\d+(\\.\\d{1,${decimals}})?$`);
-
-  function commit() {
-    const trimmed = text.trim();
-
-    if (trimmed === "") {
-      setInvalid(false);
-      onChange(null);
-      return;
-    }
-
-    if (!pattern.test(trimmed)) {
-      setInvalid(true);
-      setText(stored);
-      return;
-    }
-
-    setInvalid(false);
-    onChange(trimmed);
-  }
+  const { invalid, inputProps } = useBlurCommit(
+    value ?? "",
+    (text) => decimalText(text, decimals),
+    onChange,
+  );
 
   return (
     <Field
@@ -835,14 +823,8 @@ export function DecimalField({
     >
       <input
         id={id}
-        value={text}
-        onChange={(event) => {
-          setInvalid(false);
-          setText(event.target.value);
-        }}
-        onBlur={commit}
+        {...inputProps}
         inputMode="decimal"
-        aria-invalid={invalid}
         className={`tabular ${INPUT_CLASS} ${invalid ? INVALID_CLASS : ""}`}
       />
     </Field>
@@ -862,22 +844,11 @@ export function EffortField({
   className?: string;
 }) {
   const id = useId();
-  const stored = formatEffort(value);
-  const [text, setText] = useState(stored);
-  const [invalid, setInvalid] = useState(false);
-
-  function commit() {
-    const minutes = parseEffort(text);
-
-    if (minutes === undefined) {
-      setInvalid(true);
-      setText(stored);
-      return;
-    }
-
-    setInvalid(false);
-    onChange(minutes);
-  }
+  const { invalid, inputProps } = useBlurCommit(
+    formatEffort(value),
+    parseEffort,
+    onChange,
+  );
 
   return (
     <Field
@@ -888,14 +859,8 @@ export function EffortField({
     >
       <input
         id={id}
-        value={text}
-        onChange={(event) => {
-          setInvalid(false);
-          setText(event.target.value);
-        }}
-        onBlur={commit}
+        {...inputProps}
         placeholder="—"
-        aria-invalid={invalid}
         className={`tabular ${INPUT_CLASS} ${invalid ? INVALID_CLASS : ""}`}
       />
     </Field>
@@ -917,23 +882,12 @@ export function PriorityField({
   className?: string;
 }) {
   const id = useId();
-  const stored = formatPriority(letter, rank);
-  const [text, setText] = useState(stored);
-  const [invalid, setInvalid] = useState(false);
-
-  function commit() {
-    const parsed = parsePriority(text);
-
-    if (!parsed) {
-      setInvalid(true);
-      setText(stored);
-      return;
-    }
-
-    setInvalid(false);
-    setText(formatPriority(parsed.letter, parsed.rank));
-    onChange(parsed.letter, parsed.rank);
-  }
+  const { invalid, inputProps } = useBlurCommit(
+    formatPriority(letter, rank),
+    parsePriority,
+    (parsed) => onChange(parsed.letter, parsed.rank),
+    (parsed) => formatPriority(parsed.letter, parsed.rank),
+  );
 
   return (
     <Field
@@ -946,16 +900,10 @@ export function PriorityField({
     >
       <input
         id={id}
-        value={text}
-        onChange={(event) => {
-          setInvalid(false);
-          setText(event.target.value);
-        }}
-        onBlur={commit}
+        {...inputProps}
         {...selectValueOnFocus}
         placeholder="—"
         maxLength={3}
-        aria-invalid={invalid}
         className={`tabular ${INPUT_CLASS} uppercase ${invalid ? INVALID_CLASS : ""}`}
       />
     </Field>
