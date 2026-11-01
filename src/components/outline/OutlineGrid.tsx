@@ -94,6 +94,7 @@ import { useRowClipboard } from "@/components/grid/RowClipboardProvider";
 import { useAttachFromClipboard } from "@/components/grid/useAttachFromClipboard";
 import { depthForOutlineLevel } from "@/lib/tree/outlineLevel";
 import { clipboardCapability, nodeSelection } from "@/lib/grid/nodeCapabilities";
+import { ToolbarButton } from "@/components/tabs/tabChrome";
 
 const AchieveTransferPanel = dynamic(
   () =>
@@ -1237,30 +1238,6 @@ function useOutlineSelectionKeys({
   }, [move, editingId]);
 }
 
-function Command({
-  children,
-  onClick,
-  disabled,
-  title,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="min-h-tap flex-none rounded border border-rule px-2 py-1 text-[0.8125rem] leading-none whitespace-nowrap text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent md:min-h-0"
-    >
-      {children}
-    </button>
-  );
-}
-
 function EmptyState({
   filtered,
   onAddResultArea,
@@ -1277,7 +1254,7 @@ function EmptyState({
           <p className="text-[0.9375rem] text-ink-muted">
             Every row is hidden by the current filters.
           </p>
-          <Command onClick={onClearFilters}>Show everything</Command>
+          <ToolbarButton onClick={onClearFilters}>Show everything</ToolbarButton>
         </>
       ) : (
         <>
@@ -1285,7 +1262,7 @@ function EmptyState({
             Result areas are the major dimensions of your life — the roles the rest of
             the outline hangs from. Start with one.
           </p>
-          <Command onClick={onAddResultArea}>New result area</Command>
+          <ToolbarButton onClick={onAddResultArea}>New result area</ToolbarButton>
         </>
       )}
     </div>
