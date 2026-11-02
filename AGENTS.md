@@ -250,6 +250,27 @@ was invoked by name.
 Full lifecycle, freeze procedure, and templates: `agent-os/specs/README.md`. Exemplar frozen
 spec: `agent-os/specs/2026-07-28-1234-weekly-schedule/`.
 
+## Cursor Cloud specific instructions
+
+Docker is not available here. PostgreSQL 17 runs as a local cluster, user `planner`,
+password `planner`, database `planner`, on `localhost:5432` — the same URL as
+`.env.example`. `npm run db:up` fails without Docker. The environment start script already
+starts that cluster (`pg_ctlcluster 17 main start`), applies migrations, and runs
+`npm run db:seed` only when `users` is empty. Do not re-seed a database someone is using:
+seed deletes that account's outline, appointments, and time charts.
+
+Node is 24, from `.nvmrc`. The image also puts Node 22 at `/exec-daemon/node`, and that
+binary wins on `PATH` because nvm will not move past it. Login shells resolve Node 24 from
+`~/.local/bin`, which `~/.profile` prepends. In a non-login shell, run
+`export PATH="$HOME/.local/bin:$PATH"` before `npm`.
+
+`.env.local` is created from `.env.example` with `AUTH_DEV_BYPASS=true`, so `npm run dev`
+and `npm run smoke` render as `test@example.com`. Signing in still works with password
+`password12345678`. Never point `DATABASE_URL` at production Neon.
+
+The dev server is `npm run dev` on port **3047**. `npm run build` and `npm run dev` share
+`.next`; if the dev server is already up, build in another worktree.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know
