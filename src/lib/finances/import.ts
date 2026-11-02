@@ -26,7 +26,11 @@ import {
   selectNewAgainstMixed,
   type TaggedRow,
 } from "./liveFeedMatch";
-import { centsToNumericString, numericStringToCents } from "./money";
+import {
+  centsToNumericString,
+  numericStringToCents,
+  optionalCentsToNumeric,
+} from "./money";
 import { looksLikeCoinbaseCsv, parseCoinbaseCsv } from "./coinbaseCsv";
 import { persistPaypalResolutions } from "./paypalResolutions";
 import {
@@ -255,10 +259,6 @@ type ParsedFile =
   | { ok: true; kind: "paypal"; entries: PaypalEntry[] }
   | { ok: true; kind: "ledger"; parsed: ParsedFinanceCsv };
 
-function optionalCents(cents: number | null | undefined): string | null {
-  return cents === null || cents === undefined ? null : centsToNumericString(cents);
-}
-
 async function persistStatements(
   tx: DbExecutor,
   userId: string,
@@ -281,18 +281,18 @@ async function persistStatements(
         openingBalance: centsToNumericString(snapshot.openingBalanceCents),
         closingBalance: centsToNumericString(snapshot.closingBalanceCents),
         paymentDueDate: snapshot.paymentDueDate,
-        minimumPayment: optionalCents(snapshot.minimumPaymentCents),
-        pastDueAmount: optionalCents(snapshot.pastDueAmountCents),
-        creditLimit: optionalCents(snapshot.creditLimitCents),
-        availableCredit: optionalCents(snapshot.availableCreditCents),
-        paymentsCredits: optionalCents(snapshot.paymentsCreditsCents),
-        purchases: optionalCents(snapshot.purchasesCents),
-        cashAdvances: optionalCents(snapshot.cashAdvancesCents),
-        balanceTransfers: optionalCents(snapshot.balanceTransfersCents),
-        feesCharged: optionalCents(snapshot.feesChargedCents),
-        interestCharged: optionalCents(snapshot.interestChargedCents),
-        ytdFees: optionalCents(snapshot.ytdFeesCents),
-        ytdInterest: optionalCents(snapshot.ytdInterestCents),
+        minimumPayment: optionalCentsToNumeric(snapshot.minimumPaymentCents),
+        pastDueAmount: optionalCentsToNumeric(snapshot.pastDueAmountCents),
+        creditLimit: optionalCentsToNumeric(snapshot.creditLimitCents),
+        availableCredit: optionalCentsToNumeric(snapshot.availableCreditCents),
+        paymentsCredits: optionalCentsToNumeric(snapshot.paymentsCreditsCents),
+        purchases: optionalCentsToNumeric(snapshot.purchasesCents),
+        cashAdvances: optionalCentsToNumeric(snapshot.cashAdvancesCents),
+        balanceTransfers: optionalCentsToNumeric(snapshot.balanceTransfersCents),
+        feesCharged: optionalCentsToNumeric(snapshot.feesChargedCents),
+        interestCharged: optionalCentsToNumeric(snapshot.interestChargedCents),
+        ytdFees: optionalCentsToNumeric(snapshot.ytdFeesCents),
+        ytdInterest: optionalCentsToNumeric(snapshot.ytdInterestCents),
         rewardsPoints: snapshot.rewardsPoints,
         externalSource: feed,
         // Include the last-four: a 360 PDF has three accounts in the same period.
@@ -327,8 +327,8 @@ async function persistStatements(
         statementId: row.id,
         balanceType: rate.balanceType,
         aprPercent: rate.aprPercent.toFixed(3),
-        balanceSubject: optionalCents(rate.balanceSubjectCents),
-        interestCharged: optionalCents(rate.interestChargedCents),
+        balanceSubject: optionalCentsToNumeric(rate.balanceSubjectCents),
+        interestCharged: optionalCentsToNumeric(rate.interestChargedCents),
       })),
     );
   }

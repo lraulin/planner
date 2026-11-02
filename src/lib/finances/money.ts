@@ -83,6 +83,13 @@ export function centsToNumericString(cents: number): string {
 }
 
 /** Read a `numeric` column (Drizzle gives these back as strings) into cents. */
+/** Cents as the numeric column's text, keeping an absent amount absent. */
+export function optionalCentsToNumeric(
+  cents: number | null | undefined,
+): string | null {
+  return cents === null || cents === undefined ? null : centsToNumericString(cents);
+}
+
 export function numericStringToCents(value: string | null): number | null {
   if (value === null) return null;
   return parseAmountCents(value);

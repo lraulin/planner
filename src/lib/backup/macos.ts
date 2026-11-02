@@ -16,6 +16,7 @@ import {
 } from "./pipeline";
 import type { NeonRecoveryConfig } from "./neon";
 import { redactSecrets } from "./redaction";
+import { escapeXml } from "@/lib/text/escapeXml";
 
 const execFileAsync = promisify(execFile);
 const KEYCHAIN_HELPER_SOURCE = fileURLToPath(
@@ -381,22 +382,22 @@ function launchAgentPlist(input: {
   <string>${LAUNCH_AGENT_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${xmlEscape(input.npm)}</string>
+    <string>${escapeXml(input.npm)}</string>
     <string>run</string>
     <string>backup:run</string>
     <string>--</string>
     <string>--scheduled</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>${xmlEscape(input.repoRoot)}</string>
+  <string>${escapeXml(input.repoRoot)}</string>
   <key>EnvironmentVariables</key>
-  <dict><key>PATH</key><string>${xmlEscape(pathValue)}</string></dict>
+  <dict><key>PATH</key><string>${escapeXml(pathValue)}</string></dict>
   <key>RunAtLoad</key><true/>
   <key>StartInterval</key><integer>21600</integer>
   <key>ProcessType</key><string>Background</string>
   <key>Nice</key><integer>10</integer>
-  <key>StandardOutPath</key><string>${xmlEscape(input.paths.standardLog)}</string>
-  <key>StandardErrorPath</key><string>${xmlEscape(input.paths.errorLog)}</string>
+  <key>StandardOutPath</key><string>${escapeXml(input.paths.standardLog)}</string>
+  <key>StandardErrorPath</key><string>${escapeXml(input.paths.errorLog)}</string>
 </dict>
 </plist>
 `;
@@ -468,13 +469,4 @@ async function spawnWithInput(
       });
     });
   });
-}
-
-function xmlEscape(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
 }

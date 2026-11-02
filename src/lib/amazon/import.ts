@@ -9,7 +9,7 @@ import {
   amazonReturns,
 } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
-import { centsToNumericString, numericStringToCents } from "@/lib/finances/money";
+import { numericStringToCents, optionalCentsToNumeric } from "@/lib/finances/money";
 import { deriveAmazonOrderSummary, type AmazonOrderSummary } from "./orderSummary";
 import { parseSlimJson } from "./slim";
 import { AMAZON_FEEDS, type AmazonImportResult, type SlimAmazonOrders } from "./types";
@@ -19,10 +19,6 @@ const INSERT_CHUNK = 400;
 
 function dateOrNull(value: string | undefined): string | null {
   return value ? value : null;
-}
-
-function money(cents: number | null | undefined): string | null {
-  return cents === null || cents === undefined ? null : centsToNumericString(cents);
 }
 
 function sameText(
@@ -132,11 +128,11 @@ function summaryColumns(summary: AmazonOrderSummary | null): SummaryColumns {
     };
   }
   return {
-    itemsSubtotal: money(summary.itemsSubtotalCents),
-    shippingHandling: money(summary.shippingHandlingCents),
-    promotion: money(summary.promotionCents),
-    tax: money(summary.taxCents),
-    grandTotal: money(summary.grandTotalCents),
+    itemsSubtotal: optionalCentsToNumeric(summary.itemsSubtotalCents),
+    shippingHandling: optionalCentsToNumeric(summary.shippingHandlingCents),
+    promotion: optionalCentsToNumeric(summary.promotionCents),
+    tax: optionalCentsToNumeric(summary.taxCents),
+    grandTotal: optionalCentsToNumeric(summary.grandTotalCents),
     summaryLines: summary.lines,
     summarySource: summary.source,
   };
@@ -326,12 +322,12 @@ async function upsertItems(
       asin: item.asin,
       productName: item.productName,
       quantity: item.quantity,
-      unitPrice: money(item.unitPriceCents),
-      unitPriceTax: money(item.unitPriceTaxCents),
-      itemPaid: money(item.itemPaidCents),
-      itemTax: money(item.itemTaxCents),
-      discounts: money(item.discountsCents),
-      shippingCharge: money(item.shippingChargeCents),
+      unitPrice: optionalCentsToNumeric(item.unitPriceCents),
+      unitPriceTax: optionalCentsToNumeric(item.unitPriceTaxCents),
+      itemPaid: optionalCentsToNumeric(item.itemPaidCents),
+      itemTax: optionalCentsToNumeric(item.itemTaxCents),
+      discounts: optionalCentsToNumeric(item.discountsCents),
+      shippingCharge: optionalCentsToNumeric(item.shippingChargeCents),
       shippingOption: item.shippingOption,
       shipmentStatus: item.shipmentStatus,
       subscribeAndSave: item.subscribeAndSave,
@@ -432,7 +428,7 @@ async function upsertRefunds(
       channel: refund.channel,
       refundDate: dateOrNull(refund.refundDate),
       creationDate: dateOrNull(refund.creationDate),
-      amount: money(refund.amountCents),
+      amount: optionalCentsToNumeric(refund.amountCents),
       currency: refund.currency || "USD",
       status: refund.status,
       reason: refund.reason,
@@ -502,7 +498,7 @@ async function upsertReturns(
       amazonOrderId: row.amazonOrderId,
       returnDate: dateOrNull(row.returnDate),
       creationDate: dateOrNull(row.creationDate),
-      amount: money(row.amountCents),
+      amount: optionalCentsToNumeric(row.amountCents),
       currency: row.currency || "USD",
       resolution: row.resolution,
       reason: row.reason,

@@ -10,6 +10,7 @@ import {
 } from "./encodings";
 import type { AchPriority } from "./types";
 import { groupBy } from "@/lib/groupBy";
+import { escapeXml } from "@/lib/text/escapeXml";
 
 /**
  * Minimal outline row for export. Matches what `loadOutline` already returns plus a few
@@ -510,14 +511,6 @@ function formatAchDate(d: Date | null | undefined): string | undefined {
   if (!d) return undefined;
   // Local-naive ISO without ms, with Z — AP accepts offset timestamps; Z is fine.
   return d.toISOString().replace(/\.\d{3}Z$/, "Z");
-}
-
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function element(

@@ -33,6 +33,7 @@ import { DATE_TOLERANCE_DAYS } from "../src/lib/finances/liveFeedMatch";
 import { centsToNumericString, numericStringToCents } from "../src/lib/finances/money";
 import { shiftDateKey } from "../src/lib/schedule/geometry";
 import { runMain } from "./cli";
+import { postedActivityDate } from "@/lib/finances/importedPostedBalance";
 
 const WINDOW_START = new Date("2026-09-10T00:00:00Z");
 const WINDOW_END = new Date("2026-09-14T00:00:00Z");
@@ -78,10 +79,6 @@ function isScrapeSource(value: unknown): boolean {
 
 function money(cents: number): string {
   return centsToNumericString(cents);
-}
-
-function dayOf(row: { transactionDate: string; postedDate: string | null }): string {
-  return row.postedDate ?? row.transactionDate;
 }
 
 function rowLabel(row: {
@@ -384,8 +381,8 @@ async function main(): Promise<number> {
       const postedKeepWouldRetire = scrape.filter(
         (row) =>
           !row.pending &&
-          dayOf(row) >= POSTED_KEEP_FROM &&
-          dayOf(row) <= POSTED_KEEP_TO &&
+          postedActivityDate(row) >= POSTED_KEEP_FROM &&
+          postedActivityDate(row) <= POSTED_KEEP_TO &&
           retired.has(row.id),
       );
       const chatgpt = scrape.filter((row) => /chatgpt/i.test(row.description));
