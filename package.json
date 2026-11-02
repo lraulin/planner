@@ -86,6 +86,11 @@
     "typescript-eslint": "^8.72.0",
     "vitest": "^5.0.5"
   },
+  "overrides": {
+    "@vercel/cli-config": {
+      "zod": "$zod"
+    }
+  },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"
   },
