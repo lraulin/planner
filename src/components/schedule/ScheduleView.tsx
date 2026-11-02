@@ -238,7 +238,7 @@ export function ScheduleView({
   /*
    * `Schedule block…`, arriving from another module.
    *
-   * A row on `/tasks` has no calendar under it, so the command navigates here with `?block=` and
+   * A row on `/plan/tasks` has no calendar under it, so the command navigates here with `?block=` and
    * the week does the rest: find the node, propose a time, open the drawer already filled in.
    * The alternative was a date/time dialog on the grid, which is the calendar with the calendar
    * taken away.

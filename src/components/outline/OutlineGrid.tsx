@@ -639,8 +639,9 @@ export function OutlineGrid({ wire }: { wire: OutlineWire }) {
             clearClipboard();
           },
           onScheduleBlock: (nodeId) => router.push(`/schedule?block=${nodeId}`),
-          onViewTasks: (nodeId) => router.push(`/tasks?scope=${nodeId}`),
-          onViewProject: (projectId) => router.push(`/projects?detail=${projectId}`),
+          onViewTasks: (nodeId) => router.push(`/plan/tasks?scope=${nodeId}`),
+          onViewProject: (projectId) =>
+            router.push(`/plan/projects?detail=${projectId}`),
           onZoomIn: (nodeId) => setZoom(nodeId, "push"),
           onZoomOut: () => setZoom(zoomOutRoot(nodes, zoom), "push"),
           onClearZoom: () => setZoom(null, "push"),

@@ -5,9 +5,9 @@
 // package.json.
 //
 // Usage (steps as args, or on stdin — see SKILL.md):
-//   node .agents/skills/run-planner/driver.mjs 'goto /outline' 'shot outline'
+//   node .agents/skills/run-planner/driver.mjs 'goto /plan/outline' 'shot outline'
 //   node .agents/skills/run-planner/driver.mjs <<'EOF'
-//   goto /outline
+//   goto /plan/outline
 //   shot outline
 //   EOF
 

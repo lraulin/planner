@@ -13,7 +13,7 @@ const LIST_LIMIT = 50;
  * enough that scrolling it is slower than typing a name.
  *
  * A typed name that does not resolve uniquely reverts — creating a person still goes
- * through `/contacts`. Escape closes the list without closing the drawer (window-capture,
+ * through `/library/contacts`. Escape closes the list without closing the drawer (window-capture,
  * before Drawer's document-capture listener), same as the exercise picker.
  *
  * Pass `label` when the picker is the field (the Contacts-tab editor). Callers that already

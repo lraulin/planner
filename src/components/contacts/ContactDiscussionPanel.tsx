@@ -188,7 +188,7 @@ function ItemList({
               </span>
             )}
             <NavLink
-              href={`/tasks?detail=${item.nodeId}`}
+              href={`/plan/tasks?detail=${item.nodeId}`}
               className={`min-w-0 flex-1 truncate text-[0.8125rem] hover:underline ${
                 item.resolved ? "text-ink-faint line-through" : "text-ink"
               }`}

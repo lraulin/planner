@@ -152,7 +152,7 @@ export function useNodeCommandDeck({
       },
       /*
        * Delete. Five modules had none at all — no toolbar button, no menu row, no `⌘K` entry —
-       * so a task created on `/tasks` could only be removed by going to the Outline and finding
+       * so a task created on `/plan/tasks` could only be removed by going to the Outline and finding
        * it there. Every other item verb these grids offer (New, Rename, Convert) works in place.
        *
        * Owned here rather than by each host for the same reason the conversion dialog is: one
@@ -196,9 +196,9 @@ export function useNodeCommandDeck({
        * pushes into another one.
        */
       onScheduleBlock: (id: string) => router.push(`/schedule?block=${id}`),
-      onViewTasks: (id: string) => router.push(`/tasks?scope=${id}`),
+      onViewTasks: (id: string) => router.push(`/plan/tasks?scope=${id}`),
       onViewProject: (projectId: string) =>
-        router.push(`/projects?detail=${projectId}`),
+        router.push(`/plan/projects?detail=${projectId}`),
       onViewInOutline: (id: string) => router.push(outlineSelectPath(id)),
     }),
     [

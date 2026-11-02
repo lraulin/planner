@@ -9,7 +9,7 @@ const MINUTES_IN_DAY = 24 * 60;
 /**
  * The time `Schedule block…` proposes for a row, before the drawer opens on it.
  *
- * The command arrives from another module — right-click a task on `/tasks` and you land on the
+ * The command arrives from another module — right-click a task on `/plan/tasks` and you land on the
  * week with a drawer open — so there is no pointer position to read a time from the way
  * drag-select gives one. This picks the answer a person would: **today if today is in the week
  * you are looking at**, at the next half hour, and 9am on the first day otherwise.

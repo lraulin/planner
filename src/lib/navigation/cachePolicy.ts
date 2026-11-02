@@ -216,20 +216,6 @@ export const ROUTE_CACHE_POLICIES: Readonly<Record<string, PolicyEntry>> = {
     policy: "uncached",
     reason: "Outside the shell; shows what its own panels write.",
   },
-
-  // ── Legacy paths: redirects only, no payload ─────────────────────────────────────────
-  "/contacts": { policy: "uncached", reason: "Legacy redirect." },
-  "/day": { policy: "uncached", reason: "Legacy redirect." },
-  "/day/week": { policy: "uncached", reason: "Legacy redirect." },
-  "/goals": { policy: "uncached", reason: "Legacy redirect." },
-  "/outline": { policy: "uncached", reason: "Legacy redirect." },
-  "/overview": { policy: "uncached", reason: "Legacy redirect." },
-  "/projects": { policy: "uncached", reason: "Legacy redirect." },
-  "/resources": { policy: "uncached", reason: "Legacy redirect." },
-  "/result-areas": { policy: "uncached", reason: "Legacy redirect." },
-  "/tasks": { policy: "uncached", reason: "Legacy redirect." },
-  "/time-charts": { policy: "uncached", reason: "Legacy redirect." },
-  "/wishes": { policy: "uncached", reason: "Legacy redirect." },
 };
 
 /** Whether `pathname` is an instance of route `pattern` (`[name]` matches one segment). */

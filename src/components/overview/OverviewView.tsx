@@ -181,7 +181,7 @@ export function OverviewView({
           onConfirm={(value: ProjectPickerValue) => {
             setProjectPickerOpen(false);
             if (value.kind === "node") {
-              router.push(`/tasks?scope=${value.nodeId}`);
+              router.push(`/plan/tasks?scope=${value.nodeId}`);
               return;
             }
             if (value.kind === "all") router.push("/plan/tasks");

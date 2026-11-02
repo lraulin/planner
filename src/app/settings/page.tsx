@@ -32,7 +32,7 @@ function SettingsFrame({ children }: { children: ReactNode }) {
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <header className="pt-safe flex flex-none items-center gap-3 border-b border-rule bg-shell px-4 py-2 md:px-5">
         <NavLink
-          href="/outline"
+          href="/plan/outline"
           className="flex min-h-tap items-center text-[0.8125rem] font-semibold tracking-tight text-ink-muted hover:text-ink md:min-h-0"
         >
           <span aria-hidden className="mr-1.5 font-mono text-ink-faint">

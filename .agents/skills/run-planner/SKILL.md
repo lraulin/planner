@@ -49,7 +49,7 @@ Steps come from stdin (one per line, `#` comments allowed) or from argv:
 
 ```sh
 node .agents/skills/run-planner/driver.mjs <<'EOF'
-goto /outline
+goto /plan/outline
 shot outline
 rightclick text=ACME Account
 shot row-menu
@@ -100,14 +100,14 @@ Edit a record and confirm it persisted (drawer → save → reload):
 
 ```sh
 node .agents/skills/run-planner/driver.mjs <<'EOF'
-goto /outline
+goto /plan/outline
 dblclick text=Steve's retirement party
 wait label=Priority
 fill label=Priority | B2
 select label=State | In progress
 click text=Save
 sleep 1500
-goto /outline
+goto /plan/outline
 eval [...document.querySelectorAll('[role="row"]')].filter(r=>r.textContent.includes('retirement')).map(r=>r.querySelector('select')?.value)
 EOF
 ```
@@ -116,7 +116,7 @@ Reorder a row, and read the order back:
 
 ```sh
 node .agents/skills/run-planner/driver.mjs <<'EOF'
-goto /outline
+goto /plan/outline
 drag text=Steve's retirement party | text=Some are complex multi-step projects | before
 eval [...document.querySelectorAll('[role="row"]')].map(r=>r.getAttribute('aria-label'))
 EOF
@@ -141,7 +141,7 @@ Keyboard-driven outline (this app is keyboard-first — see the hint bar at the 
 
 ```sh
 node .agents/skills/run-planner/driver.mjs <<'EOF'
-goto /outline
+goto /plan/outline
 click text=ACME Account
 key ArrowDown
 key F2
@@ -200,7 +200,7 @@ npm run smoke     # loads every static route; needs the dev server (see below)
   cp -Rc node_modules /tmp/planner-build/node_modules
   cp .env.local /tmp/planner-build/.env.local
   (cd /tmp/planner-build && npm run build && npx next start -p 3057)
-  PLANNER_URL=http://localhost:3057 node .agents/skills/run-planner/driver.mjs 'goto /outline' 'shot prod'
+  PLANNER_URL=http://localhost:3057 node .agents/skills/run-planner/driver.mjs 'goto /plan/outline' 'shot prod'
   ```
 - **The outline uses HTML5 drag-and-drop, not pointer drags.** Synthesized mouse events
   cannot start it; the driver's `drag` uses `Input.setInterceptDrags` and replays the
@@ -287,7 +287,7 @@ npm run smoke     # loads every static route; needs the dev server (see below)
 - **The suite pins `TZ` to `America/New_York`** (`vitest.config.ts`). Some tests are about
   local wall clock and only mean something in a named zone. A date test that fails is a real
   failure, not your machine.
-- **`/goals` and `/wishes` are empty with the stock seed** — "No goals match this view."
+- **`/plan/goals` and `/plan/wishes` are empty with the stock seed** — "No goals match this view."
   is the correct render, not a failure.
 - **Static-looking pages are `force-dynamic`.** Every tab hits Postgres on each request,
   so a stopped container shows as a server error, not stale data.

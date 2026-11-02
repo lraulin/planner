@@ -50,7 +50,7 @@ async function check(path) {
     if (new URL(target, BASE).pathname === "/login") {
       return { path, ok: false, setup: true, detail: `${response.status} → ${target}` };
     }
-    // Any other redirect is the app routing on purpose — `/` sends you to `/outline`. The
+    // Any other redirect is the app routing on purpose — `/` sends you to `/plan`. The
     // destination is a route in its own right, so it is checked on its own line.
     return { path, ok: true, note: `→ ${target}` };
   }
