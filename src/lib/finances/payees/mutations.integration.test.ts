@@ -1,12 +1,7 @@
 import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  financeBudgetCategories,
-  financeCategoryGroups,
-  financePayees,
-  financeTransactions,
-} from "@/db/schema";
+import { financePayees, financeTransactions } from "@/db/schema";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
@@ -32,7 +27,7 @@ import { addPayeeAlias } from "./aliases";
 import { getPayee, listAliasRows, listPayees, previewPayeeMerge } from "./queries";
 import { payeeForDescription, payeeIndex } from "./resolve";
 import { lastChargeOnBill } from "../billLastCharge";
-import { insertTestAccount } from "@/lib/testing/financeFixtures";
+import { insertTestAccount, insertTestEnvelope } from "@/lib/testing/financeFixtures";
 
 const describeDb = await describeWithDatabase("payee mutations");
 
@@ -59,27 +54,9 @@ async function addTransaction(
 
 /** A bare bill envelope, for tests that only need something a payee can claim. */
 async function makeBillEnvelope(userId: string, name: string): Promise<{ id: string }> {
-  const [group] = await db
-    .insert(financeCategoryGroups)
-    .values({
-      userId,
-      name: `${name} group ${crypto.randomUUID()}`,
-      kind: "spending",
-      sortKey: "a0",
-    })
-    .returning({ id: financeCategoryGroups.id });
-  const [row] = await db
-    .insert(financeBudgetCategories)
-    .values({
-      userId,
-      groupId: group.id,
-      name,
-      sortKey: "a0",
-      kind: "bill",
-      cadenceMonths: 1,
-    })
-    .returning({ id: financeBudgetCategories.id });
-  return row;
+  return {
+    id: await insertTestEnvelope(userId, name, { kind: "bill", cadenceMonths: 1 }),
+  };
 }
 
 describeDb("payee mutations", () => {
@@ -563,27 +540,8 @@ describeDb("payee auto-category", () => {
     accountId = await insertTestAccount(userId);
   });
 
-  async function makeSpendingEnvelope(name: string): Promise<string> {
-    const [group] = await db
-      .insert(financeCategoryGroups)
-      .values({
-        userId,
-        name: `${name} group ${crypto.randomUUID()}`,
-        kind: "spending",
-        sortKey: "a0",
-      })
-      .returning({ id: financeCategoryGroups.id });
-    const [row] = await db
-      .insert(financeBudgetCategories)
-      .values({
-        userId,
-        groupId: group.id,
-        name,
-        sortKey: "a0",
-        kind: "spending",
-      })
-      .returning({ id: financeBudgetCategories.id });
-    return row.id;
+  function makeSpendingEnvelope(name: string): Promise<string> {
+    return insertTestEnvelope(userId, name);
   }
 
   it("learns immediately from the first manual Category", async () => {

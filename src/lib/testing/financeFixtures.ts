@@ -24,10 +24,14 @@ export async function insertTestAccount(
   return account.id;
 }
 
-/** A spending envelope called `name`, in a spending group of its own. */
+/**
+ * A spending envelope called `name`, in a spending group of its own; `values` overrides the
+ * envelope's columns (a bill: `{ kind: "bill", cadenceMonths: 1 }`).
+ */
 export async function insertTestEnvelope(
   userId: string,
   name: string,
+  values: Partial<typeof financeBudgetCategories.$inferInsert> = {},
 ): Promise<string> {
   const [group] = await db
     .insert(financeCategoryGroups)
@@ -40,7 +44,14 @@ export async function insertTestEnvelope(
     .returning({ id: financeCategoryGroups.id });
   const [row] = await db
     .insert(financeBudgetCategories)
-    .values({ userId, groupId: group.id, name, sortKey: "a0", kind: "spending" })
+    .values({
+      userId,
+      groupId: group.id,
+      name,
+      sortKey: "a0",
+      kind: "spending",
+      ...values,
+    })
     .returning({ id: financeBudgetCategories.id });
   return row.id;
 }
