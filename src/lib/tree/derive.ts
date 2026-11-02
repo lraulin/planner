@@ -26,83 +26,65 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     }
   }
 
-  // Inherited priority: walk up until a node carries one. Memoized per node asked about —
-  // the walk does not reuse an ancestor's answer, so the cost is one short walk per row
-  // rather than one pass over the tree. That is fine at outline depths and is the reason
-  // not to reach for this cache as evidence the walk is free.
-  const lapCache = new Map<
-    string,
-    { letter: OutlineRow["priorityLetter"]; rank: number | null }
-  >();
+  /**
+   * A lookup of the nearest row, self first, that `pick` has an answer for — `none` when no
+   * ancestor does. Memoized per node asked about: the walk does not reuse an ancestor's
+   * answer, so the cost is one short walk per row rather than one pass over the tree. That
+   * is fine at outline depths and is the reason not to read the cache as evidence the walk
+   * is free.
+   */
+  function nearestCached<T>(
+    pick: (row: OutlineRow) => T | undefined,
+    none: T,
+  ): (id: string) => T {
+    const cache = new Map<string, T>();
+    return (id) => {
+      const hit = cache.get(id);
+      if (hit !== undefined) return hit;
+      let result = none;
+      for (const cur of walkUp(byId.get(id), byId)) {
+        const answer = pick(cur);
+        if (answer !== undefined) {
+          result = answer;
+          break;
+        }
+      }
+      cache.set(id, result);
+      return result;
+    };
+  }
 
-  function lapFor(id: string): {
+  const NO_PRIORITY = { letter: null, rank: null } as const;
+
+  // Inherited priority (L.A.P.): the nearest row carrying a letter.
+  const lapFor = nearestCached<{
     letter: OutlineRow["priorityLetter"];
     rank: number | null;
-  } {
-    const cached = lapCache.get(id);
-    if (cached) return cached;
-
-    let result: { letter: OutlineRow["priorityLetter"]; rank: number | null } = {
-      letter: null,
-      rank: null,
-    };
-    for (const cur of walkUp(byId.get(id), byId)) {
-      if (cur.priorityLetter !== null) {
-        result = { letter: cur.priorityLetter, rank: cur.priorityRank };
-        break;
-      }
-    }
-
-    lapCache.set(id, result);
-    return result;
-  }
+  }>(
+    (cur) =>
+      cur.priorityLetter !== null
+        ? { letter: cur.priorityLetter, rank: cur.priorityRank }
+        : undefined,
+    NO_PRIORITY,
+  );
 
   /** The name of the nearest Result Area, rather than a grid cell walking the tree per row. */
-  const resultAreaNameCache = new Map<string, string | null>();
-
-  function resultAreaNameFor(id: string): string | null {
-    const cached = resultAreaNameCache.get(id);
-    if (cached !== undefined) return cached;
-
-    let result: string | null = null;
-    for (const cur of walkUp(byId.get(id), byId)) {
-      if (cur.type === "result_area") {
-        result = cur.name.trim() || null;
-        break;
-      }
-    }
-
-    resultAreaNameCache.set(id, result);
-    return result;
-  }
+  const resultAreaNameFor = nearestCached<string | null>(
+    (cur) => (cur.type === "result_area" ? cur.name.trim() || null : undefined),
+    null,
+  );
 
   /** Raw priority of the nearest Project. This intentionally does not use L.A.P. */
-  const projectPriorityCache = new Map<
-    string,
-    { letter: OutlineRow["priorityLetter"]; rank: number | null }
-  >();
-
-  function projectPriorityFor(id: string): {
+  const projectPriorityFor = nearestCached<{
     letter: OutlineRow["priorityLetter"];
     rank: number | null;
-  } {
-    const cached = projectPriorityCache.get(id);
-    if (cached) return cached;
-
-    let result: { letter: OutlineRow["priorityLetter"]; rank: number | null } = {
-      letter: null,
-      rank: null,
-    };
-    for (const cur of walkUp(byId.get(id), byId)) {
-      if (cur.type === "project") {
-        result = { letter: cur.priorityLetter, rank: cur.priorityRank };
-        break;
-      }
-    }
-
-    projectPriorityCache.set(id, result);
-    return result;
-  }
+  }>(
+    (cur) =>
+      cur.type === "project"
+        ? { letter: cur.priorityLetter, rank: cur.priorityRank }
+        : undefined,
+    NO_PRIORITY,
+  );
 
   /**
    * Inherited category — the same walk again. Only Result Areas are given one in practice,
@@ -110,24 +92,10 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
    * like every other inherited property instead of needing a special case wherever it is
    * read.
    */
-  const categoryCache = new Map<string, string | null>();
-
-  function categoryFor(id: string): string | null {
-    const cached = categoryCache.get(id);
-    if (cached !== undefined) return cached;
-
-    let result: string | null = null;
-    for (const cur of walkUp(byId.get(id), byId)) {
-      const own = cur.category?.trim();
-      if (own) {
-        result = own;
-        break;
-      }
-    }
-
-    categoryCache.set(id, result);
-    return result;
-  }
+  const categoryFor = nearestCached<string | null>(
+    (cur) => cur.category?.trim() || undefined,
+    null,
+  );
 
   // Inherited shelving, the same walk as `lapFor` and for the same reason: deferring a
   // project takes its subtree with it, and the shelf is *inherited* rather than copied onto
