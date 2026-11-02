@@ -9,6 +9,8 @@
  * Spec: `agent-os/specs/2026-08-24-1522-category-by-kind-and-history/` D7.
  */
 
+import { isRecord } from "@/lib/isRecord";
+
 export const AUTO_CATEGORY_MODES = ["learn", "fixed", "off"] as const;
 export type AutoCategoryMode = (typeof AUTO_CATEGORY_MODES)[number];
 
@@ -172,8 +174,4 @@ export function isConvertiblePayeeCategoryRule(rule: {
     typeof action.value === "string" &&
     action.value !== ""
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

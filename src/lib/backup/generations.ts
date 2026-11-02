@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { isRecord } from "@/lib/isRecord";
 
 const BACKUP_NAME =
   /^planner-production_(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})Z\.dump\.gpg$/;
@@ -204,10 +205,6 @@ async function readVerifiedGeneration(paths: {
   } catch {
     return null;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function stringValue(value: unknown): string {

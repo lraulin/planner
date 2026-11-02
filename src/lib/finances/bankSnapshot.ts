@@ -1,6 +1,7 @@
 import { parseAmountCents } from "./money";
 import { parseCalendarDayText } from "@/lib/calendarDayText";
 import type { FinanceFeed } from "./types";
+import { isRecord } from "@/lib/isRecord";
 
 export const PLANNER_BANK_SNAPSHOT_HEADER = "# planner-bank-snapshot v1";
 export const LEGACY_PLANNER_PENDING_HEADER = "# planner-pending v1";
@@ -132,10 +133,6 @@ export function looksLikeLegacyPlannerPending(text: string): boolean {
   return firstMeaningfulLine(text) === LEGACY_PLANNER_PENDING_HEADER;
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function hasOnlyKeys(value: Record<string, unknown>, allowed: Set<string>): boolean {
   return Object.keys(value).every((key) => allowed.has(key));
 }
@@ -173,7 +170,7 @@ function parseRows(
   const provisional: Omit<ParsedBankSnapshotRow, "externalId">[] = [];
   for (let index = 0; index < rawRows.length; index++) {
     const value = rawRows[index];
-    if (!isObject(value) || !hasOnlyKeys(value, ROW_KEYS)) {
+    if (!isRecord(value) || !hasOnlyKeys(value, ROW_KEYS)) {
       return {
         ok: false,
         error: `The ${label} row ${index + 1} contains unsupported page data.`,
@@ -289,7 +286,7 @@ export function parseBankBrowserSnapshot(text: string): ParseBankBrowserSnapshot
   } catch {
     return { ok: false, error: "The bank snapshot JSON could not be read." };
   }
-  if (!isObject(unknown) || !hasOnlyKeys(unknown, TOP_LEVEL_KEYS)) {
+  if (!isRecord(unknown) || !hasOnlyKeys(unknown, TOP_LEVEL_KEYS)) {
     return {
       ok: false,
       error: "The bank snapshot contains unsupported or unrelated page data.",
@@ -328,7 +325,7 @@ export function parseBankBrowserSnapshot(text: string): ParseBankBrowserSnapshot
     return { ok: false, error: "The bank snapshot capture instant is invalid." };
   }
   const complete = unknown.completeness;
-  if (!isObject(complete) || !hasOnlyKeys(complete, COMPLETENESS_KEYS)) {
+  if (!isRecord(complete) || !hasOnlyKeys(complete, COMPLETENESS_KEYS)) {
     return { ok: false, error: "The bank snapshot has invalid completeness markers." };
   }
   if (complete.filtered !== false || complete.searched !== false) {

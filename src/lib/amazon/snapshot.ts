@@ -30,6 +30,7 @@ import {
   type AmazonOrderSummary,
   type AmazonSummaryCheck,
 } from "./orderSummary";
+import { isRecord } from "@/lib/isRecord";
 
 export const PLANNER_AMAZON_HEADER = "# planner-amazon v2";
 export const SNAPSHOT_VERSION = 2;
@@ -828,10 +829,6 @@ function recordsOf(
     issues.push({ path, message: `${noun} is not an object.` });
     return [];
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function firstMeaningfulLine(text: string): string {

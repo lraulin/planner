@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 
 import type { BackupGeneration } from "./generations";
 import { decryptToCommand, verifyEncryptedArchive, type BackupTools } from "./pipeline";
+import { isRecord } from "@/lib/isRecord";
 
 const execFileAsync = promisify(execFile);
 
@@ -198,8 +199,4 @@ async function run(executable: string, args: string[]): Promise<string> {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`Command failed: ${detail}`);
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

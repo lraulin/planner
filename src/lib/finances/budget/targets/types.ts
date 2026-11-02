@@ -22,6 +22,7 @@
 import { weekdayLongLabel } from "@/lib/dateFormat";
 import { formatUsd } from "@/lib/finances/money";
 import { monthLabel, monthName, type MonthKey } from "../envelope";
+import { isRecord } from "@/lib/isRecord";
 
 export const TARGET_BEHAVIORS = ["add", "upTo", "balance", "save"] as const;
 export type TargetBehavior = (typeof TARGET_BEHAVIORS)[number];
@@ -107,10 +108,6 @@ const LEGAL: Record<TargetBehavior, readonly CadenceUnit[]> = {
 
 export function isLegalPairing(behavior: TargetBehavior, unit: CadenceUnit): boolean {
   return LEGAL[behavior]?.includes(unit) ?? false;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isIntIn(value: unknown, min: number, max: number): value is number {

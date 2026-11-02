@@ -1,3 +1,5 @@
+import { isRecord } from "@/lib/isRecord";
+
 const NEON_API = "https://console.neon.tech/api/v2";
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const HISTORY_SECONDS = 7 * 24 * 60 * 60;
@@ -388,8 +390,4 @@ function numberProperty(value: Record<string, unknown>, key: string): number {
     throw new Error(`Neon recovery API response is missing ${key}.`);
   }
   return item;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

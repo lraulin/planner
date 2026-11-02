@@ -15,6 +15,7 @@ import {
   type SlimItem,
   type SlimOrder,
 } from "./types";
+import { isRecord } from "@/lib/isRecord";
 
 export type SlimTexts = Partial<Record<SlimCsvKind, string>>;
 
@@ -106,10 +107,6 @@ export function buildSlimFromTexts(
     replacements,
   };
   return { document, warnings };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**

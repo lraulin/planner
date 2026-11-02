@@ -8,6 +8,7 @@ import {
   TOOL_REGISTRY,
   type AgentToolDefinition,
 } from "./tools";
+import { isRecord } from "@/lib/isRecord";
 
 export const MCP_PROTOCOL_LATEST = "2025-03-26";
 export const MCP_PROTOCOL_SUPPORTED = ["2025-03-26", "2024-11-05"] as const;
@@ -95,10 +96,6 @@ export function toMcpTool(tool: AgentToolDefinition): McpTool {
     description: mcpToolDescription(tool),
     inputSchema: agentJsonSchema(tool.inputSchema, "input"),
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isJsonRpcId(value: unknown): value is JsonRpcId {
