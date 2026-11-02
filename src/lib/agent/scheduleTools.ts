@@ -20,6 +20,7 @@ import {
   optionalString,
   optionalStringArray,
   parseDate,
+  parseOneOf,
   requireString,
 } from "./parse";
 import { iso } from "./serialize";
@@ -118,14 +119,7 @@ export async function createAppointmentTool(
     );
   }
   return {
-    appointment: {
-      id: row.id,
-      subject: row.subject,
-      startAt: row.startAt.toISOString(),
-      endAt: row.endAt.toISOString(),
-      projectId: row.projectId,
-      checkState: row.checkState,
-    },
+    appointment: appointmentResult(row),
     linkedExisting,
   };
 }
@@ -150,23 +144,17 @@ export async function updateAppointmentTool(
   }
   if (args.notes !== undefined) patch.notes = optionalString(args, "notes");
   if (args.checkState !== undefined) {
-    const cs = requireString(args, "checkState");
-    if (cs !== "open" && cs !== "done" && cs !== "missed") {
-      throw new AgentError("validation", "checkState must be open, done, or missed");
-    }
-    patch.checkState = cs;
+    patch.checkState = parseOneOf(
+      args.checkState,
+      ["open", "done", "missed"],
+      "checkState",
+      "open, done, or missed",
+    );
   }
 
   const row = await updateAppointment(userId, id, patch);
   return {
-    appointment: {
-      id: row.id,
-      subject: row.subject,
-      startAt: row.startAt.toISOString(),
-      endAt: row.endAt.toISOString(),
-      projectId: row.projectId,
-      checkState: row.checkState,
-    },
+    appointment: appointmentResult(row),
   };
 }
 
@@ -177,4 +165,23 @@ export async function deleteAppointmentTool(
   const id = requireString(args, "id");
   await deleteAppointment(userId, id);
   return { deleted: true, id };
+}
+
+/** The appointment a create or update answers with. */
+function appointmentResult(row: {
+  id: string;
+  subject: string;
+  startAt: Date;
+  endAt: Date;
+  projectId: string | null;
+  checkState: "open" | "done" | "missed";
+}) {
+  return {
+    id: row.id,
+    subject: row.subject,
+    startAt: row.startAt.toISOString(),
+    endAt: row.endAt.toISOString(),
+    projectId: row.projectId,
+    checkState: row.checkState,
+  };
 }
