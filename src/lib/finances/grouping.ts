@@ -8,7 +8,7 @@ import {
   compareGroupParts,
   type GroupPart,
 } from "@/lib/grid/groupRows";
-import type { GridRow } from "@/lib/tree/slice";
+import { flatRow, type GridRow } from "@/lib/tree/slice";
 import { effectiveCategory, effectiveFlow } from "./analytics";
 import { flowLabel } from "./flowLabels";
 import type { TransactionListRow } from "./types";
@@ -103,10 +103,6 @@ function partOf(row: TransactionListRow, dimension: FinanceGroupBy): GroupPart |
   return { key: name, label: name, sort: name };
 }
 
-function toGridRow(row: TransactionListRow): GridRow<TransactionListRow> {
-  return { kind: "node", id: row.id, node: row, depth: 0 };
-}
-
 /**
  * Year-group ids to collapse on first open, leaving `keepYear` expanded.
  *
@@ -144,6 +140,6 @@ export function groupTransactions(
     emptyLabel: (dimension) => EMPTY_LABELS[dimension],
     comparePart: (left, right, dimension) =>
       compareGroupParts(left, right, isCalendar(dimension)),
-    toGridRow,
+    toGridRow: flatRow,
   });
 }

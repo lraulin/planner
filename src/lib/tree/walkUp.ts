@@ -41,3 +41,16 @@ export function collapsedAncestorIds<
   }
   return ids;
 }
+
+/** Whether `node` is `scopeId` or sits beneath it; no scope means everything is in it. */
+export function inScope<T extends { id: string; parentId: string | null }>(
+  node: T,
+  scopeId: string | null | undefined,
+  byId: ReadonlyMap<string, T>,
+): boolean {
+  if (!scopeId) return true;
+  for (const cur of walkUp(node, byId)) {
+    if (cur.id === scopeId) return true;
+  }
+  return false;
+}

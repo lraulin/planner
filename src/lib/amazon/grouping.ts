@@ -4,7 +4,7 @@ import {
   type GridGroupBy,
 } from "@/lib/grid/grouping";
 import { buildGroupRows, type GroupPart } from "@/lib/grid/groupRows";
-import type { GridRow } from "@/lib/tree/slice";
+import { flatRow, type GridRow } from "@/lib/tree/slice";
 import type { AmazonItemListRow } from "./types";
 
 export const AMAZON_GROUP_BY_VALUES = [
@@ -94,10 +94,6 @@ function compareParts(
   return String(right.sort).localeCompare(String(left.sort));
 }
 
-function toGridRow(row: AmazonItemListRow): GridRow<AmazonItemListRow> {
-  return { kind: "node", id: row.id, node: row, depth: 0 };
-}
-
 /**
  * Nest Amazon item rows under year / month / order / channel headers.
  *
@@ -114,7 +110,7 @@ export function groupAmazonItems(
     partOf,
     emptyLabel: (dimension) => EMPTY[dimension],
     comparePart: compareParts,
-    toGridRow,
+    toGridRow: flatRow,
   });
 }
 

@@ -2,7 +2,7 @@ import type { NodeState } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
 import { effectiveState } from "@/lib/tree/shelving";
-import { walkUp } from "@/lib/tree/walkUp";
+import { inScope, walkUp } from "@/lib/tree/walkUp";
 import { dayString, daysBetween, effectiveDeadline } from "./dates";
 import { DEFAULT_WEIGHTS, scoreItem, type ChooserWeights } from "./score";
 import { compareTcPriority, TC_LETTERS } from "./tcPriority";
@@ -331,18 +331,6 @@ function compareItems(a: ChooserItem, b: ChooserItem): number {
 function compareByTcThenScore(a: ChooserItem, b: ChooserItem): number {
   const byTc = compareTcPriority(a.node, b.node);
   return byTc !== 0 ? byTc : compareItems(a, b);
-}
-
-function inScope(
-  node: OutlineNode,
-  scopeId: string | null,
-  byId: Map<string, OutlineNode>,
-): boolean {
-  if (!scopeId) return true;
-  for (const cur of walkUp(node, byId)) {
-    if (cur.id === scopeId) return true;
-  }
-  return false;
 }
 
 /**

@@ -5,7 +5,7 @@ import {
   type GridGroupBy,
 } from "@/lib/grid/grouping";
 import { buildGroupRows, type GroupPart } from "@/lib/grid/groupRows";
-import type { GridRow } from "@/lib/tree/slice";
+import { flatRow, type GridRow } from "@/lib/tree/slice";
 import { accountKindLabel } from "./accountKind";
 import type { OperationalAccount } from "./accountOperations";
 
@@ -79,10 +79,6 @@ function comparePart(left: GroupPart, right: GroupPart): number {
   return compareGroupText(String(left.sort), String(right.sort));
 }
 
-function toGridRow(account: OperationalAccount): GridRow<OperationalAccount> {
-  return { kind: "node", id: account.id, node: account, depth: 0 };
-}
-
 /**
  * Nest account rows under kind / source / institution / budget / status headers.
  *
@@ -99,7 +95,7 @@ export function groupAccounts(
     partOf,
     emptyLabel: (dimension) => EMPTY_LABELS[dimension],
     comparePart,
-    toGridRow,
+    toGridRow: flatRow,
   });
 }
 

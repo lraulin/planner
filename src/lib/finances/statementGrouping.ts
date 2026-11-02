@@ -1,6 +1,6 @@
 import { compareGroupText, knownGroupBy, type GridGroupBy } from "@/lib/grid/grouping";
 import { buildGroupRows, type GroupPart } from "@/lib/grid/groupRows";
-import type { GridRow } from "@/lib/tree/slice";
+import { flatRow, type GridRow } from "@/lib/tree/slice";
 import { transactionDatePart } from "./grouping";
 import type { StatementViewRow } from "./types";
 
@@ -31,10 +31,6 @@ function partOf(row: StatementViewRow, dimension: StatementGroupBy): GroupPart |
   return part && { key: part.key, label: part.label, sort: part.rank };
 }
 
-function toGridRow(row: StatementViewRow): GridRow<StatementViewRow> {
-  return { kind: "node", id: row.id, node: row, depth: 0 };
-}
-
 /**
  * Nest statements under account / year / month headers.
  *
@@ -61,7 +57,7 @@ export function groupStatements(
       const compared = compareGroupText(String(left.sort), String(right.sort));
       return dimension === "account" ? compared : -compared;
     },
-    toGridRow,
+    toGridRow: flatRow,
     tiebreak: (left, right) => right.periodEnd.localeCompare(left.periodEnd),
   });
 }

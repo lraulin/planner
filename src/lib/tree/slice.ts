@@ -10,7 +10,7 @@ import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { STATE_LABELS, STATE_ORDER } from "./hierarchy";
 import { ownEffectiveState, shelfHolds } from "./shelving";
 import type { OutlineNode } from "./types";
-import { walkUp } from "./walkUp";
+import { inScope, walkUp } from "./walkUp";
 import { naturalOrder } from "@/lib/text/collate";
 
 /**
@@ -67,6 +67,11 @@ export type GridRow<T = OutlineNode> =
        */
       branch?: { hasChildren: boolean; childCount: number };
     };
+
+/** A record as an ungrouped, top-level grid row. */
+export function flatRow<T extends { id: string }>(node: T): GridRow<T> {
+  return { kind: "node", id: node.id, node, depth: 0 };
+}
 
 /**
  * A dimension rows can be grouped under. The first three come from a row's **ancestry** and
@@ -361,18 +366,6 @@ function toNodeRow(entry: Prepared): GridRow {
     context: entry.context,
     branch: { hasChildren: entry.childCount > 0, childCount: entry.childCount },
   };
-}
-
-function inScope(
-  node: OutlineNode,
-  scopeId: string | null | undefined,
-  byId: Map<string, OutlineNode>,
-): boolean {
-  if (!scopeId) return true;
-  for (const cur of walkUp(node, byId)) {
-    if (cur.id === scopeId) return true;
-  }
-  return false;
 }
 
 /**
