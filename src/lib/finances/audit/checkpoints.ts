@@ -16,6 +16,16 @@ import type {
  * Capture the money claims a finance write can move. The scope limits detailed account and
  * envelope rows, while the account pool and Ready to Assign stay whole-wallet checkpoints.
  */
+/** The accounts and budget months some transactions touch — a checkpoint's scope for them. */
+export function transactionAuditScope(
+  rows: readonly { accountId: string; transactionDate: string }[],
+): { accountIds: string[]; budgetMonths: string[] } {
+  return {
+    accountIds: [...new Set(rows.map((row) => row.accountId))],
+    budgetMonths: [...new Set(rows.map((row) => monthKeyOf(row.transactionDate)))],
+  };
+}
+
 export async function captureFinanceMoneyCheckpoint(
   userId: string,
   scope: FinanceAuditScope,

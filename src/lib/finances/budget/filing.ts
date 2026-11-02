@@ -5,9 +5,11 @@ import { requireOwnedRow } from "@/lib/db/owned";
 import { partitionCategoryTargets } from "../categoryEligibility";
 import { learnFromCategoryEdit } from "../payees/learn";
 import { moneyRows } from "../splitRows";
-import { monthKeyOf } from "./envelope";
 import { requireCategory } from "./structureRows";
-import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
+import {
+  captureFinanceMoneyCheckpoint,
+  transactionAuditScope,
+} from "../audit/checkpoints";
 import { writeFinanceAuditEvent } from "../audit/writes";
 import { assignableLedgerIds } from "@/lib/finances/categoryEligibility";
 
@@ -126,10 +128,7 @@ export async function setTransactionBudgetCategories(
         ),
       ];
       const scope = {
-        accountIds: [...new Set(affected.map((row) => row.accountId))],
-        budgetMonths: [
-          ...new Set(affected.map((row) => monthKeyOf(row.transactionDate))),
-        ],
+        ...transactionAuditScope(affected),
         ...(envelopeIds.length === 0 ? {} : { envelopeIds }),
       };
       const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);

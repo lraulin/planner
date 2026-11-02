@@ -33,7 +33,10 @@ import {
 } from "./payees/mutations";
 import { applyClaimedPayees } from "./payees/claims";
 import { aliasFor } from "./payees/resolve";
-import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
+import {
+  captureFinanceMoneyCheckpoint,
+  transactionAuditScope,
+} from "./audit/checkpoints";
 import type { FinanceMoneyCheckpoint } from "./audit/types";
 import { reclassifyInsideTransaction } from "./bankSnapshotApply";
 import { loadAndPlanReclassify, writeReclassified } from "./reclassifyPlan";
@@ -160,13 +163,6 @@ function transactionAuditFields(row: TransactionAuditRow) {
     parentId: row.parentId,
     externalSource: row.externalSource,
     externalId: row.externalId,
-  };
-}
-
-function transactionAuditScope(rows: readonly TransactionAuditRow[]) {
-  return {
-    accountIds: [...new Set(rows.map((row) => row.accountId))],
-    budgetMonths: [...new Set(rows.map((row) => monthKeyOf(row.transactionDate)))],
   };
 }
 
@@ -634,10 +630,7 @@ export async function reclassifyTransactions(
   const { parsed, plan, changed } = await loadAndPlanReclassify(db, userId);
 
   const audit = await db.transaction(async (tx) => {
-    const scope = {
-      accountIds: [...new Set(parsed.map((row) => row.accountId))],
-      budgetMonths: [...new Set(parsed.map((row) => monthKeyOf(row.transactionDate)))],
-    };
+    const scope = transactionAuditScope(parsed);
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     await writeReclassified(tx, userId, changed);
     const afterCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);

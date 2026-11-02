@@ -14,9 +14,11 @@ import type { AutoCategoryMode } from "./autoCategory";
 import { refusedBillClaims } from "./billClaimGate";
 import { numericStringToCents } from "../money";
 import type { FinanceExecutor } from "../dbExecutor";
-import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
+import {
+  captureFinanceMoneyCheckpoint,
+  transactionAuditScope,
+} from "../audit/checkpoints";
 import { writeFinanceAuditEvent } from "../audit/writes";
-import { monthKeyOf } from "../budget/envelope";
 
 /**
  * The rows any automatic filing may touch, over the payee and account joins: the caller's
@@ -266,10 +268,7 @@ export async function applyClaimedPayees(
     if (candidates.length === 0) return;
 
     const scope = {
-      accountIds: [...new Set(candidates.map((row) => row.accountId))],
-      budgetMonths: [
-        ...new Set(candidates.map((row) => monthKeyOf(row.transactionDate))),
-      ],
+      ...transactionAuditScope(candidates),
       envelopeIds: [
         ...new Set([
           envelopeId,
@@ -349,12 +348,7 @@ export async function applyPayeeAutoCategories(
       .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
       .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
       .where(autoCategoryScope(userId, options));
-    const scope = {
-      accountIds: [...new Set(candidates.map((row) => row.accountId))],
-      budgetMonths: [
-        ...new Set(candidates.map((row) => monthKeyOf(row.transactionDate))),
-      ],
-    };
+    const scope = transactionAuditScope(candidates);
     const beforeCheckpoint = await captureFinanceMoneyCheckpoint(userId, scope, tx);
     const claimed = await applyPayeeClaims(
       userId,
