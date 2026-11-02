@@ -8,36 +8,17 @@ import {
   parseActivityRegisterParams,
 } from "./registerActivity";
 import type { TransactionListRow } from "./types";
+import { transactionRow } from "@/lib/testing/transactionRow";
 
 function tx(
   over: Partial<TransactionListRow> &
     Pick<TransactionListRow, "id" | "transactionDate">,
 ): TransactionListRow {
-  return {
-    accountId: "checking",
-    accountName: "Checking",
-    accountKind: "checking",
-    postedDate: over.transactionDate,
-    pending: false,
-    description: over.description ?? over.id,
-    amountCents: -1000,
-    sourceCategory: "",
-    externalSource: null,
-    derivedCategory: null,
-    derivedFlow: "spend",
-    flowOverride: null,
-
-    notes: "",
-    balanceAfterCents: null,
+  return transactionRow({
     budgetCategoryId: "groceries",
     budgetCategoryName: "Groceries",
-    payeeId: null,
-    parentId: null,
-    splitChildCount: 0,
-    splitImbalanceCents: 0,
-    payeeName: null,
     ...over,
-  };
+  });
 }
 
 describe("activityRegisterHref / parseActivityRegisterParams", () => {

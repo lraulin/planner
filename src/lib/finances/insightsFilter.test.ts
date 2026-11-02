@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { effectiveMerchant, type AnalyticsRow } from "./analytics";
+import { effectiveMerchant } from "./analytics";
 import {
   applyInsightsFilter,
   EMPTY_INSIGHTS_FILTER,
@@ -7,39 +7,19 @@ import {
   resolveInsightsRange,
   rowsForDrill,
 } from "./insightsFilter";
-
-function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
-  return {
-    id: crypto.randomUUID(),
-    accountId: "checking",
-    accountName: "360 Checking",
-    accountKind: "checking",
-    transactionDate: "2026-03-14",
-    description: "WM SUPERCENTER #1981",
-    amountCents: -8412,
-    sourceCategory: "",
-    derivedCategory: "Groceries",
-    derivedFlow: "spend",
-    flowOverride: null,
-    transferGroupId: null,
-
-    payeeId: null,
-    payeeName: null,
-    ...overrides,
-  };
-}
+import { analyticsRow } from "@/lib/testing/analyticsRow";
 
 describe("applyInsightsFilter", () => {
   const rows = [
-    row({ accountId: "checking", derivedCategory: "Groceries" }),
-    row({
+    analyticsRow({ accountId: "checking", derivedCategory: "Groceries" }),
+    analyticsRow({
       accountId: "card",
       accountName: "Chase",
       accountKind: "credit_card",
       derivedCategory: "Dining",
       description: "SBARRO",
     }),
-    row({
+    analyticsRow({
       accountId: "checking",
       derivedFlow: "internal_transfer",
       derivedCategory: null,
@@ -74,7 +54,10 @@ describe("applyInsightsFilter", () => {
   });
 
   it("filters by the merchant as shown, which is the payee's name when there is one", () => {
-    const named = row({ description: "WM SUPERCENTER #1981", payeeName: "Walmart" });
+    const named = analyticsRow({
+      description: "WM SUPERCENTER #1981",
+      payeeName: "Walmart",
+    });
     expect(
       applyInsightsFilter([named], {
         ...EMPTY_INSIGHTS_FILTER,
@@ -157,23 +140,23 @@ describe("resolveInsightsRange", () => {
 
 describe("rowsForDrill", () => {
   const rows = [
-    row({ derivedCategory: "Groceries", amountCents: -4000 }),
-    row({
+    analyticsRow({ derivedCategory: "Groceries", amountCents: -4000 }),
+    analyticsRow({
       derivedCategory: "Dining",
       description: "SBARRO",
       amountCents: -2000,
     }),
-    row({
+    analyticsRow({
       derivedFlow: "internal_transfer",
       derivedCategory: "Groceries",
       amountCents: -50000,
     }),
-    row({
+    analyticsRow({
       derivedFlow: "refund",
       derivedCategory: "Groceries",
       amountCents: 1500,
     }),
-    row({
+    analyticsRow({
       derivedFlow: "income",
       description: "GA8248 TRUSTEDQA PAYROLL",
       amountCents: 247433,

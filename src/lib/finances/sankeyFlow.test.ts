@@ -8,46 +8,26 @@ import {
   SANKEY_SPENT,
   type BudgetGroupSankeyRow,
 } from "./sankeyFlow";
+import { analyticsRow } from "@/lib/testing/analyticsRow";
 
 const byCategory = {
   source: (row: AnalyticsRow) => effectiveMerchant(row),
   sink: effectiveCategory,
 };
 
-function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
-  return {
-    id: crypto.randomUUID(),
-    accountId: "checking",
-    accountName: "360 Checking",
-    accountKind: "checking",
-    transactionDate: "2026-03-14",
-    description: "WM SUPERCENTER #1981",
-    amountCents: -8412,
-    sourceCategory: "",
-    derivedCategory: "Groceries",
-    derivedFlow: "spend",
-    flowOverride: null,
-    transferGroupId: null,
-
-    payeeId: null,
-    payeeName: null,
-    ...overrides,
-  };
-}
-
 describe("cashFlowSankey", () => {
   it("balances income into Spent and Kept when money is left over", () => {
     const model = cashFlowSankey(
       [
-        row({
+        analyticsRow({
           derivedFlow: "income",
           description: "PAYROLL",
           amountCents: 100000,
           derivedCategory: null,
         }),
-        row({ derivedCategory: "Groceries", amountCents: -40000 }),
-        row({ derivedCategory: "Dining", amountCents: -10000 }),
-        row({
+        analyticsRow({ derivedCategory: "Groceries", amountCents: -40000 }),
+        analyticsRow({ derivedCategory: "Dining", amountCents: -10000 }),
+        analyticsRow({
           derivedFlow: "internal_transfer",
           amountCents: -20000,
           derivedCategory: null,
@@ -75,13 +55,13 @@ describe("cashFlowSankey", () => {
   it("adds a From savings source when spending exceeds income", () => {
     const model = cashFlowSankey(
       [
-        row({
+        analyticsRow({
           derivedFlow: "income",
           description: "PAYROLL",
           amountCents: 20000,
           derivedCategory: null,
         }),
-        row({ derivedCategory: "Rent & Housing", amountCents: -50000 }),
+        analyticsRow({ derivedCategory: "Rent & Housing", amountCents: -50000 }),
       ],
       byCategory,
     );
@@ -99,14 +79,14 @@ describe("cashFlowSankey", () => {
   it("keeps Uncategorized as a sink and drops transfers from spend", () => {
     const model = cashFlowSankey(
       [
-        row({
+        analyticsRow({
           derivedFlow: "income",
           description: "PAYROLL",
           amountCents: 10000,
           derivedCategory: null,
         }),
-        row({ derivedCategory: null, sourceCategory: "", amountCents: -3000 }),
-        row({
+        analyticsRow({ derivedCategory: null, sourceCategory: "", amountCents: -3000 }),
+        analyticsRow({
           derivedFlow: "internal_transfer",
           amountCents: -8000,
           derivedCategory: null,
@@ -131,7 +111,7 @@ describe("budgetGroupSankey", () => {
     overrides: Partial<BudgetGroupSankeyRow> = {},
   ): BudgetGroupSankeyRow {
     return {
-      ...row({ derivedCategory: null }),
+      ...analyticsRow({ derivedCategory: null }),
       budgetCategoryName: "Groceries",
       budgetCategoryId: "groceries",
       groupId: null,

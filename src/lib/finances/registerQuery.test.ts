@@ -16,6 +16,7 @@ import {
   type RegisterQuery,
   type RegisterQueryContext,
 } from "./registerQuery";
+import { transactionRow } from "@/lib/testing/transactionRow";
 
 const EMPTY_CTX: RegisterQueryContext = {
   offBudgetAccountIds: new Set(),
@@ -26,31 +27,7 @@ function tx(
   over: Partial<TransactionListRow> &
     Pick<TransactionListRow, "id" | "transactionDate">,
 ): TransactionListRow {
-  return {
-    accountId: "acct",
-    accountName: "Checking",
-    accountKind: "checking",
-    postedDate: over.transactionDate,
-    pending: false,
-    description: over.description ?? over.id,
-    amountCents: -1000,
-    sourceCategory: "",
-    externalSource: null,
-    derivedCategory: null,
-    derivedFlow: "spend",
-    flowOverride: null,
-
-    notes: "",
-    balanceAfterCents: null,
-    budgetCategoryId: null,
-    budgetCategoryName: null,
-    payeeId: null,
-    parentId: null,
-    splitChildCount: 0,
-    splitImbalanceCents: 0,
-    payeeName: null,
-    ...over,
-  };
+  return transactionRow({ accountId: "acct", ...over });
 }
 
 function query(over: Partial<RegisterQuery> = {}): RegisterQuery {
