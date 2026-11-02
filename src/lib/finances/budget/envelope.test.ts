@@ -19,6 +19,7 @@ import {
   type BudgetInput,
   type BudgetMonth,
 } from "./envelope";
+import { seededRandom } from "@/lib/testing/seededRandom";
 
 const FOOD = { id: "food", groupId: "spending", isIncome: false };
 const RENT = { id: "rent", groupId: "spending", isIncome: false };
@@ -342,10 +343,7 @@ describe("buildBudget — income and Ready to Assign", () => {
 describe("buildBudget — the reconciliation invariant, over random ledgers", () => {
   // Ready to Assign + every envelope balance = the on-budget position - what is held back,
   // in every month, whatever the assignments, refunds, overspends and carryover flags.
-  let seed = 31337;
-  const random = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
-  const between = (low: number, high: number) =>
-    low + Math.floor(random() * (high - low + 1));
+  const { random, between } = seededRandom(31337);
 
   it("holds for 300 generated ledgers", () => {
     const months = [

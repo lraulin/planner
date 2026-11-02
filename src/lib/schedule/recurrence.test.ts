@@ -8,6 +8,7 @@ import {
 } from "./recurrence";
 import { fromDateKey, startOfWeek, toDateKey, weekdayOfDateKey } from "./geometry";
 import { scheduleRange, serializeRange, weekRange } from "./range";
+import { seededRandom } from "@/lib/testing/seededRandom";
 
 function master(
   partial: Partial<RecurrenceInput> & Pick<RecurrenceInput, "startAt" | "endAt">,
@@ -609,10 +610,7 @@ describe("expandRecurrence — series that started long before the window", () =
 describe("expandRecurrence — agrees with a day-by-day walk", () => {
   // The fast-forward is the clever part, and every bug it has had was a window that disagreed
   // with the series' own history. This is the history, done the slow obvious way.
-  let seed = 20261016;
-  const random = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
-  const between = (low: number, high: number) =>
-    low + Math.floor(random() * (high - low + 1));
+  const { random, between } = seededRandom(20261016);
 
   function slowWalk(m: RecurrenceInput, from: Date, to: Date): string[] {
     const hours = m.endAt.getTime() - m.startAt.getTime();
