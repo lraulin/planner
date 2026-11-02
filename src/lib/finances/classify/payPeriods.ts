@@ -16,7 +16,7 @@
  */
 
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
-import { BIWEEKLY_DAYS, type Payday } from "./income";
+import { BIWEEKLY_DAYS, comparePaydays, type Payday } from "./income";
 import { groupBy } from "@/lib/groupBy";
 
 /**
@@ -116,11 +116,7 @@ export function buildPayPeriods(
 ): PayPeriod[] {
   if (paydays.length === 0 || range.startKey > range.endKey) return [];
 
-  const ordered = [...paydays].sort(
-    (left, right) =>
-      left.dateKey.localeCompare(right.dateKey) ||
-      left.employer.localeCompare(right.employer),
-  );
+  const ordered = [...paydays].sort(comparePaydays);
   const dates = uniqueDateKeys(ordered);
   const paydaysByDate = byDate(ordered);
   const starts = periodStarts(dates, range);

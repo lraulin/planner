@@ -56,6 +56,14 @@ export type Payday = {
   transactionIds: string[];
 };
 
+/** Paydays by date, then employer, so two paid the same day keep one order. */
+export function comparePaydays(left: Payday, right: Payday): number {
+  return (
+    left.dateKey.localeCompare(right.dateKey) ||
+    left.employer.localeCompare(right.employer)
+  );
+}
+
 export type IncomeDetection = {
   /** Transaction id → `income` for every credit that belongs to a detected series. */
   flows: Map<string, "income">;
@@ -160,11 +168,7 @@ export function detectIncome(
     }
   }
 
-  paydays.sort(
-    (left, right) =>
-      left.dateKey.localeCompare(right.dateKey) ||
-      left.employer.localeCompare(right.employer),
-  );
+  paydays.sort(comparePaydays);
 
   const medianPaycheckCents = medianRounded(
     paydays.map((payday) => payday.amountCents),
