@@ -9,7 +9,12 @@ import type {
   ShowAs,
 } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
+import {
+  Drawer,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerLeaveGuard,
+} from "@/components/detail/Drawer";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import {
   FieldGrid,
@@ -146,7 +151,6 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
   );
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
-  const [confirmClose, setConfirmClose] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -168,11 +172,6 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
       setter(v);
       markDirty();
     };
-  }
-
-  function requestClose() {
-    if (dirty) setConfirmClose(true);
-    else onClose();
   }
 
   async function save(options?: { close?: boolean }) {
@@ -246,12 +245,12 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
 
   return (
     <>
-      <Drawer open onClose={requestClose} labelledBy="appointment-title">
+      <Drawer open onClose={onClose} labelledBy="appointment-title">
         <div className="flex h-full flex-col">
           <DrawerHeader
             titleId="appointment-title"
             title={persistedId ? "Appointment" : "New Appointment"}
-            onClose={requestClose}
+            onClose={onClose}
             actions={
               persistedId ? (
                 <button
@@ -614,10 +613,11 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
             </Section>
           </div>
 
+          <DrawerLeaveGuard dirty={dirty} />
           <DrawerFooter
             onSave={() => void save()}
             onSaveAndClose={() => void save({ close: true })}
-            onClose={requestClose}
+            onClose={onClose}
             saving={saving}
             dirty={dirty}
             justSaved={justSaved}
@@ -625,20 +625,6 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
           />
         </div>
       </Drawer>
-
-      <ConfirmDialog
-        open={confirmClose}
-        title="Discard changes?"
-        message="You have unsaved changes. Close without saving?"
-        confirmLabel="Discard"
-        destructive
-        onConfirm={() => {
-          setConfirmClose(false);
-          setDirty(false);
-          onClose();
-        }}
-        onCancel={() => setConfirmClose(false)}
-      />
 
       <ConfirmDialog
         open={confirmDelete}
