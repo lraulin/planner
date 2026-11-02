@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { nodeItems, nodes, resultAreaDetails } from "@/db/schema";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { WISH_KINDS, type WishKind, type WishListRow } from "./wishTypes";
+import { walkUp } from "@/lib/tree/walkUp";
 
 export {
   WISH_KINDS,
@@ -55,22 +56,16 @@ export async function loadWishList(userId: string): Promise<WishListRow[]> {
   const byId = new Map(allNodes.map((n) => [n.id, n]));
 
   const rows: WishListRow[] = items.map((item) => {
-    let resultAreaId: string | null = null;
-    let resultAreaName: string | null = null;
-    let category: string | null = null;
-    const seen = new Set<string>();
-    let cur = byId.get(item.nodeId) ?? null;
-    while (cur) {
-      if (seen.has(cur.id)) break;
-      seen.add(cur.id);
-      if (cur.type === "result_area") {
-        resultAreaId = cur.id;
-        resultAreaName = cur.name;
-        category = cur.category;
+    let area: { id: string; name: string; category: string | null } | undefined;
+    for (const node of walkUp(byId.get(item.nodeId), byId)) {
+      if (node.type === "result_area") {
+        area = node;
         break;
       }
-      cur = cur.parentId ? (byId.get(cur.parentId) ?? null) : null;
     }
+    const resultAreaId = area?.id ?? null;
+    const resultAreaName = area?.name ?? null;
+    const category = area?.category ?? null;
 
     return {
       id: item.id,
