@@ -13,7 +13,7 @@
 
 import type { EnvelopeKind } from "@/db/schema";
 import { assertCents, formatUsd } from "@/lib/finances/money";
-import { monthName, type MonthKey } from "../envelope";
+import { type MonthKey, onDay } from "../envelope";
 import { targetDemand } from "../targets/demand";
 import { hasTargetAsk, type BillSnapshot } from "../targets/derive";
 import type { Target } from "../targets/types";
@@ -61,10 +61,6 @@ export type ApplyResult = {
   errors: ApplyError[];
   note: string;
 };
-
-function onDay(todayKey: string): string {
-  return `on ${monthName(todayKey)} ${Number(todayKey.slice(8, 10))}`;
-}
 
 function selected(envelope: EnvelopeApplyInput, options: ApplyOptions): boolean {
   if (envelope.isIncome) return false;

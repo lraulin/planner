@@ -15,7 +15,7 @@
 
 import type { EnvelopeKind } from "@/db/schema";
 import { assertCents, formatUsd } from "@/lib/finances/money";
-import { monthName, prevMonthKey, type MonthKey } from "../envelope";
+import { type MonthKey, onDay, prevMonthKey } from "../envelope";
 import { pageSectionOf } from "../rows";
 import { monthsLeft } from "../targets/cadence";
 import { targetDemand } from "../targets/demand";
@@ -66,10 +66,6 @@ export type StillNeededGroup = {
   totalCents: number;
   rows: readonly StillNeededRow[];
 };
-
-function onDay(todayKey: string): string {
-  return `on ${monthName(todayKey)} ${Number(todayKey.slice(8, 10))}`;
-}
 
 function eligible(
   envelope: AssignEnvelope,

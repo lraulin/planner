@@ -124,6 +124,11 @@ export function monthName(dateKey: string): string {
   return MONTH_NAMES[Number(dateKey.slice(5, 7)) - 1] ?? dateKey.slice(5, 7);
 }
 
+/** `on August 22` — the day part of a movement line, without a year nobody reads. */
+export function onDay(todayKey: string): string {
+  return `on ${monthName(todayKey)} ${Number(todayKey.slice(8, 10))}`;
+}
+
 /** `August 2026`. */
 export function monthLabel(month: MonthKey): string {
   return `${monthName(month)} ${month.slice(0, 4)}`;

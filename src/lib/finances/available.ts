@@ -16,6 +16,7 @@
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { BIWEEKLY_DAYS, type Payday } from "./classify/income";
 import { cadenceDaysApprox, type Cadence } from "./recurringBills";
+import { medianRounded } from "@/lib/statistics";
 
 /**
  * A posted charge against a declared bill, used to decide whether this period is already paid.
@@ -119,11 +120,7 @@ function medianGapDays(sorted: readonly Payday[]): number {
   }
   if (gaps.length === 0) return BIWEEKLY_DAYS;
 
-  gaps.sort((left, right) => left - right);
-  const middle = Math.floor(gaps.length / 2);
-  return gaps.length % 2 === 1
-    ? gaps[middle]
-    : Math.round((gaps[middle - 1] + gaps[middle]) / 2);
+  return medianRounded(gaps);
 }
 
 /**

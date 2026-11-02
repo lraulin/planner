@@ -22,11 +22,11 @@
 import { formatUsd } from "@/lib/finances/money";
 
 import {
-  categoryMonth,
-  monthLabel,
-  monthName,
   type BudgetMonth,
+  categoryMonth,
   type MonthKey,
+  monthLabel,
+  onDay,
 } from "./envelope";
 
 /** An envelope, named so the movement log can say which one. */
@@ -64,11 +64,6 @@ export type BudgetEdit = {
 };
 
 export const NO_EDIT: BudgetEdit = { allocations: [], buffered: null, note: "" };
-
-/** `on August 22` — the day part of a movement line, without a year nobody reads. */
-function onDay(todayKey: string): string {
-  return `on ${monthName(todayKey)} ${Number(todayKey.slice(8, 10))}`;
-}
 
 function isNoop(edit: BudgetEdit): boolean {
   return edit.allocations.length === 0 && edit.buffered === null;
