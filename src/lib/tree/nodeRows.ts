@@ -17,6 +17,7 @@ export const {
   siblingKeys,
   sortKeyFor,
   isSelfOrDescendant,
+  setAllCollapsed: setAllNodesCollapsed,
 } = treeTableRows(nodes);
 
 export async function requireNode(tx: DbExecutor, userId: string, nodeId: string) {

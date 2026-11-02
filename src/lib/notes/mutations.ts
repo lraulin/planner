@@ -38,8 +38,8 @@ export async function lastRootNoteSortKey(
   return last?.sortKey ?? null;
 }
 
-const { expandParent, siblingKeys, sortKeyFor, isSelfOrDescendant } =
-  treeTableRows(notes);
+const noteTree = treeTableRows(notes);
+const { expandParent, siblingKeys, sortKeyFor, isSelfOrDescendant } = noteTree;
 
 async function requireNote(tx: DbExecutor, userId: string, noteId: string) {
   return requireOwnedRow(tx, notes, noteId, userId, "Note not found.");
@@ -206,10 +206,7 @@ export async function setAllNotesCollapsed(
   userId: string,
   collapsed: boolean,
 ): Promise<void> {
-  await db
-    .update(notes)
-    .set({ collapsed, updatedAt: new Date() })
-    .where(eq(notes.userId, userId));
+  await noteTree.setAllCollapsed(db, userId, collapsed);
 }
 
 /** Moves a note under a new parent and/or to a new position among its siblings. */

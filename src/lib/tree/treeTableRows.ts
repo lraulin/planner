@@ -101,5 +101,24 @@ export function treeTableRows(table: TreeTable) {
     return isSelfOrDescendantVia(id, candidateId, ownedParentOf(tx, table, userId));
   }
 
-  return { parentMatches, expandParent, siblingKeys, sortKeyFor, isSelfOrDescendant };
+  /** Expand or collapse every row the user has — Expand All / Collapse All, in one write. */
+  async function setAllCollapsed(
+    tx: DbExecutor,
+    userId: string,
+    collapsed: boolean,
+  ): Promise<void> {
+    await tx
+      .update(source)
+      .set({ collapsed, updatedAt: new Date() })
+      .where(eq(table.userId, userId));
+  }
+
+  return {
+    parentMatches,
+    expandParent,
+    siblingKeys,
+    sortKeyFor,
+    isSelfOrDescendant,
+    setAllCollapsed,
+  };
 }

@@ -27,7 +27,13 @@ import { rearmReminders, supersedeOrphanedReminders } from "@/lib/reminders/arm"
 import { autoReminderUpdate, writeReminder } from "@/lib/reminders/autoReminder";
 import type { Position } from "./types";
 import { initialStateForType } from "./lifecycle";
-import { expandParent, requireNode, resultAreaCategory, sortKeyFor } from "./nodeRows";
+import {
+  expandParent,
+  requireNode,
+  resultAreaCategory,
+  setAllNodesCollapsed,
+  sortKeyFor,
+} from "./nodeRows";
 
 /**
  * Every mutation takes a `userId` and scopes on it, so a caller cannot reach another
@@ -351,10 +357,7 @@ export async function setAllCollapsed(
   userId: string,
   collapsed: boolean,
 ): Promise<void> {
-  await db
-    .update(nodes)
-    .set({ collapsed, updatedAt: new Date() })
-    .where(eq(nodes.userId, userId));
+  await setAllNodesCollapsed(db, userId, collapsed);
 }
 
 /**
