@@ -1,8 +1,8 @@
-import { isDateKey } from "@/lib/metrics/parse";
 import { asRecordId } from "@/lib/url/viewState";
 import { categoryAssignableIds, categoryEligibilityRow } from "./categoryEligibility";
 import { effectiveFlow } from "./analytics";
 import type { TransactionListRow } from "./types";
+import { isDateKey } from "@/lib/schedule/geometry";
 export type ReportDrill = {
   basis: "envelope" | "cashflow";
   from: string;

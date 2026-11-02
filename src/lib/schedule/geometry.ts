@@ -62,6 +62,18 @@ export function isRealCalendarDate(year: number, month: number, day: number): bo
 }
 
 /**
+ * Whether `text` is a `YYYY-MM-DD` key naming a day that exists — `2026-06-31` is not one.
+ * Postgres `date` columns reject such a day outright, and a bad `?date=` must not become an
+ * invalid Date that later math walks forever, so callers decide here and say which day was
+ * wrong.
+ */
+export function isDateKey(text: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return false;
+  return isRealCalendarDate(Number(match[1]), Number(match[2]), Number(match[3]));
+}
+
+/**
  * A `YYYY-MM-DD` key from calendar components, or null when they do not name a real day.
  *
  * String-to-string by way of numbers: the parts never become an instant, so no importer

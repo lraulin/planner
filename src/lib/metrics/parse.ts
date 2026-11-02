@@ -1,5 +1,3 @@
-import { daysInMonth } from "@/lib/dateMath";
-
 /** Parse a DB `numeric` string (or number) into a finite number, else null. */
 export function parseNumeric(raw: string | number | null | undefined): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
@@ -36,21 +34,4 @@ export function formatMetricNumber(n: number | null | undefined): string {
   if (Number.isInteger(n)) return String(n);
   const fixed = n.toFixed(6).replace(/\.?0+$/, "");
   return fixed;
-}
-
-/**
- * True when `s` is `YYYY-MM-DD` **and names a day that exists**.
- *
- * The shape alone is not enough. This guards three untrusted inputs — the agent API's
- * `entryDate`, the tracking CSV import, and `createMetricEntry` — and all three write a
- * Postgres `date`, which rejects `2026-06-31` outright. Shape-only, that rejection arrived as
- * a swallowed driver error: `log_metric_entry` answered `{"code":"internal","message":
- * "Internal error"}`, and the CSV importer accepted the row and then failed the whole file.
- * Deciding it here means the caller is told which day it got wrong.
- */
-export function isDateKey(s: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!match) return false;
-  const [, year, month, day] = match.map(Number);
-  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month);
 }

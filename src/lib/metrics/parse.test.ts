@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatMetricNumber, isDateKey, parseMetricInput, parseNumeric } from "./parse";
+import { formatMetricNumber, parseMetricInput, parseNumeric } from "./parse";
+import { isDateKey } from "@/lib/schedule/geometry";
 
 describe("parseMetricInput", () => {
   it("empty is null", () => {

@@ -1,7 +1,8 @@
 import { escapeCsvField, parseCsvRowsWithLines, splitCsvLine } from "@/lib/csv/text";
 import { sortEntriesByDate } from "./derive";
-import { formatMetricNumber, isDateKey, parseMetricInput } from "./parse";
+import { formatMetricNumber, parseMetricInput } from "./parse";
 import type { MetricEntryInput, MetricEntryView } from "./types";
+import { isDateKey } from "@/lib/schedule/geometry";
 
 export { splitCsvLine };
 

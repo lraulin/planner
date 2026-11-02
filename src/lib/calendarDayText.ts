@@ -1,4 +1,4 @@
-import { dateKeyFromParts, isRealCalendarDate } from "@/lib/schedule/geometry";
+import { dateKeyFromParts, isDateKey } from "@/lib/schedule/geometry";
 
 const MONTHS: Record<string, number> = {
   jan: 1,
@@ -37,10 +37,7 @@ const MONTHS: Record<string, number> = {
  */
 export function parseCalendarDayText(text: string): string | null {
   const value = text.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const [year, month, day] = value.split("-").map(Number);
-    return isRealCalendarDate(year, month, day) ? value : null;
-  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return isDateKey(value) ? value : null;
 
   const named = /^(?:[A-Za-z]{3,9},?\s+)?([A-Za-z]{3,9})\s+(\d{1,2}),\s+(\d{4})$/.exec(
     value,

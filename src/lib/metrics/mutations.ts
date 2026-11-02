@@ -11,8 +11,9 @@ import {
 import type { PriorityLetter } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
 import { isMetricType } from "./derive";
-import { isDateKey, parseNumeric } from "./parse";
+import { parseNumeric } from "./parse";
 import type { MetricEntryInput, MetricInput, MetricType } from "./types";
+import { isDateKey } from "@/lib/schedule/geometry";
 
 function requireMetricType(raw: string | undefined, fallback: MetricType): MetricType {
   if (raw === undefined) return fallback;

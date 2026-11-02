@@ -4,9 +4,13 @@ import { loadSchedule } from "@/lib/schedule/queries";
 import { loadOutline } from "@/lib/tree/queries";
 import { scheduleNodesWire } from "@/lib/tree/wireSlices";
 import { ScheduleView, type SchedulePage } from "@/components/schedule/ScheduleView";
-import { fromDateKey, localDateKey, startOfWeek } from "@/lib/schedule/geometry";
+import {
+  fromDateKey,
+  isDateKey,
+  localDateKey,
+  startOfWeek,
+} from "@/lib/schedule/geometry";
 import { loadScheduleView, rangeForView } from "@/lib/schedule/viewRange";
-import { isDateKey } from "@/lib/metrics/parse";
 
 export type ScheduleRangeSearchParams = {
   start?: string;

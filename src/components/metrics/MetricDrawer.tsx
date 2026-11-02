@@ -48,8 +48,8 @@ import { formatBindings } from "@/lib/commands/bindings";
 import { COPY_AS_TEXT } from "@/lib/commands/chords";
 import { applySelect, selectOnly } from "@/lib/grid/selection";
 import { isTypingTarget } from "@/lib/keyboard";
-import { formatMetricNumber, isDateKey, parseMetricInput } from "@/lib/metrics/parse";
-import { localDateKey } from "@/lib/schedule/geometry";
+import { formatMetricNumber, parseMetricInput } from "@/lib/metrics/parse";
+import { isDateKey, localDateKey } from "@/lib/schedule/geometry";
 import {
   TRACKING_COLUMNS,
   TRACKING_DEFAULT_ORDER,

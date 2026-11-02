@@ -1,3 +1,4 @@
+import { isDateKey } from "@/lib/schedule/geometry";
 /**
  * Encode and decode the view-state query params shared by the grid tabs.
  *
@@ -88,21 +89,7 @@ export function asRecordId(value: unknown): string | null {
  * because a bad `?date=` must not become an invalid Date that later math walks forever.
  */
 export function asDateKey(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const encoded = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
-  if (
-    encoded.getUTCFullYear() !== year ||
-    encoded.getUTCMonth() + 1 !== month ||
-    encoded.getUTCDate() !== day
-  ) {
-    return null;
-  }
-  return value;
+  return typeof value === "string" && isDateKey(value) ? value : null;
 }
 
 /**

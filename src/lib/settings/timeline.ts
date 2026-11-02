@@ -1,5 +1,6 @@
 import { asOneOf, asRecord, asString } from "./parse";
 import { SETTINGS_VERSION } from "./scopes";
+import { isDateKey } from "@/lib/schedule/geometry";
 
 /**
  * What the Timeline page remembers: which way it is drawing the same records, and which stretch
@@ -81,12 +82,6 @@ function parseWindow(value: unknown): TimelineWindow | null {
   if (!isDateKey(startKey) || !isDateKey(endKey) || startKey > endKey) return null;
 
   return { startKey, endKey };
-}
-
-const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
-
-function isDateKey(value: string): boolean {
-  return DATE_KEY.test(value);
 }
 
 export function serializeTimelineSettings(settings: TimelineSettings): unknown {

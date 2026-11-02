@@ -15,9 +15,8 @@ import type { ScheduleWire } from "@/lib/tree/wireSlices";
 import { useOutline } from "@/components/grid/useOutline";
 import type { SchedulePayload, ScheduleOccurrence } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
-import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, isDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { draftFromCalendarSelect } from "@/lib/schedule/allDay";
-import { isDateKey } from "@/lib/metrics/parse";
 import {
   DAY_COUNTS,
   scheduleRange,
