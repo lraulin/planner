@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { GridRow } from "@/lib/tree/slice";
+import { flatRow, type GridRow } from "@/lib/tree/slice";
 import { groupMembers } from "./groupMembers";
 
 function node(id: string): GridRow<{ id: string }> {
-  return { kind: "node", id, node: { id }, depth: 0 };
+  return flatRow({ id });
 }
 
 function group(id: string, depth = 0): GridRow<{ id: string }> {
