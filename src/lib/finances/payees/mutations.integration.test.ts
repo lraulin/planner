@@ -2,7 +2,6 @@ import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  financeAccounts,
   financeBudgetCategories,
   financeCategoryGroups,
   financePayees,
@@ -33,24 +32,11 @@ import { addPayeeAlias } from "./aliases";
 import { getPayee, listAliasRows, listPayees, previewPayeeMerge } from "./queries";
 import { payeeForDescription, payeeIndex } from "./resolve";
 import { lastChargeOnBill } from "../billLastCharge";
+import { insertTestAccount } from "@/lib/testing/financeFixtures";
 
 const describeDb = await describeWithDatabase("payee mutations");
 
 const makeUser = testUsers("payees");
-
-async function makeAccount(userId: string): Promise<string> {
-  const [account] = await db
-    .insert(financeAccounts)
-    .values({
-      userId,
-      name: "Checking",
-      kind: "checking",
-      externalSource: "test",
-      externalKey: `chk-${crypto.randomUUID()}`,
-    })
-    .returning({ id: financeAccounts.id });
-  return account.id;
-}
 
 async function addTransaction(
   userId: string,
@@ -102,7 +88,7 @@ describeDb("payee mutations", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
-    accountId = await makeAccount(userId);
+    accountId = await insertTestAccount(userId);
   });
 
   it("mints a payee from a transaction that has none yet", async () => {
@@ -472,7 +458,7 @@ describeDb("payee mutations — cross-user isolation", () => {
   beforeEach(async () => {
     ownerId = await makeUser();
     intruderId = await makeUser();
-    const accountId = await makeAccount(ownerId);
+    const accountId = await insertTestAccount(ownerId);
 
     ownedPayeeId = await createPayee(ownerId, {
       name: "Walmart",
@@ -574,7 +560,7 @@ describeDb("payee auto-category", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
-    accountId = await makeAccount(userId);
+    accountId = await insertTestAccount(userId);
   });
 
   async function makeSpendingEnvelope(name: string): Promise<string> {

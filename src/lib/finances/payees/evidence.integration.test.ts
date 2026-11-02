@@ -1,13 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  financeAccounts,
-  financeBudgetCategories,
-  financeCategoryGroups,
-  financePayees,
-  financeTransactions,
-} from "@/db/schema";
+import { financePayees, financeTransactions } from "@/db/schema";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
@@ -18,47 +12,11 @@ import {
 } from "./mutations";
 import { payeeEvidenceForCategory } from "./queries";
 import { fileWaitingChargesForPayee } from "../budget/filing";
+import { insertTestAccount, insertTestEnvelope } from "@/lib/testing/financeFixtures";
 
 const describeDb = await describeWithDatabase("payee evidence");
 
 const makeUser = testUsers("evidence");
-
-async function makeAccount(userId: string): Promise<string> {
-  const [account] = await db
-    .insert(financeAccounts)
-    .values({
-      userId,
-      name: "Checking",
-      kind: "checking",
-      externalSource: "test",
-      externalKey: `chk-${crypto.randomUUID()}`,
-    })
-    .returning({ id: financeAccounts.id });
-  return account.id;
-}
-
-async function makeEnvelope(userId: string, name: string): Promise<string> {
-  const [group] = await db
-    .insert(financeCategoryGroups)
-    .values({
-      userId,
-      name: `${name} group ${crypto.randomUUID()}`,
-      kind: "spending",
-      sortKey: "a0",
-    })
-    .returning({ id: financeCategoryGroups.id });
-  const [row] = await db
-    .insert(financeBudgetCategories)
-    .values({
-      userId,
-      groupId: group.id,
-      name,
-      sortKey: "a0",
-      kind: "spending",
-    })
-    .returning({ id: financeBudgetCategories.id });
-  return row.id;
-}
 
 async function addCharge(
   userId: string,
@@ -98,8 +56,8 @@ describeDb("payee evidence", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
-    accountId = await makeAccount(userId);
-    general = await makeEnvelope(userId, "General Spending");
+    accountId = await insertTestAccount(userId);
+    general = await insertTestEnvelope(userId, "General Spending");
   });
 
   it("reports a held first default with the charges that are blocking it", async () => {
@@ -129,7 +87,7 @@ describeDb("payee evidence", () => {
   });
 
   it("flags a payee whose default sends its charges to a different envelope", async () => {
-    const dropbox = await makeEnvelope(userId, "Dropbox");
+    const dropbox = await insertTestEnvelope(userId, "Dropbox");
     const payeeId = await createPayee(userId, {
       name: "PAYPAL TO LEE RAULIN INST XFER",
       aliases: ["PAYPAL TO LEE RAULIN INST XFER"],
@@ -218,7 +176,7 @@ describeDb("payee evidence", () => {
 
   describe("fileWaitingChargesForPayee", () => {
     it("files only the charges that had no envelope", async () => {
-      const other = await makeEnvelope(userId, "Groceries");
+      const other = await insertTestEnvelope(userId, "Groceries");
       const payeeId = await createPayee(userId, {
         name: "AMAZON MKTPL",
         aliases: ["AMAZON MKTPL"],
@@ -274,7 +232,7 @@ describeDb("payee evidence", () => {
       });
       const chargeId = await addCharge(userId, accountId, { payeeId });
       const intruder = await makeUser();
-      const theirEnvelope = await makeEnvelope(intruder, "Their Spending");
+      const theirEnvelope = await insertTestEnvelope(intruder, "Their Spending");
 
       await expect(
         fileWaitingChargesForPayee(intruder, payeeId, general),

@@ -13,63 +13,27 @@
 import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  financeAccounts,
-  financeBudgetCategories,
-  financeCategoryGroups,
-  financePayees,
-  financeTransactions,
-} from "@/db/schema";
+import { financePayees, financeTransactions } from "@/db/schema";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { learnFromCategoryEdit, relearnPayeeDefault } from "./learn";
+import { insertTestAccount, insertTestEnvelope } from "@/lib/testing/financeFixtures";
 
 const describeDb = await describeWithDatabase("payee category learning");
 
 const makeUser = testUsers("learn");
 
-async function makeAccount(
-  userId: string,
-  options: { offBudget?: boolean } = {},
-): Promise<string> {
-  const [account] = await db
-    .insert(financeAccounts)
-    .values({
-      userId,
-      name: options.offBudget ? "Brokerage" : "Checking",
-      // `finance_accounts_core_on_budget` refuses an off-budget checking, savings, cash or
-      // card account, so the off-budget fixture has to be a kind that may sit outside the
-      // budget at all.
-      kind: options.offBudget ? "investment" : "checking",
-      externalSource: "test",
-      externalKey: `chk-${crypto.randomUUID()}`,
-      offBudget: options.offBudget ?? false,
-    })
-    .returning({ id: financeAccounts.id });
-  return account.id;
+function makeAccount(userId: string, options: { offBudget?: boolean } = {}) {
+  // `finance_accounts_core_on_budget` refuses an off-budget checking, savings, cash or card
+  // account, so the off-budget fixture has to be a kind that may sit outside the budget.
+  return insertTestAccount(
+    userId,
+    options.offBudget ? { name: "Brokerage", kind: "investment", offBudget: true } : {},
+  );
 }
 
-async function makeEnvelope(userId: string, name: string): Promise<string> {
-  const [group] = await db
-    .insert(financeCategoryGroups)
-    .values({
-      userId,
-      name: `${name} group ${crypto.randomUUID()}`,
-      kind: "spending",
-      sortKey: "a0",
-    })
-    .returning({ id: financeCategoryGroups.id });
-  const [row] = await db
-    .insert(financeBudgetCategories)
-    .values({
-      userId,
-      groupId: group.id,
-      name: `${name} ${crypto.randomUUID()}`,
-      sortKey: "a0",
-      kind: "spending",
-    })
-    .returning({ id: financeBudgetCategories.id });
-  return row.id;
+function makeEnvelope(userId: string, name: string) {
+  return insertTestEnvelope(userId, `${name} ${crypto.randomUUID()}`);
 }
 
 async function makePayee(

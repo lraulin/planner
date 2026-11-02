@@ -1,34 +1,17 @@
 import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  financeAccounts,
-  financePaymentResolutions,
-  financeTransactions,
-} from "@/db/schema";
+import { financePaymentResolutions, financeTransactions } from "@/db/schema";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { seedPayees, unresolvedPayeeCount } from "./backfill";
 import { createPayee, renamePayee } from "./mutations";
 import { getPayee, listPayees } from "./queries";
+import { insertTestAccount } from "@/lib/testing/financeFixtures";
 
 const describeDb = await describeWithDatabase("payee backfill");
 
 const makeUser = testUsers("payee-seed");
-
-async function makeAccount(userId: string): Promise<string> {
-  const [account] = await db
-    .insert(financeAccounts)
-    .values({
-      userId,
-      name: "Checking",
-      kind: "checking",
-      externalSource: "test",
-      externalKey: `chk-${crypto.randomUUID()}`,
-    })
-    .returning({ id: financeAccounts.id });
-  return account.id;
-}
 
 async function addTransactions(
   userId: string,
@@ -64,7 +47,7 @@ describeDb("seedPayees", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
-    accountId = await makeAccount(userId);
+    accountId = await insertTestAccount(userId);
   });
 
   it("folds the spellings a rule names into one payee and points every row at it", async () => {
@@ -205,7 +188,7 @@ describeDb("seedPayees", () => {
 
   it("touches no other user's rows", async () => {
     const otherId = await makeUser();
-    const otherAccount = await makeAccount(otherId);
+    const otherAccount = await insertTestAccount(otherId);
     const [theirs] = await addTransactions(otherId, otherAccount, [
       { description: "WM SUPERCENTER #1981", amount: "-40.00" },
     ]);

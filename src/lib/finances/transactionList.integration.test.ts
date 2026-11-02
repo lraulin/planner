@@ -1,7 +1,7 @@
 import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financeTransactions } from "@/db/schema";
+import { financeTransactions } from "@/db/schema";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import {
@@ -11,24 +11,11 @@ import {
   listTransactionsByIds,
 } from "./queries";
 import { splitTransaction } from "./mutations";
+import { insertTestAccount } from "@/lib/testing/financeFixtures";
 
 const describeDb = await describeWithDatabase("transaction list reads");
 
 const makeUser = testUsers("transaction-list");
-
-async function makeAccount(userId: string): Promise<string> {
-  const [account] = await db
-    .insert(financeAccounts)
-    .values({
-      userId,
-      name: "Checking",
-      kind: "checking",
-      externalSource: "test",
-      externalKey: crypto.randomUUID(),
-    })
-    .returning({ id: financeAccounts.id });
-  return account.id;
-}
 
 async function makeRow(
   userId: string,
@@ -59,7 +46,7 @@ describeDb("the register row reads", () => {
   beforeEach(async () => {
     ownerId = await makeUser();
     intruderId = await makeUser();
-    ownerAccountId = await makeAccount(ownerId);
+    ownerAccountId = await insertTestAccount(ownerId);
     parentId = await makeRow(ownerId, ownerAccountId, {
       description: "SPLIT ME",
       amount: "-30.00",
@@ -127,7 +114,7 @@ describeDb("the register row reads", () => {
 
     // A row of the intruder's that names the owner's parent must not be counted among its
     // children: the aggregate is scoped by user on its own side of the join.
-    const intruderAccountId = await makeAccount(intruderId);
+    const intruderAccountId = await insertTestAccount(intruderId);
     await makeRow(intruderId, intruderAccountId, {
       description: "NOT A CHILD OF YOURS",
       amount: "-500.00",
