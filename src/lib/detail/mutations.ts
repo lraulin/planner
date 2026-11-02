@@ -851,8 +851,9 @@ export async function setGoalFields(
 }
 
 /**
- * Inline edit of a result area's Category, Importance or Description from the Result Areas
- * grid. Same allowlist path as `saveNodeDetail`, without requiring a full form draft.
+ * Inline edit of a result area's Category, Importance, Description or Mission — from the
+ * Result Areas grid, and the weekly plan's Mission step. Same allowlist path as
+ * `saveNodeDetail`, without requiring a full form draft.
  */
 export async function setResultAreaFields(
   userId: string,
@@ -861,6 +862,7 @@ export async function setResultAreaFields(
     category?: string | null;
     importance?: number | null;
     description?: string;
+    mission?: string;
   },
 ): Promise<void> {
   await db.transaction(async (tx) => {
@@ -868,7 +870,12 @@ export async function setResultAreaFields(
     if (node.type !== "result_area") {
       throw new Error("These fields are only on result areas.");
     }
-    const set = pick(fields, ["category", "importance", "description"] as const);
+    const set = pick(fields, [
+      "category",
+      "importance",
+      "description",
+      "mission",
+    ] as const);
     if (!hasValues(set)) return;
     await tx
       .insert(resultAreaDetails)

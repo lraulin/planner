@@ -1,12 +1,10 @@
 "use server";
 
-import { db } from "@/db";
-import { nodes, resultAreaDetails } from "@/db/schema";
-import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import * as planning from "@/lib/planning/mutations";
 import type { PlanEntryPatch, WeeklyPlanPatch } from "@/lib/planning/mutations";
 import { run, type ActionResult } from "@/app/actionResult";
+import { setResultAreaFields } from "@/lib/detail/mutations";
 
 export async function startWeeklyPlanAction(input: {
   weekKey: string;
@@ -52,26 +50,10 @@ export async function setFocusAreaAction(
   return run((userId) => planning.setFocusArea(userId, planId, nodeId, focus));
 }
 
-/**
- * Step 1 edits the result area's Mission in place. Written here rather than through
- * `saveNodeDetail`, which requires a full core-field payload the wizard does not hold.
- */
+/** Step 1 edits the result area's Mission in place. */
 export async function saveMissionAction(
   nodeId: string,
   mission: string,
 ): Promise<ActionResult> {
-  return run(async (userId) => {
-    const node = await requireOwnedRow(db, nodes, nodeId, userId, "Item not found.");
-    if (node.type !== "result_area") {
-      throw new Error("Mission is only available on Result Areas.");
-    }
-    await db.insert(resultAreaDetails).values({ nodeId, mission }).onConflictDoUpdate({
-      target: resultAreaDetails.nodeId,
-      set: { mission },
-    });
-    await db
-      .update(nodes)
-      .set({ updatedAt: new Date() })
-      .where(ownedRow(nodes, nodeId, userId));
-  });
+  return run((userId) => setResultAreaFields(userId, nodeId, { mission }));
 }
