@@ -6,6 +6,7 @@ import {
 import { buildGroupRows, type GroupPart } from "@/lib/grid/groupRows";
 import { flatRow, type GridRow } from "@/lib/tree/slice";
 import type { AmazonItemListRow } from "./types";
+import { groupMembers } from "@/lib/grid/groupMembers";
 
 export const AMAZON_GROUP_BY_VALUES = [
   "year",
@@ -119,20 +120,11 @@ export function amazonGroupPaidCents(
   rows: readonly GridRow<AmazonItemListRow>[],
 ): Map<string, number> {
   const paid = new Map<string, number>();
-  const stack: { id: string; depth: number }[] = [];
-  for (const row of rows) {
-    if (row.kind === "group") {
-      while (stack.length > 0 && stack[stack.length - 1].depth >= row.depth) {
-        stack.pop();
-      }
-      paid.set(row.id, 0);
-      stack.push({ id: row.id, depth: row.depth });
-      continue;
-    }
-    const cents = row.node.itemPaidCents ?? 0;
-    for (const frame of stack) {
-      paid.set(frame.id, (paid.get(frame.id) ?? 0) + cents);
-    }
+  for (const [id, items] of groupMembers(rows)) {
+    paid.set(
+      id,
+      items.reduce((sum, item) => sum + (item.itemPaidCents ?? 0), 0),
+    );
   }
   return paid;
 }
@@ -155,35 +147,24 @@ export function amazonGroupOrderTotals(
   rows: readonly GridRow<AmazonItemListRow>[],
 ): Map<string, AmazonGroupTotals> {
   const totals = new Map<string, AmazonGroupTotals>();
-  // Each open group carries its own running totals and the orders already counted in it.
-  const stack: { depth: number; current: AmazonGroupTotals; seen: Set<string> }[] = [];
-  for (const row of rows) {
-    if (row.kind === "group") {
-      while (stack.length > 0 && stack[stack.length - 1].depth >= row.depth) {
-        stack.pop();
-      }
-      const current: AmazonGroupTotals = {
-        grandTotalCents: null,
-        unreconciledOrders: 0,
-      };
-      totals.set(row.id, current);
-      stack.push({ depth: row.depth, current, seen: new Set() });
-      continue;
-    }
-    for (const { current, seen } of stack) {
-      if (seen.has(row.node.amazonOrderId)) continue;
-      seen.add(row.node.amazonOrderId);
-      if (row.node.orderGrandTotalCents !== null) {
+  for (const [id, items] of groupMembers(rows)) {
+    const current: AmazonGroupTotals = { grandTotalCents: null, unreconciledOrders: 0 };
+    const seen = new Set<string>();
+    for (const item of items) {
+      if (seen.has(item.amazonOrderId)) continue;
+      seen.add(item.amazonOrderId);
+      if (item.orderGrandTotalCents !== null) {
         current.grandTotalCents =
-          (current.grandTotalCents ?? 0) + row.node.orderGrandTotalCents;
+          (current.grandTotalCents ?? 0) + item.orderGrandTotalCents;
       }
       if (
-        row.node.orderSummaryStatus !== null &&
-        row.node.orderSummaryStatus !== "reconciled"
+        item.orderSummaryStatus !== null &&
+        item.orderSummaryStatus !== "reconciled"
       ) {
         current.unreconciledOrders += 1;
       }
     }
+    totals.set(id, current);
   }
   return totals;
 }
@@ -196,28 +177,21 @@ export function amazonOrderGroupMatch(
   rows: readonly GridRow<AmazonItemListRow>[],
 ): Map<string, { matchLabel: string | null; chargeId: string | null }> {
   const out = new Map<string, { matchLabel: string | null; chargeId: string | null }>();
-  const stack: { id: string; depth: number; isOrder: boolean }[] = [];
-  for (const row of rows) {
-    if (row.kind === "group") {
-      while (stack.length > 0 && stack[stack.length - 1].depth >= row.depth) {
-        stack.pop();
-      }
-      const isOrder = /(^|\|)order:/.test(row.id.slice("group:".length));
-      if (isOrder) out.set(row.id, { matchLabel: null, chargeId: null });
-      stack.push({ id: row.id, depth: row.depth, isOrder });
-      continue;
-    }
-    for (const frame of stack) {
-      if (!frame.isOrder) continue;
-      const current = out.get(frame.id) ?? { matchLabel: null, chargeId: null };
-      if (row.node.matchLabel === "Review" || current.matchLabel === null) {
-        current.matchLabel = row.node.matchLabel;
-      } else if (row.node.matchLabel === "Matched" && current.matchLabel !== "Review") {
+  for (const [id, items] of groupMembers(rows)) {
+    if (!/(^|\|)order:/.test(id.slice("group:".length))) continue;
+    const current: { matchLabel: string | null; chargeId: string | null } = {
+      matchLabel: null,
+      chargeId: null,
+    };
+    for (const item of items) {
+      if (item.matchLabel === "Review" || current.matchLabel === null) {
+        current.matchLabel = item.matchLabel;
+      } else if (item.matchLabel === "Matched" && current.matchLabel !== "Review") {
         current.matchLabel = "Matched";
       }
-      if (!current.chargeId && row.node.chargeId) current.chargeId = row.node.chargeId;
-      out.set(frame.id, current);
+      if (!current.chargeId && item.chargeId) current.chargeId = item.chargeId;
     }
+    out.set(id, current);
   }
   return out;
 }
