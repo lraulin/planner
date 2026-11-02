@@ -157,10 +157,7 @@ async function loadAnalyzed(userId: string, args: Record<string, unknown>) {
 
 function flattenFlowPoint(point: CashFlowPoint) {
   return {
-    key: point.bucket.key,
-    label: point.bucket.label,
-    startKey: point.bucket.startKey,
-    endKey: point.bucket.endKey,
+    ...point.bucket,
     incomeCents: point.incomeCents,
     spendCents: point.spendCents,
     fixedCents: point.fixedCents,
@@ -482,10 +479,7 @@ export async function getSpendingBreakdownTool(
             range,
             data.todayKey,
           ).map((point) => ({
-            key: point.bucket.key,
-            label: point.bucket.label,
-            startKey: point.bucket.startKey,
-            endKey: point.bucket.endKey,
+            ...point.bucket,
             spendingCents: point.spendCents,
             regularIncomeCents: point.incomeCents,
           })),
@@ -627,10 +621,7 @@ export async function getDebtSummaryTool(
   return {
     range: analysis.range,
     series: analysis.assetDebt.map((point) => ({
-      key: point.bucket.key,
-      label: point.bucket.label,
-      startKey: point.bucket.startKey,
-      endKey: point.bucket.endKey,
+      ...point.bucket,
       assetCents: point.assetCents,
       debtCents: point.debtCents,
       netCents: point.netCents,
