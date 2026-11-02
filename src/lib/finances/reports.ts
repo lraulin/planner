@@ -117,12 +117,8 @@ export function reportMonthlySeries(
     const isComplete = bucket.endKey < monthKeyOf(today);
     if (isComplete) completed.push({ spend: spendCents, income: incomeCents });
     const trailing = completed.slice(-12);
-    const avgSpend = trailing.length
-      ? Math.round(trailing.reduce((sum, row) => sum + row.spend, 0) / trailing.length)
-      : null;
-    const avgIncome = trailing.length
-      ? Math.round(trailing.reduce((sum, row) => sum + row.income, 0) / trailing.length)
-      : null;
+    const avgSpend = roundedMean(trailing.map((row) => row.spend));
+    const avgIncome = roundedMean(trailing.map((row) => row.income));
     return {
       bucket,
       spendCents,
@@ -138,6 +134,13 @@ export function reportMonthlySeries(
     };
   });
 }
+/** The rounded mean of some cents, or null when there are none to average. */
+function roundedMean(values: readonly number[]): number | null {
+  return values.length === 0
+    ? null
+    : Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
 export function completedMonthAverages(
   points: readonly CashFlowPoint[],
   today: string,
@@ -148,16 +151,8 @@ export function completedMonthAverages(
     return {
       months,
       count: window.length,
-      spendCents: window.length
-        ? Math.round(
-            window.reduce((sum, row) => sum + row.spendCents, 0) / window.length,
-          )
-        : null,
-      incomeCents: window.length
-        ? Math.round(
-            window.reduce((sum, row) => sum + row.incomeCents, 0) / window.length,
-          )
-        : null,
+      spendCents: roundedMean(window.map((row) => row.spendCents)),
+      incomeCents: roundedMean(window.map((row) => row.incomeCents)),
     };
   });
 }
