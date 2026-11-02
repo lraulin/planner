@@ -22,7 +22,6 @@ import {
 } from "@/lib/tree/stateTransitions";
 import { assignPriorityAmongSiblings } from "@/lib/tree/priorityWrites";
 import { moveNode } from "@/lib/tree/nodeMoves";
-import { subtreeIdsVia } from "@/lib/tree/ancestry";
 import { owningResultAreaIdFromChain } from "@/lib/tree/owningResultArea";
 import { loadNodeChain } from "@/lib/tree/path";
 import { parentIdForResultAreaChange } from "./resultAreaParent";
@@ -41,6 +40,7 @@ import { between } from "@/lib/tree/sortKey";
 import { RESULT_AREA_STATE_REFUSAL } from "@/lib/tree/lifecycle";
 import { fetchPageTitle, shouldFetchAttachmentTitle } from "@/lib/url/pageTitle";
 import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
+import { subtreeIds } from "@/lib/tree/nodeRows";
 
 /**
  * Writes for the detail forms. Like `src/lib/tree/mutations.ts`, every function takes a
@@ -924,12 +924,7 @@ async function applyResultAreaCategory(
 
   // Cascade so nested areas do not keep a stale category that would split Projects
   // grouping or the outline's By category view.
-  const subtree = await subtreeIdsVia(nodeId, (frontier) =>
-    tx
-      .select({ id: nodes.id })
-      .from(nodes)
-      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, [...frontier]))),
-  );
+  const subtree = await subtreeIds(tx, userId, nodeId);
   const raIds = (
     await tx
       .select({ id: nodes.id })

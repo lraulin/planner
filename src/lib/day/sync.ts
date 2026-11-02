@@ -45,6 +45,7 @@ import { isSettled } from "@/lib/tree/completionCascade";
 import { laterShelf, ownShelf, shelfHolds, type Shelf } from "@/lib/tree/shelving";
 import { subtreeIdsVia } from "@/lib/tree/ancestry";
 import { between } from "@/lib/tree/sortKey";
+import { subtreeIds } from "@/lib/tree/nodeRows";
 
 /**
  * The effective shelf on a node: its own, combined with every ancestor's, latest wins.
@@ -298,12 +299,7 @@ export async function syncDayLinesInSubtree(
   userId: string,
   rootId: string,
 ): Promise<void> {
-  const ids = await subtreeIdsVia(rootId, (frontier) =>
-    tx
-      .select({ id: nodes.id })
-      .from(nodes)
-      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, [...frontier]))),
-  );
+  const ids = await subtreeIds(tx, userId, rootId);
 
   for (const id of ids) {
     await syncDayLineToTargetStart(tx, userId, id);
