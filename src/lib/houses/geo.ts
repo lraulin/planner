@@ -23,6 +23,24 @@ export type DriveRoute = {
 };
 
 /**
+ * GET a free public JSON service with our User-Agent and a timeout. Null on any failure — a
+ * network error, a timeout, or a non-2xx — since every caller treats them alike.
+ */
+async function fetchJsonOrNull(url: string): Promise<unknown> {
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { "User-Agent": USER_AGENT },
+    });
+    if (!response.ok) return null;
+    const json: unknown = await response.json();
+    return json;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Geocode a free-typed address via Nominatim. Nominatim's usage policy requires a real
  * `User-Agent` and caps at 1 req/sec — fine for a handful of houses one at a time, but
  * never loop this without a delay between calls.
@@ -34,16 +52,8 @@ export async function geocode(address: string): Promise<LatLon | null> {
     q: address,
   })}`;
 
-  try {
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { "User-Agent": USER_AGENT },
-    });
-    if (!response.ok) return null;
-    return parseNominatim(await response.json());
-  } catch {
-    return null;
-  }
+  const json = await fetchJsonOrNull(url);
+  return json === null ? null : parseNominatim(json);
 }
 
 /** Driving distance/duration between two points via the OSRM demo server. No SLA. */
@@ -52,14 +62,6 @@ export async function driveRoute(from: LatLon, to: LatLon): Promise<DriveRoute |
     `https://router.project-osrm.org/route/v1/driving/` +
     `${from.lon},${from.lat};${to.lon},${to.lat}?overview=false`;
 
-  try {
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { "User-Agent": USER_AGENT },
-    });
-    if (!response.ok) return null;
-    return parseOsrm(await response.json());
-  } catch {
-    return null;
-  }
+  const json = await fetchJsonOrNull(url);
+  return json === null ? null : parseOsrm(json);
 }
