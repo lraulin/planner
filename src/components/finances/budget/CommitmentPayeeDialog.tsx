@@ -4,6 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { setCommitmentPayeesAction } from "@/app/(shell)/finances/actions";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { PayeePickerField } from "@/components/finances/payees/PayeePickerField";
+import { FormActions } from "@/components/detail/FormActions";
 
 export function CommitmentPayeeDialog({
   commitment,
@@ -65,22 +66,7 @@ export function CommitmentPayeeDialog({
           </p>
         ) : null}
 
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink md:min-h-0 md:py-1.5"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="min-h-tap rounded border border-select-edge bg-select px-3 text-[0.8125rem] font-medium text-ink disabled:opacity-50 md:min-h-0 md:py-1.5"
-          >
-            {saving ? "Saving…" : "Save payees"}
-          </button>
-        </div>
+        <FormActions submitLabel="Save payees" pending={saving} onCancel={onClose} />
       </form>
     </ModalShell>
   );

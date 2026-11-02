@@ -4,6 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { createBudgetCategoryAction } from "@/app/(shell)/finances/actions";
 import { ModalShell } from "@/components/detail/ModalShell";
 import type { EnvelopeKind } from "@/db/schema";
+import { FormActions } from "@/components/detail/FormActions";
 
 const TITLES: Record<Exclude<EnvelopeKind, "bill">, string> = {
   income: "New income",
@@ -66,22 +67,13 @@ export function NewEnvelopeDialog({
           />
         </label>
         {error && <p className="text-[0.75rem] text-priority-a">{error}</p>}
-        <div className="mt-1 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink hover:border-rule-strong hover:bg-surface-raised md:min-h-0 md:py-1.5"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={pending || name.trim() === ""}
-            className="min-h-tap rounded border border-select-edge bg-select px-3 text-[0.8125rem] font-medium text-ink disabled:opacity-50 md:min-h-0 md:py-1.5"
-          >
-            {pending ? "Saving…" : "Create"}
-          </button>
-        </div>
+        <FormActions
+          submitLabel="Create"
+          pending={pending}
+          disabled={name.trim() === ""}
+          onCancel={onClose}
+          className="mt-1"
+        />
       </form>
     </ModalShell>
   );
