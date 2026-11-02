@@ -9,8 +9,12 @@ import {
   updateTransactionAction,
 } from "@/app/(shell)/finances/actions";
 import { DateText } from "@/components/date/DateText";
-import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
-import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
+import {
+  Drawer,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerLeaveGuard,
+} from "@/components/detail/Drawer";
 import { Section, SelectField, TextArea } from "@/components/detail/fields";
 import { effectiveFlow } from "@/lib/finances/analytics";
 import { categoryAssignmentRefusal } from "@/lib/finances/categoryEligibility";
@@ -139,7 +143,6 @@ function TransactionForm({
   const [envelopeId, setEnvelopeId] = useState(row.budgetCategoryId);
   const [savingEnvelope, startEnvelopeTransition] = useTransition();
   const [learningNotice, setLearningNotice] = useState<string | null>(null);
-  const [confirmClose, setConfirmClose] = useState(false);
   const [splitDraft, setSplitDraft] = useState<readonly SplitDraftChild[] | null>(() =>
     splitChildren.length === 0 ? null : splitChildren.map(splitDraftFromSaved),
   );
@@ -175,11 +178,6 @@ function TransactionForm({
       setJustSaved(false);
       setSplitDirty(true);
     }
-  }
-
-  function requestClose() {
-    if (dirty || splitDirty) setConfirmClose(true);
-    else onClose();
   }
 
   function save(thenClose: boolean) {
@@ -251,12 +249,12 @@ function TransactionForm({
 
   return (
     <>
-      <Drawer open onClose={requestClose} labelledBy={titleId}>
+      <Drawer open onClose={onClose} labelledBy={titleId}>
         <DrawerHeader
           titleId={titleId}
           eyebrow="Transaction"
           title={row.description}
-          onClose={requestClose}
+          onClose={onClose}
         />
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="flex flex-col gap-6">
@@ -370,31 +368,17 @@ function TransactionForm({
           </div>
         </div>
 
+        <DrawerLeaveGuard dirty={dirty || splitDirty} />
         <DrawerFooter
           onSave={() => save(false)}
           onSaveAndClose={() => save(true)}
-          onClose={requestClose}
+          onClose={onClose}
           saving={saving || savingEnvelope}
           dirty={dirty || splitDirty}
           justSaved={justSaved}
           error={error}
         />
       </Drawer>
-
-      <ConfirmDialog
-        open={confirmClose}
-        title="Discard changes?"
-        message="You have unsaved transaction changes. Close without saving?"
-        confirmLabel="Discard"
-        destructive
-        onConfirm={() => {
-          setConfirmClose(false);
-          setDirty(false);
-          setSplitDirty(false);
-          onClose();
-        }}
-        onCancel={() => setConfirmClose(false)}
-      />
     </>
   );
 }

@@ -7,8 +7,12 @@ import {
   setPayeeAutoCategoryAction,
   updatePayeeDetailsAction,
 } from "@/app/(shell)/finances/actions";
-import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
-import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
+import {
+  Drawer,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerLeaveGuard,
+} from "@/components/detail/Drawer";
 import { Section, SelectField, TextArea } from "@/components/detail/fields";
 import { CategorySelect } from "@/components/finances/CategorySelect";
 import { formatUsd } from "@/lib/finances/money";
@@ -93,13 +97,7 @@ function PayeeForm({
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aliasNotice, setAliasNotice] = useState<string | null>(null);
-  const [confirmClose, setConfirmClose] = useState(false);
   const [saving, startTransition] = useTransition();
-
-  function requestClose() {
-    if (dirty) setConfirmClose(true);
-    else onClose();
-  }
 
   function patchNotes(value: string) {
     setNotes(value);
@@ -173,12 +171,12 @@ function PayeeForm({
 
   return (
     <>
-      <Drawer open onClose={requestClose} labelledBy={titleId}>
+      <Drawer open onClose={onClose} labelledBy={titleId}>
         <DrawerHeader
           titleId={titleId}
           eyebrow="Payee"
           title={payee.name}
-          onClose={requestClose}
+          onClose={onClose}
         />
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -350,30 +348,17 @@ function PayeeForm({
           </div>
         </div>
 
+        <DrawerLeaveGuard dirty={dirty} />
         <DrawerFooter
           onSave={() => save(false)}
           onSaveAndClose={() => save(true)}
-          onClose={requestClose}
+          onClose={onClose}
           saving={saving}
           dirty={dirty}
           justSaved={justSaved}
           error={error}
         />
       </Drawer>
-
-      <ConfirmDialog
-        open={confirmClose}
-        title="Discard changes?"
-        message="You have unsaved payee changes. Close without saving?"
-        confirmLabel="Discard"
-        destructive
-        onConfirm={() => {
-          setConfirmClose(false);
-          setDirty(false);
-          onClose();
-        }}
-        onCancel={() => setConfirmClose(false)}
-      />
     </>
   );
 }
