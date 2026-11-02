@@ -1,16 +1,15 @@
 import type { NodeItem } from "@/db/schema";
 import type { ContactOption } from "@/lib/contacts/types";
 import {
-  escapeCsvCell,
-  escapeCsvField,
   normalizeCsvHeader,
   parseCsvRowsWithLines,
   restoreCsvText,
 } from "@/lib/csv/text";
 import type { NodeItemValues } from "@/lib/detail/types";
 import type { ItemField } from "./itemKinds";
-import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, isDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { formatPriority, parsePriority } from "@/lib/tree/format";
+import { tableToCsv } from "@/lib/grid/exportCsv";
 
 /**
  * CSV import/export for the detail form's repeating lists (Benefits, Objectives, …).
@@ -114,16 +113,15 @@ export function itemsToCsv(
   items: readonly NodeItem[],
   contactNames?: ReadonlyMap<string, string>,
 ): string {
-  if (fields.length === 0) return "";
-
-  const header = fields.map((f) => escapeCsvField(f.label)).join(",");
-  const lines = items.map((item) =>
-    fields.map((f) => escapeCsvCell(cellOf(item, f, contactNames))).join(","),
+  return tableToCsv(
+    fields.map((field) => ({
+      id: field.key,
+      header: field.label,
+      value: (item: NodeItem) => cellOf(item, field, contactNames),
+    })),
+    items,
   );
-  return [header, ...lines].join("\n") + (lines.length || fields.length ? "\n" : "");
 }
-
-const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
 function parseBool(raw: string): boolean | null {
   const t = raw.trim().toLowerCase();
@@ -242,7 +240,7 @@ export function parseItemsCsv(
           (values as Record<string, unknown>)[field.key] = null;
           continue;
         }
-        if (!DATE_KEY.test(t)) {
+        if (!isDateKey(t)) {
           errors.push({
             row: rowNum,
             message: `${field.label} must be YYYY-MM-DD (got "${t}").`,
