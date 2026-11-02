@@ -20,6 +20,7 @@ import {
 import type { GridRow } from "@/lib/tree/slice";
 import type { NodeGridRow } from "@/components/grid/columns";
 import { useWindowedSource } from "@/components/grid/useWindowedSource";
+import { toggledIn } from "@/lib/toggledIn";
 
 /** Stable identity while the lists have not arrived, so nothing downstream re-renders. */
 const NO_FACETS: Record<string, string[]> = {};
@@ -180,12 +181,7 @@ export function useRegisterSource({
   /** Show or hide one parent's children. Fetches them the first time, then keeps them. */
   const toggleSplit = useCallback(
     (parentId: string) => {
-      setExpandedSplitIds((current) => {
-        const next = new Set(current);
-        if (next.has(parentId)) next.delete(parentId);
-        else next.add(parentId);
-        return next;
-      });
+      setExpandedSplitIds((current) => toggledIn(current, parentId));
       void loadSplitChildren(parentId);
     },
     [loadSplitChildren],

@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { NoMatches, SearchPickerDialog } from "@/components/detail/SearchPickerDialog";
+import { toggledIn } from "@/lib/toggledIn";
 
 /**
  * Tick the records a merge will consolidate — payees, supply items — from a searchable
@@ -49,12 +50,7 @@ export function MergePickerDialog<T extends { id: string; name: string }>({
     : records;
 
   function toggle(id: string) {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelected((current) => toggledIn(current, id));
   }
 
   return (

@@ -26,6 +26,7 @@ import { localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { NotesDateTree } from "./NotesDateTree";
 import { useAutosave } from "./useAutosave";
+import { toggledIn } from "@/lib/toggledIn";
 
 function monthDateFromKey(dateKey: string): Date {
   const [year, month] = dateKey.split("-").map(Number);
@@ -135,12 +136,7 @@ export function NotesJournal({
   );
 
   const toggleExpanded = useCallback((key: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    setExpanded((prev) => toggledIn(prev, key));
   }, []);
 
   const rail = (

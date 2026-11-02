@@ -10,6 +10,7 @@ import {
   projectPickerRows,
   visiblePickerRows,
 } from "@/lib/projects/picker";
+import { toggledIn } from "@/lib/toggledIn";
 
 /** Shared value for Tasks scope, Overview, and the organizer destination field. */
 export type ProjectPickerValue =
@@ -94,12 +95,7 @@ export function ProjectPicker({
   );
 
   function toggleExpanded(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setExpandedIds((prev) => toggledIn(prev, id));
   }
 
   return (

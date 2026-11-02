@@ -26,6 +26,7 @@ import { hideField, moveField, showField, withNewColumns } from "@/lib/grid/fiel
 import { placeAt } from "@/lib/listOrder";
 import { gridScope } from "@/lib/settings/scopes";
 import type { ColumnControls, ColumnMeta } from "./columns";
+import { toggledIn } from "@/lib/toggledIn";
 
 /** Module-level so the default `defaults` object cannot churn the memos below. */
 const EMPTY_GROUP_BY: string[] = [];
@@ -545,9 +546,10 @@ export function useGridState<TCol extends ColumnMeta>(
   const toggleGroup = useCallback(
     (groupId: string) => {
       patch((current) => {
-        const next = new Set(current.collapsedGroups ?? defaultCollapsedGroups);
-        if (next.has(groupId)) next.delete(groupId);
-        else next.add(groupId);
+        const next = toggledIn(
+          current.collapsedGroups ?? defaultCollapsedGroups,
+          groupId,
+        );
         return { ...current, collapsedGroups: [...next] };
       });
     },
