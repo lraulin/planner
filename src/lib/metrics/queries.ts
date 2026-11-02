@@ -84,24 +84,7 @@ export async function listMetrics(userId: string): Promise<MetricListRow[]> {
 
   return rows.map((r) => {
     const metricType = normalizeMetricType(r.metricType);
-    const shown = displayValue(byMetric.get(r.id) ?? [], metricType);
-    return {
-      id: r.id,
-      ownerNodeId: r.ownerNodeId,
-      ownerName: r.ownerName ?? null,
-      title: r.title,
-      category: r.category,
-      question: r.question,
-      units: r.units,
-      active: r.active,
-      priorityLetter: r.priorityLetter,
-      priorityRank: r.priorityRank,
-      metricType,
-      objectiveTarget: parseNumeric(r.objectiveTarget),
-      sortKey: r.sortKey,
-      lastValue: shown?.value ?? null,
-      lastDate: shown?.entryDate ?? null,
-    };
+    return metricSummaryOf(r, displayValue(byMetric.get(r.id) ?? [], metricType));
   });
 }
 
@@ -182,22 +165,46 @@ export async function getMetricDetail(
   const shown = displayValue(entries, metricType);
 
   return {
+    ...metricSummaryOf(row, shown),
+    description: row.description,
+    reason: row.reason,
+    entries,
+  };
+}
+
+/** What a metric shows in the list, and what heads its detail. */
+function metricSummaryOf(
+  row: Pick<
+    typeof metrics.$inferSelect,
+    | "id"
+    | "ownerNodeId"
+    | "title"
+    | "category"
+    | "question"
+    | "units"
+    | "active"
+    | "priorityLetter"
+    | "priorityRank"
+    | "metricType"
+    | "objectiveTarget"
+    | "sortKey"
+  > & { ownerName: string | null },
+  shown: { value: number; entryDate: string } | null,
+): MetricListRow {
+  return {
     id: row.id,
     ownerNodeId: row.ownerNodeId,
-    ownerName: row.ownerName ?? null,
+    ownerName: row.ownerName,
     title: row.title,
     category: row.category,
     question: row.question,
-    description: row.description,
-    reason: row.reason,
     units: row.units,
     active: row.active,
     priorityLetter: row.priorityLetter,
     priorityRank: row.priorityRank,
-    metricType,
+    metricType: normalizeMetricType(row.metricType),
     objectiveTarget: parseNumeric(row.objectiveTarget),
     sortKey: row.sortKey,
-    entries,
     lastValue: shown?.value ?? null,
     lastDate: shown?.entryDate ?? null,
   };
