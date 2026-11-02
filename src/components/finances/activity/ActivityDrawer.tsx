@@ -1,7 +1,7 @@
 "use client";
 
 import { useToast } from "@/components/shell/ToastProvider";
-import { useId, useState, useTransition } from "react";
+import { useId, useState, useTransition, type ReactNode } from "react";
 import { restoreDeletedHoldAction } from "@/app/(shell)/finances/actions";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { Section } from "@/components/detail/fields";
@@ -42,14 +42,12 @@ function CheckpointRail({
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-[minmax(8rem,1fr)_auto] gap-x-4 gap-y-1 rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem]">
-        <span className="text-ink-muted">Account pool</span>
-        <span className="tabular text-right text-ink">
+        <ChangeLine label="Account pool">
           {moneyChange(before.accountPoolCents, after.accountPoolCents)}
-        </span>
-        <span className="text-ink-muted">Selected pending</span>
-        <span className="tabular text-right text-ink">
+        </ChangeLine>
+        <ChangeLine label="Selected pending">
           {moneyChange(before.selectedPendingCents, after.selectedPendingCents)}
-        </span>
+        </ChangeLine>
       </div>
 
       {accounts.map(({ key: accountId, pair }) => {
@@ -61,29 +59,26 @@ function CheckpointRail({
               {display.accountName}
             </h4>
             <div className="grid grid-cols-[minmax(8rem,1fr)_auto] gap-x-4 gap-y-1 text-[0.8125rem]">
-              <span className="text-ink-muted">Working balance</span>
-              <span className="tabular text-right text-ink">
+              <ChangeLine label="Working balance">
                 {prior && account
                   ? moneyChange(prior.workingCents, account.workingCents)
                   : account
                     ? `Added at ${formatUsd(account.workingCents)}`
                     : `Removed at ${formatUsd(prior.workingCents)}`}
-              </span>
-              <span className="text-ink-muted">Selected pending</span>
-              <span className="tabular text-right text-ink">
+              </ChangeLine>
+              <ChangeLine label="Selected pending">
                 {prior && account
                   ? moneyChange(
                       prior.selectedPendingCents,
                       account.selectedPendingCents,
                     )
                   : "—"}
-              </span>
-              <span className="text-ink-muted">Reconciliation</span>
-              <span className="tabular text-right text-ink">
+              </ChangeLine>
+              <ChangeLine label="Reconciliation">
                 {prior && account
                   ? moneyChange(prior.reconciliationCents, account.reconciliationCents)
                   : "—"}
-              </span>
+              </ChangeLine>
             </div>
           </div>
         );
@@ -103,27 +98,24 @@ function CheckpointRail({
               Budget {monthLabel(month)}
             </h4>
             <div className="grid grid-cols-[minmax(8rem,1fr)_auto] gap-x-4 gap-y-1 text-[0.8125rem]">
-              <span className="text-ink-muted">Ready to Assign</span>
-              <span className="tabular text-right text-ink">
+              <ChangeLine label="Ready to Assign">
                 {prior && budget
                   ? moneyChange(prior.readyToAssignCents, budget.readyToAssignCents)
                   : formatUsd(display.readyToAssignCents)}
-              </span>
-              <span className="text-ink-muted">Mismatch</span>
-              <span className="tabular text-right text-ink">
+              </ChangeLine>
+              <ChangeLine label="Mismatch">
                 {prior && budget
                   ? moneyChange(prior.mismatchTotalCents, budget.mismatchTotalCents)
                   : formatUsd(display.mismatchTotalCents)}
-              </span>
-              <span className="text-ink-muted">Uncategorized activity</span>
-              <span className="tabular text-right text-ink">
+              </ChangeLine>
+              <ChangeLine label="Uncategorized activity">
                 {prior && budget
                   ? moneyChange(
                       prior.uncategorizedActivityCents,
                       budget.uncategorizedActivityCents,
                     )
                   : formatUsd(display.uncategorizedActivityCents)}
-              </span>
+              </ChangeLine>
             </div>
             <details className="mt-2 text-[0.8125rem]">
               <summary className="min-h-tap cursor-pointer text-ink-muted md:min-h-0">
@@ -318,5 +310,15 @@ export function ActivityDrawer({
         )}
       </div>
     </Drawer>
+  );
+}
+
+/** One row of a before/after grid: what changed, and by how much. */
+function ChangeLine({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <span className="text-ink-muted">{label}</span>
+      <span className="tabular text-right text-ink">{children}</span>
+    </>
   );
 }
