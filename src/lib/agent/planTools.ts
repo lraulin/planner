@@ -29,7 +29,8 @@ import {
 } from "./parse";
 import { iso } from "./serialize";
 
-function planWeekArgs(args: Record<string, unknown>): {
+/** The week an agent asked about: `weekStart` (default today) snapped to `weekStartsOn`. */
+export function planWeekArgs(args: Record<string, unknown>): {
   weekStart: Date;
   weekStartsOn: number;
 } {

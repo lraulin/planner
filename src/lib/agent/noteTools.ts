@@ -95,11 +95,7 @@ export async function listNotesTool(userId: string, args: Record<string, unknown
 
   const notes = await loadNotes(userId);
   // Most recent first by noteDate / updatedAt-ish: outline order is tree order; reverse for capture feel.
-  const sorted = [...notes].sort((a, b) => {
-    const ta = (a.noteDate ?? a.updatedAt).getTime();
-    const tb = (b.noteDate ?? b.updatedAt).getTime();
-    return tb - ta;
-  });
+  const sorted = [...notes].sort(newestNoteFirst);
   const page = paginate(sorted, bounds);
   return { notes: page.items.map(noteSummary), pageInfo: page.pageInfo };
 }
@@ -122,11 +118,7 @@ export async function searchNotesTool(userId: string, args: Record<string, unkno
         .toLowerCase()
         .includes(query);
     })
-    .sort((a, b) => {
-      const aTime = (a.noteDate ?? a.updatedAt).getTime();
-      const bTime = (b.noteDate ?? b.updatedAt).getTime();
-      return bTime - aTime;
-    });
+    .sort(newestNoteFirst);
   const page = paginate(matched, bounds);
   return { notes: page.items.map(noteSearchSummary), pageInfo: page.pageInfo };
 }
@@ -137,4 +129,12 @@ export async function getNoteTool(userId: string, args: Record<string, unknown>)
   const note = await loadNote(userId, id);
   if (!note) throw new AgentError("not_found", `Note not found: ${id}`);
   return { note: noteSummary(note) };
+}
+
+/** Most recent first: a note's own date when it has one, else when it was last edited. */
+function newestNoteFirst(
+  a: { noteDate: Date | null; updatedAt: Date },
+  b: { noteDate: Date | null; updatedAt: Date },
+): number {
+  return (b.noteDate ?? b.updatedAt).getTime() - (a.noteDate ?? a.updatedAt).getTime();
 }

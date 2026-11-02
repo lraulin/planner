@@ -11,27 +11,22 @@ import {
 } from "@/lib/schedule/mutations";
 import { getWeeklyPlan } from "@/lib/planning/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
-import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { weekRange } from "@/lib/schedule/range";
 import { AgentError } from "./errors";
 import {
   optionalBoolean,
   optionalNullableString,
-  optionalNumber,
   optionalString,
   optionalStringArray,
   parseDate,
   requireString,
 } from "./parse";
 import { iso } from "./serialize";
+import { planWeekArgs } from "./planTools";
 
 export async function getWeekTool(userId: string, args: Record<string, unknown>) {
-  const weekStartsOn = optionalNumber(args, "weekStartsOn") ?? 0;
-  const weekStartArg = optionalString(args, "weekStart");
-  const weekStart = startOfWeek(
-    weekStartArg ? (parseDate(weekStartArg, "weekStart") ?? new Date()) : new Date(),
-    weekStartsOn,
-  );
+  const { weekStart, weekStartsOn } = planWeekArgs(args);
   // An agent has no browser to run the after-paint pull that keeps /schedule current, so
   // it pulls here before reading. Without this, events added in Google never reached an
   // agent at all: `loadSchedule` only reports a stale mirror, it does not refresh one.

@@ -747,9 +747,7 @@ export async function listStatementsTool(
 }
 
 function asStringList(value: unknown): string[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is string => typeof entry === "string");
+  return value === undefined ? undefined : asStringArray(value);
 }
 
 async function writeOrConflict<T>(work: () => Promise<T>): Promise<T> {
