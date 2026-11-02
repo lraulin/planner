@@ -11,6 +11,7 @@ import {
 import type { AchPriority } from "./types";
 import { groupBy } from "@/lib/groupBy";
 import { escapeXml } from "@/lib/text/escapeXml";
+import { walkUp } from "@/lib/tree/walkUp";
 
 /**
  * Minimal outline row for export. Matches what `loadOutline` already returns plus a few
@@ -454,17 +455,9 @@ function nearestExportAncestor(
   parentId: string | null,
   byId: Map<string, ExportOutlineRow>,
 ): string | null {
-  const seen = new Set<string>();
-  let cur = parentId;
-  while (cur) {
-    if (seen.has(cur)) return null;
-    seen.add(cur);
-    const p = byId.get(cur);
-    if (!p) return null;
-    if (EXPORT_TYPES.has(p.type)) {
-      return cur;
-    }
-    cur = p.parentId;
+  const start = parentId ? byId.get(parentId) : undefined;
+  for (const row of walkUp(start, byId)) {
+    if (EXPORT_TYPES.has(row.type)) return row.id;
   }
   return null;
 }
@@ -474,15 +467,8 @@ function nearestOfType(
   type: NodeType,
   byId: Map<string, ExportOutlineRow>,
 ): string | null {
-  const seen = new Set<string>();
-  let cur: string | null = startId;
-  while (cur) {
-    if (seen.has(cur)) return null;
-    seen.add(cur);
-    const n = byId.get(cur);
-    if (!n) return null;
-    if (n.type === type) return cur;
-    cur = n.parentId;
+  for (const row of walkUp(byId.get(startId), byId)) {
+    if (row.type === type) return row.id;
   }
   return null;
 }
