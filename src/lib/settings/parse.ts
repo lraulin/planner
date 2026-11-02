@@ -1,3 +1,5 @@
+import { isRecord } from "@/lib/isRecord";
+
 /**
  * Defensive readers for a stored settings blob.
  *
@@ -13,8 +15,7 @@
  */
 
 export function asRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
+  return isRecord(value) ? value : null;
 }
 
 export function asString(value: unknown, fallback: string): string {

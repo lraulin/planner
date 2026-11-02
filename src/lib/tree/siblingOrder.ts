@@ -56,14 +56,16 @@ export function indentParentId(
 
 /**
  * Move up or down: the position that swaps the row with its neighbour, or null when it is
- * already at that end of its level — a no-op rather than an error.
+ * already at that end of its level, or not in the level at all — a no-op rather than an
+ * error.
  */
 export function verticalPosition(
   siblings: readonly SiblingKey[],
   id: string,
   direction: "up" | "down",
-): Position | null {
+): Extract<Position, { siblingId: string }> | null {
   const index = siblings.findIndex((s) => s.id === id);
+  if (index === -1) return null;
   const neighbour = siblings[direction === "up" ? index - 1 : index + 1];
   if (!neighbour) return null;
   return { at: direction === "up" ? "before" : "after", siblingId: neighbour.id };

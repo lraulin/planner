@@ -18,6 +18,7 @@ import {
   type AnalyticsRow,
   type DateRange,
 } from "./analytics";
+import { isRecord } from "@/lib/isRecord";
 
 export type InsightsReportFilter = {
   accountIds: string[];
@@ -229,8 +230,8 @@ export function insightsFilterOptions(rows: readonly AnalyticsRow[]): {
 }
 
 export function parseInsightsDrill(value: unknown): InsightsDrill | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
+  if (!isRecord(value)) return null;
+  const record = value;
   const kind = record.kind;
   if (kind === "category" || kind === "merchant" || kind === "account") {
     return typeof record.id === "string" && record.id !== ""

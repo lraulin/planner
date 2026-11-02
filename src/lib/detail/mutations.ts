@@ -41,6 +41,7 @@ import { RESULT_AREA_STATE_REFUSAL } from "@/lib/tree/lifecycle";
 import { fetchPageTitle, shouldFetchAttachmentTitle } from "@/lib/url/pageTitle";
 import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
 import { subtreeIds } from "@/lib/tree/nodeRows";
+import { verticalPosition } from "@/lib/tree/siblingOrder";
 
 /**
  * Writes for the detail forms. Like `src/lib/tree/mutations.ts`, every function takes a
@@ -1160,15 +1161,8 @@ export async function moveNodeItem(
   await db.transaction(async (tx) => {
     const item = await requireItem(tx, userId, itemId);
     const siblings = await listKeys(tx, userId, item.nodeId, item.kind);
-    const index = siblings.findIndex((s) => s.id === itemId);
-
-    const target = direction === "up" ? index - 1 : index + 1;
-    if (index === -1 || target < 0 || target >= siblings.length) return;
-
-    const position: ItemPosition =
-      direction === "up"
-        ? { at: "before", siblingId: siblings[target].id }
-        : { at: "after", siblingId: siblings[target].id };
+    const position = verticalPosition(siblings, itemId, direction);
+    if (!position) return;
 
     const sortKey = await sortKeyFor(
       tx,

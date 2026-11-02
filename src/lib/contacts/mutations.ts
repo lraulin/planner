@@ -9,6 +9,7 @@ import { ensureInbox } from "@/lib/capture/mutations";
 import { createNode } from "@/lib/tree/mutations";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import type { ContactInput, ContactItemInput } from "./types";
+import { keyAtPosition, verticalPosition } from "@/lib/tree/siblingOrder";
 
 /**
  * Contacts domain writes. Every function takes `userId` and scopes on it, so a caller
@@ -282,21 +283,15 @@ export async function moveContactItem(
       )
       .orderBy(asc(contactItems.sortKey));
 
-    const index = siblings.findIndex((s) => s.id === itemId);
-    const target = direction === "up" ? index - 1 : index + 1;
-    if (index < 0 || target < 0 || target >= siblings.length) return;
-
-    // Land between the neighbour and whatever is on its far side, the same way the outline
-    // reorders — no renumbering pass, so a move is one row's write.
-    const beyond = direction === "up" ? target - 1 : target + 1;
-    const [before, after] =
-      direction === "up"
-        ? [siblings[beyond]?.sortKey ?? null, siblings[target].sortKey]
-        : [siblings[target].sortKey, siblings[beyond]?.sortKey ?? null];
+    const position = verticalPosition(siblings, itemId, direction);
+    if (!position) return;
 
     await tx
       .update(contactItems)
-      .set({ sortKey: between(before, after), updatedAt: new Date() })
+      .set({
+        sortKey: keyAtPosition(siblings, position, itemId),
+        updatedAt: new Date(),
+      })
       .where(ownedRow(contactItems, itemId, userId));
   });
 }

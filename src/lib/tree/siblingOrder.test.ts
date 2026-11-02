@@ -48,6 +48,19 @@ describe("indentParentId", () => {
 });
 
 describe("verticalPosition", () => {
+  it("is a no-op for a row that is not in the level", () => {
+    expect(
+      verticalPosition(
+        [
+          { id: "a", sortKey: "a0" },
+          { id: "b", sortKey: "a1" },
+        ],
+        "missing",
+        "down",
+      ),
+    ).toBeNull();
+  });
+
   it("swaps with the neighbour in the direction asked", () => {
     expect(verticalPosition(level, "b", "up")).toEqual({
       at: "before",
