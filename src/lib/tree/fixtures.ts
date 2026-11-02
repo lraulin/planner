@@ -1,4 +1,5 @@
-import type { OutlineRow } from "./types";
+import { derive } from "./derive";
+import type { OutlineNode, OutlineRow } from "./types";
 
 /**
  * Test-only row builder, shared by the `derive` and `slice` suites so widening
@@ -61,4 +62,9 @@ export function row(
     contactId: null,
     ...partial,
   };
+}
+
+/** A derived tree from plain rows — the shape every tab hands `sliceTree`. */
+export function derivedTree(...rows: Parameters<typeof row>[0][]): OutlineNode[] {
+  return derive(rows.map((r) => row(r)));
 }

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derive } from "./derive";
-import { row } from "./fixtures";
+import { derivedTree } from "./fixtures";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import {
   asGroupBy,
@@ -21,10 +20,7 @@ import {
 } from "./slice";
 import type { OutlineNode } from "./types";
 
-/** Build a derived tree from plain rows — the same shape every tab hands `sliceTree`. */
-function tree(...rows: Parameters<typeof row>[0][]): OutlineNode[] {
-  return derive(rows.map((r) => row(r)));
-}
+const tree = derivedTree;
 
 function nodeIds(rows: GridRow[]): string[] {
   return rows.filter((r) => r.kind === "node").map((r) => r.id);

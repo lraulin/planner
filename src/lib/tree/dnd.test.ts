@@ -6,14 +6,10 @@ import {
   type DropNode,
 } from "./dnd";
 import type { NodeType } from "@/db/schema";
-import { derive } from "./derive";
-import { row } from "./fixtures";
+import { derivedTree } from "./fixtures";
 import { categoryGroupId, NO_CATEGORY } from "./slice";
-import type { OutlineNode } from "./types";
 
-function outlineTree(...rows: Parameters<typeof row>[0][]): OutlineNode[] {
-  return derive(rows.map((r) => row(r)));
-}
+const outlineTree = derivedTree;
 
 /**
  * A small outline used by most cases:
