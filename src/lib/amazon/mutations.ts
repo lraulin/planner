@@ -6,37 +6,25 @@ import {
   amazonOrderItems,
   amazonSubscriptions,
 } from "@/db/schema";
-import { ownedRow } from "@/lib/db/owned";
+import { ownedRow, tryDeleteOwnedRow } from "@/lib/db/owned";
 
 /**
  * Delete one line item the user owns. Used by isolation tests; the Orders page does
  * not expose delete in this spec.
  */
 export async function deleteAmazonItem(userId: string, id: string): Promise<boolean> {
-  const deleted = await db
-    .delete(amazonOrderItems)
-    .where(ownedRow(amazonOrderItems, id, userId))
-    .returning({ id: amazonOrderItems.id });
-  return deleted.length > 0;
+  return tryDeleteOwnedRow(db, amazonOrderItems, id, userId);
 }
 
 export async function deleteAmazonSubscription(
   userId: string,
   id: string,
 ): Promise<boolean> {
-  const deleted = await db
-    .delete(amazonSubscriptions)
-    .where(ownedRow(amazonSubscriptions, id, userId))
-    .returning({ id: amazonSubscriptions.id });
-  return deleted.length > 0;
+  return tryDeleteOwnedRow(db, amazonSubscriptions, id, userId);
 }
 
 export async function deleteAmazonCharge(userId: string, id: string): Promise<boolean> {
-  const deleted = await db
-    .delete(amazonCharges)
-    .where(ownedRow(amazonCharges, id, userId))
-    .returning({ id: amazonCharges.id });
-  return deleted.length > 0;
+  return tryDeleteOwnedRow(db, amazonCharges, id, userId);
 }
 
 export async function updateAmazonSubscriptionReview(

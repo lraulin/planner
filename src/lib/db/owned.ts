@@ -96,6 +96,24 @@ export async function findByExternalRef(
 }
 
 /**
+ * Delete the caller's row with this id; whether there was one. Another user's id deletes
+ * nothing and answers false, exactly like an id that never existed.
+ */
+export async function tryDeleteOwnedRow(
+  executor: DbExecutor,
+  table: OwnedTable,
+  id: string,
+  userId: string,
+): Promise<boolean> {
+  const source: PgTable = table;
+  const deleted = await executor
+    .delete(source)
+    .where(ownedRow(table, id, userId))
+    .returning({ id: table.id });
+  return deleted.length > 0;
+}
+
+/**
  * Delete the caller's row with this id, or throw `notFound` — for another user's id as for
  * one that never existed, so a delete cannot be used to learn which ids are real.
  */
@@ -106,12 +124,8 @@ export async function deleteOwnedRow(
   userId: string,
   notFound: string,
 ): Promise<void> {
-  const source: PgTable = table;
-  const deleted = await executor
-    .delete(source)
-    .where(ownedRow(table, id, userId))
-    .returning({ id: table.id });
-  if (deleted.length === 0) throw new Error(notFound);
+  if (!(await tryDeleteOwnedRow(executor, table, id, userId)))
+    throw new Error(notFound);
 }
 
 /**
