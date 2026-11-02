@@ -10,11 +10,8 @@ import {
   toolbarCommands,
   toolbarSegments,
 } from "./menus";
-import { COMMAND_MENUS, COMMAND_MENU_LABELS, type Command } from "./registry";
-
-function command(id: string, extra: Partial<Command> = {}): Command {
-  return { id, label: id, group: "record", run: () => {}, ...extra };
-}
+import { COMMAND_MENUS, COMMAND_MENU_LABELS } from "./registry";
+import { testCommand } from "@/lib/testing/commands";
 
 describe("buildMenus", () => {
   it("orders menus by the declared bar order, not by when commands arrived", () => {
@@ -22,9 +19,9 @@ describe("buildMenus", () => {
     // menu bar that reordered itself depending on which grid mounted first is one you have to
     // re-read on every tab.
     const menus = buildMenus([
-      command("a", { menu: "view", section: "Layout" }),
-      command("b", { menu: "new", section: "New" }),
-      command("c", { menu: "organize", section: "Move" }),
+      testCommand("a", { menu: "view", section: "Layout" }),
+      testCommand("b", { menu: "new", section: "New" }),
+      testCommand("c", { menu: "organize", section: "Move" }),
     ]);
 
     expect(menus.map((menu) => menu.id)).toEqual(["new", "organize", "view"]);
@@ -33,8 +30,8 @@ describe("buildMenus", () => {
 
   it("puts File first even when it arrived last", () => {
     const menus = buildMenus([
-      command("new-task", { menu: "new", section: "New" }),
-      command("settings", { menu: "file", section: "Account" }),
+      testCommand("new-task", { menu: "new", section: "New" }),
+      testCommand("settings", { menu: "file", section: "Account" }),
     ]);
     expect(menus.map((menu) => menu.id)).toEqual(["file", "new"]);
   });
@@ -43,10 +40,10 @@ describe("buildMenus", () => {
     // The real case: `Expand all items` is palette-group `view` and `Move up` is `record`, so
     // anything ordering by group or by build order puts Expand above Move inside one menu.
     const [organize] = buildMenus([
-      command("expand", { menu: "organize", section: "Expand" }),
-      command("zoom", { menu: "organize", section: "Zoom" }),
-      command("move", { menu: "organize", section: "Move" }),
-      command("priority", { menu: "organize", section: "Priority" }),
+      testCommand("expand", { menu: "organize", section: "Expand" }),
+      testCommand("zoom", { menu: "organize", section: "Zoom" }),
+      testCommand("move", { menu: "organize", section: "Move" }),
+      testCommand("priority", { menu: "organize", section: "Priority" }),
     ]);
 
     expect(organize.sections.map((section) => section.label)).toEqual([
@@ -59,9 +56,9 @@ describe("buildMenus", () => {
 
   it("keeps declaration order inside a section", () => {
     const [organize] = buildMenus([
-      command("up", { menu: "organize", section: "Move" }),
-      command("down", { menu: "organize", section: "Move" }),
-      command("indent", { menu: "organize", section: "Move" }),
+      testCommand("up", { menu: "organize", section: "Move" }),
+      testCommand("down", { menu: "organize", section: "Move" }),
+      testCommand("indent", { menu: "organize", section: "Move" }),
     ]);
 
     expect(organize.sections[0].commands.map((entry) => entry.id)).toEqual([
@@ -73,8 +70,8 @@ describe("buildMenus", () => {
 
   it("leads with the unlabelled section and trails with sections it has never heard of", () => {
     const [tools] = buildMenus([
-      command("invented", { menu: "tools", section: "Import" }),
-      command("bare", { menu: "tools" }),
+      testCommand("invented", { menu: "tools", section: "Import" }),
+      testCommand("bare", { menu: "tools" }),
     ]);
 
     expect(tools.sections.map((section) => section.label)).toEqual([null, "Import"]);
@@ -83,19 +80,19 @@ describe("buildMenus", () => {
   it("does not render a menu with nothing in it", () => {
     // A flat catalog grid has creation and view control and nothing else. A bar showing five
     // names where three open empty menus teaches you to stop opening them.
-    const menus = buildMenus([command("only", { menu: "new", section: "New" })]);
+    const menus = buildMenus([testCommand("only", { menu: "new", section: "New" })]);
     expect(menus.map((menu) => menu.id)).toEqual(["new"]);
   });
 
   it("leaves out a command with no menu", () => {
-    expect(buildMenus([command("nowhere")])).toEqual([]);
+    expect(buildMenus([testCommand("nowhere")])).toEqual([]);
   });
 
   it("takes the newest definition of an id but keeps its original place", () => {
     const menus = buildMenus([
-      command("first", { menu: "new", section: "New" }),
-      command("dupe", { menu: "new", section: "New", label: "old" }),
-      command("dupe", { menu: "new", section: "New", label: "new" }),
+      testCommand("first", { menu: "new", section: "New" }),
+      testCommand("dupe", { menu: "new", section: "New", label: "old" }),
+      testCommand("dupe", { menu: "new", section: "New", label: "new" }),
     ]);
 
     expect(menus[0].sections[0].commands.map((entry) => entry.label)).toEqual([
@@ -110,8 +107,8 @@ describe("nested sections", () => {
     // Same flag on the bar and on the row menu: `Organize ▾ → Rank ▸` and a right-click's
     // `Rank ▸` are the same family, so a user who learns one has learned the other.
     const [organize] = buildMenus([
-      command("a", { menu: "organize", section: "Convert to" }),
-      command("b", { menu: "organize", section: "Convert to" }),
+      testCommand("a", { menu: "organize", section: "Convert to" }),
+      testCommand("b", { menu: "organize", section: "Convert to" }),
     ]);
 
     expect(organize.sections[0]).toMatchObject({ label: "Convert to", submenu: true });
@@ -122,10 +119,14 @@ describe("nested sections", () => {
     // is hiding it, not organizing it. `Move` used to sit with them; five movement verbs
     // dominate the row the way Convert to's kinds used to, so it nests now.
     const [item] = buildMenus([
-      command("open", { menu: "item", section: "Item" }),
-      command("rename", { menu: "item", section: "Item" }),
-      command("delete", { menu: "item", section: "Danger", destructive: true }),
-      command("delete-many", { menu: "item", section: "Danger", destructive: true }),
+      testCommand("open", { menu: "item", section: "Item" }),
+      testCommand("rename", { menu: "item", section: "Item" }),
+      testCommand("delete", { menu: "item", section: "Danger", destructive: true }),
+      testCommand("delete-many", {
+        menu: "item",
+        section: "Danger",
+        destructive: true,
+      }),
     ]);
 
     expect(
@@ -138,10 +139,10 @@ describe("nested sections", () => {
 
   it("nests Move on Organize and Go on Item once each family has two members", () => {
     const menus = buildMenus([
-      command("up", { menu: "organize", section: "Move" }),
-      command("down", { menu: "organize", section: "Move" }),
-      command("tasks", { menu: "item", section: "Go" }),
-      command("project", { menu: "item", section: "Go" }),
+      testCommand("up", { menu: "organize", section: "Move" }),
+      testCommand("down", { menu: "organize", section: "Move" }),
+      testCommand("tasks", { menu: "item", section: "Go" }),
+      testCommand("project", { menu: "item", section: "Go" }),
     ]);
     const organize = menus.find((menu) => menu.id === "organize");
     const item = menus.find((menu) => menu.id === "item");
@@ -155,9 +156,9 @@ describe("nested sections", () => {
     // it — and it happens for real, on a grid with one conversion target, or a host with a
     // single Go or Move verb.
     const menus = buildMenus([
-      command("only-convert", { menu: "item", section: "Convert to" }),
-      command("only-go", { menu: "item", section: "Go" }),
-      command("only-move", { menu: "organize", section: "Move" }),
+      testCommand("only-convert", { menu: "item", section: "Convert to" }),
+      testCommand("only-go", { menu: "item", section: "Go" }),
+      testCommand("only-move", { menu: "organize", section: "Move" }),
     ]);
 
     expect(
@@ -178,8 +179,8 @@ describe("nested sections", () => {
   it("never nests the leading unlabelled section", () => {
     // There would be no row to open it with.
     const [tools] = buildMenus([
-      command("bare", { menu: "tools" }),
-      command("also-bare", { menu: "tools" }),
+      testCommand("bare", { menu: "tools" }),
+      testCommand("also-bare", { menu: "tools" }),
     ]);
 
     expect(tools.sections[0]).toMatchObject({ label: null });
@@ -188,10 +189,10 @@ describe("nested sections", () => {
 
   it("carries the flag into the row menu without disturbing its ordering", () => {
     const sections = rowMenuSections([
-      command("convert-a", { menu: "item", section: "Convert to", rowMenu: true }),
-      command("convert-b", { menu: "item", section: "Convert to", rowMenu: true }),
-      command("open", { menu: "item", section: "Item", rowMenu: true }),
-      command("delete", {
+      testCommand("convert-a", { menu: "item", section: "Convert to", rowMenu: true }),
+      testCommand("convert-b", { menu: "item", section: "Convert to", rowMenu: true }),
+      testCommand("open", { menu: "item", section: "Item", rowMenu: true }),
+      testCommand("delete", {
         menu: "item",
         section: "Danger",
         rowMenu: true,
@@ -220,9 +221,9 @@ describe("nested sections", () => {
 describe("commandOrder", () => {
   it("dedupes by id, last winning, without reordering", () => {
     const ordered = commandOrder([
-      command("a", { disabled: true }),
-      command("b"),
-      command("a"),
+      testCommand("a", { disabled: true }),
+      testCommand("b"),
+      testCommand("a"),
     ]);
 
     expect(ordered.map((entry) => entry.id)).toEqual(["a", "b"]);
@@ -235,22 +236,22 @@ describe("toolbarCommands", () => {
     // The row reads create → insert → move → item verbs, which is not the order
     // `buildGridCommands` happens to emit them in.
     const promoted = toolbarCommands([
-      command("rename", { toolbar: 50 }),
-      command("new", { toolbar: 10 }),
-      command("move-up", { toolbar: 30 }),
+      testCommand("rename", { toolbar: 50 }),
+      testCommand("new", { toolbar: 10 }),
+      testCommand("move-up", { toolbar: 30 }),
     ]);
 
     expect(promoted.map((entry) => entry.id)).toEqual(["new", "move-up", "rename"]);
   });
 
   it("ignores everything without a weight", () => {
-    expect(toolbarCommands([command("menu-only")])).toEqual([]);
+    expect(toolbarCommands([testCommand("menu-only")])).toEqual([]);
   });
 
   it("treats weight zero as promoted", () => {
     // `toolbar: 0` is a legitimate first position; a truthiness check would silently drop it.
     expect(
-      toolbarCommands([command("first", { toolbar: 0 })]).map((e) => e.id),
+      toolbarCommands([testCommand("first", { toolbar: 0 })]).map((e) => e.id),
     ).toEqual(["first"]);
   });
 });
@@ -258,12 +259,12 @@ describe("toolbarCommands", () => {
 describe("toolbarSegments", () => {
   it("groups the row by weight decade, so a hairline lands between clusters", () => {
     const segments = toolbarSegments([
-      command("new", { toolbar: 10 }),
-      command("before", { toolbar: 20 }),
-      command("after", { toolbar: 21 }),
-      command("up", { toolbar: 30 }),
-      command("down", { toolbar: 31 }),
-      command("rename", { toolbar: 50 }),
+      testCommand("new", { toolbar: 10 }),
+      testCommand("before", { toolbar: 20 }),
+      testCommand("after", { toolbar: 21 }),
+      testCommand("up", { toolbar: 30 }),
+      testCommand("down", { toolbar: 31 }),
+      testCommand("rename", { toolbar: 50 }),
     ]);
 
     expect(segments.map((segment) => segment.map((entry) => entry.id))).toEqual([
@@ -276,7 +277,7 @@ describe("toolbarSegments", () => {
 
   it("is empty rather than one empty segment when nothing is promoted", () => {
     // The command row renders `null` on this; a single empty segment would draw a stray divider.
-    expect(toolbarSegments([command("menu-only")])).toEqual([]);
+    expect(toolbarSegments([testCommand("menu-only")])).toEqual([]);
   });
 });
 
@@ -287,15 +288,15 @@ describe("sectionShowsHeading", () => {
     expect(
       sectionShowsHeading({
         label: "New",
-        commands: [command("grid.create", { menu: "new", section: "New" })],
+        commands: [testCommand("grid.create", { menu: "new", section: "New" })],
       }),
     ).toBe(false);
     expect(
       sectionShowsHeading({
         label: "Item",
         commands: [
-          command("open", { menu: "item", section: "Item" }),
-          command("rename", { menu: "item", section: "Item" }),
+          testCommand("open", { menu: "item", section: "Item" }),
+          testCommand("rename", { menu: "item", section: "Item" }),
         ],
       }),
     ).toBe(true);
@@ -303,8 +304,8 @@ describe("sectionShowsHeading", () => {
       sectionShowsHeading({
         label: "Move",
         commands: [
-          command("up", { menu: "organize", section: "Move" }),
-          command("down", { menu: "organize", section: "Move" }),
+          testCommand("up", { menu: "organize", section: "Move" }),
+          testCommand("down", { menu: "organize", section: "Move" }),
         ],
         submenu: true,
       }),
@@ -312,7 +313,7 @@ describe("sectionShowsHeading", () => {
     expect(
       sectionShowsHeading({
         label: null,
-        commands: [command("bare", { menu: "tools" })],
+        commands: [testCommand("bare", { menu: "tools" })],
       }),
     ).toBe(false);
   });
@@ -321,8 +322,8 @@ describe("sectionShowsHeading", () => {
 describe("rowMenuSections", () => {
   it("shows only opted-in commands", () => {
     const sections = rowMenuSections([
-      command("open", { menu: "item", section: "Item", rowMenu: true }),
-      command("fields", { menu: "view", section: "Layout" }),
+      testCommand("open", { menu: "item", section: "Item", rowMenu: true }),
+      testCommand("fields", { menu: "view", section: "Layout" }),
     ]);
 
     expect(sections.flatMap((section) => section.commands.map((c) => c.id))).toEqual([
@@ -334,9 +335,9 @@ describe("rowMenuSections", () => {
     // You right-clicked a row to do something to that row. The bar leads with New because that
     // is where a session starts; this menu is answering a different question.
     const sections = rowMenuSections([
-      command("insert", { menu: "new", section: "Insert row", rowMenu: true }),
-      command("move", { menu: "organize", section: "Move", rowMenu: true }),
-      command("open", { menu: "item", section: "Item", rowMenu: true }),
+      testCommand("insert", { menu: "new", section: "Insert row", rowMenu: true }),
+      testCommand("move", { menu: "organize", section: "Move", rowMenu: true }),
+      testCommand("open", { menu: "item", section: "Item", rowMenu: true }),
     ]);
 
     expect(sections.map((section) => section.label)).toEqual([
@@ -350,14 +351,14 @@ describe("rowMenuSections", () => {
     // In the bar, Danger is the last thing in the Item menu. Here the menu opens *under the
     // pointer*, so Delete two rows from the top is a misclick waiting to happen.
     const sections = rowMenuSections([
-      command("delete", {
+      testCommand("delete", {
         menu: "item",
         section: "Danger",
         rowMenu: true,
         destructive: true,
       }),
-      command("open", { menu: "item", section: "Item", rowMenu: true }),
-      command("move", { menu: "organize", section: "Move", rowMenu: true }),
+      testCommand("open", { menu: "item", section: "Item", rowMenu: true }),
+      testCommand("move", { menu: "organize", section: "Move", rowMenu: true }),
     ]);
 
     expect(sections.map((section) => section.label)).toEqual([
@@ -370,15 +371,15 @@ describe("rowMenuSections", () => {
   it("keeps a row-menu command that forgot to name a menu", () => {
     // A stray row at the bottom is a visible bug; a command silently missing from the only
     // surface a touch user has is an invisible one.
-    const sections = rowMenuSections([command("orphan", { rowMenu: true })]);
+    const sections = rowMenuSections([testCommand("orphan", { rowMenu: true })]);
     expect(sections).toHaveLength(1);
     expect(sections[0].commands.map((entry) => entry.id)).toEqual(["orphan"]);
   });
 
   it("is empty when nothing opted in", () => {
-    expect(rowMenuSections([command("a", { menu: "item", section: "Item" })])).toEqual(
-      [],
-    );
+    expect(
+      rowMenuSections([testCommand("a", { menu: "item", section: "Item" })]),
+    ).toEqual([]);
   });
 });
 
@@ -389,9 +390,9 @@ describe("overflowMenus", () => {
     // are icon buttons on the *command* row, which the phone does not render at all, so `⋯` is
     // the only place they exist.
     const menus = overflowMenus([
-      command("filter", { menu: "view", section: "Layout", ownControl: true }),
-      command("fields", { menu: "view", section: "Layout" }),
-      command("new", { menu: "new", section: "New", toolbar: 10 }),
+      testCommand("filter", { menu: "view", section: "Layout", ownControl: true }),
+      testCommand("fields", { menu: "view", section: "Layout" }),
+      testCommand("new", { menu: "new", section: "New", toolbar: 10 }),
     ]);
 
     expect(

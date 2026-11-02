@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildGridCommands } from "./commandDeck";
-import {
-  formatBindings,
-  matchBindings,
-  type KeyEventLike,
-} from "@/lib/commands/bindings";
+import { formatBindings, matchBindings } from "@/lib/commands/bindings";
 import {
   buildMenus,
   commandOrder,
@@ -13,17 +9,7 @@ import {
   toolbarSegments,
 } from "@/lib/commands/menus";
 import { toolbarWithoutMenu, unplacedCommands } from "@/lib/commands/fileCommands";
-
-function press(key: string, held: Partial<KeyEventLike> = {}): KeyEventLike {
-  return {
-    key,
-    metaKey: false,
-    ctrlKey: false,
-    altKey: false,
-    shiftKey: false,
-    ...held,
-  };
-}
+import { keyPress } from "@/lib/testing/commands";
 
 describe("grid command deck", () => {
   it("keeps selection commands visible but explains why they are disabled", () => {
@@ -696,7 +682,7 @@ describe("grid command deck", () => {
       },
     });
 
-    const chord = press("Enter", { metaKey: true });
+    const chord = keyPress("Enter", { metaKey: true });
     const matches = commandOrder(commands).filter((entry) =>
       matchBindings(chord, entry.bindings),
     );

@@ -5,35 +5,24 @@ import {
   matchBinding,
   matchBindings,
   type KeyBinding,
-  type KeyEventLike,
 } from "./bindings";
-
-function press(key: string, held: Partial<KeyEventLike> = {}): KeyEventLike {
-  return {
-    key,
-    metaKey: false,
-    ctrlKey: false,
-    altKey: false,
-    shiftKey: false,
-    ...held,
-  };
-}
+import { keyPress } from "@/lib/testing/commands";
 
 describe("matchBinding", () => {
   it("treats ⌘ and Ctrl as the same modifier", () => {
     // Every hand-written handler in the app did `metaKey || ctrlKey`, because the app runs on
     // both kinds of keyboard and `⌘C` has to mean Ctrl+C on Windows.
     const copy: KeyBinding = { key: "c", meta: true };
-    expect(matchBinding(press("c", { metaKey: true }), copy)).toBe(true);
-    expect(matchBinding(press("c", { ctrlKey: true }), copy)).toBe(true);
-    expect(matchBinding(press("c"), copy)).toBe(false);
+    expect(matchBinding(keyPress("c", { metaKey: true }), copy)).toBe(true);
+    expect(matchBinding(keyPress("c", { ctrlKey: true }), copy)).toBe(true);
+    expect(matchBinding(keyPress("c"), copy)).toBe(false);
   });
 
   it("matches a single character whichever case the event reports", () => {
     // Holding Shift is a different chord, but `⌘C` arrives as `"c"` or `"C"` depending on
     // caps lock, and caps lock is not a modifier anyone is choosing to press.
     const copy: KeyBinding = { key: "c", meta: true };
-    expect(matchBinding(press("C", { metaKey: true }), copy)).toBe(true);
+    expect(matchBinding(keyPress("C", { metaKey: true }), copy)).toBe(true);
   });
 
   /*
@@ -44,20 +33,20 @@ describe("matchBinding", () => {
    */
   it("requires the modifiers it does not name to be *up*", () => {
     const after: KeyBinding = { key: "Insert" };
-    expect(matchBinding(press("Insert"), after)).toBe(true);
-    expect(matchBinding(press("Insert", { shiftKey: true }), after)).toBe(false);
-    expect(matchBinding(press("Insert", { ctrlKey: true }), after)).toBe(false);
-    expect(matchBinding(press("Insert", { altKey: true }), after)).toBe(false);
+    expect(matchBinding(keyPress("Insert"), after)).toBe(true);
+    expect(matchBinding(keyPress("Insert", { shiftKey: true }), after)).toBe(false);
+    expect(matchBinding(keyPress("Insert", { ctrlKey: true }), after)).toBe(false);
+    expect(matchBinding(keyPress("Insert", { altKey: true }), after)).toBe(false);
   });
 
   it("keeps the three insert chords apart", () => {
     const before: KeyBinding = { key: "Insert", shift: true };
     const child: KeyBinding = { key: "Insert", ctrl: true };
 
-    expect(matchBinding(press("Insert", { shiftKey: true }), before)).toBe(true);
-    expect(matchBinding(press("Insert", { ctrlKey: true }), before)).toBe(false);
-    expect(matchBinding(press("Insert", { ctrlKey: true }), child)).toBe(true);
-    expect(matchBinding(press("Insert", { shiftKey: true }), child)).toBe(false);
+    expect(matchBinding(keyPress("Insert", { shiftKey: true }), before)).toBe(true);
+    expect(matchBinding(keyPress("Insert", { ctrlKey: true }), before)).toBe(false);
+    expect(matchBinding(keyPress("Insert", { ctrlKey: true }), child)).toBe(true);
+    expect(matchBinding(keyPress("Insert", { shiftKey: true }), child)).toBe(false);
   });
 
   it("does not let Ctrl stand in for ⌘ when the chord wants both", () => {
@@ -65,25 +54,29 @@ describe("matchBinding", () => {
     // plain Ctrl+Return would fire it, and the user who meant "new sibling" would get whatever
     // the two-modifier chord does.
     const child: KeyBinding = { key: "Enter", meta: true, ctrl: true };
-    expect(matchBinding(press("Enter", { metaKey: true, ctrlKey: true }), child)).toBe(
-      true,
-    );
-    expect(matchBinding(press("Enter", { ctrlKey: true }), child)).toBe(false);
-    expect(matchBinding(press("Enter", { metaKey: true }), child)).toBe(false);
+    expect(
+      matchBinding(keyPress("Enter", { metaKey: true, ctrlKey: true }), child),
+    ).toBe(true);
+    expect(matchBinding(keyPress("Enter", { ctrlKey: true }), child)).toBe(false);
+    expect(matchBinding(keyPress("Enter", { metaKey: true }), child)).toBe(false);
   });
 
   it("keeps a plain key from firing while the command modifier is down", () => {
     // ⌘← is collapse-all in the outline, ← is collapse-selected. Two commands, two rows.
     const collapse: KeyBinding = { key: "ArrowLeft" };
-    expect(matchBinding(press("ArrowLeft"), collapse)).toBe(true);
-    expect(matchBinding(press("ArrowLeft", { metaKey: true }), collapse)).toBe(false);
+    expect(matchBinding(keyPress("ArrowLeft"), collapse)).toBe(true);
+    expect(matchBinding(keyPress("ArrowLeft", { metaKey: true }), collapse)).toBe(
+      false,
+    );
   });
 
   it("distinguishes Tab from ⇧Tab", () => {
-    expect(matchBinding(press("Tab"), { key: "Tab" })).toBe(true);
-    expect(matchBinding(press("Tab", { shiftKey: true }), { key: "Tab" })).toBe(false);
+    expect(matchBinding(keyPress("Tab"), { key: "Tab" })).toBe(true);
+    expect(matchBinding(keyPress("Tab", { shiftKey: true }), { key: "Tab" })).toBe(
+      false,
+    );
     expect(
-      matchBinding(press("Tab", { shiftKey: true }), { key: "Tab", shift: true }),
+      matchBinding(keyPress("Tab", { shiftKey: true }), { key: "Tab", shift: true }),
     ).toBe(true);
   });
 });
@@ -92,14 +85,14 @@ describe("matchBindings", () => {
   it("fires on any of a command's chords", () => {
     // Apple keyboards have no Insert key, so ⌘⏎ replaced it — Insert still fires on a full one.
     const insertAfter: KeyBinding[] = [{ key: "Enter", meta: true }, { key: "Insert" }];
-    expect(matchBindings(press("Insert"), insertAfter)).toBe(true);
-    expect(matchBindings(press("Enter", { metaKey: true }), insertAfter)).toBe(true);
-    expect(matchBindings(press("Enter"), insertAfter)).toBe(false);
+    expect(matchBindings(keyPress("Insert"), insertAfter)).toBe(true);
+    expect(matchBindings(keyPress("Enter", { metaKey: true }), insertAfter)).toBe(true);
+    expect(matchBindings(keyPress("Enter"), insertAfter)).toBe(false);
   });
 
   it("is false for a command with no bindings at all", () => {
-    expect(matchBindings(press("a"), undefined)).toBe(false);
-    expect(matchBindings(press("a"), [])).toBe(false);
+    expect(matchBindings(keyPress("a"), undefined)).toBe(false);
+    expect(matchBindings(keyPress("a"), [])).toBe(false);
   });
 });
 

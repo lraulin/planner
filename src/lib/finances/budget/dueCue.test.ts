@@ -3,25 +3,14 @@ import { billDueCue, billDueSoon, billDaysRemaining } from "./dueCue";
 import type { BillFacet } from "./queries";
 import type { BudgetRow } from "./rows";
 import type { IndicatorState } from "./indicator";
+import { billFacet } from "@/lib/testing/billFacet";
 
 const TODAY = "2026-09-05";
 const MONTH = "2026-09-01";
 const PAYDAY = "2026-09-11";
 
 function facet(overrides: Partial<BillFacet> = {}): BillFacet {
-  return {
-    status: "active",
-    cancelledOn: null,
-    url: "",
-    cadenceMonths: 1,
-    cadenceDays: null,
-    dueDay: 1,
-    leadDays: 0,
-    anchorDate: null,
-    scheduled: true,
-    expectedCents: 1_000,
-    ...overrides,
-  };
+  return billFacet({ dueDay: 1, ...overrides });
 }
 
 type CueRow = Pick<BudgetRow, "bill" | "nextDueKey">;

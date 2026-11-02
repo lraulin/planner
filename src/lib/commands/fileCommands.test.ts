@@ -7,10 +7,7 @@ import {
   toolbarWithoutMenu,
 } from "./fileCommands";
 import type { Command } from "./registry";
-
-function command(id: string, extra: Partial<Command> = {}): Command {
-  return { id, label: id, group: "record", run: () => {}, ...extra };
-}
+import { testCommand } from "@/lib/testing/commands";
 
 function fileCommands(): Command[] {
   return FILE_COMMAND_PLACEMENTS.map((placement) => ({
@@ -37,7 +34,7 @@ describe("FILE_COMMAND_PLACEMENTS", () => {
   it("is the leftmost menu when mixed with a view's commands", () => {
     const menus = buildMenus([
       ...fileCommands(),
-      command("new-task", { menu: "new", section: "New" }),
+      testCommand("new-task", { menu: "new", section: "New" }),
     ]);
     expect(menus.map((menu) => menu.id)).toEqual(["file", "new"]);
   });
@@ -58,13 +55,13 @@ describe("FILE_COMMAND_PLACEMENTS", () => {
 
 describe("unplacedCommands", () => {
   it("reports a non-go command that forgot its menu", () => {
-    expect(unplacedCommands([command("app.forgot")]).map((entry) => entry.id)).toEqual([
-      "app.forgot",
-    ]);
+    expect(
+      unplacedCommands([testCommand("app.forgot")]).map((entry) => entry.id),
+    ).toEqual(["app.forgot"]);
   });
 
   it("lets go-to destinations stay palette extras", () => {
-    expect(unplacedCommands([command("go.plan", { group: "go" })])).toEqual([]);
+    expect(unplacedCommands([testCommand("go.plan", { group: "go" })])).toEqual([]);
   });
 
   it("is empty for the File catalog itself", () => {
@@ -75,13 +72,15 @@ describe("unplacedCommands", () => {
 describe("toolbarWithoutMenu", () => {
   it("catches an icon-row command that is not also in a menu", () => {
     expect(
-      toolbarWithoutMenu([command("orphan", { toolbar: 10 })]).map((entry) => entry.id),
+      toolbarWithoutMenu([testCommand("orphan", { toolbar: 10 })]).map(
+        (entry) => entry.id,
+      ),
     ).toEqual(["orphan"]);
   });
 
   it("accepts a toolbar command that named its menu", () => {
-    expect(toolbarWithoutMenu([command("new", { menu: "new", toolbar: 10 })])).toEqual(
-      [],
-    );
+    expect(
+      toolbarWithoutMenu([testCommand("new", { menu: "new", toolbar: 10 })]),
+    ).toEqual([]);
   });
 });

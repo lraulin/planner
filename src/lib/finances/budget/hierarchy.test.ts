@@ -5,7 +5,6 @@ import { groupMembers } from "@/lib/grid/groupMembers";
 
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
 import type { BudgetRow } from "./rows";
-import type { BillFacet } from "./queries";
 import {
   budgetChildren,
   budgetEnvelopeLabel,
@@ -20,6 +19,7 @@ import {
   structureParentId,
   structurePosition,
 } from "./hierarchy";
+import { billFacet } from "@/lib/testing/billFacet";
 
 function group(
   id: string,
@@ -56,22 +56,6 @@ function category(
     expectedMonthlyIncomeCents: null,
     isIncome: kind === "income",
     bill: null,
-  };
-}
-
-function billFacet(overrides: Partial<BillFacet> = {}): BillFacet {
-  return {
-    status: "active",
-    cancelledOn: null,
-    url: "",
-    cadenceMonths: 1,
-    cadenceDays: null,
-    dueDay: null,
-    leadDays: 0,
-    anchorDate: null,
-    scheduled: true,
-    expectedCents: 1_000,
-    ...overrides,
   };
 }
 

@@ -11,21 +11,10 @@ import {
 import type { BillFacet } from "./queries";
 import type { BudgetRow } from "./rows";
 import type { Target } from "./targets/types";
+import { billFacet } from "@/lib/testing/billFacet";
 
 function bill(overrides: Partial<BillFacet> = {}): BillFacet {
-  return {
-    status: "active",
-    cancelledOn: null,
-    url: "",
-    cadenceMonths: 1,
-    cadenceDays: null,
-    dueDay: null,
-    leadDays: 0,
-    anchorDate: null,
-    scheduled: true,
-    expectedCents: 8_799,
-    ...overrides,
-  };
+  return billFacet({ expectedCents: 8_799, ...overrides });
 }
 
 describe("inspectorBreakdown", () => {

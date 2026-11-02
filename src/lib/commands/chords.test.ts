@@ -31,17 +31,7 @@ import {
   VIEW_PROJECT,
   VIEW_TASKS,
 } from "./chords";
-
-function press(key: string, modifiers: Partial<KeyEventLike> = {}): KeyEventLike {
-  return {
-    key,
-    metaKey: false,
-    ctrlKey: false,
-    altKey: false,
-    shiftKey: false,
-    ...modifiers,
-  };
-}
+import { keyPress } from "@/lib/testing/commands";
 
 /**
  * Five of the six chords are Return with a different modifier set, which is what makes the scheme
@@ -51,12 +41,16 @@ function press(key: string, modifiers: Partial<KeyEventLike> = {}): KeyEventLike
  * months.
  */
 const FAMILY: [string, ReturnType<() => KeyEventLike>, typeof INSERT_AFTER][] = [
-  ["open", press("Enter"), OPEN_RECORD],
-  ["rename", press("Enter", { shiftKey: true }), RENAME],
-  ["insert after", press("Enter", { metaKey: true }), INSERT_AFTER],
-  ["insert before", press("Enter", { metaKey: true, shiftKey: true }), INSERT_BEFORE],
-  ["insert child", press("Enter", { metaKey: true, altKey: true }), INSERT_CHILD],
-  ["delete", press("Backspace"), DELETE_ROW],
+  ["open", keyPress("Enter"), OPEN_RECORD],
+  ["rename", keyPress("Enter", { shiftKey: true }), RENAME],
+  ["insert after", keyPress("Enter", { metaKey: true }), INSERT_AFTER],
+  [
+    "insert before",
+    keyPress("Enter", { metaKey: true, shiftKey: true }),
+    INSERT_BEFORE,
+  ],
+  ["insert child", keyPress("Enter", { metaKey: true, altKey: true }), INSERT_CHILD],
+  ["delete", keyPress("Backspace"), DELETE_ROW],
 ];
 
 describe("the Return family", () => {
@@ -80,13 +74,15 @@ describe("the Return family", () => {
   });
 
   it("still answers Achieve's keys on a keyboard that has them", () => {
-    expect(matchBindings(press("Insert"), INSERT_AFTER)).toBe(true);
-    expect(matchBindings(press("Insert", { shiftKey: true }), INSERT_BEFORE)).toBe(
+    expect(matchBindings(keyPress("Insert"), INSERT_AFTER)).toBe(true);
+    expect(matchBindings(keyPress("Insert", { shiftKey: true }), INSERT_BEFORE)).toBe(
       true,
     );
-    expect(matchBindings(press("Insert", { ctrlKey: true }), INSERT_CHILD)).toBe(true);
-    expect(matchBindings(press("F2"), RENAME)).toBe(true);
-    expect(matchBindings(press("Delete"), DELETE_ROW)).toBe(true);
+    expect(matchBindings(keyPress("Insert", { ctrlKey: true }), INSERT_CHILD)).toBe(
+      true,
+    );
+    expect(matchBindings(keyPress("F2"), RENAME)).toBe(true);
+    expect(matchBindings(keyPress("Delete"), DELETE_ROW)).toBe(true);
   });
 });
 
