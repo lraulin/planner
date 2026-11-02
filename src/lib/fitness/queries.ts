@@ -21,6 +21,7 @@ import type {
   SessionSummary,
   WorkoutSetView,
 } from "./types";
+import { groupBy } from "@/lib/groupBy";
 
 function weightNumber(raw: string | null): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
@@ -50,6 +51,17 @@ function mapExercise(row: {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+/** Each session exercise's sets, in the order the rows came. */
+function setsByExercise(
+  setRows: readonly (typeof workoutSets.$inferSelect)[],
+): Map<string, WorkoutSetView[]> {
+  const grouped = new Map<string, WorkoutSetView[]>();
+  for (const [id, rows] of groupBy(setRows, (set) => set.sessionExerciseId)) {
+    grouped.set(id, rows.map(mapSet));
+  }
+  return grouped;
 }
 
 function mapSet(row: {
@@ -123,12 +135,7 @@ export async function listSessions(userId: string): Promise<SessionSummary[]> {
       .orderBy(asc(workoutSets.setIndex)),
   ]);
 
-  const setsBySe = new Map<string, WorkoutSetView[]>();
-  for (const set of setRows) {
-    const list = setsBySe.get(set.sessionExerciseId) ?? [];
-    list.push(mapSet(set));
-    setsBySe.set(set.sessionExerciseId, list);
-  }
+  const setsBySe = setsByExercise(setRows);
 
   const labelsBySession = new Map<string, string[]>();
   const incompleteBySession = new Map<string, boolean>();
@@ -211,12 +218,7 @@ export async function getSessionDetail(
       ),
     );
 
-  const setsBySe = new Map<string, WorkoutSetView[]>();
-  for (const set of setRows) {
-    const list = setsBySe.get(set.sessionExerciseId) ?? [];
-    list.push(mapSet(set));
-    setsBySe.set(set.sessionExerciseId, list);
-  }
+  const setsBySe = setsByExercise(setRows);
 
   return {
     id: session.id,
@@ -287,12 +289,7 @@ export async function loadExerciseHistory(
     )
     .orderBy(asc(workoutSets.setIndex));
 
-  const setsBySe = new Map<string, WorkoutSetView[]>();
-  for (const set of setRows) {
-    const list = setsBySe.get(set.sessionExerciseId) ?? [];
-    list.push(mapSet(set));
-    setsBySe.set(set.sessionExerciseId, list);
-  }
+  const setsBySe = setsByExercise(setRows);
 
   return seRows.map((r) => ({
     sessionId: r.sessionId,
