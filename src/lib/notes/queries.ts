@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { nodeTypeEnum, noteFlagEnum, notes } from "@/db/schema";
 import { ownedRow } from "@/lib/db/owned";
@@ -149,11 +149,8 @@ export async function loadNoteSummary(
   return note ? toSummary(note) : null;
 }
 
-/** Every note linked to one record, newest first. Direct SQL — not a full-tree scan. */
-export async function loadNotesForNode(
-  userId: string,
-  nodeId: string,
-): Promise<NoteNode[]> {
+/** The user's notes matching `link`, newest first, each with its linked record's name. */
+async function loadLinkedNotes(userId: string, link: SQL): Promise<NoteNode[]> {
   const result = await db.execute(sql`
     SELECT
       n.id, n.parent_id, n.sort_key, n.title, n.subject, n.body,
@@ -163,11 +160,18 @@ export async function loadNotesForNode(
       linked.type AS node_type
     FROM notes n
     LEFT JOIN nodes linked ON linked.id = n.node_id AND linked.user_id = ${userId}
-    WHERE n.user_id = ${userId} AND n.node_id = ${nodeId}
+    WHERE n.user_id = ${userId} AND ${link}
     ORDER BY n.updated_at DESC
   `);
-
   return mapFlatNoteRows(result.rows);
+}
+
+/** Every note linked to one record, newest first. Direct SQL — not a full-tree scan. */
+export async function loadNotesForNode(
+  userId: string,
+  nodeId: string,
+): Promise<NoteNode[]> {
+  return loadLinkedNotes(userId, sql`n.node_id = ${nodeId}`);
 }
 
 /** Every note filed against one contact, newest first. Direct SQL — not a full-tree scan. */
@@ -175,20 +179,7 @@ export async function loadNotesForContact(
   userId: string,
   contactId: string,
 ): Promise<NoteNode[]> {
-  const result = await db.execute(sql`
-    SELECT
-      n.id, n.parent_id, n.sort_key, n.title, n.subject, n.body,
-      n.note_date, n.flag, n.contexts, n.collapsed, n.node_id, n.contact_id,
-      n.created_at, n.updated_at,
-      linked.name AS node_name,
-      linked.type AS node_type
-    FROM notes n
-    LEFT JOIN nodes linked ON linked.id = n.node_id AND linked.user_id = ${userId}
-    WHERE n.user_id = ${userId} AND n.contact_id = ${contactId}
-    ORDER BY n.updated_at DESC
-  `);
-
-  return mapFlatNoteRows(result.rows);
+  return loadLinkedNotes(userId, sql`n.contact_id = ${contactId}`);
 }
 
 function toSummary(note: NoteNode): NoteSummary {
