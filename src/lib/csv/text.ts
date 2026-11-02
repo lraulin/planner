@@ -96,54 +96,7 @@ export function normalizeCsvHeader(cell: string): string {
  * and newlines. Strips a leading BOM. Drops rows that are entirely blank.
  */
 export function parseCsvRows(text: string): string[][] {
-  const s = text.replace(/^\uFEFF/, "");
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cur = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (s[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cur += ch;
-      }
-      continue;
-    }
-
-    if (ch === '"') {
-      inQuotes = true;
-      continue;
-    }
-    if (ch === ",") {
-      row.push(cur);
-      cur = "";
-      continue;
-    }
-    if (ch === "\n" || ch === "\r") {
-      if (ch === "\r" && s[i + 1] === "\n") i++;
-      row.push(cur);
-      cur = "";
-      if (row.some((cell) => cell.trim() !== "")) rows.push(row);
-      row = [];
-      continue;
-    }
-    cur += ch;
-  }
-
-  if (cur.length > 0 || row.length > 0) {
-    row.push(cur);
-    if (row.some((cell) => cell.trim() !== "")) rows.push(row);
-  }
-
-  return rows;
+  return parseCsvRowsWithLines(text).map((row) => row.cells);
 }
 
 /** One kept row from {@link parseCsvRowsWithLines}, tagged with where it actually sits. */
