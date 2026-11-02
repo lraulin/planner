@@ -30,7 +30,7 @@ import {
 import { redactSecrets } from "../src/lib/backup/redaction";
 import { restoreTest } from "../src/lib/backup/restore";
 import { retentionDryRun, runBackup } from "../src/lib/backup/run";
-import { argValue } from "./cli";
+import { argValue, readStdin } from "./cli";
 
 async function main(): Promise<number> {
   const command = process.argv[2];
@@ -269,13 +269,6 @@ function rejectUnknownArgsWithValue(args: string[], valueFlag: string): void {
     if (!args[index + 1]) throw new Error(`${valueFlag} requires a path.`);
     index += 1;
   }
-}
-
-async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin)
-    chunks.push(Buffer.from(chunk as Uint8Array));
-  return Buffer.concat(chunks).toString("utf8");
 }
 
 function formatBytes(bytes: number): string {

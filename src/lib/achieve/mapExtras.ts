@@ -4,6 +4,7 @@ import {
   decodeCalendarDay,
   decodeDateTime,
   decodePriority,
+  emptyToNull,
   intField,
 } from "./encodings";
 import { tableRows } from "./parseXml";
@@ -538,9 +539,4 @@ export function minutesFromIsoWallClock(
   const m = /T(\d{2}):(\d{2})/.exec(text);
   if (!m) return null;
   return Number(m[1]) * 60 + Number(m[2]);
-}
-
-function emptyToNull(value: string | undefined): string | null {
-  if (!value || !value.trim()) return null;
-  return value;
 }

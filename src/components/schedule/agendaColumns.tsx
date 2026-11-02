@@ -7,6 +7,7 @@ import { checkStateLabel, checkStateMark } from "@/lib/schedule/checkState";
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
 import { DaysLeftCell } from "@/components/grid/DaysLeftCell";
+import { shortTimeLabel } from "@/lib/dateFormat";
 
 export type AgendaColumnCtx = {
   /**
@@ -25,12 +26,6 @@ export const AGENDA_COLUMN_IDS = [
   "project",
   "daysLeft",
 ] as const;
-
-function timeLabel(date: Date): string {
-  return date
-    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    .replace(":00", "");
-}
 
 /**
  * Days from today to the row's day: 0 today, negative behind you.
@@ -96,7 +91,8 @@ export const agendaColumns: ColumnDef<AgendaColumnCtx, AgendaRow>[] = [
     label: "Time",
     width: "8rem",
     filterKind: "text",
-    filterValue: (row) => (row.node.allDay ? "All day" : timeLabel(row.node.startAt)),
+    filterValue: (row) =>
+      row.node.allDay ? "All day" : shortTimeLabel(row.node.startAt),
     // Sorted on the instant, not the printed label: "9:00 AM" sorts before "10:00 AM" as
     // text, which is exactly the wrong order.
     sortValue: (row) => row.node.startAt.getTime(),
@@ -104,7 +100,7 @@ export const agendaColumns: ColumnDef<AgendaColumnCtx, AgendaRow>[] = [
       <span className="tabular truncate text-[0.8125rem] text-ink-muted">
         {row.node.allDay
           ? "All day"
-          : `${timeLabel(row.node.startAt)} – ${timeLabel(row.node.endAt)}`}
+          : `${shortTimeLabel(row.node.startAt)} – ${shortTimeLabel(row.node.endAt)}`}
       </span>
     ),
   },

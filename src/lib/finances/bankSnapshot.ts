@@ -2,6 +2,7 @@ import { parseAmountCents } from "./money";
 import { parseCalendarDayText } from "@/lib/calendarDayText";
 import type { FinanceFeed } from "./types";
 import { isRecord } from "@/lib/isRecord";
+import { firstMeaningfulLine } from "@/lib/text/firstMeaningfulLine";
 
 export const PLANNER_BANK_SNAPSHOT_HEADER = "# planner-bank-snapshot v1";
 export const LEGACY_PLANNER_PENDING_HEADER = "# planner-pending v1";
@@ -407,12 +408,4 @@ export function parseBankBrowserSnapshot(text: string): ParseBankBrowserSnapshot
 
 function fold(description: string): string {
   return description.replace(/\s+/g, " ").trim().toUpperCase();
-}
-
-function firstMeaningfulLine(text: string): string {
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (trimmed !== "") return trimmed;
-  }
-  return "";
 }

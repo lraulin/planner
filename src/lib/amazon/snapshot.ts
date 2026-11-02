@@ -31,6 +31,7 @@ import {
   type AmazonSummaryCheck,
 } from "./orderSummary";
 import { isRecord } from "@/lib/isRecord";
+import { firstMeaningfulLine } from "@/lib/text/firstMeaningfulLine";
 
 export const PLANNER_AMAZON_HEADER = "# planner-amazon v2";
 export const SNAPSHOT_VERSION = 2;
@@ -829,12 +830,4 @@ function recordsOf(
     issues.push({ path, message: `${noun} is not an object.` });
     return [];
   });
-}
-
-function firstMeaningfulLine(text: string): string {
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (trimmed !== "") return trimmed;
-  }
-  return "";
 }

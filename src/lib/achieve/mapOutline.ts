@@ -8,6 +8,7 @@ import {
   decodePriority,
   decodeProgressReview,
   decodeStatus,
+  emptyToNull,
   intField,
 } from "./encodings";
 import { EXTRAS_TABLES } from "./mapExtras";
@@ -442,11 +443,6 @@ export function mapOutline(doc: AchDocument): AchOutlineMap {
   });
 
   return { nodes, skippedTables, counts, warnings };
-}
-
-function emptyToNull(value: string | undefined): string | null {
-  if (!value || !value.trim()) return null;
-  return value;
 }
 
 /**

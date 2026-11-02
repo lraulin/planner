@@ -30,6 +30,7 @@ import {
   tsxArguments,
 } from "../src/lib/backup/productionAccess";
 import { redactSecrets } from "../src/lib/backup/redaction";
+import { readStdin } from "./cli";
 
 /**
  * Every value as Postgres prints it — numerics, dates and timestamps stay exact text. A stored
@@ -47,13 +48,6 @@ function client(connectionString: string): pg.Client {
     connectionString: url.toString(),
     types: { getTypeParser: () => (value: string) => value },
   });
-}
-
-async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin)
-    chunks.push(Buffer.from(chunk as Uint8Array));
-  return Buffer.concat(chunks).toString("utf8");
 }
 
 async function read(sqlArgument: string | undefined): Promise<number> {

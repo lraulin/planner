@@ -27,3 +27,11 @@ export function runMain(main: () => Promise<number>): void {
     },
   );
 }
+
+/** Everything piped to the script, as text. */
+export async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin)
+    chunks.push(Buffer.from(chunk as Uint8Array));
+  return Buffer.concat(chunks).toString("utf8");
+}

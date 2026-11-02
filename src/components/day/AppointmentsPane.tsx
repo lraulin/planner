@@ -2,6 +2,7 @@
 
 import { NavLink } from "@/components/shell/NavLink";
 import type { DayAppointment } from "@/lib/day/appointments";
+import { shortTimeLabel } from "@/lib/dateFormat";
 
 export type { DayAppointment };
 
@@ -13,13 +14,6 @@ export type { DayAppointment };
  * calendar here would mean two places to drag a block to and two ways for them to disagree.
  * Editing goes to the Schedule tab.
  */
-
-function timeLabel(date: Date): string {
-  return date
-    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    .replace(":00", "");
-}
-
 export function AppointmentsPane({
   appointments,
   dayKey,
@@ -58,7 +52,7 @@ export function AppointmentsPane({
             {appointments.map((appointment) => (
               <li key={appointment.id} className="flex gap-2 text-[0.8125rem]">
                 <span className="tabular w-16 flex-none text-ink-faint">
-                  {appointment.allDay ? "All day" : timeLabel(appointment.startAt)}
+                  {appointment.allDay ? "All day" : shortTimeLabel(appointment.startAt)}
                 </span>
                 <span
                   className={

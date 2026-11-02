@@ -205,3 +205,9 @@ export function boolField(
   if (raw === undefined || raw === "") return fallback;
   return raw.toLowerCase() === "true";
 }
+
+/** Achieve's blank strings as null — an empty field is an absent one. */
+export function emptyToNull(value: string | undefined): string | null {
+  if (!value || !value.trim()) return null;
+  return value;
+}

@@ -276,3 +276,10 @@ export function relativeDaysLabel(days: number): string {
   if (days === -1) return "Yesterday";
   return days > 0 ? `In ${days} days` : `${Math.abs(days)} days ago`;
 }
+
+/** A clock time as a schedule row shows it: "9 AM", "9:30 AM", in the reader's locale. */
+export function shortTimeLabel(date: Date): string {
+  return date
+    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    .replace(":00", "");
+}
