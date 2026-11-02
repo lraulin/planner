@@ -26,6 +26,11 @@ import { sortRowsWithinGroups, type SortValue } from "./sortRows";
 import type { GridRow } from "@/lib/tree/slice";
 import { MAX_SORT_KEYS, type GridSort } from "@/lib/settings/grid";
 
+/** One line of a windowed grid's index: a group header, or the id of a row to fetch. */
+export type WindowedIndexEntry =
+  | { kind: "group"; id: string; label: string; count: number; depth: number }
+  | { kind: "node"; id: string };
+
 /** Records per block: what one server round trip returns. */
 export const SERVER_GRID_BLOCK_SIZE = 100;
 export const SERVER_GRID_SEARCH_MAX = 200;

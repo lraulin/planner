@@ -45,9 +45,10 @@ import {
   passingRows,
   SERVER_GRID_BLOCK_SIZE,
   SERVER_GRID_PREFETCH,
+  type ServerGridFields,
   sliceBlock,
   sortByQuery,
-  type ServerGridFields,
+  type WindowedIndexEntry,
 } from "@/lib/grid/serverQuery";
 import type { GridSort } from "@/lib/settings/grid";
 
@@ -80,13 +81,9 @@ export type RegisterQueryContext = {
   supersededPendingIds?: ReadonlySet<string>;
 };
 
-export type RegisterIndexEntry =
-  | { kind: "group"; id: string; label: string; count: number; depth: number }
-  | { kind: "node"; id: string };
-
 export type RegisterIndex = {
   queryKey: string;
-  entries: RegisterIndexEntry[];
+  entries: WindowedIndexEntry[];
   nodeIds: string[];
   /** Whole-ledger metadata needed even when a collapsed or filtered row opens by deep link. */
   notBudgetedIds: string[];
@@ -410,7 +407,7 @@ export function prepareRegister(
   const collapsed = applyGroupCollapse(grouped, new Set(query.collapsedGroups));
   const display = sortByQuery(collapsed, query.sorts, registerFields);
 
-  const entries: RegisterIndexEntry[] = [];
+  const entries: WindowedIndexEntry[] = [];
   const nodeIds: string[] = [];
   const groupIds: string[] = [];
   for (const row of grouped) {

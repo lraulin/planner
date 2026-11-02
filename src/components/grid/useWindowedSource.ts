@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { QueryResult } from "@/app/actionResult";
 
-/** One line of a windowed grid's index: a group header, or the id of a row to fetch. */
-export type WindowedIndexEntry =
-  | { kind: "group"; id: string; label: string; count: number; depth: number }
-  | { kind: "node"; id: string };
+import type { WindowedIndexEntry } from "@/lib/grid/serverQuery";
 
 /** What the server sends for one query: every line in display order, without row data. */
 export type WindowedIndex<Entry extends WindowedIndexEntry> = {
