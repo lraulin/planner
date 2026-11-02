@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { NodeType } from "@/db/schema";
-import type { OutlineNode } from "./types";
 import { owningResultAreaId, owningResultAreaIdFromChain } from "./owningResultArea";
+import { treeNode } from "@/lib/testing/treeNode";
 
-const node = (id: string, parentId: string | null, type: NodeType): OutlineNode =>
-  ({ id, parentId, type, name: id, depth: 0 }) as OutlineNode;
+const node = treeNode;
 
 describe("owningResultAreaId", () => {
   const nodes = [

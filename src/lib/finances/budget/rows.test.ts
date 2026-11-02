@@ -14,6 +14,7 @@ import {
   sectionGridRows,
 } from "./rows";
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
+import { budgetCategoryRow } from "@/lib/testing/budgetCategoryRow";
 
 const GROUPS: BudgetGroupRow[] = [
   {
@@ -41,20 +42,7 @@ function category(
   hidden = false,
   kind: BudgetCategoryRow["kind"] = groupId === "income" ? "income" : "spending",
 ): BudgetCategoryRow {
-  return {
-    id,
-    groupId,
-    name: id,
-    sortKey,
-    hidden,
-    notes: "",
-    target: null,
-    kind,
-    incomeRole: "other",
-    expectedMonthlyIncomeCents: null,
-    isIncome: kind === "income",
-    bill: null,
-  };
+  return budgetCategoryRow(id, { groupId, sortKey, hidden, kind });
 }
 
 const CATEGORIES: BudgetCategoryRow[] = [

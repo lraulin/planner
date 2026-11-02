@@ -11,6 +11,7 @@ import {
 } from "./fixThis";
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
 import type { EnvelopeKind } from "@/db/schema";
+import { budgetCategoryRow } from "@/lib/testing/budgetCategoryRow";
 
 function group(
   id: string,
@@ -34,20 +35,7 @@ function category(
   groupId: string | null = null,
   hidden = false,
 ): BudgetCategoryRow {
-  return {
-    id,
-    groupId,
-    name: id,
-    sortKey: id,
-    hidden,
-    notes: "",
-    target: null,
-    kind,
-    incomeRole: "other",
-    expectedMonthlyIncomeCents: null,
-    isIncome: kind === "income",
-    bill: null,
-  };
+  return budgetCategoryRow(id, { kind, groupId, hidden });
 }
 
 const GROUPS: BudgetGroupRow[] = [group("food", "spending"), group("bills", "bill")];

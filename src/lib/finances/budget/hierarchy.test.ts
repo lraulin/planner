@@ -20,6 +20,7 @@ import {
   structurePosition,
 } from "./hierarchy";
 import { billFacet } from "@/lib/testing/billFacet";
+import { budgetCategoryRow } from "@/lib/testing/budgetCategoryRow";
 
 function group(
   id: string,
@@ -43,20 +44,7 @@ function category(
   sortKey: string,
   kind: BudgetCategoryRow["kind"] = "spending",
 ): BudgetCategoryRow {
-  return {
-    id,
-    groupId,
-    name: id,
-    sortKey,
-    hidden: false,
-    notes: "",
-    target: null,
-    kind,
-    incomeRole: "other",
-    expectedMonthlyIncomeCents: null,
-    isIncome: kind === "income",
-    bill: null,
-  };
+  return budgetCategoryRow(id, { groupId, sortKey, kind });
 }
 
 function row(

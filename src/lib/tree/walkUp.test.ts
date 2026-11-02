@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { NodeType } from "@/db/schema";
 import type { OutlineNode } from "./types";
 import { collapsedAncestorIds, walkUp } from "./walkUp";
+import { treeNode } from "@/lib/testing/treeNode";
 
-const node = (
-  id: string,
-  parentId: string | null,
-  type: NodeType = "task",
-): OutlineNode => ({ id, parentId, type, name: id, depth: 0 }) as OutlineNode;
+const node = treeNode;
 
 describe("walkUp", () => {
   it("yields self then each ancestor, nearest first", () => {
