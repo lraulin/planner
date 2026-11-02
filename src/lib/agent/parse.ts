@@ -6,9 +6,12 @@ import {
   type PriorityLetter,
 } from "@/db/schema";
 import type { ExternalRef } from "@/db/schema";
-import { daysInMonth } from "@/lib/dateMath";
 import { PRIORITY_LETTERS } from "@/lib/priority/letterRank";
-import { asCalendarDay, fromDateKey } from "@/lib/schedule/geometry";
+import {
+  asCalendarDay,
+  fromDateKey,
+  isRealCalendarDate,
+} from "@/lib/schedule/geometry";
 import { AgentError } from "./errors";
 
 export function asObject(body: unknown): Record<string, unknown> {
@@ -75,6 +78,19 @@ export function optionalNullableString(
 /** A leading calendar day, whether the string is `2026-06-31` or `2026-06-31T09:00:00Z`. */
 const LEADING_DAY = /^(\d{4})-(\d{2})-(\d{2})(?=$|[T ])/;
 
+/** Refuse a calendar day that does not exist — Feb 30, month 13 — naming the field. */
+function requireRealDay(
+  year: number,
+  month: number,
+  day: number,
+  field: string,
+  value: string,
+) {
+  if (!isRealCalendarDate(year, month, day)) {
+    throw new AgentError("validation", `${field} is not a date that exists: ${value}`);
+  }
+}
+
 /**
  * A date that does not exist is a *rejection*, not a date two days later.
  *
@@ -99,12 +115,7 @@ export function parseDate(
   const day = LEADING_DAY.exec(trimmed);
   if (day) {
     const [, year, month, date] = day.map(Number);
-    if (month < 1 || month > 12 || date < 1 || date > daysInMonth(year, month)) {
-      throw new AgentError(
-        "validation",
-        `${field} is not a date that exists: ${value}`,
-      );
-    }
+    requireRealDay(year, month, date, field, value);
     // Day label only — no time. Use the same calendar encoding as the rest of the app.
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
       return fromDateKey(trimmed);
@@ -227,9 +238,7 @@ export function parseDateKey(
     throw new AgentError("validation", `${field} must be YYYY-MM-DD`);
   }
   const [year, month, day] = value.split("-").map(Number);
-  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
-    throw new AgentError("validation", `${field} is not a date that exists: ${value}`);
-  }
+  requireRealDay(year, month, day, field, value);
   return value;
 }
 
