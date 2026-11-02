@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useState, useTransition } from "react";
 import {
   loadReviewCandidatesAction,
   setPayeeNotACommitmentAction,
@@ -10,7 +10,7 @@ import { Drawer, DrawerHeader, DrawerLeaveGuard } from "@/components/detail/Draw
 import { CadenceSelect } from "@/components/finances/CadenceSelect";
 import { DateText } from "@/components/date/DateText";
 import type { RecurringMerchant } from "@/lib/finances/analytics";
-import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
+import { formatUsd } from "@/lib/finances/money";
 import {
   cadenceFromGapDays,
   cadenceLabel,
@@ -18,6 +18,8 @@ import {
   nextDueFrom,
   type Cadence,
 } from "@/lib/finances/recurringBills";
+import { FormActions } from "@/components/detail/FormActions";
+import { useBillDraft } from "../useBillDraft";
 
 const FIELD =
   "min-h-tap rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:py-1 md:text-[0.8125rem]";
@@ -214,62 +216,50 @@ function ReviewForm({
   onError: (error: string) => void;
 }) {
   const [pending, startTransition] = useTransition();
-  const [name, setName] = useState(entry.merchant);
-  const initialCadence = useMemo(() => proposedCadence(entry), [entry]);
-  const [cadence, setCadence] = useState<Cadence>(initialCadence);
-  const initialAmount = (entry.typicalCents / 100).toFixed(2);
-  const [amount, setAmount] = useState(initialAmount);
-  const [next, setNext] = useState(() =>
-    nextDueFrom(entry.lastChargeOn, initialCadence, todayKey),
+  const initialCadence = proposedCadence(entry);
+  const bill = useBillDraft(
+    {
+      name: entry.merchant,
+      cadence: initialCadence,
+      expectedCents: entry.typicalCents,
+      lastChargeOn: entry.lastChargeOn,
+      nextDueKey: nextDueFrom(entry.lastChargeOn, initialCadence, todayKey),
+    },
+    todayKey,
   );
-  const [nextTouched, setNextTouched] = useState(false);
-  const cents = parseAmountEntryCents(amount);
-  const dirty =
-    name !== entry.merchant ||
-    cadence !== initialCadence ||
-    amount !== initialAmount ||
-    nextTouched;
-
-  function changeCadence(value: Cadence) {
-    setCadence(value);
-    if (!nextTouched) setNext(nextDueFrom(entry.lastChargeOn, value, todayKey));
-  }
 
   return (
     <form
       className="mt-2 flex flex-col gap-2 border-t border-rule pt-2"
       onSubmit={(event) => {
         event.preventDefault();
-        if (name.trim() === "") return;
+        if (bill.name.trim() === "") return;
         onError("");
         startTransition(async () => {
           if (entry.lastTransactionId === null) {
             onError("This merchant has no charge to track from.");
             return;
           }
-          const result = await trackTransactionAsBillAction(entry.lastTransactionId, {
-            name: name.trim(),
-            cadence,
-            expectedCents: cents !== null && cents > 0 ? cents : null,
-            anchorDate: next || null,
-            scheduled: true,
-          });
+          const result = await trackTransactionAsBillAction(
+            entry.lastTransactionId,
+            bill.edit(true),
+          );
           if (!result.ok) {
             onError(result.error);
             return;
           }
-          onSaved(`Tracking ${name.trim()} as a bill.`);
+          onSaved(`Tracking ${bill.name.trim()} as a bill.`);
         });
       }}
     >
-      <DrawerLeaveGuard dirty={dirty} />
+      <DrawerLeaveGuard dirty={bill.dirty} />
       <label className="flex flex-col gap-1 text-[0.75rem] text-ink-muted">
         Call it
         <input
           type="text"
-          value={name}
+          value={bill.name}
           autoFocus
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => bill.setName(event.target.value)}
           aria-label="Name for this bill"
           className={FIELD}
         />
@@ -278,8 +268,8 @@ function ReviewForm({
         <label className="flex flex-1 flex-col gap-1 text-[0.75rem] text-ink-muted">
           Charged
           <CadenceSelect
-            value={cadence}
-            onChange={changeCadence}
+            value={bill.cadence}
+            onChange={bill.changeCadence}
             disabled={pending}
             ariaLabel="Cadence for this bill"
             className={FIELD}
@@ -290,8 +280,8 @@ function ReviewForm({
           <input
             type="text"
             inputMode="decimal"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
+            value={bill.amount}
+            onChange={(event) => bill.setAmount(event.target.value)}
             aria-label="Amount for this bill"
             className={`${FIELD} w-24 text-right`}
           />
@@ -301,27 +291,18 @@ function ReviewForm({
         Next charge
         <input
           type="date"
-          value={next}
-          onChange={(event) => {
-            setNextTouched(true);
-            setNext(event.target.value);
-          }}
+          value={bill.next}
+          onChange={(event) => bill.changeNext(event.target.value)}
           aria-label="Next charge for this bill"
           className={FIELD}
         />
       </label>
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className={BUTTON}>
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={pending || name.trim() === ""}
-          className="min-h-tap rounded border border-select-edge bg-select px-3 text-[0.8125rem] font-medium text-ink disabled:opacity-50 md:min-h-0 md:py-1"
-        >
-          {pending ? "Saving…" : "Track as bill"}
-        </button>
-      </div>
+      <FormActions
+        submitLabel="Track as bill"
+        pending={pending}
+        disabled={bill.name.trim() === ""}
+        onCancel={onCancel}
+      />
     </form>
   );
 }

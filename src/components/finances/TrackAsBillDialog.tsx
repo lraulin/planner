@@ -8,10 +8,11 @@ import {
   loadTrackAsBillDraftAction,
   trackTransactionAsBillAction,
 } from "@/app/(shell)/finances/actions";
-import { formatUsd, parseAmountEntryCents } from "@/lib/finances/money";
-import { nextDueFrom, type Cadence } from "@/lib/finances/recurringBills";
+import { formatUsd } from "@/lib/finances/money";
 import type { ClaimedPayee, TrackAsBillDraft } from "@/lib/finances/registerBillDraft";
 import { CadenceSelect } from "./CadenceSelect";
+import { useBillDraft } from "./useBillDraft";
+import { FormActions } from "@/components/detail/FormActions";
 
 const FIELD =
   "min-h-tap rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:py-1 md:text-[0.8125rem]";
@@ -84,18 +85,8 @@ function TrackAsBillForm({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState(seed.name);
-  const [cadence, setCadence] = useState<Cadence>(seed.cadence);
-  const [amount, setAmount] = useState((seed.expectedCents / 100).toFixed(2));
-  const [next, setNext] = useState(seed.nextDueKey);
-  const [nextTouched, setNextTouched] = useState(false);
+  const bill = useBillDraft(seed, todayKey);
   const [scheduled, setScheduled] = useState(true);
-  const cents = parseAmountEntryCents(amount);
-
-  function changeCadence(value: Cadence) {
-    setCadence(value);
-    if (!nextTouched) setNext(nextDueFrom(seed.lastChargeOn, value, todayKey));
-  }
 
   return (
     <ModalShell open onClose={onClose} labelledBy={titleId} width="max-w-md">
@@ -103,16 +94,13 @@ function TrackAsBillForm({
         className="flex flex-col gap-3 p-5"
         onSubmit={(event) => {
           event.preventDefault();
-          if (name.trim() === "") return;
+          if (bill.name.trim() === "") return;
           setError(null);
           startTransition(async () => {
-            const result = await trackTransactionAsBillAction(seed.transactionId, {
-              name: name.trim(),
-              cadence,
-              expectedCents: cents !== null && cents > 0 ? cents : null,
-              anchorDate: scheduled ? next || null : null,
-              scheduled,
-            });
+            const result = await trackTransactionAsBillAction(
+              seed.transactionId,
+              bill.edit(scheduled),
+            );
             if (!result.ok || !result.data) {
               setError(
                 result.ok
@@ -124,7 +112,7 @@ function TrackAsBillForm({
             onSaved({
               payeeId: result.data.payeeId,
               merchant: seed.merchant,
-              name: name.trim(),
+              name: bill.name.trim(),
             });
             router.refresh();
           });
@@ -145,9 +133,9 @@ function TrackAsBillForm({
           Call it
           <input
             type="text"
-            value={name}
+            value={bill.name}
             autoFocus
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => bill.setName(event.target.value)}
             aria-label="Name for this bill"
             className={FIELD}
           />
@@ -155,8 +143,8 @@ function TrackAsBillForm({
         <label className="flex flex-col gap-1 text-[0.75rem] text-ink-muted">
           Charged
           <CadenceSelect
-            value={cadence}
-            onChange={changeCadence}
+            value={bill.cadence}
+            onChange={bill.changeCadence}
             disabled={pending}
             ariaLabel="Cadence for this bill"
             className={FIELD}
@@ -167,8 +155,8 @@ function TrackAsBillForm({
           <input
             type="text"
             inputMode="decimal"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
+            value={bill.amount}
+            onChange={(event) => bill.setAmount(event.target.value)}
             aria-label="Amount for this bill"
             className={`${FIELD} w-28 text-right`}
           />
@@ -187,11 +175,8 @@ function TrackAsBillForm({
             Next charge
             <input
               type="date"
-              value={next}
-              onChange={(event) => {
-                setNextTouched(true);
-                setNext(event.target.value);
-              }}
+              value={bill.next}
+              onChange={(event) => bill.changeNext(event.target.value)}
               aria-label="Next charge for this bill"
               className={FIELD}
             />
@@ -200,22 +185,13 @@ function TrackAsBillForm({
 
         {error && <p className="text-[0.75rem] text-priority-a">{error}</p>}
 
-        <div className="mt-1 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink hover:border-rule-strong hover:bg-surface-raised md:min-h-0 md:py-1.5"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={pending || name.trim() === ""}
-            className="min-h-tap rounded border border-select-edge bg-select px-3 text-[0.8125rem] font-medium text-ink disabled:opacity-50 md:min-h-0 md:py-1.5"
-          >
-            {pending ? "Saving…" : "Track as bill"}
-          </button>
-        </div>
+        <FormActions
+          submitLabel="Track as bill"
+          pending={pending}
+          disabled={bill.name.trim() === ""}
+          onCancel={onClose}
+          className="mt-1"
+        />
       </form>
     </ModalShell>
   );
