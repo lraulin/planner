@@ -10,7 +10,7 @@ import {
 } from "@/db/schema";
 import { ownedRow, requireOwnedRow } from "@/lib/db/owned";
 import type { NodeItemKind } from "@/db/schema";
-import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import { assertContactOwned } from "@/lib/contacts/ownership";
 import {
   clearConflictingDescendantPlans,
@@ -21,7 +21,7 @@ import {
   reopenSettledAncestors,
 } from "@/lib/tree/stateTransitions";
 import { assignPriorityAmongSiblings } from "@/lib/tree/priorityWrites";
-import { moveNode } from "@/lib/tree/nodeMoves";
+import { applyCategoryToResultAreaSubtree, moveNode } from "@/lib/tree/nodeMoves";
 import { owningResultAreaIdFromChain } from "@/lib/tree/owningResultArea";
 import { loadNodeChain } from "@/lib/tree/path";
 import { parentIdForResultAreaChange } from "./resultAreaParent";
@@ -40,7 +40,6 @@ import { between } from "@/lib/tree/sortKey";
 import { RESULT_AREA_STATE_REFUSAL } from "@/lib/tree/lifecycle";
 import { fetchPageTitle, shouldFetchAttachmentTitle } from "@/lib/url/pageTitle";
 import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
-import { subtreeIds } from "@/lib/tree/nodeRows";
 import { verticalPosition } from "@/lib/tree/siblingOrder";
 
 /**
@@ -932,29 +931,7 @@ async function applyResultAreaCategory(
 
   // Cascade so nested areas do not keep a stale category that would split Projects
   // grouping or the outline's By category view.
-  const subtree = await subtreeIds(tx, userId, nodeId);
-  const raIds = (
-    await tx
-      .select({ id: nodes.id })
-      .from(nodes)
-      .where(
-        and(
-          eq(nodes.userId, userId),
-          eq(nodes.type, "result_area"),
-          inArray(nodes.id, subtree),
-        ),
-      )
-  ).map((row) => row.id);
-
-  for (const id of raIds) {
-    await tx
-      .insert(resultAreaDetails)
-      .values({ nodeId: id, category })
-      .onConflictDoUpdate({
-        target: resultAreaDetails.nodeId,
-        set: { category },
-      });
-  }
+  await applyCategoryToResultAreaSubtree(tx, userId, nodeId, category);
 }
 
 /** Sort keys already in one list, in order. */

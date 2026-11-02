@@ -114,7 +114,7 @@ export async function moveNode(params: {
  * Writes `category` on `rootId` (must be a result area) and every result area beneath it.
  * Other node types do not carry a category column.
  */
-async function applyCategoryToResultAreaSubtree(
+export async function applyCategoryToResultAreaSubtree(
   tx: DbExecutor,
   userId: string,
   rootId: string,
