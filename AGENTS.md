@@ -259,8 +259,8 @@ starts that cluster (`pg_ctlcluster 17 main start`), applies migrations, and run
 `npm run db:seed` only when `users` is empty. Do not re-seed a database someone is using:
 seed deletes that account's outline, appointments, and time charts.
 
-Node is 24, from `.nvmrc`. The image also puts Node 22 at `/exec-daemon/node`, and that
-binary wins on `PATH` because nvm will not move past it. Login shells resolve Node 24 from
+Node is 26, from `.nvmrc`. The image also puts Node 22 at `/exec-daemon/node`, and that
+binary wins on `PATH` because nvm will not move past it. Login shells resolve Node 26 from
 `~/.local/bin`, which `~/.profile` prepends. In a non-login shell, run
 `export PATH="$HOME/.local/bin:$PATH"` before `npm`.
 
