@@ -348,24 +348,32 @@ export function BudgetView({
     />
   );
 
+  // On a phone the header lives inside the page scroller and scrolls away with it; fixed
+  // above the scroller it left the envelopes a one-row strip (`BudgetHeader`).
+  const header = (
+    <BudgetHeader
+      data={data}
+      anchors={anchors}
+      month={month}
+      paydayKey={payday.dateKey}
+      stillNeeded={assign.stillNeededThisMonth}
+      canFixThis={canFixThis}
+      onAction={canFixThis ? assign.openFixThis : assign.openAssign}
+      showHidden={tables.showHidden}
+      onShowHidden={tables.setShowHidden}
+      pending={pending}
+      run={run}
+    />
+  );
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <BudgetHeader
-        data={data}
-        anchors={anchors}
-        month={month}
-        paydayKey={payday.dateKey}
-        stillNeeded={assign.stillNeededThisMonth}
-        canFixThis={canFixThis}
-        onAction={canFixThis ? assign.openFixThis : assign.openAssign}
-        showHidden={tables.showHidden}
-        onShowHidden={tables.setShowHidden}
-        pending={pending}
-        run={run}
-      />
+      {compact ? null : header}
 
       <div className="flex min-h-0 min-w-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
+          {compact ? header : null}
+
           <IncomeSection
             rows={sections.income}
             month={data.month}

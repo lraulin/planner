@@ -11,6 +11,7 @@ import {
   monthKeyOf,
   monthKeyRange,
   monthLabel,
+  monthShortLabel,
   monthParamOf,
   nextMonthKey,
   prevMonthKey,
@@ -67,6 +68,8 @@ describe("month keys", () => {
     expect(monthKeyOf("2026-08-31")).toBe("2026-08-01");
     expect(monthLabel("2026-08-01")).toBe("August 2026");
     expect(monthLabel("2026-12-01")).toBe("December 2026");
+    expect(monthShortLabel("2026-09-01")).toBe("Sep 2026");
+    expect(monthShortLabel("2027-01-01")).toBe("Jan 2027");
   });
 
   it("knows the last day of the month, leap years included", () => {

@@ -134,6 +134,11 @@ export function monthLabel(month: MonthKey): string {
   return `${monthName(month)} ${month.slice(0, 4)}`;
 }
 
+/** `Aug 2026` — the phone's sticky month bar, where the full name crowds out the figure. */
+export function monthShortLabel(month: MonthKey): string {
+  return `${monthName(month).slice(0, 3)} ${month.slice(0, 4)}`;
+}
+
 /**
  * What Ready to Assign *means* at this figure, in words.
  *
