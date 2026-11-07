@@ -179,6 +179,9 @@ function moneyColumns<T extends BudgetRow>(): ColumnDef<BudgetColumnCtx, T>[] {
       render: assignedCell,
       sortValue: (row) => row.node.assignedCents,
       compactText: (row) => formatUsd(row.node.assignedCents),
+      // The phone's meta line, labelled: two bare amounts side by side ("$30.83 · $30.83")
+      // gave no way to tell Assigned from Available. `compactText` stays bare for export.
+      compactTextWithCtx: (row) => `Assigned ${formatUsd(row.node.assignedCents)}`,
     },
     {
       id: "activity",
@@ -215,6 +218,7 @@ function moneyColumns<T extends BudgetRow>(): ColumnDef<BudgetColumnCtx, T>[] {
       ),
       sortValue: (row) => row.node.balanceCents,
       compactText: (row) => formatUsd(row.node.balanceCents),
+      compactTextWithCtx: (row) => `Available ${formatUsd(row.node.balanceCents)}`,
     },
   ];
 }
@@ -291,12 +295,14 @@ function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnC
               <FundingBar indicator={indicator} />
             </div>
           ) : null}
-          <ActivityAmountLink
-            categoryId={row.node.id}
-            month={ctx.month}
-            cents={row.node.activityCents}
-            className="self-start md:hidden"
-          />
+          <span className="flex items-center gap-1 self-start text-[0.75rem] text-ink-muted md:hidden">
+            Activity
+            <ActivityAmountLink
+              categoryId={row.node.id}
+              month={ctx.month}
+              cents={row.node.activityCents}
+            />
+          </span>
         </div>
       );
     },
