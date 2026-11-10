@@ -1,4 +1,5 @@
 "use client";
+import { useIsClient } from "@/components/shell/useIsClient";
 import { useToast } from "@/components/shell/ToastProvider";
 import { NavLink } from "@/components/shell/NavLink";
 
@@ -9,7 +10,6 @@ import {
   useId,
   useMemo,
   useState,
-  useSyncExternalStore,
   useTransition,
 } from "react";
 import { formatUsd } from "@/lib/finances/money";
@@ -122,19 +122,6 @@ function viewDefaults(
 
 function transactionRowLabel(row: { node: RegisterTransactionRow }): string {
   return row.node.description || "Transaction";
-}
-
-function subscribeNever() {
-  return () => {};
-}
-
-/** False during SSR and hydration; true after the client has painted the shell. */
-function useIsClient() {
-  return useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
 }
 
 /** Balance strip above the register — statement-anchored when a snapshot exists. */

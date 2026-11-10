@@ -1,13 +1,7 @@
 "use client";
 
-import {
-  useCallback,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  useTransition,
-  type ReactNode,
-} from "react";
+import { useIsClient } from "@/components/shell/useIsClient";
+import { useCallback, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AMAZON_GROUP_BY_VALUES } from "@/lib/amazon/grouping";
 import { formatUsd } from "@/lib/finances/money";
@@ -63,19 +57,6 @@ function viewDefaults(viewId: string, collapsedYears: string[]): GridDefaults {
     groupBy: ["year", "month"],
     collapsedGroups: collapsedYears,
   };
-}
-
-function subscribeNever() {
-  return () => {};
-}
-
-/** False during SSR and hydration; true after the client has painted the shell. */
-function useIsClient() {
-  return useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
 }
 
 export function AmazonOrdersView({

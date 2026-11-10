@@ -21,6 +21,7 @@ import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
+import { useIsClient } from "@/components/shell/useIsClient";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { PayeeDrawer } from "./PayeeDrawer";
 import { PayeeMergeDialog } from "./PayeeMergeDialog";
@@ -56,6 +57,7 @@ export function PayeesView({
   catalog: BudgetEnvelopeCatalog;
 }) {
   const compact = useIsCompact();
+  const isClient = useIsClient();
   const [rows, setRows] = useState(initialPayees);
   const [seenServerRows, setSeenServerRows] = useState(initialPayees);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -286,7 +288,8 @@ export function PayeesView({
       />
 
       <DataGrid<PayeeColumnCtx, PayeeRow>
-        rows={gridRows}
+        rows={isClient ? gridRows : []}
+        virtualize={isClient}
         columns={gridState.columns}
         allColumns={payeeColumns}
         columnCtx={{ compact, pending, onRename: rename }}
@@ -306,18 +309,22 @@ export function PayeesView({
         onCountsChange={setCounts}
         onNavigableIdsChange={onIdsChange}
         empty={
-          <div className="mx-auto w-full max-w-2xl p-6 text-center">
-            <p className="mb-4 text-[0.9375rem] text-ink-muted">
-              No payees yet. Build them from the merchants already in your register.
-            </p>
-            <button
-              type="button"
-              className="min-h-tap rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
-              onClick={rebuild}
-            >
-              Rebuild from register
-            </button>
-          </div>
+          !isClient ? (
+            <div className="min-h-0 flex-1" />
+          ) : (
+            <div className="mx-auto w-full max-w-2xl p-6 text-center">
+              <p className="mb-4 text-[0.9375rem] text-ink-muted">
+                No payees yet. Build them from the merchants already in your register.
+              </p>
+              <button
+                type="button"
+                className="min-h-tap rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
+                onClick={rebuild}
+              >
+                Rebuild from register
+              </button>
+            </div>
+          )
         }
       />
 
