@@ -114,6 +114,8 @@ export function AccountsView({
    */
   operations: {
     pending: readonly PendingRow[];
+    /** Holds the bank stopped vouching for with nothing posted in their place. */
+    unlistedHolds: readonly { accountId: string; count: number }[];
     connections: readonly BankConnectionRow[];
   };
   links: BankLinkRow[];
@@ -419,6 +421,16 @@ export function AccountsView({
             </NavLink>
           </p>
         ))}
+      {operations.unlistedHolds.map(({ accountId, count }) => (
+        <p key={accountId} className="px-3 py-1 text-xs text-priority-a">
+          {rows.find((row) => row.id === accountId)?.name}: {count} unlisted{" "}
+          {count === 1 ? "hold" : "holds"} with no posted charge. Check and delete in
+          the{" "}
+          <NavLink className="underline" href="/finances/register">
+            Register
+          </NavLink>
+        </p>
+      ))}
       <GridToolbar
         grid={gridState}
         gridLabel="Accounts"

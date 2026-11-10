@@ -29,6 +29,12 @@ export type WorkingPendingSelection = {
   rows: PendingRow[];
   /** The other source's holds, kept in the Register but not Budget money. */
   supersededTransactionIds: string[];
+  /**
+   * Holds kept after their source stopped vouching for them and nothing posted in their
+   * place (`unlisted_at`), counted per account. Still money until someone deletes them, so
+   * this is the count of rows waiting on a person.
+   */
+  unlistedHolds: { accountId: string; count: number }[];
 };
 
 /**
@@ -74,6 +80,7 @@ type WorkingPendingCandidate = {
   accountId: string;
   amountCents: number;
   source: string;
+  unlisted: boolean;
 };
 
 /** Every pending row the rule could count, before it chooses between the sources. */
@@ -89,6 +96,7 @@ async function readPendingCandidates(
       accountId: financeTransactions.accountId,
       amount: financeTransactions.amount,
       source: financeTransactions.externalSource,
+      unlistedAt: financeTransactions.unlistedAt,
     })
     .from(financeTransactions)
     .where(
@@ -109,6 +117,7 @@ async function readPendingCandidates(
     accountId: row.accountId,
     amountCents: numericStringToCents(row.amount) ?? 0,
     source: row.source ?? "",
+    unlisted: row.unlistedAt !== null,
   }));
 }
 
@@ -118,6 +127,14 @@ function workingPendingSelection(
 ): WorkingPendingSelection {
   const selected = selectWorkingPending(candidates, accounts);
   const selectedIds = new Set(selected.map((row) => row.id));
+  const unlistedByAccount = new Map<string, number>();
+  for (const row of candidates) {
+    if (!row.unlisted) continue;
+    unlistedByAccount.set(
+      row.accountId,
+      (unlistedByAccount.get(row.accountId) ?? 0) + 1,
+    );
+  }
 
   return {
     rows: selected.map((row) => ({
@@ -127,5 +144,9 @@ function workingPendingSelection(
     supersededTransactionIds: candidates
       .filter((row) => !selectedIds.has(row.id))
       .map((row) => row.id),
+    unlistedHolds: [...unlistedByAccount].map(([accountId, count]) => ({
+      accountId,
+      count,
+    })),
   };
 }

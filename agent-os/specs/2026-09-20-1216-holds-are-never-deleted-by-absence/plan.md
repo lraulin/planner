@@ -155,7 +155,8 @@ resolve path. Listed below as a follow-up.
 - A balance-identity guard: refuse or warn when the projected register balance disagrees with the
   capture's own `currentBalance`.
 - Whether the alias table in `descriptionsOverlap` should be replaced by something structural.
-- An Accounts-page count of unlisted holds (change 6).
+- ~~An Accounts-page count of unlisted holds (change 6).~~ Built 2026-11-10: Accounts names each
+  account with unlisted holds and how many, linking to the Register.
 
 ## Changes from original plan
 

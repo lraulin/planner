@@ -38,7 +38,11 @@ export default async function FinancesAccountsPage() {
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
         <AccountsView
           initialAccounts={accounts}
-          operations={{ pending: pending.rows, connections }}
+          operations={{
+            pending: pending.rows,
+            unlistedHolds: pending.unlistedHolds,
+            connections,
+          }}
           links={links}
           todayKey={localDateKey(new Date())}
           mismatch={mismatch}

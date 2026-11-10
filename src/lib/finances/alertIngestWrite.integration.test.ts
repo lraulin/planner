@@ -17,6 +17,7 @@ import {
 } from "./alertIngestWrite";
 import { retireAlertHolds } from "./alertHolds";
 import { seedBudget } from "./budget/mutations";
+import { loadAccountsWithPending } from "./workingPendingQuery";
 
 const describeDb = await describeWithDatabase("alert ingest");
 
@@ -427,5 +428,13 @@ describeDb("alert holds", () => {
     await retireAlertHolds(db, userId, accountId, "2026-11-01");
     const [stale] = await rowsOf(userId);
     expect(stale.unlistedAt).not.toBeNull();
+
+    // The Accounts page counts it for its owner and for nobody else.
+    const otherId = await makeUser();
+    await makeCard(otherId);
+    expect((await loadAccountsWithPending(userId)).pending.unlistedHolds).toEqual([
+      { accountId, count: 1 },
+    ]);
+    expect((await loadAccountsWithPending(otherId)).pending.unlistedHolds).toEqual([]);
   });
 });
