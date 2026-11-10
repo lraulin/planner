@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { loadCarryingCost, loadInsightsRows } from "@/lib/finances/dashboardQueries";
+import { packInsightsRows } from "@/lib/finances/insightsWire";
 import { listStatements } from "@/lib/finances/queries";
 import { loadBudget } from "@/lib/finances/budget/queries";
 import { InsightsView } from "@/components/finances/insights/InsightsView";
@@ -16,7 +17,7 @@ export default async function FinancesInsightsPage() {
   return (
     <Suspense fallback={<div className="min-h-0 flex-1" />}>
       <InsightsView
-        rows={rows}
+        packedRows={packInsightsRows(rows)}
         data={data}
         carryingCost={carryingCost}
         statements={statements}

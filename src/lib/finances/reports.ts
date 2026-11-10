@@ -27,6 +27,20 @@ export type EnvelopeReportRow = AnalyticsRow & {
   accountOffBudget: boolean;
   contributesToBudget: boolean;
 };
+/** Each payee the rows name, once, for the report's payee filter. The last row's name wins. */
+export function reportPayees(
+  rows: readonly EnvelopeReportRow[],
+): { id: string; name: string }[] {
+  const byId = new Map<string, { id: string; name: string }>();
+  for (const row of rows) {
+    if (!row.payeeId) continue;
+    byId.set(row.payeeId, {
+      id: row.payeeId,
+      name: row.payeeName ?? row.description,
+    });
+  }
+  return [...byId.values()];
+}
 export type SpendingScope = "living" | "savings" | "all";
 export type ReportFilters = {
   accountIds: string[];

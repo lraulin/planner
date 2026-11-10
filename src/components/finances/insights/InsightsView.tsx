@@ -20,14 +20,15 @@ import {
   completedMonthAverages,
   envelopeReportRows,
   reportMonthlySeries,
+  reportPayees,
   reportRange,
   scopeCategoryIds,
   spendingContributions,
   regularIncomeContributions,
-  type EnvelopeReportRow,
   type ReportEnvelope,
 } from "@/lib/finances/reports";
 import { rowsInRange, type DateRange } from "@/lib/finances/analytics";
+import { unpackInsightsRows, type InsightsRowsWire } from "@/lib/finances/insightsWire";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
 import { budgetGroupSankey } from "@/lib/finances/sankeyFlow";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
@@ -107,12 +108,13 @@ const reportColumns: ColumnDef<ReportCtx, ReportEnvelope>[] = [
 const label =
   "min-h-tap rounded border border-rule bg-surface px-2 py-1 text-base md:min-h-0 md:text-xs";
 export function InsightsView({
-  rows,
+  packedRows,
   data,
   carryingCost,
   statements,
 }: {
-  rows: readonly EnvelopeReportRow[];
+  /** Every classified row, packed for the trip (`insightsWire.ts`). */
+  packedRows: InsightsRowsWire;
   data: BudgetData;
   carryingCost: CarryingCost;
   statements: StatementListRow[];
@@ -120,19 +122,9 @@ export function InsightsView({
   const router = useRouter();
   const titleId = useId();
   const [detailId, setDetailId] = useState<string | null>(null);
-  const payees = useMemo(
-    () => [
-      ...new Map(
-        rows
-          .filter((row) => row.payeeId)
-          .map((row) => [
-            row.payeeId as string,
-            { id: row.payeeId as string, name: row.payeeName ?? row.description },
-          ]),
-      ).values(),
-    ],
-    [rows],
-  );
+  // Memoised for identity, not speed: every analysis below is keyed on `rows`.
+  const rows = useMemo(() => unpackInsightsRows(packedRows), [packedRows]);
+  const payees = useMemo(() => reportPayees(rows), [rows]);
   const codec = useMemo(
     () => ({
       parse: (value: unknown) => parseReportSettings(value, data.categories, payees),
