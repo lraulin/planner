@@ -182,7 +182,8 @@ describe("resolveLostHold", () => {
 
   describe("successorsOnly", () => {
     // Lee's Capital One •••3448, 2026-10-04: three alerts each retired onto an older,
-    // unrelated purchase that merely sat inside the band.
+    // unrelated purchase. Those sat inside the amount band, which no longer qualifies on its
+    // own; the date rule is still what guards an older row at the very same amount.
     const alert = row({
       id: "alert",
       transactionDate: "2026-10-04",
@@ -194,7 +195,7 @@ describe("resolveLostHold", () => {
       id: "tequila",
       transactionDate: "2026-09-30",
       postedDate: "2026-09-30",
-      amountCents: -4987,
+      amountCents: -5129,
       description: "TEQUILA GRILL CANTIN",
     });
 
@@ -291,12 +292,89 @@ describe("resolveLostHold", () => {
     expect(resolveLostHold(hold, [posted])).toEqual({ outcome: "none" });
   });
 
-  it("carries to the one qualifying row even when its description does not overlap", () => {
+  it("carries to the one exact-amount row even when its description does not overlap", () => {
     // D4: a page's own display name for a hold routinely shares nothing with a feed's
     // fuller descriptor (Amazon.com vs AMAZON MKTPL*537NK9DZ2). Description ranks
     // candidates; it never gates the single one that qualifies on amount and date.
-    const posted = row({ id: "posted", amountCents: -2100, description: "Pizza Hut" });
+    const posted = row({ id: "posted", amountCents: -2000, description: "Pizza Hut" });
     expect(resolveLostHold(hold, [posted])).toEqual({
+      outcome: "carry",
+      postedId: "posted",
+    });
+  });
+
+  it("does not take a near amount from a different merchant", () => {
+    // Lee's Capital One •••3448, 2026-10-23: both holds went the moment the next alert
+    // arrived, each onto the one unrelated row inside the 7.5% band.
+    const youtube = row({
+      id: "youtube",
+      transactionDate: "2026-10-21",
+      postedDate: null,
+      amountCents: -1695,
+      description: "YouTube",
+    });
+    const grok = row({
+      id: "grok",
+      transactionDate: "2026-10-21",
+      postedDate: "2026-10-21",
+      amountCents: -1590,
+      description: "GROK XAI",
+    });
+    expect(resolveLostHold(youtube, [grok], { successorsOnly: true })).toEqual({
+      outcome: "none",
+    });
+  });
+
+  it("prefers the exact-amount row over the same merchant's near one", () => {
+    const chewy = row({
+      id: "chewy",
+      transactionDate: "2026-10-15",
+      postedDate: null,
+      amountCents: -5129,
+      description: "Chewy.com",
+    });
+    const own = row({
+      id: "own",
+      transactionDate: "2026-10-16",
+      postedDate: "2026-10-16",
+      amountCents: -5129,
+      description: "CHEWY.COM",
+    });
+    const other = row({
+      id: "other",
+      transactionDate: "2026-10-16",
+      postedDate: "2026-10-16",
+      amountCents: -5320,
+      description: "CHEWY.COM",
+    });
+    expect(resolveLostHold(chewy, [other, own])).toEqual({
+      outcome: "carry",
+      postedId: "own",
+    });
+  });
+
+  it("with exactOnly, leaves a near-amount row of the same merchant alone", () => {
+    const posted = row({
+      id: "posted",
+      amountCents: -2100,
+      description: "DOMINOS 1234",
+    });
+    expect(resolveLostHold(hold, [posted], { exactOnly: true })).toEqual({
+      outcome: "none",
+    });
+    expect(
+      resolveLostHold(hold, [{ ...posted, amountCents: -2000 }], { exactOnly: true }),
+    ).toEqual({ outcome: "carry", postedId: "posted" });
+  });
+
+  it("takes a near amount across a processor star when the brand word is shared", () => {
+    const amazon = row({ id: "hold", amountCents: -2000, description: "Amazon.com" });
+    const posted = row({
+      id: "posted",
+      amountCents: -2050,
+      description: "AMAZON MKTPL*537NK9DZ2",
+    });
+    expect(resolveLostHold(amazon, [posted])).toEqual({
       outcome: "carry",
       postedId: "posted",
     });

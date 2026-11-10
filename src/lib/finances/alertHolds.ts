@@ -31,12 +31,26 @@ export type AlertHoldResult = {
 };
 
 /**
+ * How old an alert hold must be before a row at a merely *near* amount may retire it.
+ *
+ * A bank page drops a hold when it resolves, and that absence is why a near-amount row can be
+ * read as its successor at once. An alert hold is never seen to leave anything, and this
+ * pass runs on every sync and every new alert — so for its first days the hold's own row
+ * simply has not arrived, and whatever near-amount row is in the register is some other
+ * purchase. Lee's holds post within three days (Friday's on Monday); the sync that brings
+ * the row can be a day behind that.
+ */
+export const NEAR_AMOUNT_WAIT_DAYS = 4;
+
+/**
  * Retire this account's alert holds onto the stored rows that succeeded them.
  *
  * First the ordinary pairing (exact amount, near date, overlapping wording). What it leaves
- * gets the lost-hold rule — an amount band or a tip, seven days — because an alert is an
- * authorization and posts at whatever the merchant finally charged. A row the first pass
- * already used is not offered again. A hold still unpaired a week on is kept and flagged.
+ * gets the lost-hold rule: an exact amount under any name at once, and — once the hold is
+ * `NEAR_AMOUNT_WAIT_DAYS` old — the same merchant at a near amount or with a tip, because an
+ * alert is an authorization and can post at whatever the merchant finally charged. A row the
+ * first pass already used is not offered again. A hold still unpaired a week on is kept and
+ * flagged.
  */
 export async function retireAlertHolds(
   executor: FinanceExecutor,
@@ -127,6 +141,7 @@ export async function retireAlertHolds(
     ]),
   );
   const flagBefore = shiftDateKey(todayKey, -LOST_HOLD_TOLERANCE_DAYS);
+  const nearAmountBefore = shiftDateKey(todayKey, -NEAR_AMOUNT_WAIT_DAYS);
 
   // Oldest hold first, so the same input always pairs the same way.
   for (const hold of [...holds].sort(
@@ -153,7 +168,10 @@ export async function retireAlertHolds(
             amountCents: numericStringToCents(hold.amount) ?? 0,
           },
           candidates,
-          { successorsOnly: true },
+          {
+            successorsOnly: true,
+            exactOnly: hold.transactionDate > nearAmountBefore,
+          },
         );
 
     if (resolution.outcome === "carry") {

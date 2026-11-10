@@ -27,6 +27,7 @@ import {
   closestPairs,
   dateDistance,
   descriptionsOverlap,
+  sharesBrandWord,
   DATE_TOLERANCE_DAYS,
 } from "./liveFeedMatch";
 import { amountMatches } from "./amountMatch";
@@ -122,8 +123,8 @@ export const LOST_HOLD_TIP_CEILING = 0.5;
 
 /**
  * Whether `posted` is `hold` with a tip added: same direction, larger, and not by more than
- * `LOST_HOLD_TIP_CEILING`. Only ever trusted together with a description overlap — a larger
- * amount alone says nothing about which merchant it came from.
+ * `LOST_HOLD_TIP_CEILING`. Only ever trusted together with `sameMerchant` — a larger amount
+ * alone says nothing about which merchant it came from.
  */
 function tippedFrom(postedCents: number, holdCents: number): boolean {
   if (Math.sign(postedCents) !== Math.sign(holdCents)) return false;
@@ -137,53 +138,83 @@ export type LostHoldResolution =
   | { outcome: "ambiguous"; candidateIds: string[] };
 
 /**
- * Where an omitted hold's envelope and notes should land before the hold is removed.
- *
- * Bank-page pending sets omit a hold once it clears, one way or another: it posted, or it
- * never did (a duplicate the page dropped). Only the first case has anywhere to carry state
- * to. A posted row qualifies as a candidate successor when it is dated within
- * `LOST_HOLD_TOLERANCE_DAYS` and either its amount is within Actual's 7.5% band, or it names
- * the same merchant and is the hold with a tip added (`tippedFrom`). The tip case needs the
- * description because a bigger amount, unlike a near-equal one, is not itself evidence.
- *
- * **Description ranks candidates; it does not gate them**
- * (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D4). A page's own display name
- * for a hold (`Amazon.com`) routinely shares nothing with a feed's fuller descriptor
- * (`AMAZON MKTPL*537NK9DZ2`) — requiring overlap lost every one of those retirements and
- * left the hold, and the duplicate it caused, in the register forever. So: exactly one
- * qualifying row retires the hold outright, whatever its description. Several qualifying
- * rows retire it only when exactly one of them also overlaps the hold's description — a
- * clear winner among plausible successors. Several with no clear winner keep the hold
- * rather than guess which one it became; the caller warns instead of removing it.
- *
- * `successorsOnly` drops candidates dated before the hold (`couldSucceed`). It is for a hold
- * whose day is the purchase day, which is every alert hold, and it matters most when the
- * alert has just landed: the only posted rows then in the register are older purchases.
+ * Whether two descriptions name one merchant, for a pair whose amounts differ. Looser than
+ * `descriptionsOverlap` alone because a display name and a feed descriptor for the same
+ * storefront often part ways at a `*` (`Amazon.com` / `AMAZON MKTPL*537NK9DZ2`).
  */
-export function resolveLostHold(
+function sameMerchant(a: string, b: string): boolean {
+  return descriptionsOverlap(a, b) || sharesBrandWord(a, b);
+}
+
+/** One candidate retires the hold; several do only when the description singles one out. */
+function pickSuccessor(
   hold: PairableRow,
-  postedCandidates: readonly PairableRow[],
-  options: { successorsOnly?: boolean } = {},
+  candidates: readonly PairableRow[],
 ): LostHoldResolution {
-  const qualifying = postedCandidates.filter(
-    (candidate) =>
-      (!options.successorsOnly || couldSucceed(hold, candidate)) &&
-      dateDistance(hold, candidate) <= LOST_HOLD_TOLERANCE_DAYS &&
-      (amountMatches(candidate.amountCents, hold.amountCents) ||
-        (tippedFrom(candidate.amountCents, hold.amountCents) &&
-          descriptionsOverlap(hold.description, candidate.description))),
-  );
-
-  if (qualifying.length === 0) return { outcome: "none" };
-  if (qualifying.length === 1) {
-    return { outcome: "carry", postedId: qualifying[0].id };
-  }
-
-  const overlapping = qualifying.filter((candidate) =>
+  if (candidates.length === 0) return { outcome: "none" };
+  if (candidates.length === 1) return { outcome: "carry", postedId: candidates[0].id };
+  const overlapping = candidates.filter((candidate) =>
     descriptionsOverlap(hold.description, candidate.description),
   );
   if (overlapping.length === 1) {
     return { outcome: "carry", postedId: overlapping[0].id };
   }
-  return { outcome: "ambiguous", candidateIds: qualifying.map((row) => row.id) };
+  return { outcome: "ambiguous", candidateIds: candidates.map((row) => row.id) };
+}
+
+/**
+ * Where an omitted hold's envelope and notes should land before the hold is removed.
+ *
+ * A posted row dated within `LOST_HOLD_TOLERANCE_DAYS` is a candidate successor in one of
+ * two ways, tried in order:
+ *
+ * 1. **Its amount is the hold's, to the cent.** Description then only ranks
+ *    (`agent-os/specs/2026-09-14-1004-ledger-ready-to-assign/` D4): a display name
+ *    (`Amazon.com`) routinely shares nothing with a feed descriptor
+ *    (`AMAZON MKTPL*537NK9DZ2`), and requiring overlap lost every one of those retirements.
+ *    One exact row retires the hold whatever it is called; several retire it only when
+ *    exactly one overlaps the hold's description.
+ * 2. **Its amount is near — Actual's 7.5% band, or the hold with a tip added — and it names
+ *    the same merchant.** Only when no exact row exists. A near amount alone is not
+ *    evidence: on Lee's Capital One •••3448, 2026-10-23, a $16.95 YouTube hold retired onto
+ *    a $15.90 Grok row and a $94.94 county-utility hold onto a $100.90 Comcast row, each
+ *    because it was the one row inside the band — days before the hold's own row arrived.
+ *    Of the 62 alert holds that had posted by 2026-11-10, all 62 posted at the exact amount.
+ *
+ * Several candidates with no clear winner keep the hold rather than guess which one it
+ * became; the caller warns instead of removing it.
+ *
+ * `successorsOnly` drops candidates dated before the hold (`couldSucceed`). It is for a hold
+ * whose day is the purchase day, which is every alert hold, and it matters most when the
+ * alert has just landed: the only posted rows then in the register are older purchases.
+ *
+ * `exactOnly` stops after step 1. It is for a hold nobody has seen leave the bank's pending
+ * list: until its own row has had time to arrive, the same merchant's *other* charge at a
+ * near amount (Chewy $53.20 beside the fortnightly Chewy $51.29) is the likelier match.
+ */
+export function resolveLostHold(
+  hold: PairableRow,
+  postedCandidates: readonly PairableRow[],
+  options: { successorsOnly?: boolean; exactOnly?: boolean } = {},
+): LostHoldResolution {
+  const inRange = postedCandidates.filter(
+    (candidate) =>
+      (!options.successorsOnly || couldSucceed(hold, candidate)) &&
+      dateDistance(hold, candidate) <= LOST_HOLD_TOLERANCE_DAYS,
+  );
+
+  const exact = inRange.filter(
+    (candidate) => candidate.amountCents === hold.amountCents,
+  );
+  if (exact.length > 0 || options.exactOnly) return pickSuccessor(hold, exact);
+
+  return pickSuccessor(
+    hold,
+    inRange.filter(
+      (candidate) =>
+        (amountMatches(candidate.amountCents, hold.amountCents) ||
+          tippedFrom(candidate.amountCents, hold.amountCents)) &&
+        sameMerchant(hold.description, candidate.description),
+    ),
+  );
 }

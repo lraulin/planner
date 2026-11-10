@@ -270,8 +270,8 @@ export function planSync(input: SyncPlanInput): SyncPlan {
   }
 
   // Every vanished hold looks for its successor among posted rows already stored and posted
-  // rows this sync is about to insert (`resolveLostHold`: amount band, seven days, description
-  // to rank). A found successor takes its state and the hold goes; anything else stays.
+  // rows this sync is about to insert (`resolveLostHold`: the exact amount, or the same
+  // merchant at a near one, within seven days). A found successor takes its state and the hold goes; anything else stays.
   const deletes: string[] = [];
   const carries: SyncCarry[] = [];
   const unlisted: string[] = [];

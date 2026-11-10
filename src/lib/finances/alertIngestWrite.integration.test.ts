@@ -317,7 +317,7 @@ describeDb("alert holds", () => {
     await addFeedRow(userId, accountId, {
       externalId: "sf-amb-2",
       date: "2026-09-22",
-      amount: "-41.00",
+      amount: "-40.00",
       description: "EXXON 2",
     });
 
@@ -330,6 +330,46 @@ describeDb("alert holds", () => {
     expect(ambiguous).toBeDefined();
     expect(ambiguous?.unlistedAt).not.toBeNull();
     expect(rows.filter((r) => r.externalSource === "api:simplefin")).toHaveLength(3);
+  });
+
+  it("keeps a hold beside an unrelated row at a near amount, however old it gets", async () => {
+    // Production, 2026-10-23: a YouTube hold went onto Grok's row two days before its own.
+    const userId = await makeUser();
+    const accountId = await makeCard(userId);
+    await ingest(userId, push("youtube", "YouTube", "$16.95", "Oct. 2"));
+    await addFeedRow(userId, accountId, {
+      externalId: "sf-grok",
+      date: "2026-10-02",
+      amount: "-15.90",
+      description: "GROK XAI",
+    });
+
+    await retireAlertHolds(db, userId, accountId, "2026-10-03");
+    await retireAlertHolds(db, userId, accountId, "2026-10-08");
+    const rows = await rowsOf(userId);
+    expect(rows.find((r) => r.externalId === "youtube")).toBeDefined();
+    expect(rows).toHaveLength(2);
+  });
+
+  it("waits before retiring a hold onto the same merchant's near-amount row", async () => {
+    const userId = await makeUser();
+    const accountId = await makeCard(userId);
+    await ingest(userId, push("chewy", "Chewy.com", "$53.20", "Oct. 2"));
+    await addFeedRow(userId, accountId, {
+      externalId: "sf-other-order",
+      date: "2026-10-03",
+      amount: "-51.29",
+      description: "CHEWY.COM",
+    });
+
+    const young = await retireAlertHolds(db, userId, accountId, "2026-10-04");
+    expect(young.retired).toBe(0);
+    expect(await rowsOf(userId)).toHaveLength(2);
+
+    // Its own row never came, so the near one is what it became.
+    const aged = await retireAlertHolds(db, userId, accountId, "2026-10-06");
+    expect(aged.retired).toBe(1);
+    expect((await rowsOf(userId)).map((r) => r.externalId)).toEqual(["sf-other-order"]);
   });
 
   it("does not flag a young unmatched hold, and never deletes it", async () => {
