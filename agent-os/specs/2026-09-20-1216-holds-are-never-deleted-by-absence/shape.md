@@ -1,6 +1,6 @@
 # Holds are never deleted by absence — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 ## Scope
 

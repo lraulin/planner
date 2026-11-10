@@ -1,6 +1,6 @@
 # References for holds are never deleted by absence
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 ## Governing specs
 

@@ -1,6 +1,6 @@
 # A group belongs to a section — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 ## Scope
 

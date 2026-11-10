@@ -1,6 +1,6 @@
 # get_finance_overview fits the response budget with real history — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 ## Scope
 

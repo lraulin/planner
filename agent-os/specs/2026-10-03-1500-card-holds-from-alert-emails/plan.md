@@ -1,6 +1,10 @@
 # Card holds from alert emails — Plan
 
-**Status: active** (shaped 2026-10-03; code implemented 2026-10-03; production cutover, Apps Script install and live acceptance remain, so not frozen)
+**Status: frozen / complete** (2026-11-10)
+
+> Shaped and built 2026-10-03; live for Capital One that day and for Chase from 2026-10-18.
+> Frozen 2026-11-10 with `standards.md` pinned at `502269d9`, after the two changes dated
+> 2026-11-10 in **Changes from original plan**. Further change opens a new delta-spec.
 
 ## Spec relationships
 
@@ -74,12 +78,21 @@ newer_than:2d` for messages not yet handled, POSTs
 
 ## Acceptance
 
-- [ ] A Capital One alert POSTed twice yields one pending row on •••3448.
-- [ ] A SimpleFIN row for the same charge retires it, carrying envelope and notes; a tipped
-      charge too; an ambiguous one is kept and flagged.
-- [ ] Cutover dry runs for both cards read cleanly and are applied on production.
-- [ ] A real purchase appears as a hold within ~5 minutes and retires when SimpleFIN posts it.
-- [ ] `npm test` (database tests actually ran) and `npm run smoke` pass.
+- [x] A Capital One alert POSTed twice yields one pending row on •••3448. —
+      `alertIngestWrite.integration.test.ts` "writes one pending, negative hold and treats a
+      re-push as a no-op".
+- [x] A SimpleFIN row for the same charge retires it, carrying envelope and notes; a tipped
+      charge too; an ambiguous one is kept and flagged. — the same file's "retires a hold onto
+      its exact SimpleFIN twin…" and "retires a hold onto a tipped posting and keeps an
+      ambiguous one…". In production, 63 of 71 holds had retired by 2026-11-10; the other
+      eight were under four days old.
+- [x] Cutover dry runs for both cards read cleanly and are applied on production. — both
+      cards read `history_source = simplefin` on 2026-11-10; Capital One's cutover events are
+      2026-10-03, Chase's first accepted alert is 2026-10-18.
+- [x] A real purchase appears as a hold within ~5 minutes and retires when SimpleFIN posts it.
+      — the eight live holds on 2026-11-10 were written 0–4 minutes after their mail arrived.
+- [x] `npm test` (database tests actually ran) and `npm run smoke` pass. — 2026-11-10: 4,944
+      unit and 1,404 database tests with no skip, smoke 53/53.
 
 ## Out of scope
 
@@ -102,3 +115,10 @@ alert exists.
 | 2026-11-10: `resolveLostHold` takes an exact-amount row under any name, and a near amount (7.5% band or tip) only from the same merchant. An alert hold gets the near-amount step only once it is `NEAR_AMOUNT_WAIT_DAYS` (4) old. Narrows `2026-09-14-1004-ledger-ready-to-assign` D4, which let the band alone qualify a row. | Production, 2026-10-23: a $16.95 YouTube hold and a $94.94 county-utility hold were retired the moment the next alert arrived, onto a $15.90 Grok row and a ~$100 row, and the Pizza Hut hold then carried its envelope onto YouTube's $16.95 row. The pass runs on every sync and alert, so a fresh hold's own row is usually not there yet and the one row inside the band is someone else's. All 62 holds that had posted by 2026-11-10 posted at the exact amount; no real retirement needed the band. |
 | 2026-11-10: each SimpleFIN sync offers the last week's rejected alerts again from their audit evidence (`retryRejectedAlerts`); a repeat refusal writes no second event. The script is unchanged and still marks a 422 handled.                                                                                                 | A refusal is true of the moment only. All eight production rejections (2026-10-01 to 10-06) were for cards mid-cutover, and Gmail never resent them. Retrying from the script instead would wake the database every five minutes for two days per refused message.                                                                                                                                                                                                                                         |
 | 2026-11-10: Chase alerts are confirmed live: 11 accepted between 2026-10-18 and 11-05, none rejected since the cutover.                                                                                                                                                                                                         | Evidence section said the Chase parser waited on a real sample.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- A posted row can absorb more than one hold over successive syncs, because nothing records
+  which hold a row already retired. Two identical purchases a day apart would lose the second
+  hold a day or two early; the posted rows themselves are unaffected.
+- Whether "A deposit has been made to your account" (a 360 deposit) should ever be a hold.

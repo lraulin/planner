@@ -1,6 +1,6 @@
 # Standards for get_finance_overview fits the response budget with real history
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 Applied as of standards commit `dff043d6`. References, not copies — recover the text with
 `git show dff043d6:agent-os/standards/<path>`.

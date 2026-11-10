@@ -1,6 +1,6 @@
 # References for scheduled syncs and health probe
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 ## Governing specs
 

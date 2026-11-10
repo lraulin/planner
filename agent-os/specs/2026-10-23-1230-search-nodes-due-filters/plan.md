@@ -1,7 +1,10 @@
 # search_nodes: due-date filters, deadline sort, compact rows
 
-**Status: active**
-Spec folder: `agent-os/specs/2026-10-23-1230-search-nodes-due-filters/`
+**Status: frozen / complete** (2026-11-10)
+
+> Frozen 2026-11-10 with `standards.md` pinned at `502269d9`. Every acceptance box was met when built; nothing was left open. Further change opens a
+> new delta-spec; this folder is the as-built record.
+> Spec folder: `agent-os/specs/2026-10-23-1230-search-nodes-due-filters/`
 
 ## Spec relationships
 

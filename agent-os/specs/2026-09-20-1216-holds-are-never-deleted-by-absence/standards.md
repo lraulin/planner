@@ -1,6 +1,6 @@
 # Standards for holds are never deleted by absence
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 Applied as of standards commit `30a9c769`. References, not copies — recover the text with
 `git show 30a9c769:agent-os/standards/<path>`.

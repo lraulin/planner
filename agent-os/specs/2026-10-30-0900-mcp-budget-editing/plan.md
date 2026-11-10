@@ -1,6 +1,9 @@
 # MCP budget editing — Plan
 
-**Status: in review** (2026-10-30)
+**Status: frozen / complete** (2026-11-10)
+
+> Frozen 2026-11-10 with `standards.md` pinned at `502269d9`. All five tasks were built on 2026-10-30 with unit and database tests (`budgetTools.test.ts`, `budgetTools.integration.test.ts`); it sat "in review" with nothing outstanding. Further change opens a
+> new delta-spec; this folder is the as-built record.
 
 ## Task 1: Save spec documentation
 

@@ -1,6 +1,6 @@
 # Holds are never deleted by absence
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 Spec folder: `agent-os/specs/2026-09-20-1216-holds-are-never-deleted-by-absence/`
 
 ## Spec relationships
@@ -106,10 +106,15 @@ both pipelines.
       `before_fields`: no delete, the hold flagged unlisted. With a Chewy statement row added it is
       marked `postedAtBank` on a feed-covered account, and posted in place on a page-sourced one
       (`2026-09-23-1316-one-history-source-per-account` supersedes D2 there).
-- [ ] A capture whose posted table is absent or unreadable refuses; tested against saved HTML of
-      the statement-close page.
-      **Open (2026-10-24):** no test exercises either userscript's region reading, and no saved
-      HTML of a statement-close page exists (change 2). See **Status 2026-10-24** below.
+- [x] ~~A capture whose posted table is absent or unreadable refuses; tested against saved HTML
+      of the statement-close page.~~
+      **Superseded 2026-11-10** by `2026-10-03-1500-card-holds-from-alert-emails` D8: the
+      userscripts are retired for both cards. Every account's `history_source` is `simplefin`
+      or `files`, `applyBankBrowserSnapshot` refuses a paste for any of them (`2624052a`), and
+      the last snapshot was Chase's on 2026-10-07. The fail-closed region reading in the two
+      userscripts was never run against a real statement-close page and now has no caller to
+      protect; if an account ever returns to the bank page, that test is the first task of
+      the spec that moves it.
 - [x] Unit: `resolveLostHold` with `recentPosted` candidates; the `none` branch sets `unlisted_at`
       and deletes nothing. — `bankSnapshotReconcile.test.ts` "D3: keeps and flags a vanished hold
       when there is no successor, deleting nothing" and the D2 block; `feedPairing.test.ts`.
@@ -149,6 +154,11 @@ needed; D4's restore would now refuse it as a duplicate.
 
 **Change 6's Accounts-page surface** was not built; the register badge and audited delete are the
 resolve path. Listed below as a follow-up.
+
+## Status 2026-11-10
+
+Frozen. The one open box is superseded (above); the Accounts-page count is built; the lost-hold
+rule itself was narrowed the same day (`2026-10-03-1500-card-holds-from-alert-emails`, Changes).
 
 ## Follow-ups (not in this spec)
 

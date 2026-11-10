@@ -1,6 +1,6 @@
 # Card holds from alert emails — Shaping Notes
 
-**Status: active** (2026-10-03)
+**Status: frozen / complete** (2026-11-10)
 
 ## Scope
 

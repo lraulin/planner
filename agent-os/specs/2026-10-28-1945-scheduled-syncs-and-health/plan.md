@@ -1,7 +1,10 @@
 # Scheduled syncs (SimpleFIN, Google Calendar) and a public health probe
 
-**Status: active**
-Spec folder: `agent-os/specs/2026-10-28-1945-scheduled-syncs-and-health/`
+**Status: frozen / complete** (2026-11-10)
+
+> Frozen 2026-11-10 with `standards.md` pinned at `502269d9`. Verified in production on 2026-11-10: the bank-sync cron wrote its SimpleFIN audit events at 23:53 UTC on each of the previous six days. Further change opens a
+> new delta-spec; this folder is the as-built record.
+> Spec folder: `agent-os/specs/2026-10-28-1945-scheduled-syncs-and-health/`
 
 ## Spec relationships
 

@@ -1478,6 +1478,10 @@ period)` so money already spent stops being held twice and only going over bites
   and a cutover now keeps the SimpleFIN link so the provider account is not reported unmatched.
   On 2026-09-26 the app got one outcome surface, toasts (`specs/2026-09-26-2137-toasts-and-one-step-snapshot-paste`),
   and a copied bank snapshot applies on ⌘V or one toolbar click; the textarea is only a fallback.
+  On 2026-10-03 both cards went back to SimpleFIN for posted history, with holds arriving
+  from the banks' alert emails within about five minutes
+  (`specs/2026-10-03-1500-card-holds-from-alert-emails`); the bank-page userscripts are
+  retired for them, and a daily cron runs the sync (`specs/2026-10-28-1945-scheduled-syncs-and-health`).
 
 - **Finance pages read what they use** (daily-use performance, 2026-10-13) —
   `specs/2026-10-13-1147-finance-narrow-ledger-reads`. Accounts stopped reading ledger rows

@@ -1,6 +1,6 @@
 # Google inbound sync for agents, duplicate-safe creates, and the write zone — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 ## Scope
 

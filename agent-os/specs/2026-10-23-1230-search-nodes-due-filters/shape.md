@@ -1,6 +1,6 @@
 # search_nodes: due-date filters, deadline sort, compact rows — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 ## Scope
 

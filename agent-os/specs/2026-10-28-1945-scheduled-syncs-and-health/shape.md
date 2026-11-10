@@ -1,6 +1,6 @@
 # Scheduled syncs and health probe — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 ## Scope
 

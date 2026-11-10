@@ -210,8 +210,9 @@ shipped, no spec) made the Budget tables and the picker sort by name and stop re
 `sort_key`; its body says "Move up/down still records a position; the page ignores it". Checked:
 Move envelope up rewrote the row's `sort_key` (`zx` → `zv`, ahead of its neighbour) and the table
 did not change. The commands are still offered in the row menu, the group menu and Organize ▸
-Budget. Lee's call: retire the commands (a delta superseding D6's reordering) or restore manual
-order.
+Budget. **Resolved 2026-11-10: retired.** Name order has stood since `9037cedd`, so the row-menu
+items, the Organize ▸ Budget commands and their action are removed; D6's reordering is superseded
+(`2026-08-28-1613-group-kind` Changes row 6).
 
 **Spec inconsistency, reported not resolved.** The criterion asks for Change section and Hide
 "from the command catalog", but D8's command list never included them, and neither exists as a

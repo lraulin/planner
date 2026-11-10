@@ -1,7 +1,10 @@
 # get_finance_overview fits the response budget with real history
 
-**Status: active**
-Spec folder: `agent-os/specs/2026-10-23-1210-finance-overview-response-budget/`
+**Status: frozen / complete** (2026-11-10)
+
+> Frozen 2026-11-10 with `standards.md` pinned at `502269d9`. Every acceptance box was met when built; nothing was left open. Further change opens a
+> new delta-spec; this folder is the as-built record.
+> Spec folder: `agent-os/specs/2026-10-23-1210-finance-overview-response-budget/`
 
 ## Spec relationships
 

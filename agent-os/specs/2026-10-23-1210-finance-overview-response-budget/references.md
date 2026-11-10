@@ -1,6 +1,6 @@
 # References for get_finance_overview fits the response budget with real history
 
-**Status: active**
+**Status: frozen / complete** (2026-11-10)
 
 ## Governing specs
 

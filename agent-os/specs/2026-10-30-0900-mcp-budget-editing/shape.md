@@ -1,6 +1,6 @@
 # MCP budget editing — Shaping Notes
 
-**Status: in review** (2026-10-30). Written alongside the build, not before it.
+**Status: frozen / complete** (2026-11-10). Written alongside the build, not before it.
 
 ## Scope
 

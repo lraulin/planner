@@ -1,6 +1,6 @@
 # Standards for MCP budget editing
 
-**Status: in review** (2026-10-30)
+**Status: frozen / complete** (2026-11-10)
 
 Full files stay in `agent-os/standards/`.
 
