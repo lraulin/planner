@@ -21,6 +21,8 @@
  *
  * A 2xx (the hold exists or already did) and a 422 (Planner read it and refused; the raw text
  * is in the audit trail) both mark a message handled. Anything else leaves it for the next run.
+ * A refused alert is not lost by that: Planner offers its own copy again on each bank sync for
+ * a week (`retryRejectedAlerts`), so nothing here needs to resend it.
  */
 
 var SEARCH =

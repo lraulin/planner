@@ -9,7 +9,12 @@ import {
 } from "@/db/schema";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
-import { AlertRejected, applyAlertEmail, type AlertPush } from "./alertIngestWrite";
+import {
+  AlertRejected,
+  applyAlertEmail,
+  retryRejectedAlerts,
+  type AlertPush,
+} from "./alertIngestWrite";
 import { retireAlertHolds } from "./alertHolds";
 import { seedBudget } from "./budget/mutations";
 
@@ -164,6 +169,44 @@ describeDb("alert holds", () => {
       }),
     ).rejects.toBeInstanceOf(AlertRejected);
     expect(await rowsOf(userId)).toHaveLength(0);
+  });
+
+  it("lands a rejected alert on retry once the card is SimpleFIN-sourced, and only once", async () => {
+    const userId = await makeUser();
+    const otherId = await makeUser();
+    const accountId = await makeCard(userId, { historySource: "bank_page" });
+    await makeCard(otherId);
+    await expect(
+      ingest(userId, push("msg-late", "Pizza Hut", "$12.71")),
+    ).rejects.toBeInstanceOf(AlertRejected);
+
+    const eventCount = async () =>
+      (
+        await db
+          .select({ id: financeAuditEvents.id })
+          .from(financeAuditEvents)
+          .where(eq(financeAuditEvents.userId, userId))
+      ).length;
+
+    // Still refused: nothing lands and the refusal is not audited a second time.
+    expect(await retryRejectedAlerts(userId, INGEST_DAY)).toBe(0);
+    expect(await eventCount()).toBe(1);
+    // Another user's sync never picks up this user's rejected mail.
+    expect(await retryRejectedAlerts(otherId, INGEST_DAY)).toBe(0);
+    expect(await rowsOf(otherId)).toHaveLength(0);
+
+    await db
+      .update(financeAccounts)
+      .set({ historySource: "simplefin" })
+      .where(eq(financeAccounts.id, accountId));
+    expect(await retryRejectedAlerts(userId, INGEST_DAY)).toBe(1);
+    expect(await retryRejectedAlerts(userId, INGEST_DAY)).toBe(0);
+    const rows = await rowsOf(userId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ externalId: "msg-late", pending: true });
+
+    // Past the week, a rejection is left alone.
+    expect(await retryRejectedAlerts(userId, "2026-11-01")).toBe(0);
   });
 
   it("keeps a new alert hold when the only look-alike posted rows are earlier purchases", async () => {

@@ -7,15 +7,21 @@
  * silent drop.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financeTransactions } from "@/db/schema";
-import { localDateKey } from "@/lib/schedule/geometry";
+import {
+  financeAccounts,
+  financeAuditChanges,
+  financeAuditEvents,
+  financeTransactions,
+} from "@/db/schema";
+import { localDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import { parseAlertEmail } from "./alertEmail";
 import { retireAlertHolds } from "./alertHolds";
 import { captureFinanceMoneyCheckpoint } from "./audit/checkpoints";
 import { writeFinanceAuditEvent } from "./audit/writes";
 import { reclassifyInsideTransaction } from "./bankSnapshotApply";
+import { LOST_HOLD_TOLERANCE_DAYS } from "./feedPairing";
 import { autoFileNewRows } from "./payees/claims";
 import { centsToNumericString } from "./money";
 
@@ -41,11 +47,15 @@ export class AlertRejected extends Error {}
  * alert carries its own date: a hold is "lost" once it is a week old with nothing posted for
  * it, so ingesting a dated alert against the wall clock gives a different answer depending
  * on the day it is run.
+ *
+ * `recordRejection: false` is for `retryRejectedAlerts`: the refusal it is replaying is
+ * already in the audit trail, and being refused again is not news.
  */
 export async function applyAlertEmail(
   userId: string,
   push: AlertPush,
   todayKey: string = localDateKey(new Date()),
+  options: { recordRejection: boolean } = { recordRejection: true },
 ): Promise<AlertIngestResult> {
   const parsed = parseAlertEmail(push);
   const evidence = {
@@ -58,6 +68,7 @@ export async function applyAlertEmail(
   };
 
   const reject = async (reason: string): Promise<never> => {
+    if (!options.recordRejection) throw new AlertRejected(reason);
     await writeFinanceAuditEvent(db, userId, {
       kind: "alert_email",
       origin: "Alert email",
@@ -182,4 +193,87 @@ export async function applyAlertEmail(
       transactionId: retired ? null : inserted.id,
     };
   });
+}
+
+/** The alert a rejected event kept as evidence, or null if the evidence is not a whole one. */
+function pushFromEvidence(evidence: Record<string, unknown>): AlertPush | null {
+  const { messageId, from, subject, receivedAt, rawText, htmlBody } = evidence;
+  if (
+    typeof messageId !== "string" ||
+    typeof from !== "string" ||
+    typeof subject !== "string" ||
+    typeof receivedAt !== "string" ||
+    Number.isNaN(Date.parse(receivedAt)) ||
+    typeof rawText !== "string"
+  ) {
+    return null;
+  }
+  return {
+    messageId,
+    from,
+    subject,
+    receivedAt: new Date(receivedAt),
+    plainText: rawText,
+    ...(typeof htmlBody === "string" ? { htmlBody } : {}),
+  };
+}
+
+/**
+ * Offer the last week's rejected alerts again; returns how many were accepted this time.
+ *
+ * A refusal is a fact about the moment it was made: the card was still on the bank page, the
+ * account was not yet linked, the parser did not know the wording. The Apps Script marks a
+ * 422 handled so a refused alert does not re-audit every five minutes, which means Gmail
+ * never sends it twice — all eight rejections in production (2026-10-01 to 10-06) were
+ * alerts for cards mid-cutover, and none came back once the cutover finished. The audit
+ * event holds the whole message, so the retry is made from that. It runs with each
+ * SimpleFIN sync, after the feed rows are in: a hold whose charge already posted retires in
+ * the same call.
+ *
+ * Only a week back, because an older hold would be flagged as lost the moment it landed.
+ */
+export async function retryRejectedAlerts(
+  userId: string,
+  todayKey: string = localDateKey(new Date()),
+): Promise<number> {
+  const since = new Date(
+    `${shiftDateKey(todayKey, -LOST_HOLD_TOLERANCE_DAYS)}T00:00:00Z`,
+  );
+  const events = await db
+    .select({
+      sourceEvidence: financeAuditEvents.sourceEvidence,
+      // The outer id is spelled out: a bare column in a one-table select renders
+      // unqualified, and inside the subquery `"id"` would be the change row's own.
+      accepted: sql<boolean>`exists (select 1 from ${financeAuditChanges} where ${financeAuditChanges.eventId} = "finance_audit_events"."id")`,
+    })
+    .from(financeAuditEvents)
+    .where(
+      and(
+        eq(financeAuditEvents.userId, userId),
+        eq(financeAuditEvents.kind, "alert_email"),
+        gte(financeAuditEvents.occurredAt, since),
+      ),
+    );
+
+  const acceptedIds = new Set(
+    events
+      .filter((event) => event.accepted)
+      .map((event) => event.sourceEvidence.messageId),
+  );
+  const pending = new Map<string, AlertPush>();
+  for (const event of events) {
+    const push = pushFromEvidence(event.sourceEvidence);
+    if (push && !acceptedIds.has(push.messageId)) pending.set(push.messageId, push);
+  }
+
+  let accepted = 0;
+  for (const push of pending.values()) {
+    try {
+      await applyAlertEmail(userId, push, todayKey, { recordRejection: false });
+      accepted += 1;
+    } catch (error) {
+      if (!(error instanceof AlertRejected)) throw error;
+    }
+  }
+  return accepted;
 }

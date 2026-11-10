@@ -28,6 +28,7 @@ import {
 import { planSync } from "./syncPlan";
 import { nextSyncedThrough, syncWindow } from "./crossSource";
 import { financeAuditBatchId } from "@/lib/finances/audit/writes";
+import { retryRejectedAlerts } from "@/lib/finances/alertIngestWrite";
 
 /** How stale a connection may be before a page load refreshes it on its own. */
 export const SYNC_MAX_AGE_MS = 5 * 60_000;
@@ -262,6 +263,12 @@ export async function syncAll(userId: string): Promise<SyncResult> {
       auditBatchId,
       auditOrigin: "SimpleFIN classification",
     });
+  }
+
+  // The feed rows are in, so an alert refused earlier (a card mid-cutover) can land and, if
+  // its charge has posted, retire at once.
+  if (statuses.some((status) => status.state === "ok")) {
+    await retryRejectedAlerts(userId);
   }
 
   return {
