@@ -17,7 +17,6 @@ import {
   nestedBudgetGridRows,
   resolveBudgetDrop,
   structureParentId,
-  structurePosition,
 } from "./hierarchy";
 import { billFacet } from "@/lib/testing/billFacet";
 import { budgetCategoryRow } from "@/lib/testing/budgetCategoryRow";
@@ -513,54 +512,6 @@ describe("budgetSiblings", () => {
     expect(
       budgetSiblings(groups, categories, "bills", "bill").map((item) => item.id),
     ).toEqual(["electric"]);
-  });
-});
-
-describe("structurePosition", () => {
-  const groups = [
-    group("bills", null, "B", "bill"),
-    group("utilities", "bills", "C", "bill"),
-  ];
-  const categories = [
-    category("rent", null, "A", "bill"),
-    category("groceries", null, "C"),
-    category("electric", "utilities", "A", "bill"),
-    category("water", "utilities", "B", "bill"),
-  ];
-
-  it("places a root envelope among its own section's root items only", () => {
-    const { siblings, index } = structurePosition(groups, categories, {
-      kind: "category",
-      id: "rent",
-    });
-    expect(siblings.map((item) => item.id)).toEqual(["rent", "bills"]);
-    expect(index).toBe(0);
-  });
-
-  it("places a group inside its parent, matching on kind as well as id", () => {
-    // A group and an envelope may not share an id in practice, but the index must not
-    // depend on that: it is what Move up/down step from.
-    const { siblings, index } = structurePosition(groups, categories, {
-      kind: "group",
-      id: "utilities",
-    });
-    expect(siblings.map((item) => item.id)).toEqual(["utilities"]);
-    expect(index).toBe(0);
-  });
-
-  it("walks the run inside a nested group", () => {
-    const { siblings, index } = structurePosition(groups, categories, {
-      kind: "category",
-      id: "water",
-    });
-    expect(siblings.map((item) => item.id)).toEqual(["electric", "water"]);
-    expect(index).toBe(1);
-  });
-
-  it("has no run for an item that is not in the structure", () => {
-    expect(
-      structurePosition(groups, categories, { kind: "category", id: "gone" }),
-    ).toEqual({ siblings: [], index: -1 });
   });
 });
 

@@ -5,7 +5,6 @@ import { useState } from "react";
 import {
   deleteBudgetCategoryAction,
   deleteCategoryGroupAction,
-  moveBudgetStructureItemAction,
   moveBudgetStructureItemIntoGroupAction,
   renameCategoryGroupAction,
 } from "@/app/(shell)/finances/actions";
@@ -16,7 +15,6 @@ import {
   groupDeleteBlockedReason,
   moveDestinations,
   structureParentId,
-  structurePosition,
   type BudgetStructureRef,
 } from "@/lib/finances/budget/hierarchy";
 import type { BudgetCategoryRow, BudgetGroupRow } from "@/lib/finances/budget/queries";
@@ -75,27 +73,6 @@ export function useBudgetStructure({
     });
   }
 
-  /**
-   * Swap one item with the sibling above or below it, inside its own parent.
-   *
-   * Reordering is commands rather than grid drag: `DataGrid` requires `gutter: "handle"` for
-   * `rowDrag`, and the Budget tables keep the checkbox gutter and its header select-all
-   * (`agent-os/specs/2026-08-27-2200-plan-gutter-drag-handle/`). Unlike the drawer's
-   * desktop-only drag these also work on a phone. See D6.
-   */
-  function moveRelative(moving: BudgetStructureRef, direction: -1 | 1) {
-    const { siblings, index } = structurePosition(groups, categories, moving);
-    const target = siblings[index + direction];
-    if (!target) return;
-    run(() =>
-      moveBudgetStructureItemAction(
-        moving,
-        { kind: target.kind, id: target.id },
-        direction < 0 ? "before" : "after",
-      ),
-    );
-  }
-
   function moveIntoGroup(moving: BudgetStructureRef, groupId: string | null) {
     run(() => moveBudgetStructureItemIntoGroupAction(moving, groupId));
   }
@@ -132,8 +109,9 @@ export function useBudgetStructure({
   }
 
   /**
-   * Rename / Move up / Move down / Move to group… / Delete — the same five on a row and on
-   * a group header, because they are the same five operations on the same structure.
+   * Rename / Move to group… / Delete — the same three on a row and on a group header,
+   * because they are the same three operations on the same structure. There is no Move up
+   * or Move down: the tables sort by name, so a position has nothing to show.
    *
    * Every one of them is a declared command as well (`navigation.md`); this is the menu the
    * commands and the right-click share.
@@ -143,7 +121,6 @@ export function useBudgetStructure({
     name: string,
     deleteBlockedReason?: string,
   ): MenuItem[] {
-    const { siblings, index } = structurePosition(groups, categories, moving);
     const parentId = structureParentId(groups, categories, moving);
     const destinations = moveDestinations(groups, categories, moving);
     return [
@@ -151,21 +128,6 @@ export function useBudgetStructure({
         label: "Rename",
         icon: "rename",
         onSelect: () => setRenaming(moving.id),
-      },
-      {
-        label: "Move up",
-        icon: "move-up",
-        disabled: index <= 0,
-        title: index <= 0 ? `${name} is already first here` : undefined,
-        onSelect: () => moveRelative(moving, -1),
-      },
-      {
-        label: "Move down",
-        icon: "move-down",
-        disabled: index < 0 || index >= siblings.length - 1,
-        title:
-          index >= siblings.length - 1 ? `${name} is already last here` : undefined,
-        onSelect: () => moveRelative(moving, 1),
       },
       {
         label: "Move to group",
@@ -255,7 +217,6 @@ export function useBudgetStructure({
       run(() => renameCategoryGroupAction(groupId, trimmed));
     },
     openComposer,
-    moveRelative,
     openMoveToGroupMenu,
     structureMenuItems,
     groupMenuItems,

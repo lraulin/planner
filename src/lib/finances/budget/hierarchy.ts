@@ -430,35 +430,6 @@ export function structureParentId(
     : (categories.find((entry) => entry.id === item.id)?.groupId ?? null);
 }
 
-/**
- * The ordered run an item sits in (`budgetSiblings`) and its place in it — what Move up /
- * Move down step through. An item that is not in the structure has no run and index `-1`.
- */
-export function structurePosition(
-  groups: readonly BudgetGroupRow[],
-  categories: readonly Pick<
-    BudgetCategoryRow,
-    "id" | "groupId" | "name" | "sortKey" | "kind"
-  >[],
-  item: BudgetStructureRef,
-): { siblings: StructureItem[]; index: number } {
-  const kind =
-    item.kind === "group"
-      ? groups.find((entry) => entry.id === item.id)?.kind
-      : categories.find((entry) => entry.id === item.id)?.kind;
-  if (!kind) return { siblings: [], index: -1 };
-  const siblings = budgetSiblings(
-    groups,
-    categories,
-    structureParentId(groups, categories, item),
-    kind,
-  );
-  const index = siblings.findIndex(
-    (entry) => entry.kind === item.kind && entry.id === item.id,
-  );
-  return { siblings, index };
-}
-
 /** Empty-only delete, and the reason when it is not. Groups hold no money; rows do. */
 export function groupDeleteBlockedReason(
   groups: readonly Pick<BudgetGroupRow, "parentGroupId">[],

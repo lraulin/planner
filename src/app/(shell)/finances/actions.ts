@@ -115,20 +115,14 @@ import {
   setTransactionBudgetCategory,
   setTransactionBudgetCategories,
 } from "@/lib/finances/budget/filing";
-import {
-  moveBudgetStructureItem,
-  moveBudgetStructureItemIntoGroup,
-} from "@/lib/finances/budget/structureMoves";
+import { moveBudgetStructureItemIntoGroup } from "@/lib/finances/budget/structureMoves";
 import { reconcileAccount } from "@/lib/finances/budget/reconcileAccount";
 import {
   saveEnvelopeTarget,
   setCarryover,
   setTargetSnooze,
 } from "@/lib/finances/budget/envelopeSettings";
-import type {
-  BudgetDropZone,
-  BudgetStructureRef,
-} from "@/lib/finances/budget/hierarchy";
+import type { BudgetStructureRef } from "@/lib/finances/budget/hierarchy";
 import type { MonthKey } from "@/lib/finances/budget/envelope";
 import type { AssignOption } from "@/lib/finances/budget/assign/types";
 import type { BudgetPreset } from "@/lib/finances/budget/presets";
@@ -495,14 +489,6 @@ export async function deleteCategoryGroupAction(
   groupId: string,
 ): Promise<ActionResult> {
   return run((userId) => deleteCategoryGroup(userId, groupId));
-}
-
-export async function moveBudgetStructureItemAction(
-  moving: BudgetStructureRef,
-  target: BudgetStructureRef,
-  zone: BudgetDropZone,
-): Promise<ActionResult> {
-  return run((userId) => moveBudgetStructureItem(userId, moving, target, zone));
 }
 
 export async function moveBudgetStructureItemIntoGroupAction(

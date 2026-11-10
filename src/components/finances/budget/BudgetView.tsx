@@ -240,7 +240,6 @@ export function BudgetView({
     startAssign: assign.startAssign,
     handlers: {
       openComposer: structure.openComposer,
-      moveRelative: structure.moveRelative,
       openMoveToGroupMenu: structure.openMoveToGroupMenu,
       // A bare "New envelope"/"New group" lands in the section you were last in.
       newKindForFocus: () => (focusedTable === "savings" ? "savings" : "spending"),

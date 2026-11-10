@@ -7,7 +7,6 @@ import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import type { EnvelopeKind } from "@/db/schema";
 import type { BudgetMonth } from "@/lib/finances/budget/envelope";
 import { fixThisUnavailableReason } from "@/lib/finances/budget/fixThis";
-import type { BudgetStructureRef } from "@/lib/finances/budget/hierarchy";
 import type { BudgetData } from "@/lib/finances/budget/queries";
 import type { BudgetRow } from "@/lib/finances/budget/rows";
 import {
@@ -24,7 +23,6 @@ type CommandHandlers = {
     kind: EnvelopeKind,
     groupId: string | null,
   ) => void;
-  moveRelative: (moving: BudgetStructureRef, direction: -1 | 1) => void;
   openMoveToGroupMenu: (row: BudgetRow) => void;
   /** Which section a bare "New envelope"/"New group" lands in. */
   newKindForFocus: () => EnvelopeKind;
@@ -151,37 +149,6 @@ export function useBudgetCommands({
         disabled: !selectedRow,
         title: selectedRow ? undefined : "Select an envelope first",
         run: () => selectedRow && handlersRef.current.startRename(selectedRow.id),
-      },
-      {
-        id: "budget.row.move-up",
-        label: "Move envelope up",
-        group: "record",
-        menu: "organize",
-        section: "Budget",
-        icon: "move-up",
-        keywords: "reorder sort order",
-        disabled: !selectedRow,
-        title: selectedRow ? undefined : "Select an envelope first",
-        run: () =>
-          selectedRow &&
-          handlersRef.current.moveRelative(
-            { kind: "category", id: selectedRow.id },
-            -1,
-          ),
-      },
-      {
-        id: "budget.row.move-down",
-        label: "Move envelope down",
-        group: "record",
-        menu: "organize",
-        section: "Budget",
-        icon: "move-down",
-        keywords: "reorder sort order",
-        disabled: !selectedRow,
-        title: selectedRow ? undefined : "Select an envelope first",
-        run: () =>
-          selectedRow &&
-          handlersRef.current.moveRelative({ kind: "category", id: selectedRow.id }, 1),
       },
       {
         id: "budget.row.move-to-group",
