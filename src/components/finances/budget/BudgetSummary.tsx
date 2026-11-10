@@ -24,6 +24,10 @@ import type { BudgetMismatch } from "@/lib/finances/budget/queries";
  * assigned for the month on screen, the sum of the amber per-row pills. It arrives computed
  * (`stillNeeded()`), for the same reason the terms do
  * (`agent-os/specs/2026-09-06-1215-still-needed-this-month/`).
+ *
+ * On a phone the figure and its button move up into `BudgetHeader`'s sticky month bar
+ * (`headline={false}`), so they stay on screen while the envelopes scroll under them; this
+ * card keeps everything that explains the figure.
  */
 export function BudgetSummary({
   month,
@@ -35,6 +39,7 @@ export function BudgetSummary({
   uncategorizedCents = 0,
   uncategorizedSinceLabel,
   stillNeeded,
+  headline = true,
 }: {
   month: BudgetMonth;
   /** When viewing the current month, the live on-budget working pool. A diagnostic only —
@@ -52,15 +57,11 @@ export function BudgetSummary({
   uncategorizedSinceLabel?: string;
   /** The viewed month's remaining ask, computed beside the grid it must agree with. */
   stillNeeded: StillNeeded;
+  /** False when the Ready to Assign figure and its button are drawn elsewhere (the phone bar). */
+  headline?: boolean;
 }) {
   const ready = month.readyToAssignCents;
-  const tone =
-    ready < 0
-      ? "text-[var(--chart-spend)]"
-      : ready === 0
-        ? "text-[var(--chart-income)]"
-        : "text-ink";
-  const fixThis = action === "fix-this";
+  const tone = readyToAssignTone(ready);
   const needed = stillNeeded.totalCents;
   const neededTone =
     needed > 0 ? "text-[var(--goal-unmet)]" : "text-[var(--chart-income)]";
@@ -90,32 +91,24 @@ export function BudgetSummary({
   return (
     <section className="rounded border border-rule bg-surface p-3">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <div>
-          <span className={`tabular text-[2.25rem] leading-none font-medium ${tone}`}>
-            {formatUsd(ready)}
-          </span>
-          <span className="mt-0.5 block text-[0.75rem] text-ink-muted">
-            Ready to Assign
-          </span>
-          {/* Inside the figure's own block: below the whole row, the phone's wrap put it under
-              Still needed, where "Still needed · unassigned from on-budget accounts" reads as
-              one sentence about the wrong number. */}
-          <span className="mt-1 block text-[0.8125rem] text-ink-muted">
-            {readyToAssignNote(ready)}
-          </span>
-        </div>
-        {onAction ? (
-          <button
-            type="button"
-            onClick={onAction}
-            className={
-              fixThis
-                ? "min-h-tap rounded border border-[var(--chart-spend)] px-2 py-1 text-[0.8125rem] text-[var(--chart-spend)] hover:bg-[color-mix(in_srgb,var(--chart-spend)_12%,transparent)] md:min-h-0"
-                : "min-h-tap rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
-            }
-          >
-            {fixThis ? "Fix This" : "Assign"}
-          </button>
+        {headline ? (
+          <div>
+            <span className={`tabular text-[2.25rem] leading-none font-medium ${tone}`}>
+              {formatUsd(ready)}
+            </span>
+            <span className="mt-0.5 block text-[0.75rem] text-ink-muted">
+              Ready to Assign
+            </span>
+            {/* Inside the figure's own block: below the whole row, a wrap put it under
+                Still needed, where "Still needed · unassigned from on-budget accounts" reads
+                as one sentence about the wrong number. */}
+            <span className="mt-1 block text-[0.8125rem] text-ink-muted">
+              {readyToAssignNote(ready)}
+            </span>
+          </div>
+        ) : null}
+        {headline && onAction ? (
+          <SummaryAction action={action} onAction={onAction} />
         ) : null}
         {/* No vertical rule between the pair: it would not survive the wrap on phone, and
             the labels already carry the separation. */}
@@ -295,5 +288,36 @@ export function BudgetSummary({
         </p>
       )}
     </section>
+  );
+}
+
+/** Zero is the target, so it is the one figure drawn green; a negative is an overspend. */
+export function readyToAssignTone(cents: number): string {
+  if (cents < 0) return "text-[var(--chart-spend)]";
+  if (cents === 0) return "text-[var(--chart-income)]";
+  return "text-ink";
+}
+
+/** The summary's one button: Assign, or Fix This while Ready to Assign is negative. */
+export function SummaryAction({
+  action,
+  onAction,
+}: {
+  action: "assign" | "fix-this";
+  onAction: () => void;
+}) {
+  const fixThis = action === "fix-this";
+  return (
+    <button
+      type="button"
+      onClick={onAction}
+      className={
+        fixThis
+          ? "min-h-tap shrink-0 rounded border border-[var(--chart-spend)] px-2 py-1 text-[0.8125rem] text-[var(--chart-spend)] hover:bg-[color-mix(in_srgb,var(--chart-spend)_12%,transparent)] md:min-h-0"
+          : "min-h-tap shrink-0 rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0"
+      }
+    >
+      {fixThis ? "Fix This" : "Assign"}
+    </button>
   );
 }
