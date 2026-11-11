@@ -79,7 +79,7 @@
     "dotenv": "^18.0.9",
     "drizzle-kit": "^0.31.11",
     "eslint": "^10.14.0",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.5",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "prettier": "^3.9.10",
@@ -87,7 +87,7 @@
     "tsx": "^4.23.15",
     "typescript": "^6",
     "typescript-eslint": "^8.72.0",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   },
   "overrides": {
     "@vercel/cli-config": {
