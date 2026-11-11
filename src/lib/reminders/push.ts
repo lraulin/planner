@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import webpush from "web-push";
+import { sendNotification } from "web-push";
 import { db } from "@/db";
 import { pushSubscriptions, type ReminderSourceKind } from "@/db/schema";
 
@@ -72,7 +72,7 @@ export async function pushToUser(
   await Promise.all(
     devices.map(async (device) => {
       try {
-        await webpush.sendNotification(
+        await sendNotification(
           {
             endpoint: device.endpoint,
             keys: { p256dh: device.p256dh, auth: device.auth },
