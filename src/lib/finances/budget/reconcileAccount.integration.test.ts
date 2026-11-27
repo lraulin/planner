@@ -8,7 +8,8 @@ import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { seedBudget } from "./mutations";
 import { reconcileAccount } from "./reconcileAccount";
-import { loadBudget, loadBudgetMismatch } from "./queries";
+import { loadBudgetMismatch } from "./accountDrift";
+import { loadBudget } from "./queries";
 import { loadFinanceAuditEvent, listFinanceAuditEvents } from "../audit/queries";
 
 const describeDb = await describeWithDatabase("reconcile account");

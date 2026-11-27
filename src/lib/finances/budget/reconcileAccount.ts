@@ -8,7 +8,7 @@ import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { centsToNumericString, formatUsd } from "../money";
 import { reconcileAdjustment } from "../reconcileAdjustment";
 import { monthKeyOf } from "./envelope";
-import { loadBudgetMismatch } from "./queries";
+import { loadBudgetMismatch } from "./accountDrift";
 import { captureFinanceMoneyCheckpoint } from "../audit/checkpoints";
 import { writeFinanceAuditEvent } from "../audit/writes";
 

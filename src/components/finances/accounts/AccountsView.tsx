@@ -9,7 +9,8 @@ import {
   type OperationalAccount,
 } from "@/lib/finances/accountOperations";
 import { accountPoolBreakdown } from "@/lib/finances/accountPool";
-import type { BudgetMismatch } from "@/lib/finances/budget/queries";
+import type { BudgetMismatch } from "@/lib/finances/budget/accountDrift";
+import type { MismatchClues } from "@/lib/finances/budget/mismatchClues";
 import {
   ACCOUNT_GROUP_BY_VALUES,
   accountTotals,
@@ -49,6 +50,7 @@ import { looksLikeBankBrowserSnapshot } from "@/lib/finances/bankSnapshot";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { FinanceImportPanel } from "../FinanceImportPanel";
 import { AccountDrawer } from "./AccountDrawer";
+import { MismatchExplainer } from "./MismatchExplainer";
 import { UrlLink } from "@/components/url/UrlLink";
 import {
   ACCOUNT_COLUMN_IDS,
@@ -106,6 +108,7 @@ export function AccountsView({
   links,
   todayKey,
   mismatch,
+  mismatchClues,
 }: {
   initialAccounts: FinanceAccountRow[];
   /**
@@ -122,6 +125,8 @@ export function AccountsView({
   todayKey: string;
   /** D3: per-account drift from the register. Empty before the budget is set up. */
   mismatch: BudgetMismatch;
+  /** Where to look for each account that is off; null when none is. */
+  mismatchClues: MismatchClues | null;
 }) {
   const snapshot = useBankSnapshotPaste();
   const { pasteFromClipboard } = snapshot;
@@ -355,6 +360,9 @@ export function AccountsView({
 
   const openAccount = gridRows.find((row) => row.kind === "node" && row.id === openId);
   const accountDetail = openAccount?.kind === "node" ? openAccount.node : null;
+  const detailMismatch = mismatch.accounts.find(
+    (account) => account.accountId === accountDetail?.id && account.mismatchCents !== 0,
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -504,24 +512,33 @@ export function AccountsView({
         onChanged={refresh}
         summary={
           accountDetail ? (
-            <section className="mb-3 space-y-2 rounded border border-rule p-3 text-xs">
-              <p className="tabular">
-                Working {formatUsd(accountDetail.workingCents)} · Posted / headline{" "}
-                {formatUsd(accountDetail.postedCents)} · Pending added{" "}
-                {formatUsd(accountDetail.pendingCents)}
-              </p>
-              <p>
-                {accountDetail.balanceSourceLabel} · {accountDetail.freshness}
-              </p>
-              {accountDetail.url ? (
-                <UrlLink
-                  value={accountDetail.url}
-                  className="inline-block min-h-tap underline"
-                >
-                  Open banking site
-                </UrlLink>
+            <>
+              {detailMismatch ? (
+                <MismatchExplainer
+                  mismatch={detailMismatch}
+                  clues={mismatchClues}
+                  onReconcile={() => requestReconcile(accountDetail.id)}
+                />
               ) : null}
-            </section>
+              <section className="mb-3 space-y-2 rounded border border-rule p-3 text-xs">
+                <p className="tabular">
+                  Working {formatUsd(accountDetail.workingCents)} · Posted / headline{" "}
+                  {formatUsd(accountDetail.postedCents)} · Pending added{" "}
+                  {formatUsd(accountDetail.pendingCents)}
+                </p>
+                <p>
+                  {accountDetail.balanceSourceLabel} · {accountDetail.freshness}
+                </p>
+                {accountDetail.url ? (
+                  <UrlLink
+                    value={accountDetail.url}
+                    className="inline-block min-h-tap underline"
+                  >
+                    Open banking site
+                  </UrlLink>
+                ) : null}
+              </section>
+            </>
           ) : null
         }
       />

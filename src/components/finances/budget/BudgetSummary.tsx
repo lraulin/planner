@@ -3,7 +3,8 @@
 import { formatUsd } from "@/lib/finances/money";
 import { readyToAssignNote, type BudgetMonth } from "@/lib/finances/budget/envelope";
 import { stillNeededGroups, type StillNeeded } from "@/lib/finances/budget/assign/plan";
-import type { BudgetMismatch } from "@/lib/finances/budget/queries";
+import type { BudgetMismatch } from "@/lib/finances/budget/accountDrift";
+import { hrefWithViewState } from "@/lib/url/viewState";
 
 /**
  * Ready to Assign, the backlog that explains it, and the arithmetic behind it.
@@ -79,10 +80,14 @@ export function BudgetSummary({
   const mismatchTotalCents =
     mismatchedAccounts.reduce((sum, account) => sum + account.mismatchCents, 0) +
     (mismatch?.unmatchedTransferCents ?? 0);
+  // One account is named — "1 account" sent you hunting for which.
+  const [firstMismatched] = mismatchedAccounts;
   const mismatchLabel = [
-    mismatchedAccounts.length > 0
-      ? `${mismatchedAccounts.length} ${mismatchedAccounts.length === 1 ? "account" : "accounts"}`
-      : "",
+    mismatchedAccounts.length > 1
+      ? `${mismatchedAccounts.length} accounts`
+      : firstMismatched
+        ? firstMismatched.accountName
+        : "",
     hasTransferMismatch ? "an unmatched transfer" : "",
   ]
     .filter(Boolean)
@@ -184,7 +189,7 @@ export function BudgetSummary({
             {formatUsd(mismatchTotalCents)}
           </span>
           <a
-            href="/finances/accounts"
+            href={mismatchReviewHref(mismatchedAccounts)}
             className="ml-auto inline-flex min-h-tap items-center rounded border border-[var(--goal-unmet)] px-2 text-ink hover:bg-[color-mix(in_srgb,var(--goal-unmet)_16%,transparent)] md:min-h-0 md:py-1"
           >
             Review
@@ -289,6 +294,24 @@ export function BudgetSummary({
       )}
     </section>
   );
+}
+
+/**
+ * Review opens the account that is off, in the drawer that explains it (its terms, the rows
+ * that could account for it, the write that moved it). With several, the largest gap first;
+ * with only an unpaired transfer, the Accounts page, which has no drawer for that.
+ */
+function mismatchReviewHref(
+  accounts: readonly { accountId: string; mismatchCents: number }[],
+): string {
+  const [worst] = [...accounts].sort(
+    (left, right) => Math.abs(right.mismatchCents) - Math.abs(left.mismatchCents),
+  );
+  return worst
+    ? hrefWithViewState("/finances/accounts", new URLSearchParams(), {
+        detail: worst.accountId,
+      })
+    : "/finances/accounts";
 }
 
 /** Zero is the target, so it is the one figure drawn green; a negative is an overspend. */

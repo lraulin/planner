@@ -5,7 +5,8 @@ import { financeAccounts, financeTransactions } from "@/db/schema";
 import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { seedBudget } from "./mutations";
-import { loadBudget, openingPositionFor } from "./queries";
+import { openingPositionFor } from "./accountDrift";
+import { loadBudget } from "./queries";
 import { findMonth, ledgerIdentity } from "./envelope";
 import {
   applySinglePoolCutover,

@@ -99,10 +99,8 @@ import {
 } from "@/lib/finances/dashboardQueries";
 import { loadAccountsWithPending } from "@/lib/finances/workingPendingQuery";
 import { createCategoryGroup } from "@/lib/finances/budget/mutations";
-import {
-  listBudgetEnvelopeOptions,
-  openingPositionFor,
-} from "@/lib/finances/budget/queries";
+import { openingPositionFor } from "@/lib/finances/budget/accountDrift";
+import { listBudgetEnvelopeOptions } from "@/lib/finances/budget/queries";
 import { createSupplyGroup, createSupplyItem } from "@/lib/finances/supplies/mutations";
 import {
   listAmazonRepeatPurchases,

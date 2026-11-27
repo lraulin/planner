@@ -43,7 +43,8 @@ import {
   type SeedRow,
   type SeedStatement,
 } from "./openingSeed";
-import { loadBudget, openingPositionFor } from "./queries";
+import { openingPositionFor } from "./accountDrift";
+import { loadBudget } from "./queries";
 
 export type CrossingRow = SeedRow & { description: string; sign: 1 | -1 };
 

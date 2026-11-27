@@ -12,7 +12,8 @@ import { describeWithDatabase } from "@/lib/testing/database";
 import { testUsers } from "@/lib/testing/users";
 import { findMonth } from "./envelope";
 import { seedBudget } from "./mutations";
-import { loadBudget, loadBudgetMismatch } from "./queries";
+import { loadBudgetMismatch } from "./accountDrift";
+import { loadBudget } from "./queries";
 
 const describeDb = await describeWithDatabase("budget queries — mismatch");
 

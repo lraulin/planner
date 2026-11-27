@@ -19,7 +19,7 @@ import { listAccounts } from "../queries";
 import { applyPayeeClaims } from "../payees/claims";
 import { monthKeyOf, type MonthKey } from "./envelope";
 import { PRESET_GROUPS, type BudgetPreset } from "./presets";
-import { openingPositionFor } from "./queries";
+import { openingPositionFor } from "./accountDrift";
 import {
   endOfBudgetGroupSortKey,
   requireCategory,
